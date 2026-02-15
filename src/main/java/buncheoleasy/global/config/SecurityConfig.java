@@ -26,7 +26,8 @@ public class SecurityConfig {
 
     private static final String[] OAUTH_PATHS = {
             "/oauth2/**",
-            "/login/oauth2/**"
+            "/login/oauth2/**",
+            "/v1/auth/reissue"
     };
 
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;

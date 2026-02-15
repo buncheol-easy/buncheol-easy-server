@@ -2,6 +2,8 @@ package buncheoleasy.auth.application;
 
 import buncheoleasy.auth.dto.Tokens;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.SocialInfo;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
@@ -21,12 +23,16 @@ public class SocialLoginService {
     public Tokens login(final String provider, final String providerId, final String email) {
         SocialInfo socialInfo = SocialInfo.of(provider, providerId);
         User user = userDomainService.getOrCreateBySocialLogin(socialInfo, email);
-        return issueTokens(user.getId());
+        return jwtTokenProvider.issueTokens(user.getId());
     }
 
-    private Tokens issueTokens(final Long userId) {
-        String accessToken = jwtTokenProvider.createAccessToken(userId);
-        String refreshToken = jwtTokenProvider.createRefreshToken(userId);
-        return new Tokens(accessToken, refreshToken);
+    public Tokens reissueTokens(final String refreshToken) {
+        Long userId = jwtTokenProvider.parseUserIdFromRefreshToken(refreshToken);
+
+        if (!userDomainService.isValidUser(userId)) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+        }
+
+        return jwtTokenProvider.reissueTokens(userId, refreshToken);
     }
 }

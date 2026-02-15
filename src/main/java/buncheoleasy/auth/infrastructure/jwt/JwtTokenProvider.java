@@ -1,5 +1,7 @@
 package buncheoleasy.auth.infrastructure.jwt;
 
+import buncheoleasy.auth.domain.RefreshTokenStore;
+import buncheoleasy.auth.dto.Tokens;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import io.jsonwebtoken.Claims;
@@ -21,16 +23,19 @@ public class JwtTokenProvider {
     private final long refreshTokenExpirationSeconds;
     private final SecretKey accessSecretKey;
     private final SecretKey refreshSecretKey;
+    private final RefreshTokenStore refreshTokenStore;
 
     public JwtTokenProvider(
             @Value("${jwt.secret.access-key}") final String accessSecret,
             @Value("${jwt.secret.refresh-key}") final String refreshSecret,
             @Value("${jwt.access-token-expiration-seconds}") final long accessTokenExpirationSeconds,
-            @Value("${jwt.refresh-token-expiration-seconds}") final long refreshTokenExpirationSeconds) {
+            @Value("${jwt.refresh-token-expiration-seconds}") final long refreshTokenExpirationSeconds,
+            final RefreshTokenStore refreshTokenStore) {
         this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
         this.refreshTokenExpirationSeconds = refreshTokenExpirationSeconds;
         this.accessSecretKey = Keys.hmacShaKeyFor(accessSecret.getBytes(StandardCharsets.UTF_8));
         this.refreshSecretKey = Keys.hmacShaKeyFor(refreshSecret.getBytes(StandardCharsets.UTF_8));
+        this.refreshTokenStore = refreshTokenStore;
     }
 
     public Long parseUserIdFromAccessToken(final String token) {
@@ -43,27 +48,35 @@ public class JwtTokenProvider {
         return parseUserId(claims.getSubject());
     }
 
-    public String createAccessToken(final Long userId) {
-        final Instant now = Instant.now();
-        final Instant expiration = now.plusSeconds(accessTokenExpirationSeconds);
+    public Tokens issueTokens(final Long userId) {
+        return new Tokens(createAccessToken(userId), createRefreshToken(userId));
+    }
 
-        return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiration))
-                .signWith(accessSecretKey)
-                .compact();
+    public String createAccessToken(final Long userId) {
+        return createToken(userId, accessTokenExpirationSeconds, accessSecretKey);
     }
 
     public String createRefreshToken(final Long userId) {
+        String token = createToken(userId, refreshTokenExpirationSeconds, refreshSecretKey);
+        refreshTokenStore.save(userId, token, refreshTokenExpirationSeconds);
+        return token;
+    }
+
+    public Tokens reissueTokens(final Long userId, final String oldRefreshToken) {
+        refreshTokenStore.verify(userId, oldRefreshToken);
+        refreshTokenStore.delete(userId);
+        return issueTokens(userId);
+    }
+
+    private String createToken(final Long userId, final long expirationSeconds, final SecretKey secretKey) {
         final Instant now = Instant.now();
-        final Instant expiration = now.plusSeconds(refreshTokenExpirationSeconds);
+        final Instant expiration = now.plusSeconds(expirationSeconds);
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiration))
-                .signWith(refreshSecretKey)
+                .signWith(secretKey)
                 .compact();
     }
 

@@ -1,5 +1,6 @@
 package buncheoleasy.auth.application;
 
+import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.auth.dto.Tokens;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -17,6 +18,7 @@ public class SocialLoginService {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDomainService userDomainService;
+    private final RefreshTokenStore refreshTokenStore;
 
     public Tokens login(final String provider, final String providerId, final String email) {
         SocialInfo socialInfo = SocialInfo.of(provider, providerId);
@@ -33,5 +35,9 @@ public class SocialLoginService {
         }
 
         return jwtTokenProvider.reissueTokens(userId, refreshToken);
+    }
+
+    public void logout(final Long userId) {
+        refreshTokenStore.delete(userId);
     }
 }

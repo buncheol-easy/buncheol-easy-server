@@ -11,4 +11,6 @@ public interface UserRepository {
     Optional<User> findBySocialInfo(SocialInfo socialInfo);
 
     boolean isValidUserId(Long id);
+
+    void withdraw(User user);
 }

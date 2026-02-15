@@ -67,4 +67,12 @@ public class User {
         }
         this.nickname = newNickname;
     }
+
+    public void withdraw() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 }

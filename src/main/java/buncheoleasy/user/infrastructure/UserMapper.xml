@@ -65,8 +65,16 @@
                updated_at,
                deleted_at
         FROM users
-        WHERE provider = #{provider} AND provider_id = #{providerId}
+        WHERE provider = #{provider}
+          AND provider_id = #{providerId}
           AND deleted_at IS NULL
     </select>
+
+    <update id="updateDeletedAt">
+        UPDATE users
+        SET deleted_at = #{deletedAt},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
 
 </mapper>

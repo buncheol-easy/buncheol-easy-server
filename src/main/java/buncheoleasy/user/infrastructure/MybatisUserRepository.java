@@ -33,4 +33,9 @@ public class MybatisUserRepository implements UserRepository {
     public boolean isValidUserId(Long id) {
         return userMapper.findById(id).isPresent();
     }
+
+    @Override
+    public void withdraw(User user) {
+        userMapper.updateDeletedAt(user.getId(), user.getDeletedAt());
+    }
 }

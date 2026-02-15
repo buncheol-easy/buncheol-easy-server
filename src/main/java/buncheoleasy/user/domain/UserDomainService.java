@@ -21,6 +21,15 @@ public class UserDomainService {
         return userRepository.isValidUserId(userId);
     }
 
+    @Transactional
+    public void withdraw(final Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new buncheoleasy.global.exception.domain.BusinessException(
+                        buncheoleasy.global.exception.domain.ErrorCode.AUTH_INVALID_TOKEN));
+        user.withdraw();
+        userRepository.withdraw(user);
+    }
+
     private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
         User newUser = User.create(
                 socialInfo.provider().getValue(),

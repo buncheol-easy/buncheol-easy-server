@@ -1,5 +1,6 @@
 package buncheoleasy.global.config;
 
+import buncheoleasy.auth.infrastructure.jwt.JwtAuthenticationEntryPoint;
 import buncheoleasy.auth.infrastructure.jwt.JwtAuthenticationFilter;
 import buncheoleasy.auth.infrastructure.oauth.OAuth2LoginFailureHandler;
 import buncheoleasy.auth.infrastructure.oauth.OAuth2LoginSuccessHandler;
@@ -7,12 +8,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
@@ -33,6 +32,7 @@ public class SecurityConfig {
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) {
@@ -51,8 +51,8 @@ public class SecurityConfig {
                         // 그 외 모든 요청은 인증 필요
                         .anyRequest().authenticated()
                 )
-                .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+                .exceptionHandling(ex -> ex // 필터 처리 중 발생한 예외 핸들링
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                 )
                 .requestCache(cache -> cache.disable()) // 이전 요청 저장/재시도 흐름 제거
 

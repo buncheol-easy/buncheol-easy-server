@@ -3,7 +3,7 @@ package buncheoleasy.auth.infrastructure.oauth;
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.auth.dto.OAuth2UserProfile;
 import buncheoleasy.auth.dto.Tokens;
-import buncheoleasy.auth.infrastructure.jwt.TokenResponseWriter;
+import buncheoleasy.auth.infrastructure.response.TokenResponseWriter;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;

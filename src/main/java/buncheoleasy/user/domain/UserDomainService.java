@@ -17,6 +17,10 @@ public class UserDomainService {
                 .orElseGet(() -> createNewSocialUser(socialInfo, email));
     }
 
+    public boolean isValidUser(final Long userId) {
+        return userRepository.isValidUserId(userId);
+    }
+
     private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
         User newUser = User.create(
                 socialInfo.provider().getValue(),

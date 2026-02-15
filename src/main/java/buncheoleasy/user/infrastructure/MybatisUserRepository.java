@@ -28,4 +28,9 @@ public class MybatisUserRepository implements UserRepository {
     public Optional<User> findBySocialInfo(SocialInfo socialInfo) {
         return userMapper.findBySocialInfo(socialInfo.provider().getValue(), socialInfo.providerId());
     }
+
+    @Override
+    public boolean isValidUserId(Long id) {
+        return userMapper.findById(id).isPresent();
+    }
 }

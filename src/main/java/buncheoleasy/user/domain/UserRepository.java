@@ -9,4 +9,6 @@ public interface UserRepository {
     Optional<User> findById(Long id);
 
     Optional<User> findBySocialInfo(SocialInfo socialInfo);
+
+    boolean isValidUserId(Long id);
 }

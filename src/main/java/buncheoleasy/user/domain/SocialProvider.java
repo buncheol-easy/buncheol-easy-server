@@ -24,4 +24,8 @@ public enum SocialProvider {
         }
         throw new BusinessException(ErrorCode.PROVIDER_NOT_FOUND);
     }
+
+    public boolean matched(final String value) {
+        return this.value.equals(value);
+    }
 }

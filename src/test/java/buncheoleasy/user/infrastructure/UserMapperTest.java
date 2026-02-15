@@ -73,4 +73,34 @@ class UserMapperTest {
             assertThat(foundUser).isNull();
         }
     }
+
+    @Nested
+    @DisplayName("findBySocialInfo 테스트")
+    class FindBySocialInfoTest {
+
+        @Test
+        void provider와_providerId로_User를_조회할_수_있다() {
+            // given
+            User user = User.create("kakao", "social_123", "social@example.com");
+            userMapper.insert(user);
+
+            // when
+            User foundUser = userMapper.findBySocialInfo("kakao", "social_123").orElse(null);
+
+            // then
+            assertThat(foundUser).isNotNull();
+            assertThat(foundUser.getId()).isEqualTo(user.getId());
+            assertThat(foundUser.getSocialInfo().provider().getValue()).isEqualTo("kakao");
+            assertThat(foundUser.getSocialInfo().providerId()).isEqualTo("social_123");
+        }
+
+        @Test
+        void 존재하지_않는_provider_providerId면_empty를_반환한다() {
+            // when
+            User foundUser = userMapper.findBySocialInfo("kakao", "not_found").orElse(null);
+
+            // then
+            assertThat(foundUser).isNull();
+        }
+    }
 }

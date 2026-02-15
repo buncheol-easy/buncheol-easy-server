@@ -34,6 +34,16 @@ public enum ErrorCode {
 
     PROVIDER_REQUIRED("USR-016", "소셜 로그인 제공자는 필수입니다.", HttpStatus.BAD_REQUEST),
     PROVIDER_NOT_FOUND("USR-017", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.BAD_REQUEST),
+
+    /**
+     * AUTH - 인증 관련 에러
+     */
+    AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
+    AUTH_SOCIAL_PROVIDER_UNSUPPORTED("AUTH-002", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.UNAUTHORIZED),
+    AUTH_SOCIAL_EMAIL_REQUIRED("AUTH-003", "소셜 계정 이메일 정보가 없습니다.", HttpStatus.UNAUTHORIZED),
+    AUTH_OAUTH2_LOGIN_FAILED("AUTH-004", "소셜 로그인에 실패했습니다.", HttpStatus.UNAUTHORIZED),
+    AUTH_INVALID_TOKEN("AUTH-005", "유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED),
+    AUTH_EXPIRED_TOKEN("AUTH-006", "만료된 토큰입니다.", HttpStatus.UNAUTHORIZED),
     
     /**
      * C - 공통 에러

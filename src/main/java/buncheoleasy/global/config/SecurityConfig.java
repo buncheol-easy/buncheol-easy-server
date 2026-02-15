@@ -1,5 +1,6 @@
 package buncheoleasy.global.config;
 
+import buncheoleasy.auth.infrastructure.jwt.JwtAuthenticationFilter;
 import buncheoleasy.auth.infrastructure.oauth.OAuth2LoginFailureHandler;
 import buncheoleasy.auth.infrastructure.oauth.OAuth2LoginSuccessHandler;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +13,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @RequiredArgsConstructor
@@ -30,6 +32,7 @@ public class SecurityConfig {
 
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) {
@@ -65,7 +68,9 @@ public class SecurityConfig {
                         .failureHandler(oAuth2LoginFailureHandler) // 로그인 실패 시 동작
                 )
                 .httpBasic(httpBasic -> httpBasic.disable()) // 기본 HTTP Basic 비활성화
-                .formLogin(formLogin -> formLogin.disable());
+                .formLogin(formLogin -> formLogin.disable())
+                // JWT 인증 필터
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

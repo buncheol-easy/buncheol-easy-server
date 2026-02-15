@@ -13,19 +13,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class SocialLoginService {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDomainService userDomainService;
 
-    @Transactional
     public Tokens login(final String provider, final String providerId, final String email) {
         SocialInfo socialInfo = SocialInfo.of(provider, providerId);
         User user = userDomainService.getOrCreateBySocialLogin(socialInfo, email);
         return jwtTokenProvider.issueTokens(user.getId());
     }
 
+    @Transactional(readOnly = true)
     public Tokens reissueTokens(final String refreshToken) {
         Long userId = jwtTokenProvider.parseUserIdFromRefreshToken(refreshToken);
 

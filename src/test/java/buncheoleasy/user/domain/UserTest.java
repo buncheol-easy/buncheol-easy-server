@@ -203,21 +203,6 @@ class UserTest {
 
             assertThat(user.getPhoneNumber().value()).isEqualTo(phoneNumber);
         }
-
-        @Test
-        void 동일한_전화번호로_변경_시도시_예외가_발생한다() {
-            // given
-            User user = User.create("KAKAO", "123456", "test@example.com");
-            String phoneNumber = "01012345678";
-            user.updatePhoneNumber(phoneNumber);
-
-            // when & then
-            assertThatThrownBy(() -> user.updatePhoneNumber(phoneNumber))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessage(ErrorCode.USER_PHONE_NUMBER_UNCHANGED.getMessage())
-                    .extracting("errorCode")
-                    .isEqualTo(ErrorCode.USER_PHONE_NUMBER_UNCHANGED);
-        }
     }
 
     @Nested
@@ -235,20 +220,6 @@ class UserTest {
                     .doesNotThrowAnyException();
 
             assertThat(user.getNickname().value()).isEqualTo(newNickname);
-        }
-
-        @Test
-        void 동일한_닉네임으로_변경_시도시_예외가_발생한다() {
-            // given
-            User user = User.create("KAKAO", "123456", "test@example.com");
-            String currentNickname = user.getNickname().value();
-
-            // when & then
-            assertThatThrownBy(() -> user.updateNickname(currentNickname))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessage(ErrorCode.USER_NICKNAME_UNCHANGED.getMessage())
-                    .extracting("errorCode")
-                    .isEqualTo(ErrorCode.USER_NICKNAME_UNCHANGED);
         }
 
         @ParameterizedTest

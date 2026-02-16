@@ -1,7 +1,5 @@
 package buncheoleasy.user.domain;
 
-import buncheoleasy.global.exception.domain.BusinessException;
-import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.Getter;
@@ -57,27 +55,18 @@ public class User {
 
     public void updatePhoneNumber(final String newValue) {
         PhoneNumber newPhoneNumber = PhoneNumber.of(newValue);
-        if (phoneNumber != null && phoneNumber.equals(newPhoneNumber)) {
-            throw new BusinessException(ErrorCode.USER_PHONE_NUMBER_UNCHANGED);
-        }
+
+        boolean wasNull = (this.phoneNumber == null);
         this.phoneNumber = newPhoneNumber;
-        checkAndUpdateProfileCompletion();
+
+        // 최초 전화번호 설정 시에만 profileCompleted를 true로 변경
+        if (wasNull && !this.profileCompleted) {
+            this.profileCompleted = true;
+        }
     }
 
     public void updateNickname(final String newValue) {
-        Nickname newNickname = Nickname.of(newValue);
-        if (nickname != null && nickname.equals(newNickname)) {
-            throw new BusinessException(ErrorCode.USER_NICKNAME_UNCHANGED);
-        }
-        this.nickname = newNickname;
-    }
-
-    private void checkAndUpdateProfileCompletion() {
-        this.profileCompleted = isProfileComplete();
-    }
-
-    private boolean isProfileComplete() {
-        return phoneNumber != null;
+        this.nickname = Nickname.of(newValue);
     }
 
     public void withdraw() {

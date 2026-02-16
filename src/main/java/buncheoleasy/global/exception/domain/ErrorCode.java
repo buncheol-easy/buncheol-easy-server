@@ -28,8 +28,6 @@ public enum ErrorCode {
     USER_PHONE_NUMBER_LENGTH_INVALID("USR-011", "전화번호는 10자 또는 11자여야 합니다.", HttpStatus.BAD_REQUEST),
     USER_PHONE_NUMBER_FORMAT_INVALID("USR-012", "올바른 전화번호 형식이 아닙니다. (예: 01012345678)", HttpStatus.BAD_REQUEST),
 
-    USER_NICKNAME_UNCHANGED("USR-013", "변경할 닉네임이 현재 닉네임과 동일합니다.", HttpStatus.BAD_REQUEST),
-    USER_PHONE_NUMBER_UNCHANGED("USR-014", "변경할 전화번호가 현재 전화번호와 동일합니다.", HttpStatus.BAD_REQUEST),
     USER_NICKNAME_DUPLICATE("USR-015", "이미 다른 사용자가 사용 중인 닉네임입니다.", HttpStatus.CONFLICT),
 
     PROVIDER_REQUIRED("USR-016", "소셜 로그인 제공자는 필수입니다.", HttpStatus.BAD_REQUEST),

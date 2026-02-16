@@ -25,6 +25,10 @@ public class UserService {
         refreshTokenStore.delete(userId);
     }
 
+    public void updateProfile(final Long userId, final String nickname, final String phoneNumber) {
+        userDomainService.updateProfile(userId, nickname, phoneNumber);
+    }
+
     public UserProfileResponse getUserProfile(final Long userId) {
         User user = userDomainService.getUser(userId);
 
@@ -33,7 +37,7 @@ public class UserService {
         }
 
         return UserProfileResponse.of(
-                user.getSocialInfo().provider().getValue(),
+                user.getSocialInfo().provider().name(),
                 user.getEmail().value(),
                 user.getNickname().value(),
                 user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null,

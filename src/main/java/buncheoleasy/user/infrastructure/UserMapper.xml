@@ -83,10 +83,37 @@
           AND deleted_at IS NULL
     </select>
 
+    <!-- 닉네임으로 유저 조회 -->
+    <select id="findByNickname" resultMap="userResultMap">
+        SELECT id,
+               provider,
+               provider_id,
+               nickname,
+               email,
+               phone_number,
+               profile_completed,
+               created_at,
+               updated_at,
+               deleted_at
+        FROM users
+        WHERE nickname = #{nickname}
+          AND deleted_at IS NULL
+    </select>
+
     <update id="updateDeletedAt">
         UPDATE users
         SET deleted_at = #{deletedAt},
             updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 유저 정보 업데이트 -->
+    <update id="update">
+        UPDATE users
+        SET nickname          = #{nickname.value},
+            phone_number      = #{phoneNumber.value},
+            profile_completed = #{profileCompleted},
+            updated_at        = NOW()
         WHERE id = #{id}
     </update>
 

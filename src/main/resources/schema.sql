@@ -16,13 +16,11 @@ CREATE TABLE IF NOT EXISTS users
     _active_provider    VARCHAR(20) GENERATED ALWAYS AS (IF(deleted_at IS NULL, provider, NULL)) VIRTUAL,
     _active_provider_id VARCHAR(100) GENERATED ALWAYS AS (IF(deleted_at IS NULL, provider_id, NULL)) VIRTUAL,
     _active_nickname    VARCHAR(20) GENERATED ALWAYS AS (IF(deleted_at IS NULL, nickname, NULL)) VIRTUAL,
-    _active_phone       VARCHAR(15) GENERATED ALWAYS AS (IF(deleted_at IS NULL, phone_number, NULL)) VIRTUAL,
 
     PRIMARY KEY (id),
 
     UNIQUE INDEX uq_users_active_social_account (_active_provider, _active_provider_id),
     UNIQUE INDEX uq_users_active_nickname (_active_nickname),
-    UNIQUE INDEX uq_users_active_phone (_active_phone),
 
     INDEX idx_users_provider_id (provider_id),
     INDEX idx_users_nickname (nickname)

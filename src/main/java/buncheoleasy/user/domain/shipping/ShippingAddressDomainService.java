@@ -1,4 +1,4 @@
-package buncheoleasy.user.domain;
+package buncheoleasy.user.domain.shipping;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -18,7 +18,7 @@ public class ShippingAddressDomainService {
 
     @Transactional
     public ShippingAddress createShippingAddress(final Long userId, final String shippingMethod,
-                                                  final String storeName) {
+                                                 final String storeName) {
         // 개수 제한 체크
         int currentCount = shippingAddressRepository.countByUserId(userId);
         if (currentCount >= MAX_SHIPPING_ADDRESS_COUNT) {
@@ -37,7 +37,7 @@ public class ShippingAddressDomainService {
 
     @Transactional
     public void updateShippingAddress(final Long userId, final Long addressId, final String shippingMethod,
-                                       final String storeName) {
+                                      final String storeName) {
         ShippingAddress shippingAddress = shippingAddressRepository.findById(addressId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND));
 

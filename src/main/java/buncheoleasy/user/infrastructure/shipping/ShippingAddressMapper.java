@@ -1,6 +1,6 @@
-package buncheoleasy.user.infrastructure;
+package buncheoleasy.user.infrastructure.shipping;
 
-import buncheoleasy.user.domain.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.util.List;
 import java.util.Optional;
 import org.apache.ibatis.annotations.Mapper;

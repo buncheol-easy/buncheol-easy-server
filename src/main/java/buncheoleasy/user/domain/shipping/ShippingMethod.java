@@ -1,4 +1,4 @@
-package buncheoleasy.user.domain;
+package buncheoleasy.user.domain.shipping;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ShippingMethod {
-    
+
     GS25_HALF("GS25반값택배"),
     CU_HALF("CU반값택배");
 

@@ -1,7 +1,7 @@
-package buncheoleasy.user.infrastructure;
+package buncheoleasy.user.infrastructure.shipping;
 
-import buncheoleasy.user.domain.ShippingAddress;
-import buncheoleasy.user.domain.ShippingAddressRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -46,7 +46,7 @@ public class MybatisShippingAddressRepository implements ShippingAddressReposito
 
     @Override
     public boolean existsByUserIdAndShippingMethodAndStoreName(Long userId, String shippingMethod,
-                                                                String storeName) {
+                                                               String storeName) {
         return shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(userId, shippingMethod, storeName);
     }
 }

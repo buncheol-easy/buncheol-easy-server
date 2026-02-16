@@ -1,7 +1,6 @@
-package buncheoleasy.user.domain;
+package buncheoleasy.user.domain.shipping;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 import lombok.Getter;
 
 @Getter
@@ -45,22 +44,5 @@ public class ShippingAddress {
 
     public boolean isOwnedBy(final Long userId) {
         return this.userId.equals(userId);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        ShippingAddress that = (ShippingAddress) o;
-        return Objects.equals(id, that.id);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
     }
 }

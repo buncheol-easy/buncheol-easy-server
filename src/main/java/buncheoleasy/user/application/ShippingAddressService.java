@@ -1,7 +1,7 @@
 package buncheoleasy.user.application;
 
-import buncheoleasy.user.domain.ShippingAddress;
-import buncheoleasy.user.domain.ShippingAddressDomainService;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ public class ShippingAddressService {
     }
 
     public void updateShippingAddress(final Long userId, final Long addressId, final String shippingMethod,
-                                       final String storeName) {
+                                      final String storeName) {
         shippingAddressDomainService.updateShippingAddress(userId, addressId, shippingMethod, storeName);
     }
 

@@ -1,4 +1,4 @@
-package buncheoleasy.user.domain;
+package buncheoleasy.user.domain.shipping;
 
 import java.util.List;
 import java.util.Optional;

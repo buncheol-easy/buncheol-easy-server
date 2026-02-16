@@ -30,6 +30,34 @@
                 NOW())
     </insert>
 
+    <!-- 배송 정보 업데이트 -->
+    <update id="update">
+        UPDATE shipping_addresses
+        SET shipping_method = #{shippingMethod},
+            store_name      = #{storeName},
+            updated_at      = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 배송 정보 삭제 -->
+    <delete id="delete">
+        DELETE
+        FROM shipping_addresses
+        WHERE id = #{id}
+    </delete>
+
+    <!-- ID로 배송 정보 조회 -->
+    <select id="findById" resultMap="shippingAddressResultMap">
+        SELECT id,
+               user_id,
+               shipping_method,
+               store_name,
+               created_at,
+               updated_at
+        FROM shipping_addresses
+        WHERE id = #{id}
+    </select>
+
     <!-- userId로 배송 정보 조회 -->
     <select id="findAllByUser" resultMap="shippingAddressResultMap">
         SELECT id,
@@ -40,6 +68,24 @@
                updated_at
         FROM shipping_addresses
         WHERE user_id = #{userId}
+    </select>
+
+    <!-- userId로 배송지 개수 조회 -->
+    <select id="countByUserId" resultType="int">
+        SELECT COUNT(*)
+        FROM shipping_addresses
+        WHERE user_id = #{userId}
+    </select>
+
+    <!-- 중복 배송지 확인 -->
+    <select id="existsByUserIdAndShippingMethodAndStoreName" resultType="boolean">
+        SELECT EXISTS(
+                       SELECT 1
+                       FROM shipping_addresses
+                       WHERE user_id = #{userId}
+                         AND shipping_method = #{shippingMethod}
+                         AND store_name = #{storeName}
+                   )
     </select>
 
 </mapper>

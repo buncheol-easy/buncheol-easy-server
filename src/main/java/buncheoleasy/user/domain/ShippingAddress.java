@@ -1,6 +1,7 @@
 package buncheoleasy.user.domain;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.Getter;
 
 @Getter
@@ -8,7 +9,7 @@ public class ShippingAddress {
 
     private Long id;
     private final Long userId;
-    private final ShippingMethod shippingMethod;
+    private ShippingMethod shippingMethod;
     private String storeName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -31,5 +32,35 @@ public class ShippingAddress {
 
     public static ShippingAddress create(final Long userId, final String shippingMethodName, final String storeName) {
         return new ShippingAddress(userId, ShippingMethod.of(shippingMethodName), storeName);
+    }
+
+    public void update(final String shippingMethodName, final String storeName) {
+        this.shippingMethod = ShippingMethod.of(shippingMethodName);
+        this.storeName = storeName;
+    }
+
+    public boolean isSameAddress(final String shippingMethodName, final String storeName) {
+        return this.shippingMethod.name().equals(shippingMethodName) && this.storeName.equals(storeName);
+    }
+
+    public boolean isOwnedBy(final Long userId) {
+        return this.userId.equals(userId);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ShippingAddress that = (ShippingAddress) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }

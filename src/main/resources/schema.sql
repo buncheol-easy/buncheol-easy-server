@@ -20,10 +20,7 @@ CREATE TABLE IF NOT EXISTS users
     PRIMARY KEY (id),
 
     UNIQUE INDEX uq_users_active_social_account (_active_provider, _active_provider_id),
-    UNIQUE INDEX uq_users_active_nickname (_active_nickname),
-
-    INDEX idx_users_provider_id (provider_id),
-    INDEX idx_users_nickname (nickname)
+    UNIQUE INDEX uq_users_active_nickname (_active_nickname)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -40,10 +37,10 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
 
     PRIMARY KEY (id),
 
-    INDEX idx_shipping_address_user_id (user_id),
-    UNIQUE INDEX idx_shipping_address_user_method (user_id, shipping_method),
+    INDEX idx_shipping_addresses_user_id (user_id),
+    UNIQUE INDEX uq_shipping_addresses_user_method_store (user_id, shipping_method, store_name),
 
-    CONSTRAINT fk_shipping_address_user
+    CONSTRAINT fk_shipping_addresses_user
         FOREIGN KEY (user_id)
             REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE = InnoDB

@@ -2,7 +2,7 @@ package buncheoleasy.auth.infrastructure.oauth;
 
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.auth.dto.OAuth2UserProfile;
-import buncheoleasy.auth.dto.Tokens;
+import buncheoleasy.auth.dto.TokenPair;
 import buncheoleasy.auth.infrastructure.response.TokenResponseWriter;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -33,14 +33,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         OAuth2AuthenticationToken oauthToken = getOAuth2AuthenticationToken(authentication);
         OAuth2UserProfile profile = getUserProfile(oauthToken);
 
-        Tokens tokens = socialLoginService.login(
+        TokenPair token = socialLoginService.login(
                 profile.provider().getValue(),
                 profile.providerId(),
                 profile.email()
         );
         log.debug("OAuth2 로그인 성공: provider={}, providerId={}",
                 profile.provider(), profile.providerId());
-        tokenResponseWriter.write(response, tokens);
+        tokenResponseWriter.write(response, token);
     }
 
     private OAuth2UserProfile getUserProfile(final OAuth2AuthenticationToken oauthToken) {

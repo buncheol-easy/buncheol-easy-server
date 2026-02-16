@@ -2,7 +2,7 @@ package buncheoleasy.auth.presentation;
 
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.auth.dto.RefreshTokenRequest;
-import buncheoleasy.auth.dto.Tokens;
+import buncheoleasy.auth.dto.TokenPair;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,12 +19,12 @@ public class AuthController {
 
     private final SocialLoginService socialLoginService;
 
-    @PostMapping("/reissue")
-    public ResponseEntity<Tokens> reIssueToken(@RequestBody final RefreshTokenRequest request) {
-        Tokens newTokens = socialLoginService.reissueTokens(request.refreshToken());
+    @PostMapping("/reissue-token")
+    public ResponseEntity<TokenPair> reissueToken(@RequestBody final RefreshTokenRequest request) {
+        TokenPair token = socialLoginService.reissueTokens(request.refreshToken());
         return ResponseEntity
                 .status(HttpStatus.OK)
-                .body(newTokens);
+                .body(token);
     }
 
     @PostMapping("/logout")

@@ -1,6 +1,6 @@
 package buncheoleasy.auth.infrastructure.response;
 
-import buncheoleasy.auth.dto.Tokens;
+import buncheoleasy.auth.dto.TokenPair;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.stereotype.Component;
@@ -16,7 +16,7 @@ public class TokenResponseWriter extends FilterJsonResponseWriter {
         super(objectMapper);
     }
 
-    public void write(final HttpServletResponse response, final Tokens tokens) throws IOException {
-        writeJson(response, HttpServletResponse.SC_OK, tokens);
+    public void write(final HttpServletResponse response, final TokenPair token) throws IOException {
+        writeJson(response, HttpServletResponse.SC_OK, token);
     }
 }

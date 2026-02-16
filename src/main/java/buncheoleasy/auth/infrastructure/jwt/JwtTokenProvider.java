@@ -1,7 +1,7 @@
 package buncheoleasy.auth.infrastructure.jwt;
 
 import buncheoleasy.auth.domain.RefreshTokenStore;
-import buncheoleasy.auth.dto.Tokens;
+import buncheoleasy.auth.dto.TokenPair;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import io.jsonwebtoken.Claims;
@@ -48,8 +48,8 @@ public class JwtTokenProvider {
         return parseUserId(claims.getSubject());
     }
 
-    public Tokens issueTokens(final Long userId) {
-        return new Tokens(createAccessToken(userId), createRefreshToken(userId));
+    public TokenPair issueTokens(final Long userId) {
+        return new TokenPair(createAccessToken(userId), createRefreshToken(userId));
     }
 
     public String createAccessToken(final Long userId) {
@@ -62,7 +62,7 @@ public class JwtTokenProvider {
         return token;
     }
 
-    public Tokens reissueTokens(final Long userId, final String oldRefreshToken) {
+    public TokenPair reissueTokens(final Long userId, final String oldRefreshToken) {
         refreshTokenStore.verify(userId, oldRefreshToken);
         refreshTokenStore.delete(userId);
         return issueTokens(userId);

@@ -13,9 +13,8 @@ public record SocialInfo(SocialProvider provider, String providerId) {
         validateProviderId(providerId);
     }
 
-    public static SocialInfo of(final String providerValue, final String providerId) {
-        SocialProvider provider = SocialProvider.from(providerValue);
-        return new SocialInfo(provider, providerId);
+    public static SocialInfo of(final String provider, final String providerId) {
+        return new SocialInfo(SocialProvider.from(provider), providerId);
     }
 
     private void validateProviderId(final String providerId) {

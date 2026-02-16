@@ -31,6 +31,11 @@ public class UserDomainService {
         userRepository.withdraw(user);
     }
 
+    public User getUser(final Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
+    }
+
     private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
         User newUser = User.create(
                 socialInfo.provider().name(),

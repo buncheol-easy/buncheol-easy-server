@@ -12,6 +12,7 @@
             <arg column="nickname" javaType="String"/>
             <arg column="email" javaType="String"/>
             <arg column="phone_number" javaType="String"/>
+            <arg column="profile_completed" javaType="Boolean"/>
             <arg column="created_at" javaType="java.time.LocalDateTime"/>
             <arg column="updated_at" javaType="java.time.LocalDateTime"/>
             <arg column="deleted_at" javaType="java.time.LocalDateTime"/>
@@ -26,6 +27,7 @@
                            nickname,
                            email,
                            phone_number,
+                           profile_completed,
                            created_at,
                            updated_at)
         VALUES (#{socialInfo.provider},
@@ -33,6 +35,7 @@
                 #{nickname.value},
                 #{email.value},
                 #{phoneNumber.value},
+                #{profileCompleted},
                 NOW(),
                 NOW())
     </insert>
@@ -45,6 +48,7 @@
                nickname,
                email,
                phone_number,
+               profile_completed,
                created_at,
                updated_at,
                deleted_at
@@ -61,6 +65,7 @@
                nickname,
                email,
                phone_number,
+               profile_completed,
                created_at,
                updated_at,
                deleted_at

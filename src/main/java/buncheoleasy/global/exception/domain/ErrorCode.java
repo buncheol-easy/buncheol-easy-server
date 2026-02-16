@@ -36,6 +36,9 @@ public enum ErrorCode {
     PROVIDER_NOT_FOUND("USR-017", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.BAD_REQUEST),
     USER_NOT_FOUND("USR-018", "존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND),
 
+    SHIPPING_METHOD_FORMAT_INVALID("USR-018", "올바른 배송방법 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+    USER_PROFILE_IS_NOT_COMPLETE("USR-019", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
+
     /**
      * AUTH - 인증 관련 에러
      */
@@ -45,7 +48,7 @@ public enum ErrorCode {
     AUTH_OAUTH2_LOGIN_FAILED("AUTH-004", "소셜 로그인에 실패했습니다.", HttpStatus.UNAUTHORIZED),
     AUTH_INVALID_TOKEN("AUTH-005", "유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED),
     AUTH_EXPIRED_TOKEN("AUTH-006", "만료된 토큰입니다.", HttpStatus.UNAUTHORIZED),
-    
+
     /**
      * C - 공통 에러
      */

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="buncheoleasy.user.infrastructure.ShippingAddressMapper">
+
+    <!-- ShippingAddress ResultMap -->
+    <resultMap id="shippingAddressResultMap" type="ShippingAddress">
+        <constructor>
+            <idArg column="id" javaType="Long"/>
+            <arg column="user_id" javaType="Long"/>
+            <arg column="shipping_method" javaType="ShippingMethod"/>
+            <arg column="store_name" javaType="String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <!-- 배송 정보 저장 -->
+    <insert id="insert" parameterType="ShippingAddress"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO shipping_addresses (user_id,
+                                        shipping_method,
+                                        store_name,
+                                        created_at,
+                                        updated_at)
+        VALUES (#{userId},
+                #{shippingMethod},
+                #{storeName},
+                NOW(),
+                NOW())
+    </insert>
+
+    <!-- userId로 배송 정보 조회 -->
+    <select id="findAllByUser" resultMap="shippingAddressResultMap">
+        SELECT id,
+               user_id,
+               shipping_method,
+               store_name,
+               created_at,
+               updated_at
+        FROM shipping_addresses
+        WHERE user_id = #{userId}
+    </select>
+
+</mapper>

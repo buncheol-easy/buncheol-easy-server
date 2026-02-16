@@ -17,19 +17,21 @@ public class User {
     private final Email email;
     private Nickname nickname;
     private PhoneNumber phoneNumber;
+    private boolean profileCompleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
 
     public User(final Long id, final String provider, final String providerId,
                 final String nickname, final String email, final String phoneNumber,
-                final LocalDateTime createdAt, final LocalDateTime updatedAt,
+                final Boolean profileCompleted, final LocalDateTime createdAt, final LocalDateTime updatedAt,
                 final LocalDateTime deletedAt) {
         this.id = id;
         this.socialInfo = SocialInfo.of(provider, providerId);
         this.nickname = Nickname.of(nickname);
         this.email = Email.of(email);
         this.phoneNumber = phoneNumber != null ? new PhoneNumber(phoneNumber) : null;
+        this.profileCompleted = profileCompleted != null ? profileCompleted : false;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.deletedAt = deletedAt;
@@ -44,6 +46,7 @@ public class User {
         this.socialInfo = SocialInfo.of(provider, providerId);
         this.email = Email.of(email);
         this.nickname = Nickname.of(generateRandomNickname());
+        this.profileCompleted = false;
     }
 
     private String generateRandomNickname() {
@@ -58,6 +61,7 @@ public class User {
             throw new BusinessException(ErrorCode.USER_PHONE_NUMBER_UNCHANGED);
         }
         this.phoneNumber = newPhoneNumber;
+        checkAndUpdateProfileCompletion();
     }
 
     public void updateNickname(final String newValue) {
@@ -66,6 +70,14 @@ public class User {
             throw new BusinessException(ErrorCode.USER_NICKNAME_UNCHANGED);
         }
         this.nickname = newNickname;
+    }
+
+    private void checkAndUpdateProfileCompletion() {
+        this.profileCompleted = isProfileComplete();
+    }
+
+    private boolean isProfileComplete() {
+        return phoneNumber != null;
     }
 
     public void withdraw() {

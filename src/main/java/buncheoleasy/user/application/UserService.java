@@ -5,10 +5,13 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
+import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -18,11 +21,15 @@ public class UserService {
 
     public void withdraw(final Long userId) {
         userDomainService.withdraw(userId);
-        refreshTokenStore.delete(userId);
+        try {
+            refreshTokenStore.delete(userId);
+        } catch (Exception e) {
+            log.warn("회원 탈퇴 후 리프레시 토큰 삭제 실패. userId: {}", userId, e);
+        }
     }
 
-    public void updateProfile(final Long userId, final String nickname, final String phoneNumber) {
-        userDomainService.updateProfile(userId, nickname, phoneNumber);
+    public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
+        userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
     }
 
     public UserProfileResponse getUserProfile(final Long userId) {

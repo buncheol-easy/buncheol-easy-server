@@ -22,7 +22,7 @@ public class UserController {
 
     private final UserService userService;
 
-    @DeleteMapping("/withdraw")
+    @DeleteMapping("/me")
     public ResponseEntity<Void> withdraw(@AuthenticationPrincipal final Long userId) {
         userService.withdraw(userId);
         return ResponseEntity.noContent().build();
@@ -38,7 +38,7 @@ public class UserController {
     @PutMapping("/me")
     public ResponseEntity<Void> updateProfile(@AuthenticationPrincipal final Long userId,
                                               @Valid @RequestBody final UpdateUserProfileRequest request) {
-        userService.updateProfile(userId, request.nickname(), request.phoneNumber());
+        userService.updateProfile(userId, request);
         return ResponseEntity.noContent().build();
     }
 }

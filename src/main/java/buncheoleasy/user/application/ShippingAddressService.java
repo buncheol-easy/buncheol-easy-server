@@ -2,6 +2,7 @@ package buncheoleasy.user.application;
 
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
+import buncheoleasy.user.dto.request.ShippingAddressRequest;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -13,16 +14,16 @@ public class ShippingAddressService {
 
     private final ShippingAddressDomainService shippingAddressDomainService;
 
-    public void createShippingAddress(final Long userId, final String shippingMethod, final String storeName) {
-        shippingAddressDomainService.createShippingAddress(userId, shippingMethod, storeName);
+    public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
+        shippingAddressDomainService.createShippingAddress(userId, request.shippingMethod(), request.storeName());
     }
 
-    public void updateShippingAddress(final Long userId, final Long addressId, final String shippingMethod,
-                                      final String storeName) {
-        shippingAddressDomainService.updateShippingAddress(userId, addressId, shippingMethod, storeName);
+    public void modifyShippingAddress(final Long userId, final Long addressId, final ShippingAddressRequest request) {
+        shippingAddressDomainService.updateShippingAddress(userId, addressId, request.shippingMethod(),
+                request.storeName());
     }
 
-    public void deleteShippingAddress(final Long userId, final Long addressId) {
+    public void removeShippingAddress(final Long userId, final Long addressId) {
         shippingAddressDomainService.deleteShippingAddress(userId, addressId);
     }
 

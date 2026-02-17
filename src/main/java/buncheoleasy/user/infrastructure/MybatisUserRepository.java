@@ -40,13 +40,8 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public Optional<User> findByNickname(String nickname) {
-        return userMapper.findByNickname(nickname);
-    }
-
-    @Override
-    public boolean isValidUserId(Long id) {
-        return userMapper.findById(id).isPresent();
+    public boolean existsByNicknameExcludingId(String nickname, Long excludeId) {
+        return userMapper.existsByNicknameExcludingId(nickname, excludeId);
     }
 
     @Override

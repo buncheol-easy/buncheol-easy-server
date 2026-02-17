@@ -26,8 +26,7 @@ public class ShippingAddressDomainService {
         }
 
         // 중복 체크
-        if (shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(userId, shippingMethod,
-                storeName)) {
+        if (shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(userId, shippingMethod, storeName)) {
             throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
         }
 
@@ -36,20 +35,18 @@ public class ShippingAddressDomainService {
     }
 
     @Transactional
-    public void updateShippingAddress(final Long userId, final Long addressId, final String shippingMethod,
+    public void updateShippingAddress(final Long userId, final Long id, final String shippingMethod,
                                       final String storeName) {
-        ShippingAddress shippingAddress = shippingAddressRepository.findById(addressId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND));
+        ShippingAddress shippingAddress = getShippingAddress(id);
 
-        // 본인 소유 확인
         if (!shippingAddress.isOwnedBy(userId)) {
             throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
         }
 
         // 중복 체크 (변경 사항이 있고, 중복되는 경우만)
-        if (!shippingAddress.isSameAddress(shippingMethod, storeName) &&
-                shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(userId, shippingMethod,
-                        storeName)) {
+        if (!shippingAddress.isSameAddress(shippingMethod, storeName)
+                && shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(userId, shippingMethod,
+                storeName)) {
             throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
         }
 
@@ -58,19 +55,22 @@ public class ShippingAddressDomainService {
     }
 
     @Transactional
-    public void deleteShippingAddress(final Long userId, final Long addressId) {
-        ShippingAddress shippingAddress = shippingAddressRepository.findById(addressId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND));
+    public void deleteShippingAddress(final Long userId, final Long id) {
+        ShippingAddress shippingAddress = getShippingAddress(id);
 
-        // 본인 소유 확인
         if (!shippingAddress.isOwnedBy(userId)) {
             throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
         }
 
-        shippingAddressRepository.delete(addressId);
+        shippingAddressRepository.delete(id);
     }
 
     public List<ShippingAddress> getUserShippingAddresses(final Long userId) {
         return shippingAddressRepository.getUserShippingAddresses(userId);
+    }
+
+    private ShippingAddress getShippingAddress(final Long id) {
+        return shippingAddressRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND));
     }
 }

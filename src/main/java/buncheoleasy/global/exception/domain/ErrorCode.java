@@ -28,19 +28,19 @@ public enum ErrorCode {
     USER_PHONE_NUMBER_LENGTH_INVALID("USR-011", "전화번호는 10자 또는 11자여야 합니다.", HttpStatus.BAD_REQUEST),
     USER_PHONE_NUMBER_FORMAT_INVALID("USR-012", "올바른 전화번호 형식이 아닙니다. (예: 01012345678)", HttpStatus.BAD_REQUEST),
 
-    USER_NICKNAME_DUPLICATE("USR-015", "이미 다른 사용자가 사용 중인 닉네임입니다.", HttpStatus.CONFLICT),
+    USER_NICKNAME_DUPLICATE("USR-013", "이미 다른 사용자가 사용 중인 닉네임입니다.", HttpStatus.CONFLICT),
 
-    PROVIDER_REQUIRED("USR-016", "소셜 로그인 제공자는 필수입니다.", HttpStatus.BAD_REQUEST),
-    PROVIDER_NOT_FOUND("USR-017", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.BAD_REQUEST),
-    USER_NOT_FOUND("USR-018", "존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND),
+    PROVIDER_REQUIRED("USR-014", "소셜 로그인 제공자는 필수입니다.", HttpStatus.BAD_REQUEST),
+    PROVIDER_NOT_FOUND("USR-015", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.BAD_REQUEST),
+    USER_NOT_FOUND("USR-016", "존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND),
 
-    SHIPPING_METHOD_FORMAT_INVALID("USR-018", "올바른 배송방법 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
-    USER_PROFILE_IS_NOT_COMPLETE("USR-019", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
+    SHIPPING_METHOD_FORMAT_INVALID("USR-017", "올바른 배송방법 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+    USER_PROFILE_IS_NOT_COMPLETE("USR-018", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.FORBIDDEN),
 
-    SHIPPING_ADDRESS_NOT_FOUND("USR-020", "배송지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
-    SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-021", "배송지는 최대 10개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
-    SHIPPING_ADDRESS_DUPLICATE("USR-022", "이미 등록된 배송지입니다.", HttpStatus.CONFLICT),
-    SHIPPING_ADDRESS_FORBIDDEN("USR-023", "본인의 배송지만 수정/삭제할 수 있습니다.", HttpStatus.FORBIDDEN),
+    SHIPPING_ADDRESS_NOT_FOUND("USR-019", "배송지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+    SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-020", "배송지는 최대 10개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
+    SHIPPING_ADDRESS_DUPLICATE("USR-021", "이미 등록된 배송지입니다.", HttpStatus.CONFLICT),
+    SHIPPING_ADDRESS_FORBIDDEN("USR-022", "본인의 배송지만 수정/삭제할 수 있습니다.", HttpStatus.FORBIDDEN),
 
     /**
      * AUTH - 인증 관련 에러

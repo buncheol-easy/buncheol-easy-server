@@ -19,34 +19,29 @@ public class UserDomainService {
                 .orElseGet(() -> createNewSocialUser(socialInfo, email));
     }
 
-    public boolean isValidUser(final Long userId) {
-        return userRepository.existsById(userId);
-    }
-
-    @Transactional
-    public void withdraw(final Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        user.withdraw();
-        userRepository.withdraw(user);
+    public boolean isValidUser(final Long id) {
+        return userRepository.existsById(id);
     }
 
     public User getUser(final Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
     @Transactional
-    public void updateProfile(final Long userId, final String nickname, final String phoneNumber) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
+    public void withdraw(final Long id) {
+        User user = getUser(id);
+        user.withdraw();
+        userRepository.withdraw(user);
+    }
 
-        userRepository.findByNickname(nickname)
-                .ifPresent(existingUser -> {
-                    if (!existingUser.getId().equals(userId)) {
-                        throw new BusinessException(ErrorCode.USER_NICKNAME_DUPLICATE);
-                    }
-                });
+    @Transactional
+    public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
+        User user = getUser(id);
+
+        if (userRepository.existsByNicknameExcludingId(nickname, id)) {
+            throw new BusinessException(ErrorCode.USER_NICKNAME_DUPLICATE);
+        }
 
         user.updateNickname(nickname);
         user.updatePhoneNumber(phoneNumber);

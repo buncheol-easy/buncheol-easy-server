@@ -11,6 +11,7 @@ public record UpdateUserProfileRequest(
         String nickname,
 
         @NotBlank
+        @Size(min = 10, max = 11)
         @Pattern(regexp = "^01[0-9]+$")
         String phoneNumber
 ) {

@@ -19,7 +19,7 @@ public interface UserMapper {
 
     boolean existsById(Long id);
 
-    Optional<User> findByNickname(@Param("nickname") String nickname);
+    boolean existsByNicknameExcludingId(@Param("nickname") String nickname, @Param("excludeId") Long excludeId);
 
     void updateDeletedAt(@Param("id") Long id, @Param("deletedAt") LocalDateTime deletedAt);
 }

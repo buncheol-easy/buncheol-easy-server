@@ -1,8 +1,7 @@
 package buncheoleasy.user.presentation;
 
 import buncheoleasy.user.application.ShippingAddressService;
-import buncheoleasy.user.dto.request.CreateShippingAddressRequest;
-import buncheoleasy.user.dto.request.UpdateShippingAddressRequest;
+import buncheoleasy.user.dto.request.ShippingAddressRequest;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -20,37 +19,43 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequiredArgsConstructor
 @RequestMapping("/v1/users/me/shipping-addresses")
+@RequiredArgsConstructor
 public class ShippingAddressController {
 
     private final ShippingAddressService shippingAddressService;
 
+    /**
+     * TODO: user가 탈퇴 유저가 아닌지 검증이 필요함
+     */
+    
     @PostMapping
-    public ResponseEntity<Void> createShippingAddress(@AuthenticationPrincipal final Long userId,
-                                                      @Valid @RequestBody final CreateShippingAddressRequest request) {
-        shippingAddressService.createShippingAddress(userId, request.shippingMethod(), request.storeName());
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+    public ResponseEntity<Void> registerShippingAddress(@AuthenticationPrincipal final Long userId,
+                                                        @Valid @RequestBody final ShippingAddressRequest request) {
+        shippingAddressService.registerShippingAddress(userId, request);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .build();
+    }
+
+    @GetMapping
+    public ResponseEntity<List<ShippingAddressResponse>> getUserShippingAddresses(
+            @AuthenticationPrincipal final Long userId) {
+        return ResponseEntity.ok(shippingAddressService.getUserShippingAddresses(userId));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Void> updateShippingAddress(@AuthenticationPrincipal final Long userId,
+    public ResponseEntity<Void> modifyShippingAddress(@AuthenticationPrincipal final Long userId,
                                                       @PathVariable final Long id,
-                                                      @Valid @RequestBody final UpdateShippingAddressRequest request) {
-        shippingAddressService.updateShippingAddress(userId, id, request.shippingMethod(), request.storeName());
+                                                      @Valid @RequestBody final ShippingAddressRequest request) {
+        shippingAddressService.modifyShippingAddress(userId, id, request);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteShippingAddress(@AuthenticationPrincipal final Long userId,
+    public ResponseEntity<Void> removeShippingAddress(@AuthenticationPrincipal final Long userId,
                                                       @PathVariable final Long id) {
-        shippingAddressService.deleteShippingAddress(userId, id);
+        shippingAddressService.removeShippingAddress(userId, id);
         return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping
-    public ResponseEntity<List<ShippingAddressResponse>> getShippingAddresses(
-            @AuthenticationPrincipal final Long userId) {
-        return ResponseEntity.ok(shippingAddressService.getUserShippingAddresses(userId));
     }
 }

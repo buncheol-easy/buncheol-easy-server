@@ -83,20 +83,12 @@
           AND deleted_at IS NULL
     </select>
 
-    <!-- 닉네임으로 유저 조회 -->
-    <select id="findByNickname" resultMap="userResultMap">
-        SELECT id,
-               provider,
-               provider_id,
-               nickname,
-               email,
-               phone_number,
-               profile_completed,
-               created_at,
-               updated_at,
-               deleted_at
+    <!-- 닉네임 중복 확인 (자신 제외) -->
+    <select id="existsByNicknameExcludingId" resultType="boolean">
+        SELECT COUNT(1) > 0
         FROM users
         WHERE nickname = #{nickname}
+          AND id != #{excludeId}
           AND deleted_at IS NULL
     </select>
 

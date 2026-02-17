@@ -14,9 +14,7 @@ public interface UserRepository {
 
     boolean existsById(Long id);
 
-    Optional<User> findByNickname(String nickname);
-
-    boolean isValidUserId(Long id);
+    boolean existsByNicknameExcludingId(String nickname, Long excludeId);
 
     void withdraw(User user);
 }

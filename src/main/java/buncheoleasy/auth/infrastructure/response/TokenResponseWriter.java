@@ -1,6 +1,6 @@
 package buncheoleasy.auth.infrastructure.response;
 
-import buncheoleasy.auth.dto.TokenPair;
+import buncheoleasy.auth.TokenPair;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.stereotype.Component;

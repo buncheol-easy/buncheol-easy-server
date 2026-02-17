@@ -28,7 +28,7 @@
                            phone_number,
                            created_at,
                            updated_at)
-        VALUES (#{socialInfo.provider.value},
+        VALUES (#{socialInfo.provider},
                 #{socialInfo.providerId},
                 #{nickname.value},
                 #{email.value},
@@ -67,6 +67,14 @@
         FROM users
         WHERE provider = #{provider}
           AND provider_id = #{providerId}
+          AND deleted_at IS NULL
+    </select>
+
+    <!-- ID로 유저 존재 여부 확인 -->
+    <select id="existsById" resultType="boolean">
+        SELECT COUNT(1) > 0
+        FROM users
+        WHERE id = #{id}
           AND deleted_at IS NULL
     </select>
 

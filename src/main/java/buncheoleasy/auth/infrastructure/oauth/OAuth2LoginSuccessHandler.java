@@ -1,8 +1,7 @@
 package buncheoleasy.auth.infrastructure.oauth;
 
+import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.application.SocialLoginService;
-import buncheoleasy.auth.dto.OAuth2UserProfile;
-import buncheoleasy.auth.dto.TokenPair;
 import buncheoleasy.auth.infrastructure.response.TokenResponseWriter;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -30,25 +29,24 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
-        OAuth2AuthenticationToken oauthToken = getOAuth2AuthenticationToken(authentication);
+        OAuth2AuthenticationToken oauthToken = getAuthenticationToken(authentication);
         OAuth2UserProfile profile = getUserProfile(oauthToken);
 
         TokenPair token = socialLoginService.login(
-                profile.provider().getValue(),
+                profile.provider().name(),
                 profile.providerId(),
                 profile.email()
         );
-        log.debug("OAuth2 로그인 성공: provider={}, providerId={}",
-                profile.provider(), profile.providerId());
+        log.debug("OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
         tokenResponseWriter.write(response, token);
     }
 
     private OAuth2UserProfile getUserProfile(final OAuth2AuthenticationToken oauthToken) {
-        String registrationId = oauthToken.getAuthorizedClientRegistrationId();
-        return extractProfile(registrationId, oauthToken.getPrincipal());
+        String provider = oauthToken.getAuthorizedClientRegistrationId();
+        return extractProfile(provider, oauthToken.getPrincipal());
     }
 
-    private OAuth2AuthenticationToken getOAuth2AuthenticationToken(final Authentication authentication) {
+    private OAuth2AuthenticationToken getAuthenticationToken(final Authentication authentication) {
         if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
             throw new BusinessException(ErrorCode.AUTH_UNSUPPORTED_AUTHENTICATION);
         }

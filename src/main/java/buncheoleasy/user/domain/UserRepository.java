@@ -10,7 +10,7 @@ public interface UserRepository {
 
     Optional<User> findBySocialInfo(SocialInfo socialInfo);
 
-    boolean isValidUserId(Long id);
+    boolean existsById(Long id);
 
     void withdraw(User user);
 }

@@ -2,7 +2,6 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 public record Email(String value) {
@@ -28,19 +27,6 @@ public record Email(String value) {
         if (!EMAIL_REGEX.matcher(value).matches()) {
             throw new BusinessException(ErrorCode.USER_EMAIL_FORMAT_INVALID);
         }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        Email email = (Email) o;
-        return Objects.equals(this.value, email.value);
     }
 
 }

@@ -2,7 +2,6 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 public record PhoneNumber(String value) {
@@ -29,19 +28,6 @@ public record PhoneNumber(String value) {
         if (!PHONE_NUMBER_REGEX.matcher(value).matches()) {
             throw new BusinessException(ErrorCode.USER_PHONE_NUMBER_FORMAT_INVALID);
         }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        PhoneNumber phoneNumber = (PhoneNumber) o;
-        return Objects.equals(this.value, phoneNumber.value);
     }
 
 }

@@ -1,4 +1,4 @@
-package buncheoleasy.auth.dto;
+package buncheoleasy.auth;
 
 public record TokenPair(String accessToken, String refreshToken) {
 }

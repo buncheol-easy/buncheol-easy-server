@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Collections;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,38 +16,33 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String EXCEPTION_ATTRIBUTE = "exception";
+    public static final String EXCEPTION_ATTRIBUTE = "exception";
 
     private final JwtTokenProvider jwtTokenProvider;
 
     @Override
-    protected void doFilterInternal(
-            final HttpServletRequest request,
-            final HttpServletResponse response,
-            final FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(final HttpServletRequest request, final HttpServletResponse response,
+                                    final FilterChain filterChain) throws ServletException, IOException {
         try {
             final String accessToken = extractAccessToken(request);
-
-            if (StringUtils.hasText(accessToken)) {
+            if (accessToken != null) {
                 authenticateWithToken(accessToken);
             }
         } catch (final BusinessException exception) {
-            handleAuthenticationException(request, exception);
+            handleException(request, exception);
         }
 
         filterChain.doFilter(request, response);
     }
 
     /**
-     * 요청 헤더에서 액세스 토큰을 추출합니다.
+     * 요청 헤더에서 액세스 토큰 추출
      */
     private String extractAccessToken(final HttpServletRequest request) {
         final String bearerToken = request.getHeader(AUTHORIZATION_HEADER);
@@ -89,10 +83,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
-    private void handleAuthenticationException(
-            final HttpServletRequest request,
-            final BusinessException exception
-    ) {
+    private void handleException(final HttpServletRequest request, final BusinessException exception) {
         request.setAttribute(EXCEPTION_ATTRIBUTE, exception);
     }
 }

@@ -1,5 +1,7 @@
 package buncheoleasy.user.domain;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,21 +20,20 @@ public class UserDomainService {
     }
 
     public boolean isValidUser(final Long userId) {
-        return userRepository.isValidUserId(userId);
+        return userRepository.existsById(userId);
     }
 
     @Transactional
-    public void withdraw(final Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new buncheoleasy.global.exception.domain.BusinessException(
-                        buncheoleasy.global.exception.domain.ErrorCode.AUTH_INVALID_TOKEN));
+    public void withdraw(final Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         user.withdraw();
         userRepository.withdraw(user);
     }
 
     private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
         User newUser = User.create(
-                socialInfo.provider().getValue(),
+                socialInfo.provider().name(),
                 socialInfo.providerId(),
                 email
         );

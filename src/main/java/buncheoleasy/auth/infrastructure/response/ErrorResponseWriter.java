@@ -18,11 +18,8 @@ public class ErrorResponseWriter extends FilterJsonResponseWriter {
         super(objectMapper);
     }
 
-    public void write(
-            final HttpServletRequest request,
-            final HttpServletResponse response,
-            final ProblemDetail problemDetail
-    ) throws IOException {
+    public void write(final HttpServletRequest request, final HttpServletResponse response,
+                      final ProblemDetail problemDetail) throws IOException {
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         writeJson(response, problemDetail.getStatus(), problemDetail);
     }

@@ -23,7 +23,7 @@ class UserTest {
         @Test
         void 유저_생성에_성공한다() {
             // given
-            String provider = "kakao";
+            String provider = "KAKAO";
             String providerId = "123456";
             String email = "test@example.com";
 
@@ -50,7 +50,7 @@ class UserTest {
         @ValueSource(strings = {"   "})
         void providerId가_null이거나_빈_값인_경우_예외가_발생한다(String providerId) {
             // when & then
-            assertThatThrownBy(() -> User.create("kakao", providerId, "test@example.com"))
+            assertThatThrownBy(() -> User.create("KAKAO", providerId, "test@example.com"))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.USER_SOCIAL_ID_REQUIRED.getMessage())
                     .extracting("errorCode")
@@ -63,7 +63,7 @@ class UserTest {
             String providerId = "a".repeat(101);
 
             // when & then
-            assertThatThrownBy(() -> User.create("kakao", providerId, "test@example.com"))
+            assertThatThrownBy(() -> User.create("KAKAO", providerId, "test@example.com"))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.USER_SOCIAL_ID_LENGTH_INVALID.getMessage())
                     .extracting("errorCode")
@@ -74,7 +74,7 @@ class UserTest {
         @ValueSource(strings = {"kakao@123456", "kakao 123456", "kakao한글123", "google#123", "naver!456"})
         void providerId_형식이_유효하지_않은_경우_예외가_발생한다(String providerId) {
             // when & then
-            assertThatThrownBy(() -> User.create("kakao", providerId, "test@example.com"))
+            assertThatThrownBy(() -> User.create("KAKAO", providerId, "test@example.com"))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.USER_SOCIAL_ID_FORMAT_INVALID.getMessage())
                     .extracting("errorCode")
@@ -85,7 +85,7 @@ class UserTest {
         @ValueSource(strings = {"123456", "789012", "123", "test-user_123"})
         void 올바른_형식의_providerId로_유저를_생성할_수_있다(String providerId) {
             // when & then
-            assertThatCode(() -> User.create("kakao", providerId, "test@example.com"))
+            assertThatCode(() -> User.create("KAKAO", providerId, "test@example.com"))
                     .doesNotThrowAnyException();
         }
     }
@@ -99,7 +99,7 @@ class UserTest {
         @ValueSource(strings = {"   "})
         void email이_null이거나_빈_값인_경우_예외가_발생한다(String email) {
             // when & then
-            assertThatThrownBy(() -> User.create("kakao", "123456", email))
+            assertThatThrownBy(() -> User.create("KAKAO", "123456", email))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.USER_EMAIL_REQUIRED.getMessage())
                     .extracting("errorCode")
@@ -112,7 +112,7 @@ class UserTest {
             String email = "a".repeat(321);
 
             // when & then
-            assertThatThrownBy(() -> User.create("kakao", "123456", email))
+            assertThatThrownBy(() -> User.create("KAKAO", "123456", email))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.USER_EMAIL_LENGTH_INVALID.getMessage())
                     .extracting("errorCode")
@@ -123,7 +123,7 @@ class UserTest {
         @ValueSource(strings = {"testexample.com", "test@", "test@example", "test@example.c", "@example.com"})
         void email_형식이_유효하지_않은_경우_예외가_발생한다(String email) {
             // when & then
-            assertThatThrownBy(() -> User.create("kakao", "123456", email))
+            assertThatThrownBy(() -> User.create("KAKAO", "123456", email))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.USER_EMAIL_FORMAT_INVALID.getMessage())
                     .extracting("errorCode")
@@ -139,7 +139,7 @@ class UserTest {
         })
         void 올바른_형식의_email로_유저를_생성할_수_있다(String email) {
             // when & then
-            assertThatCode(() -> User.create("kakao", "123456", email))
+            assertThatCode(() -> User.create("KAKAO", "123456", email))
                     .doesNotThrowAnyException();
         }
     }
@@ -153,7 +153,7 @@ class UserTest {
         @ValueSource(strings = {"   "})
         void phoneNumber가_null이거나_빈_값인_경우_예외가_발생한다(String phoneNumber) {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when & then
             assertThatThrownBy(() -> user.updatePhoneNumber(phoneNumber))
@@ -167,7 +167,7 @@ class UserTest {
         @ValueSource(strings = {"012345678", "012345678901"})
         void phoneNumber가_길이가_유효하지_않으면_예외가_발생한다(String phoneNumber) {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when & then
             assertThatThrownBy(() -> user.updatePhoneNumber(phoneNumber))
@@ -181,7 +181,7 @@ class UserTest {
         @ValueSource(strings = {"0201234567", "1012345678", "00123456789", "a101234567", "0201234567a"})
         void phoneNumber_형식이_유효하지_않은_경우_예외가_발생한다(String phoneNumber) {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when & then
             assertThatThrownBy(() -> user.updatePhoneNumber(phoneNumber))
@@ -195,7 +195,7 @@ class UserTest {
         @ValueSource(strings = {"01012345678", "01112345678", "01612345678", "01912345678", "0161234567"})
         void 올바른_형식의_phoneNumber로_업데이트할_수_있다(String phoneNumber) {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when & then
             assertThatCode(() -> user.updatePhoneNumber(phoneNumber))
@@ -207,7 +207,7 @@ class UserTest {
         @Test
         void 동일한_전화번호로_변경_시도시_예외가_발생한다() {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
             String phoneNumber = "01012345678";
             user.updatePhoneNumber(phoneNumber);
 
@@ -227,7 +227,7 @@ class UserTest {
         @Test
         void 올바른_형식의_nickname으로_업데이트할_수_있다() {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
             String newNickname = "새닉네임";
 
             // when & then
@@ -240,7 +240,7 @@ class UserTest {
         @Test
         void 동일한_닉네임으로_변경_시도시_예외가_발생한다() {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
             String currentNickname = user.getNickname().value();
 
             // when & then
@@ -256,7 +256,7 @@ class UserTest {
         @ValueSource(strings = {"   "})
         void nickname이_null이거나_빈_값인_경우_예외가_발생한다(String nickname) {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when & then
             assertThatThrownBy(() -> user.updateNickname(nickname))
@@ -267,7 +267,7 @@ class UserTest {
         @Test
         void nickname이_최대_길이를_초과하면_예외가_발생한다() {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
             String nickname = "a".repeat(21);
 
             // when & then
@@ -280,7 +280,7 @@ class UserTest {
         @ValueSource(strings = {"테스트@유저", "테스트 유저", "테스트_유저", "유저!", "nick#name"})
         void nickname_형식이_유효하지_않은_경우_예외가_발생한다(String nickname) {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when & then
             assertThatThrownBy(() -> user.updateNickname(nickname))

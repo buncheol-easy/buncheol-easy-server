@@ -15,14 +15,8 @@ public abstract class FilterJsonResponseWriter {
 
     protected final ObjectMapper objectMapper;
 
-    /**
-     * JSON 응답 작성
-     */
-    protected void writeJson(
-            final HttpServletResponse response,
-            final int status,
-            final Object data
-    ) throws IOException {
+    protected void writeJson(final HttpServletResponse response, final int status, final Object data)
+            throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());

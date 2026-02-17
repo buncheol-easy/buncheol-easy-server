@@ -2,6 +2,7 @@ package buncheoleasy.user.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import buncheoleasy.user.domain.SocialProvider;
 import buncheoleasy.user.domain.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -25,7 +26,7 @@ class UserMapperTest {
         @Test
         void User를_저장할_수_있다() {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
 
             // when
             userMapper.insert(user);
@@ -43,7 +44,7 @@ class UserMapperTest {
         @Test
         void ID로_User를_조회할_수_있다() {
             // given
-            User user = User.create("kakao", "123456", "test@example.com");
+            User user = User.create("KAKAO", "123456", "test@example.com");
             userMapper.insert(user);
             Long userId = user.getId();
 
@@ -53,7 +54,7 @@ class UserMapperTest {
             // then
             assertThat(foundUser).isNotNull();
             assertThat(foundUser.getId()).isEqualTo(userId);
-            assertThat(foundUser.getSocialInfo().provider().getValue()).isEqualTo("kakao");
+            assertThat(foundUser.getSocialInfo().provider()).isEqualTo(SocialProvider.KAKAO);
             assertThat(foundUser.getSocialInfo().providerId()).isEqualTo("123456");
             assertThat(foundUser.getEmail().value()).isEqualTo("test@example.com");
             assertThat(foundUser.getNickname().value()).startsWith("Guest");
@@ -81,23 +82,23 @@ class UserMapperTest {
         @Test
         void provider와_providerId로_User를_조회할_수_있다() {
             // given
-            User user = User.create("kakao", "social_123", "social@example.com");
+            User user = User.create("KAKAO", "social_123", "social@example.com");
             userMapper.insert(user);
 
             // when
-            User foundUser = userMapper.findBySocialInfo("kakao", "social_123").orElse(null);
+            User foundUser = userMapper.findBySocialInfo("KAKAO", "social_123").orElse(null);
 
             // then
             assertThat(foundUser).isNotNull();
             assertThat(foundUser.getId()).isEqualTo(user.getId());
-            assertThat(foundUser.getSocialInfo().provider().getValue()).isEqualTo("kakao");
+            assertThat(foundUser.getSocialInfo().provider()).isEqualTo(SocialProvider.KAKAO);
             assertThat(foundUser.getSocialInfo().providerId()).isEqualTo("social_123");
         }
 
         @Test
         void 존재하지_않는_provider_providerId면_empty를_반환한다() {
             // when
-            User foundUser = userMapper.findBySocialInfo("kakao", "not_found").orElse(null);
+            User foundUser = userMapper.findBySocialInfo("KAKAO", "not_found").orElse(null);
 
             // then
             assertThat(foundUser).isNull();

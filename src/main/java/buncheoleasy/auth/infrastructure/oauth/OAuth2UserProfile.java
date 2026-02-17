@@ -1,4 +1,4 @@
-package buncheoleasy.auth.dto;
+package buncheoleasy.auth.infrastructure.oauth;
 
 import buncheoleasy.user.domain.SocialProvider;
 

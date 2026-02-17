@@ -15,5 +15,7 @@ public interface UserMapper {
 
     Optional<User> findBySocialInfo(@Param("provider") String provider, @Param("providerId") String providerId);
 
+    boolean existsById(Long id);
+
     void updateDeletedAt(@Param("id") Long id, @Param("deletedAt") LocalDateTime deletedAt);
 }

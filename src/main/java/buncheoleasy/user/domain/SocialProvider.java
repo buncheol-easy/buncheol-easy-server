@@ -13,12 +13,12 @@ public enum SocialProvider {
 
     private final String value;
 
-    public static SocialProvider from(final String value) {
-        if (value == null || value.isBlank()) {
+    public static SocialProvider from(final String name) {
+        if (name == null || name.isBlank()) {
             throw new BusinessException(ErrorCode.PROVIDER_REQUIRED);
         }
         for (SocialProvider provider : values()) {
-            if (provider.value.equals(value)) {
+            if (provider.name().equals(name)) {
                 return provider;
             }
         }

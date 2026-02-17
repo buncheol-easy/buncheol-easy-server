@@ -1,7 +1,7 @@
 package buncheoleasy.auth.application;
 
+import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.domain.RefreshTokenStore;
-import buncheoleasy.auth.dto.TokenPair;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;

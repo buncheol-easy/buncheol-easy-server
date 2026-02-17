@@ -2,7 +2,6 @@ package buncheoleasy.auth.infrastructure.oauth;
 
 import static buncheoleasy.user.domain.SocialProvider.KAKAO;
 
-import buncheoleasy.auth.dto.OAuth2UserProfile;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;

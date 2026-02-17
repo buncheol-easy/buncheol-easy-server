@@ -34,6 +34,7 @@ public enum ErrorCode {
 
     PROVIDER_REQUIRED("USR-016", "소셜 로그인 제공자는 필수입니다.", HttpStatus.BAD_REQUEST),
     PROVIDER_NOT_FOUND("USR-017", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.BAD_REQUEST),
+    USER_NOT_FOUND("USR-018", "존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND),
 
     /**
      * AUTH - 인증 관련 에러

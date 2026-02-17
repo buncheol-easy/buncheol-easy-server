@@ -2,7 +2,6 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 public record SocialInfo(SocialProvider provider, String providerId) {
@@ -31,27 +30,4 @@ public record SocialInfo(SocialProvider provider, String providerId) {
         }
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        SocialInfo socialInfo = (SocialInfo) o;
-
-        if (provider != socialInfo.provider) {
-            return false;
-        }
-        return Objects.equals(providerId, socialInfo.providerId);
-    }
-
-    @Override
-    public int hashCode() {
-        int result = provider != null ? provider.hashCode() : 0;
-        result = 31 * result + (providerId != null ? providerId.hashCode() : 0);
-        return result;
-    }
 }

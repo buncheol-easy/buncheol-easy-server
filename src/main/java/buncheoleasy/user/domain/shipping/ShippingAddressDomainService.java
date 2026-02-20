@@ -5,18 +5,15 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-@RequiredArgsConstructor
 @Service
-@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class ShippingAddressDomainService {
 
     private static final int MAX_SHIPPING_ADDRESS_COUNT = 10;
 
     private final ShippingAddressRepository shippingAddressRepository;
 
-    @Transactional
     public ShippingAddress createShippingAddress(final Long userId, final String shippingMethod,
                                                  final String storeName) {
         // 개수 제한 체크
@@ -34,7 +31,6 @@ public class ShippingAddressDomainService {
         return shippingAddressRepository.save(shippingAddress);
     }
 
-    @Transactional
     public void updateShippingAddress(final Long userId, final Long id, final String shippingMethod,
                                       final String storeName) {
         ShippingAddress shippingAddress = getShippingAddress(id);
@@ -54,7 +50,6 @@ public class ShippingAddressDomainService {
         shippingAddressRepository.update(shippingAddress);
     }
 
-    @Transactional
     public void deleteShippingAddress(final Long userId, final Long id) {
         ShippingAddress shippingAddress = getShippingAddress(id);
 

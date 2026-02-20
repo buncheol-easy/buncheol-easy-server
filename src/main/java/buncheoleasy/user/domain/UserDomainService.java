@@ -4,16 +4,13 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class UserDomainService {
 
     private final UserRepository userRepository;
 
-    @Transactional
     public User getOrCreateBySocialLogin(final SocialInfo socialInfo, final String email) {
         return userRepository.findBySocialInfo(socialInfo)
                 .orElseGet(() -> createNewSocialUser(socialInfo, email));
@@ -28,14 +25,12 @@ public class UserDomainService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
-    @Transactional
     public void withdraw(final Long id) {
         User user = getUser(id);
         user.withdraw();
         userRepository.withdraw(user);
     }
 
-    @Transactional
     public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
         User user = getUser(id);
 

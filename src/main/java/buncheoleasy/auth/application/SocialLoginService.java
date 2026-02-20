@@ -10,7 +10,6 @@ import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +25,6 @@ public class SocialLoginService {
         return jwtTokenProvider.issueTokens(user.getId());
     }
 
-    @Transactional(readOnly = true)
     public TokenPair reissueTokens(final String refreshToken) {
         Long userId = jwtTokenProvider.parseUserIdFromRefreshToken(refreshToken);
 

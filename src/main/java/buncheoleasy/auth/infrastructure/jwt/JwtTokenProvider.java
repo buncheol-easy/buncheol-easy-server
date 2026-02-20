@@ -53,31 +53,36 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(final Long userId) {
-        return createToken(userId, accessTokenExpirationSeconds, accessSecretKey);
-    }
-
-    public String createRefreshToken(final Long userId) {
-        String token = createToken(userId, refreshTokenExpirationSeconds, refreshSecretKey);
-        refreshTokenStore.save(userId, token, refreshTokenExpirationSeconds);
-        return token;
-    }
-
-    public TokenPair reissueTokens(final Long userId, final String oldRefreshToken) {
-        refreshTokenStore.verify(userId, oldRefreshToken);
-        refreshTokenStore.delete(userId);
-        return issueTokens(userId);
-    }
-
-    private String createToken(final Long userId, final long expirationSeconds, final SecretKey secretKey) {
         final Instant now = Instant.now();
-        final Instant expiration = now.plusSeconds(expirationSeconds);
+        final Instant expiration = now.plusSeconds(accessTokenExpirationSeconds);
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiration))
-                .signWith(secretKey)
+                .signWith(accessSecretKey)
                 .compact();
+    }
+
+    public String createRefreshToken(final Long userId) {
+        final Instant now = Instant.now();
+        final Instant expiration = now.plusSeconds(refreshTokenExpirationSeconds);
+
+        String token = Jwts.builder()
+                .subject(String.valueOf(userId))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiration))
+                .signWith(refreshSecretKey)
+                .compact();
+
+        refreshTokenStore.save(userId, token, refreshTokenExpirationSeconds);
+        return token;
+    }
+    
+    public TokenPair reissueTokens(final Long userId, final String oldRefreshToken) {
+        refreshTokenStore.verify(userId, oldRefreshToken);
+        refreshTokenStore.delete(userId);
+        return issueTokens(userId);
     }
 
     private Claims parseClaims(final String token, final SecretKey secretKey) {

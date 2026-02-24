@@ -1,17 +1,20 @@
-package buncheoleasy.auth.presentation;
+package buncheoleasy.user.presentation;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.mockito.BDDMockito.willThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.TokenPair;
-import buncheoleasy.auth.application.SocialLoginService;
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.user.application.UserService;
+import buncheoleasy.user.dto.response.UserProfileResponse;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,8 +34,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
 @ActiveProfiles("test")
-@DisplayName("AuthController WebMvc 테스트")
-class AuthControllerWebMvcTest {
+@DisplayName("UserController 테스트")
+class UserControllerTest {
 
     private static final Long USER_ID = 1L;
 
@@ -40,7 +43,7 @@ class AuthControllerWebMvcTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private SocialLoginService socialLoginService;
+    private UserService userService;
 
     @MockitoBean
     private JwtTokenProvider jwtTokenProvider;
@@ -60,44 +63,44 @@ class AuthControllerWebMvcTest {
     }
 
     @Test
-    void 토큰_재발급_요청이_성공하면_200을_반환한다() throws Exception {
-        given(socialLoginService.reissueTokens("valid-refresh"))
-                .willReturn(new TokenPair("new-access", "new-refresh"));
+    void 내_프로필_조회가_성공하면_200과_응답본문을_반환한다() throws Exception {
+        given(userService.getUserProfile(USER_ID))
+                .willReturn(UserProfileResponse.of("KAKAO", "test@example.com", "테스트닉", "01012345678"));
 
-        mockMvc.perform(post("/v1/auth/reissue-token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"valid-refresh\"}"))
+        mockMvc.perform(get("/v1/users/me").with(mockAuth()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("new-access"))
-                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+                .andExpect(jsonPath("$.provider").value("KAKAO"))
+                .andExpect(jsonPath("$.email").value("test@example.com"))
+                .andExpect(jsonPath("$.nickname").value("테스트닉"))
+                .andExpect(jsonPath("$.phoneNumber").value("01012345678"));
     }
 
     @Test
-    void 토큰_재발급_요청_검증에_실패하면_400과_표준_에러코드를_반환한다() throws Exception {
-        mockMvc.perform(post("/v1/auth/reissue-token")
+    void 프로필_수정_요청_검증에_실패하면_400과_표준_에러코드를_반환한다() throws Exception {
+        mockMvc.perform(put("/v1/users/me")
+                        .with(mockAuth())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"\"}"))
+                        .content("{\"nickname\":\"테스트@유저\",\"phoneNumber\":\"01012345678\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
     @Test
-    void 토큰_재발급_중_BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
-        given(socialLoginService.reissueTokens("invalid-refresh"))
-                .willThrow(new BusinessException(ErrorCode.AUTH_INVALID_TOKEN));
+    void 회원탈퇴_중_BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.USER_NOT_FOUND))
+                .given(userService)
+                .withdraw(USER_ID);
 
-        mockMvc.perform(post("/v1/auth/reissue-token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"invalid-refresh\"}"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
+        mockMvc.perform(delete("/v1/users/me").with(mockAuth()))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(ErrorCode.USER_NOT_FOUND.getCode())));
     }
 
     @Test
-    void 로그아웃_요청이_성공하면_204를_반환한다() throws Exception {
-        mockMvc.perform(post("/v1/auth/logout").with(mockAuth()))
+    void 회원탈퇴가_성공하면_204를_반환한다() throws Exception {
+        mockMvc.perform(delete("/v1/users/me").with(mockAuth()))
                 .andExpect(status().isNoContent());
 
-        then(socialLoginService).should().logout(USER_ID);
+        then(userService).should().withdraw(USER_ID);
     }
 }

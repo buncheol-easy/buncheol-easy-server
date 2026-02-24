@@ -38,6 +38,7 @@ dependencies {
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 
@@ -54,6 +55,7 @@ dependencies {
 	// Spring Security
 	implementation "org.springframework.boot:spring-boot-starter-security"
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+	testImplementation 'org.springframework.security:spring-security-test'
 
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
@@ -64,6 +66,15 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 }
 
-tasks.named('test') {
+tasks.withType(Test).configureEach {
 	useJUnitPlatform()
+
+	doFirst {
+		def agent = configurations.testRuntimeClasspath.find {
+			it.name.contains("byte-buddy-agent")
+		}
+		if (agent != null) {
+			jvmArgs "-javaagent:${agent.absolutePath}"
+		}
+	}
 }

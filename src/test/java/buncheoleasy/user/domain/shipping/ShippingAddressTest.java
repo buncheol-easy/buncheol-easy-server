@@ -119,7 +119,7 @@ class ShippingAddressTest {
         }
 
         @Test
-        void 상점명이_다르면_false를_반환한다() {
+        void 지점명이_다르면_false를_반환한다() {
             // given
             ShippingAddress address = ShippingAddress.create(1L, "GS25_HALF", "GS25 강남역점");
 

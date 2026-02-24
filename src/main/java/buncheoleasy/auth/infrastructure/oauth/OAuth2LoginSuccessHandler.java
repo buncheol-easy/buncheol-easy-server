@@ -31,6 +31,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                                         Authentication authentication) throws IOException {
         OAuth2AuthenticationToken oauthToken = getAuthenticationToken(authentication);
         OAuth2UserProfile profile = getUserProfile(oauthToken);
+        validateSocialEmail(profile.email());
 
         TokenPair token = socialLoginService.login(
                 profile.provider().name(),
@@ -65,5 +66,11 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             }
         }
         throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
+    }
+
+    private void validateSocialEmail(final String email) {
+        if (email == null || email.isBlank()) {
+            throw new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
+        }
     }
 }

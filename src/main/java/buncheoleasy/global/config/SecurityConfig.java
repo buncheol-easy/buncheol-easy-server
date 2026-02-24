@@ -21,6 +21,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_PATHS = {
             "/", "/index.html",
             "/favicon.ico",
+            "/error",
             "/v1/auth/reissue-token"
     };
 

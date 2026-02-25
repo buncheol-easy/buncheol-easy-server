@@ -63,6 +63,10 @@ public enum ErrorCode {
      * BCH - 분철 관련 에러
      */
     BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-001", "이미지는 최대 3개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_REQUIRED("BCH-002", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_DUPLICATED("BCH-003", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_NAME_REQUIRED("BCH-004", "그룹을 직접 입력한 경우 멤버 이름은 필수입니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_OFFICIAL_GROUP_MEMBER_ID_REQUIRED("BCH-005", "공식 그룹의 분철 멤버는 멤버 ID가 필수입니다.", HttpStatus.BAD_REQUEST),
 
     /**
      * GRP - 그룹 관련 에러

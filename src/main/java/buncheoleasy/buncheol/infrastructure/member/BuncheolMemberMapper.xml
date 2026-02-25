@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="buncheoleasy.buncheol.infrastructure.member.BuncheolMemberMapper">
+
+    <!-- 분철 멤버 일괄 저장 -->
+    <insert id="insertAll">
+        INSERT INTO buncheol_members (
+                buncheol_id,
+                member_id,
+                member_name,
+                instant_price,
+                bid_allowed,
+                bid_min_price,
+                created_at,
+                updated_at
+        )
+        VALUES
+        <foreach collection="buncheolMembers" item="buncheolMember" separator=",">
+            (
+                 #{buncheolMember.buncheolId},
+                 #{buncheolMember.memberId},
+                 #{buncheolMember.memberName},
+                 #{buncheolMember.instantPrice},
+                 #{buncheolMember.bidAllowed},
+                 #{buncheolMember.bidMinPrice},
+                 NOW(),
+                 NOW()
+            )
+        </foreach>
+    </insert>
+
+</mapper>

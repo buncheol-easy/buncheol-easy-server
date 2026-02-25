@@ -60,6 +60,11 @@ public enum ErrorCode {
     FILE_READ_FAILED("FILE-003", "파일을 읽는데 실패했습니다.", HttpStatus.BAD_REQUEST),
 
     /**
+     * BCH - 분철 관련 에러
+     */
+    BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-001", "이미지는 최대 3개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
+
+    /**
      * GRP - 그룹 관련 에러
      */
     GROUP_NOT_FOUND("GRP-001", "존재하지 않는 그룹입니다.", HttpStatus.NOT_FOUND),

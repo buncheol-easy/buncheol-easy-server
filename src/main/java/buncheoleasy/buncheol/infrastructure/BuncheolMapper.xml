@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="buncheoleasy.buncheol.infrastructure.BuncheolMapper">
+
+    <!-- 분철 저장 -->
+    <insert id="insert" parameterType="Buncheol" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO buncheols (
+                host_id,
+                group_id,
+                group_name,
+                title,
+                description,
+                goods_name,
+                store_name,
+                original_price,
+                deadline,
+                shipping_deadline_days,
+                gs25_shipping_fee,
+                cu_shipping_fee,
+                settlement_bank,
+                settlement_account,
+                settlement_holder,
+                created_at,
+                updated_at
+        ) VALUES (
+                #{hostId},
+                #{groupId},
+                #{groupName},
+                #{title},
+                #{description},
+                #{goodsName},
+                #{storeName},
+                #{originalPrice},
+                #{deadline},
+                #{shippingDeadlineDays},
+                #{gs25ShippingFee},
+                #{cuShippingFee},
+                #{settlementBank},
+                #{settlementAccount},
+                #{settlementHolder},
+                NOW(),
+                NOW()
+        )
+    </insert>
+
+</mapper>

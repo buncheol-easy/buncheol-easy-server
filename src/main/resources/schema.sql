@@ -83,3 +83,86 @@ CREATE TABLE IF NOT EXISTS group_members
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- buncheols 테이블 생성
+CREATE TABLE IF NOT EXISTS buncheols
+(
+    id                     BIGINT       NOT NULL AUTO_INCREMENT,
+    host_id                BIGINT       NOT NULL COMMENT '개최자',
+    group_id               BIGINT       NULL COMMENT '대상 그룹 (NULL이면 커스텀 그룹)',
+    group_name             VARCHAR(100) NOT NULL COMMENT '그룹명 (반정규화/커스텀)',
+    title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
+    description            TEXT         NULL COMMENT '분철 설명',
+    goods_name             VARCHAR(200) NOT NULL COMMENT '굿즈명',
+    store_name             VARCHAR(200) NOT NULL COMMENT '구매처',
+    original_price         INT          NOT NULL COMMENT '원가(굿즈 1개당)',
+    deadline               DATETIME     NOT NULL COMMENT '분철 마감일',
+    shipping_deadline_days INT          NOT NULL COMMENT '발송 마감 일수(수령 후 n일)',
+    gs25_shipping_fee      INT          NULL COMMENT 'GS25반값택배 배송비',
+    cu_shipping_fee        INT          NULL COMMENT 'CU반값택배 배송비',
+    settlement_bank        VARCHAR(50)  NOT NULL COMMENT '정산 은행',
+    settlement_account     VARCHAR(50)  NOT NULL COMMENT '정산 계좌번호',
+    settlement_holder      VARCHAR(50)  NOT NULL COMMENT '정산 예금주',
+    status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED',
+    closed_at              DATETIME     NULL COMMENT '마감 일시',
+    created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_buncheols_group_id (group_id),
+    INDEX idx_buncheols_goods_name (goods_name),
+    INDEX idx_buncheols_title (title),
+
+    CONSTRAINT fk_buncheols_host
+        FOREIGN KEY (host_id)
+            REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_buncheols_group
+        FOREIGN KEY (group_id)
+            REFERENCES `groups` (id) ON DELETE SET NULL
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS buncheol_members
+(
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id   BIGINT       NOT NULL,
+    member_id     BIGINT       NULL COMMENT '대상 멤버 (NULL이면 커스텀 멤버)',
+    member_name   VARCHAR(100) NOT NULL COMMENT '멤버명 (반정규화/커스텀)',
+    instant_price INT          NOT NULL COMMENT '즉시 구매 가격',
+    bid_allowed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '제시 가능 여부',
+    bid_min_price INT          NULL COMMENT '제시 최소 금액',
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_buncheol_members_buncheol_id (buncheol_id),
+
+    CONSTRAINT fk_buncheol_members_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE,
+    CONSTRAINT fk_buncheol_members_member
+        FOREIGN KEY (member_id)
+            REFERENCES group_members (id) ON DELETE SET NULL
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS buncheol_images
+(
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id BIGINT       NOT NULL,
+    image_url   VARCHAR(500) NOT NULL COMMENT '이미지 URL',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_buncheol_images_buncheol_id (buncheol_id),
+
+    CONSTRAINT fk_buncheol_images_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

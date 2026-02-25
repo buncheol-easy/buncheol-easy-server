@@ -34,9 +34,7 @@ public class BuncheolService {
 
     @Transactional
     public void holdBuncheol(final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
-        if (images != null) {
-            buncheolImageDomainService.validateImageCount(images.size());
-        }
+        buncheolImageDomainService.validateImageCount(images.size());
 
         ResolvedGroup resolvedGroup = resolveGroup(request.groupId(), request.groupName());
 
@@ -58,7 +56,7 @@ public class BuncheolService {
         );
 
         // 분철 이미지 저장
-        if (images != null && !images.isEmpty()) {
+        if (!images.isEmpty()) {
             eventPublisher.publishEvent(
                     new BuncheolImageUploadEvent(
                         buncheol.getId(),

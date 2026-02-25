@@ -44,7 +44,7 @@ public class BuncheolController {
 
     private List<ImageFile> toImageFiles(final List<MultipartFile> files) {
         if (files == null) {
-            return null;
+            return List.of();
         }
         return files.stream()
                 .map(this::toImageFile)

@@ -28,7 +28,7 @@ jobs:
 
       - name: Create Sonar Gradle File
         run: |
-          insert_string="plugins { id 'org.sonarqube' version '6.0.1.5171' }"
+          insert_string="plugins { id 'org.sonarqube' version '7.2.2.6593' }"
           if [ -f "build.gradle" ]; then
             echo "$insert_string" > temp.gradle
             cat build.gradle >> temp.gradle

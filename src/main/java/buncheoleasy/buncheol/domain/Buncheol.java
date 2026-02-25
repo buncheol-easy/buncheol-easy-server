@@ -1,12 +1,18 @@
 package buncheoleasy.buncheol.domain;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.LocalDateTime;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
-@AllArgsConstructor
 public class Buncheol {
+
+    private static final int GROUP_NAME_MAX_LENGTH = 100;
+    private static final int TITLE_MAX_LENGTH = 200;
+    private static final int DESCRIPTION_MAX_LENGTH = 300;
+    private static final int GOODS_NAME_MAX_LENGTH = 200;
+    private static final int STORE_NAME_MAX_LENGTH = 200;
 
     private Long id;
     private final Long hostId;
@@ -16,14 +22,11 @@ public class Buncheol {
     private String description;
     private final String goodsName;
     private final String storeName;
-    private final int originalPrice;
+    private final long originalPrice;
     private LocalDateTime deadline;
     private final int shippingDeadlineDays;
-    private Integer gs25ShippingFee;
-    private Integer cuShippingFee;
-    private String settlementBank;
-    private String settlementAccount;
-    private String settlementHolder;
+    private final ShippingFeePolicy shippingFeePolicy;
+    private final SettlementInfo settlementInfo;
     private BuncheolStatus status;
     private LocalDateTime closedAt;
     private LocalDateTime createdAt;
@@ -34,6 +37,7 @@ public class Buncheol {
     }
 
     private Buncheol(final Long hostId, final BuncheolParams params) {
+        validate(hostId, params);
         this.hostId = hostId;
         this.groupId = params.groupId();
         this.groupName = params.groupName();
@@ -44,11 +48,93 @@ public class Buncheol {
         this.originalPrice = params.originalPrice();
         this.deadline = params.deadline();
         this.shippingDeadlineDays = params.shippingDeadlineDays();
-        this.gs25ShippingFee = params.gs25ShippingFee();
-        this.cuShippingFee = params.cuShippingFee();
-        this.settlementBank = params.settlementBank();
-        this.settlementAccount = params.settlementAccount();
-        this.settlementHolder = params.settlementHolder();
+        this.shippingFeePolicy = ShippingFeePolicy.of(
+                params.gs25ShippingFee(),
+                params.cuShippingFee()
+        );
+        this.settlementInfo = SettlementInfo.of(
+                params.settlementBank(),
+                params.settlementAccount(),
+                params.settlementHolder()
+        );
         this.status = BuncheolStatus.RECRUITING;
+    }
+
+    private void validate(final Long hostId, final BuncheolParams params) {
+        validateHostAndParams(hostId, params);
+        validateGroupName(params.groupName());
+        validateTitle(params.title());
+        validateDescription(params.description());
+        validateGoodsName(params.goodsName());
+        validateStoreName(params.storeName());
+        validateOriginalPrice(params.originalPrice());
+        validateShippingDeadlineDays(params.shippingDeadlineDays());
+        validateDeadline(params.deadline());
+    }
+
+    private void validateHostAndParams(final Long hostId, final BuncheolParams params) {
+        if (hostId == null || params == null) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+        }
+    }
+
+    private void validateGroupName(final String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+        }
+        if (value.length() > GROUP_NAME_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+        }
+    }
+
+    private void validateTitle(final String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+        }
+        if (value.length() > TITLE_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+        }
+    }
+
+    private void validateDescription(final String value) {
+        if (value != null && value.length() > DESCRIPTION_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+        }
+    }
+
+    private void validateGoodsName(final String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+        }
+        if (value.length() > GOODS_NAME_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+        }
+    }
+
+    private void validateStoreName(final String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+        }
+        if (value.length() > STORE_NAME_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+        }
+    }
+
+    private void validateOriginalPrice(final long value) {
+        if (value <= 0) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_PRICE_INVALID);
+        }
+    }
+
+    private void validateShippingDeadlineDays(final int value) {
+        if (value <= 0) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID);
+        }
+    }
+
+    private void validateDeadline(final LocalDateTime deadline) {
+        if (deadline == null || !deadline.isAfter(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
+        }
     }
 }

@@ -22,8 +22,8 @@
                  #{buncheolMember.memberId},
                  #{buncheolMember.memberName},
                  #{buncheolMember.instantPrice},
-                 #{buncheolMember.bidAllowed},
-                 #{buncheolMember.bidMinPrice},
+                 #{buncheolMember.bidOption.bidAllowed},
+                 #{buncheolMember.bidOption.bidMinPrice},
                  NOW(),
                  NOW()
             )

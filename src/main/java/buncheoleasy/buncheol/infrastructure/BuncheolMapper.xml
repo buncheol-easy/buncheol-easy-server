@@ -21,6 +21,7 @@
                 settlement_bank,
                 settlement_account,
                 settlement_holder,
+                status,
                 created_at,
                 updated_at
         ) VALUES (
@@ -34,11 +35,12 @@
                 #{originalPrice},
                 #{deadline},
                 #{shippingDeadlineDays},
-                #{gs25ShippingFee},
-                #{cuShippingFee},
-                #{settlementBank},
-                #{settlementAccount},
-                #{settlementHolder},
+                #{shippingFeePolicy.gs25ShippingFee},
+                #{shippingFeePolicy.cuShippingFee},
+                #{settlementInfo.bank},
+                #{settlementInfo.account},
+                #{settlementInfo.holder},
+                #{status},
                 NOW(),
                 NOW()
         )

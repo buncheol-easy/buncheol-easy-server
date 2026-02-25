@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.domain.member;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -11,7 +13,12 @@ public class BuncheolMemberDomainService {
     private final BuncheolMemberRepository buncheolMemberRepository;
 
     public void createBuncheolMembers(final Long buncheolId, final List<BuncheolMemberParams> params) {
-        List<BuncheolMember> newBuncheolMembers = params.stream().map(param ->
+        if (params == null || params.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
+        }
+
+        List<BuncheolMember> newBuncheolMembers = params.stream()
+                .map(param ->
                     BuncheolMember.create(
                             buncheolId,
                             param.memberId(),

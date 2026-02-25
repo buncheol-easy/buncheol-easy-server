@@ -62,11 +62,28 @@ public enum ErrorCode {
     /**
      * BCH - 분철 관련 에러
      */
-    BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-001", "이미지는 최대 3개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
-    BUNCHEOL_MEMBER_REQUIRED("BCH-002", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
-    BUNCHEOL_MEMBER_DUPLICATED("BCH-003", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
-    BUNCHEOL_MEMBER_NAME_REQUIRED("BCH-004", "그룹을 직접 입력한 경우 멤버 이름은 필수입니다.", HttpStatus.BAD_REQUEST),
-    BUNCHEOL_OFFICIAL_GROUP_MEMBER_ID_REQUIRED("BCH-005", "공식 그룹의 분철 멤버는 멤버 ID가 필수입니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_REQUIRED_FIELD_MISSING("BCH-001", "분철 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_TEXT_LENGTH_INVALID("BCH-002", "분철 텍스트 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_DEADLINE_INVALID("BCH-003", "분철 마감일은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID("BCH-004", "발송 마감일수는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_PRICE_INVALID("BCH-005", "가격은 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_SHIPPING_FEE_REQUIRED("BCH-006", "배송비는 최소 1개 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_SETTLEMENT_INFO_LENGTH_INVALID("BCH-008", "정산 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
+
+    BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_NAME_REQUIRED("BCH-022", "그룹을 직접 입력한 경우 멤버 이름은 필수입니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_NAME_LENGTH_INVALID("BCH-023", "분철 멤버 이름은 100자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_OFFICIAL_GROUP_MEMBER_ID_REQUIRED("BCH-024", "공식 그룹의 분철 멤버는 멤버 ID가 필수입니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_PRICE_INVALID("BCH-025", "분철 멤버 즉시 구매가는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_BID_MIN_PRICE_REQUIRED("BCH-026", "제시 허용 시 제시 최소 금액은 필수입니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID("BCH-027", "제시 최소 금액은 즉시 구매가보다 작아야 합니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_MEMBER_BID_MIN_PRICE_FORBIDDEN("BCH-028", "제시 미허용 시 제시 최소 금액은 입력할 수 없습니다.", HttpStatus.BAD_REQUEST),
+
+    BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 3개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_IMAGE_URL_REQUIRED("BCH-041", "이미지 URL은 필수입니다.", HttpStatus.BAD_REQUEST),
+    BUNCHEOL_IMAGE_URL_LENGTH_INVALID("BCH-042", "이미지 URL은 500자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
 
     /**
      * GRP - 그룹 관련 에러

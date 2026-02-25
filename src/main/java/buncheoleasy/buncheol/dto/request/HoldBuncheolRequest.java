@@ -15,10 +15,10 @@ public record HoldBuncheolRequest(
         Long groupId,
         @Size(max = 100) String groupName,
         @NotBlank @Size(max = 200) String title,
-        String description,
+        @Size(max = 300) String description,
         @NotBlank @Size(max = 200) String goodsName,
         @NotBlank @Size(max = 200) String storeName,
-        @Positive int originalPrice,
+        @Positive long originalPrice,
         @NotNull @Future LocalDateTime deadline,
         @Positive int shippingDeadlineDays,
         @Positive Integer gs25ShippingFee,
@@ -30,7 +30,7 @@ public record HoldBuncheolRequest(
 ) {
     // 커스텀 그룹 생성 시(groupId == null)에만 groupName 필수
     @AssertTrue
-    public boolean isGroupNameRequiredForCustomGroup() {
+    public boolean isGroupNameValidForGroupType() {
         if (groupId != null) {
             return true;
         }

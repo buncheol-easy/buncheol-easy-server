@@ -9,7 +9,7 @@ public record BuncheolParams(
         String description,
         String goodsName,
         String storeName,
-        int originalPrice,
+        long originalPrice,
         LocalDateTime deadline,
         int shippingDeadlineDays,
         Integer gs25ShippingFee,

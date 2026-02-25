@@ -12,7 +12,7 @@
 
     <!-- ID로 그룹 조회 -->
     <select id="findById" resultType="Group">
-        SELECT *
+        SELECT id, name, created_at, updated_at
         FROM `groups`
         WHERE id = #{id}
     </select>

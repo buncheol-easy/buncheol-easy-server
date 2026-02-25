@@ -13,13 +13,8 @@ public class MybatisGroupMemberRepository implements GroupMemberRepository {
     private final GroupMemberMapper groupMemberMapper;
 
     @Override
-    public int countByIdsAndGroupId(final Long groupId, final List<Long> memberIds) {
-        return groupMemberMapper.countByIdsAndGroupId(groupId, memberIds);
-    }
-
-    @Override
-    public List<GroupMember> findAllByIds(final List<Long> memberIds) {
-        return groupMemberMapper.selectAllByIds(memberIds);
+    public List<GroupMember> findAllByGroupIdAndIds(final Long groupId, final List<Long> memberIds) {
+        return groupMemberMapper.selectAllByGroupIdAndIds(groupId, memberIds);
     }
 
     @Override

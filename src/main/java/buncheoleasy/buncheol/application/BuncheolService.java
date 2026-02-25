@@ -38,22 +38,23 @@ public class BuncheolService {
             buncheolImageDomainService.validateImageCount(images.size());
         }
 
-        // null 또는 groupId
-        Long resolvedGroupId = resolveGroup(request.groupId());
+        ResolvedGroup resolvedGroup = resolveGroup(request.groupId(), request.groupName());
+
+        List<BuncheolMemberParams> buncheolMemberParams = toBuncheolMemberParams(
+                resolvedGroup.groupId(),
+                request.buncheolMembers()
+        );
 
         // groupId가 있으면 groupName은 DB값으로 채워짐 (요청값 무시), 없으면 요청값 사용
         Buncheol buncheol = buncheolDomainService.createBuncheol(
                 hostId,
-                toBuncheolParams(request, resolvedGroupId)
+                toBuncheolParams(request, resolvedGroup)
         );
 
         // 분철 멤버 저장
         buncheolMemberDomainService.createBuncheolMembers(
                 buncheol.getId(),
-                toBuncheolMemberParams(
-                        resolvedGroupId,
-                        request.buncheolMembers()
-                )
+                buncheolMemberParams
         );
 
         // 분철 이미지 저장
@@ -67,22 +68,23 @@ public class BuncheolService {
         }
     }
 
-    // groupId가 있으면 존재 검증 후 반환, 없으면 null 반환 (그룹명은 buncheol에 직접 저장)
-    private Long resolveGroup(final Long groupId) {
+    // groupId가 있으면 존재 검증 후 반환, 없으면 null 반환 (그룹명은 분철에 직접 저장)
+    private ResolvedGroup resolveGroup(final Long groupId, final String requestedGroupName) {
         if (groupId == null) {
-            return null;
+            return new ResolvedGroup(null, requestedGroupName);
         }
-        groupDomainService.validateGroupExists(groupId);
-        return groupId;
+        return new ResolvedGroup(
+                groupId,
+                groupDomainService
+                        .getGroup(groupId)
+                        .getName()
+        );
     }
 
-    private BuncheolParams toBuncheolParams(final HoldBuncheolRequest request, final Long resolvedGroupId) {
-        String groupName = resolvedGroupId == null
-                ? request.groupName()
-                : groupDomainService.getGroup(resolvedGroupId).getName();
+    private BuncheolParams toBuncheolParams(final HoldBuncheolRequest request, final ResolvedGroup resolvedGroup) {
         return new BuncheolParams(
-                resolvedGroupId,
-                groupName,
+                resolvedGroup.groupId(),
+                resolvedGroup.groupName(),
                 request.title(),
                 request.description(),
                 request.goodsName(),
@@ -101,50 +103,31 @@ public class BuncheolService {
     private List<BuncheolMemberParams> toBuncheolMemberParams(final Long resolvedGroupId,
                                                               final List<BuncheolMemberRequest> requests) {
         if (resolvedGroupId == null) {
-            if (requests.stream()
-                    .anyMatch(m -> m.memberName() == null
-                                    || m.memberName().isBlank())
-            ) {
-                throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_NAME_REQUIRED);
-            }
+            return buildCustomGroupMembers(requests);
+        }
+        return buildOfficialGroupMembers(resolvedGroupId, requests);
+    }
 
-            return requests.stream()
-                    .map(m -> new BuncheolMemberParams(
-                            null,
-                            m.memberName(),
-                            m.instantPrice(),
-                            m.bidAllowed(),
-                            m.bidMinPrice()
-                    )).toList();
+    private List<BuncheolMemberParams> buildCustomGroupMembers(final List<BuncheolMemberRequest> requests) {
+        if (requests.stream().anyMatch(m -> m.memberName() == null || m.memberName().isBlank())) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_NAME_REQUIRED);
         }
 
-        // memberId가 없는 멤버가 있으면 에러
-        if (requests.stream()
-                .anyMatch(m -> m.memberId() == null)
-        ) {
-            throw new BusinessException(ErrorCode.BUNCHEOL_OFFICIAL_GROUP_MEMBER_ID_REQUIRED);
-        }
-
-        List<Long> memberIds = requests.stream()
-                .map(BuncheolMemberRequest::memberId)
+        return requests.stream()
+                .map(m -> new BuncheolMemberParams(
+                        null,
+                        m.memberName(),
+                        m.instantPrice(),
+                        m.bidAllowed(),
+                        m.bidMinPrice()
+                ))
                 .toList();
+    }
 
-        // 중복 memberId 검증
-        long distinctCount = memberIds.stream().distinct().count();
-        if (memberIds.size() != distinctCount) {
-            throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_DUPLICATED);
-        }
-
-        // 해당 그룹 소속 여부 검증
-        groupDomainService.validateMembersBelongToGroup(resolvedGroupId, memberIds);
-
-        Map<Long, String> memberNames = groupDomainService.getGroupMembersByIds(memberIds)
-                .stream().collect(
-                        Collectors.toMap(
-                                GroupMember::getId,
-                                GroupMember::getName
-                        )
-                );
+    private List<BuncheolMemberParams> buildOfficialGroupMembers(final Long groupId,
+                                                                 final List<BuncheolMemberRequest> requests) {
+        List<Long> memberIds = extractAndValidateOfficialMemberIds(requests);
+        Map<Long, String> memberNames = loadMemberNameMapInGroup(groupId, memberIds);
 
         return requests.stream()
                 .map(m -> new BuncheolMemberParams(
@@ -153,6 +136,37 @@ public class BuncheolService {
                         m.instantPrice(),
                         m.bidAllowed(),
                         m.bidMinPrice()
-                )).toList();
+                ))
+                .toList();
+    }
+
+    private List<Long> extractAndValidateOfficialMemberIds(final List<BuncheolMemberRequest> requests) {
+        if (requests.stream().anyMatch(m -> m.memberId() == null)) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_OFFICIAL_GROUP_MEMBER_ID_REQUIRED);
+        }
+
+        List<Long> memberIds = requests.stream()
+                .map(BuncheolMemberRequest::memberId)
+                .toList();
+
+        if (memberIds.size() != memberIds.stream().distinct().count()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_DUPLICATED);
+        }
+
+        return memberIds;
+    }
+
+    private Map<Long, String> loadMemberNameMapInGroup(final Long groupId, final List<Long> memberIds) {
+        return groupDomainService.getGroupMembersByIdsInGroup(groupId, memberIds)
+                .stream()
+                .collect(
+                        Collectors.toMap(
+                                GroupMember::getId,
+                                GroupMember::getName
+                        )
+                );
+    }
+
+    private record ResolvedGroup(Long groupId, String groupName) {
     }
 }

@@ -8,9 +8,7 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface GroupMemberMapper {
 
-    int countByIdsAndGroupId(@Param("groupId") Long groupId, @Param("memberIds") List<Long> memberIds);
-
-    List<GroupMember> selectAllByIds(@Param("memberIds") List<Long> memberIds);
+    List<GroupMember> selectAllByGroupIdAndIds(@Param("groupId") Long groupId, @Param("memberIds") List<Long> memberIds);
 
     List<GroupMember> selectAllByGroupId(@Param("groupId") Long groupId);
 }

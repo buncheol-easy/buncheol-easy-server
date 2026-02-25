@@ -26,11 +26,12 @@ public class GroupDomainService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
     }
 
-    public void validateMembersBelongToGroup(final Long id, final List<Long> memberIds) {
-        int matchedCount = groupMemberRepository.countByIdsAndGroupId(id, memberIds);
-        if (matchedCount != memberIds.size()) {
+    public List<GroupMember> getGroupMembersByIdsInGroup(final Long groupId, final List<Long> memberIds) {
+        List<GroupMember> members = groupMemberRepository.findAllByGroupIdAndIds(groupId, memberIds);
+        if (members.size() != memberIds.size()) {
             throw new BusinessException(ErrorCode.GROUP_MEMBER_NOT_IN_GROUP);
         }
+        return members;
     }
 
     public List<Group> searchGroups(final String keyword) {
@@ -39,9 +40,5 @@ public class GroupDomainService {
 
     public List<GroupMember> getGroupMembers(final Long id) {
         return groupMemberRepository.findAllByGroupId(id);
-    }
-
-    public List<GroupMember> getGroupMembersByIds(final List<Long> memberIds) {
-        return groupMemberRepository.findAllByIds(memberIds);
     }
 }

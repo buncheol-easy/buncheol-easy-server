@@ -25,10 +25,6 @@ public class ShippingAddressController {
 
     private final ShippingAddressService shippingAddressService;
 
-    /**
-     * TODO: user가 탈퇴 유저가 아닌지 검증이 필요함
-     */
-    
     @PostMapping
     public ResponseEntity<Void> registerShippingAddress(@AuthenticationPrincipal final Long userId,
                                                         @Valid @RequestBody final ShippingAddressRequest request) {

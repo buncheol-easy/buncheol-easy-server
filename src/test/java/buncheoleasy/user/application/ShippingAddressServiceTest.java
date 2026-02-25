@@ -1,9 +1,13 @@
 package buncheoleasy.user.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -29,6 +33,9 @@ class ShippingAddressServiceTest {
     @Mock
     private ShippingAddressDomainService shippingAddressDomainService;
 
+    @Mock
+    private UserDomainService userDomainService;
+
     private ShippingAddress savedAddress(Long id, Long userId, String method, String storeName) {
         return new ShippingAddress(id, userId, ShippingMethod.of(method), storeName,
                 LocalDateTime.now(), LocalDateTime.now());
@@ -43,6 +50,7 @@ class ShippingAddressServiceTest {
             // given
             Long userId = 1L;
             ShippingAddressRequest request = new ShippingAddressRequest("GS25_HALF", "GS25 강남역점");
+            given(userDomainService.isValidUser(userId)).willReturn(true);
 
             // when
             shippingAddressService.registerShippingAddress(userId, request);
@@ -50,6 +58,22 @@ class ShippingAddressServiceTest {
             // then
             then(shippingAddressDomainService).should()
                     .createShippingAddress(userId, "GS25_HALF", "GS25 강남역점");
+        }
+
+        @Test
+        void 유효하지_않은_유저면_예외가_발생하고_등록하지_않는다() {
+            // given
+            Long userId = 1L;
+            ShippingAddressRequest request = new ShippingAddressRequest("GS25_HALF", "GS25 강남역점");
+            given(userDomainService.isValidUser(userId)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> shippingAddressService.registerShippingAddress(userId, request))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+            then(shippingAddressDomainService).shouldHaveNoInteractions();
         }
     }
 
@@ -63,6 +87,7 @@ class ShippingAddressServiceTest {
             Long userId = 1L;
             Long addressId = 10L;
             ShippingAddressRequest request = new ShippingAddressRequest("CU_HALF", "CU 홍대입구점");
+            given(userDomainService.isValidUser(userId)).willReturn(true);
 
             // when
             shippingAddressService.modifyShippingAddress(userId, addressId, request);
@@ -70,6 +95,23 @@ class ShippingAddressServiceTest {
             // then
             then(shippingAddressDomainService).should()
                     .updateShippingAddress(userId, addressId, "CU_HALF", "CU 홍대입구점");
+        }
+
+        @Test
+        void 유효하지_않은_유저면_예외가_발생하고_수정하지_않는다() {
+            // given
+            Long userId = 1L;
+            Long addressId = 10L;
+            ShippingAddressRequest request = new ShippingAddressRequest("CU_HALF", "CU 홍대입구점");
+            given(userDomainService.isValidUser(userId)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> shippingAddressService.modifyShippingAddress(userId, addressId, request))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+            then(shippingAddressDomainService).shouldHaveNoInteractions();
         }
     }
 
@@ -82,6 +124,7 @@ class ShippingAddressServiceTest {
             // given
             Long userId = 1L;
             Long addressId = 10L;
+            given(userDomainService.isValidUser(userId)).willReturn(true);
 
             // when
             shippingAddressService.removeShippingAddress(userId, addressId);
@@ -89,6 +132,22 @@ class ShippingAddressServiceTest {
             // then
             then(shippingAddressDomainService).should()
                     .deleteShippingAddress(userId, addressId);
+        }
+
+        @Test
+        void 유효하지_않은_유저면_예외가_발생하고_삭제하지_않는다() {
+            // given
+            Long userId = 1L;
+            Long addressId = 10L;
+            given(userDomainService.isValidUser(userId)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> shippingAddressService.removeShippingAddress(userId, addressId))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+            then(shippingAddressDomainService).shouldHaveNoInteractions();
         }
     }
 
@@ -105,6 +164,7 @@ class ShippingAddressServiceTest {
                     savedAddress(2L, userId, "CU_HALF", "CU 홍대입구점")
             );
             given(shippingAddressDomainService.getUserShippingAddresses(userId)).willReturn(addresses);
+            given(userDomainService.isValidUser(userId)).willReturn(true);
 
             // when
             List<ShippingAddressResponse> responses = shippingAddressService.getUserShippingAddresses(userId);
@@ -124,12 +184,28 @@ class ShippingAddressServiceTest {
             // given
             Long userId = 1L;
             given(shippingAddressDomainService.getUserShippingAddresses(userId)).willReturn(List.of());
+            given(userDomainService.isValidUser(userId)).willReturn(true);
 
             // when
             List<ShippingAddressResponse> responses = shippingAddressService.getUserShippingAddresses(userId);
 
             // then
             assertThat(responses).isEmpty();
+        }
+
+        @Test
+        void 유효하지_않은_유저면_예외가_발생하고_조회하지_않는다() {
+            // given
+            Long userId = 1L;
+            given(userDomainService.isValidUser(userId)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> shippingAddressService.getUserShippingAddresses(userId))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+            then(shippingAddressDomainService).shouldHaveNoInteractions();
         }
     }
 }

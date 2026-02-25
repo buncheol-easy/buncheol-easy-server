@@ -1,5 +1,8 @@
 package buncheoleasy.user.application;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import buncheoleasy.user.dto.request.ShippingAddressRequest;
@@ -13,25 +16,36 @@ import org.springframework.stereotype.Service;
 public class ShippingAddressService {
 
     private final ShippingAddressDomainService shippingAddressDomainService;
+    private final UserDomainService userDomainService;
 
     public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
+        validateUser(userId);
         shippingAddressDomainService.createShippingAddress(userId, request.shippingMethod(), request.storeName());
     }
 
     public void modifyShippingAddress(final Long userId, final Long addressId, final ShippingAddressRequest request) {
+        validateUser(userId);
         shippingAddressDomainService.updateShippingAddress(userId, addressId, request.shippingMethod(),
                 request.storeName());
     }
 
     public void removeShippingAddress(final Long userId, final Long addressId) {
+        validateUser(userId);
         shippingAddressDomainService.deleteShippingAddress(userId, addressId);
     }
 
     public List<ShippingAddressResponse> getUserShippingAddresses(final Long userId) {
+        validateUser(userId);
         return shippingAddressDomainService.getUserShippingAddresses(userId)
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    private void validateUser(final Long userId) {
+        if(!userDomainService.isValidUser(userId)) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
     }
 
     private ShippingAddressResponse toResponse(final ShippingAddress shippingAddress) {

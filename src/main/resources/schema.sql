@@ -46,3 +46,40 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- groups 테이블 생성
+CREATE TABLE IF NOT EXISTS `groups`
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    name       VARCHAR(100) NOT NULL COMMENT '그룹명',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_groups_name (name)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- group_members 테이블 생성
+CREATE TABLE IF NOT EXISTS group_members
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    group_id   BIGINT       NOT NULL,
+    name       VARCHAR(100) NOT NULL COMMENT '멤버명',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_group_members_group_id (group_id),
+    INDEX idx_group_members_name (name),
+
+    CONSTRAINT fk_group_members_group
+        FOREIGN KEY (group_id)
+            REFERENCES `groups` (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+

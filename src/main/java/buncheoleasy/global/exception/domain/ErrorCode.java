@@ -53,6 +53,19 @@ public enum ErrorCode {
     AUTH_EXPIRED_TOKEN("AUTH-006", "만료된 토큰입니다.", HttpStatus.UNAUTHORIZED),
 
     /**
+     * FILE - MultiPart File 관련 에러
+     */
+    FILE_NAME_INVALID("FILE-001", "유효하지 않은 파일 이름입니다.", HttpStatus.BAD_REQUEST),
+    FILE_EXTENSION_INVALID("FILE-002", "지원하지 않는 이미지 형식입니다.", HttpStatus.BAD_REQUEST),
+    FILE_READ_FAILED("FILE-003", "파일을 읽는데 실패했습니다.", HttpStatus.BAD_REQUEST),
+
+    /**
+     * GRP - 그룹 관련 에러
+     */
+    GROUP_NOT_FOUND("GRP-001", "존재하지 않는 그룹입니다.", HttpStatus.NOT_FOUND),
+    GROUP_MEMBER_NOT_IN_GROUP("GRP-002", "해당 그룹에 속하지 않는 멤버입니다.", HttpStatus.BAD_REQUEST),
+
+    /**
      * C - 공통 에러
      */
     INVALID_INPUT_VALUE("C-001", "적절하지 않은 입력값입니다.", HttpStatus.BAD_REQUEST),

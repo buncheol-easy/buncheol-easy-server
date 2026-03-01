@@ -30,4 +30,8 @@ public class BuncheolImageDomainService {
             throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED);
         }
     }
+
+    public void deleteImagesExcluding(final Long buncheolId, final List<Long> keepImageIds) {
+        buncheolImageRepository.deleteByBuncheolIdExcludingIds(buncheolId, keepImageIds);
+    }
 }

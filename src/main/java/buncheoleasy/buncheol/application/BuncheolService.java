@@ -7,6 +7,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
+import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -66,6 +67,38 @@ public class BuncheolService {
         }
     }
 
+    // TODO: 추후 참여자 존재 시 제한된 수정만 허용하는 분기 추가
+    @Transactional
+    public void modifyBuncheol(final Long hostId, final Long buncheolId,
+                               final BuncheolModifyRequest request, final List<ImageFile> images) {
+        Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+        buncheol.validateOwner(hostId);
+
+        buncheolImageDomainService.validateImageCount(request.keepImageIds().size() + images.size());
+
+        // 그룹 해석 (공식 그룹이면 DB에서 그룹명 조회)
+        ResolvedGroup resolvedGroup = resolveGroup(request.groupId(), request.groupName());
+
+        // 분철 정보 전체 업데이트
+        buncheolDomainService.updateBuncheol(buncheol, toBuncheolParams(request, resolvedGroup));
+
+        // 멤버 교체
+        List<BuncheolMemberParams> memberParams = toBuncheolMemberParams(
+                resolvedGroup.groupId(),
+                request.buncheolMembers()
+        );
+        buncheolMemberDomainService.deleteAllByBuncheolId(buncheolId);
+        buncheolMemberDomainService.createBuncheolMembers(buncheolId, memberParams);
+
+        // 기존 이미지 중 유지 대상 외 삭제
+        buncheolImageDomainService.deleteImagesExcluding(buncheolId, request.keepImageIds());
+
+        // 새 이미지 업로드
+        if (!images.isEmpty()) {
+            eventPublisher.publishEvent(new BuncheolImageUploadEvent(buncheolId, images));
+        }
+    }
+
     // groupId가 있으면 존재 검증 후 반환, 없으면 null 반환 (그룹명은 분철에 직접 저장)
     private ResolvedGroup resolveGroup(final Long groupId, final String requestedGroupName) {
         if (groupId == null) {
@@ -80,6 +113,25 @@ public class BuncheolService {
     }
 
     private BuncheolParams toBuncheolParams(final HoldBuncheolRequest request, final ResolvedGroup resolvedGroup) {
+        return new BuncheolParams(
+                resolvedGroup.groupId(),
+                resolvedGroup.groupName(),
+                request.title(),
+                request.description(),
+                request.goodsName(),
+                request.storeName(),
+                request.originalPrice(),
+                request.deadline(),
+                request.shippingDeadlineDays(),
+                request.gs25ShippingFee(),
+                request.cuShippingFee(),
+                request.settlementBank(),
+                request.settlementAccount(),
+                request.settlementHolder()
+        );
+    }
+
+    private BuncheolParams toBuncheolParams(final BuncheolModifyRequest request, final ResolvedGroup resolvedGroup) {
         return new BuncheolParams(
                 resolvedGroup.groupId(),
                 resolvedGroup.groupName(),

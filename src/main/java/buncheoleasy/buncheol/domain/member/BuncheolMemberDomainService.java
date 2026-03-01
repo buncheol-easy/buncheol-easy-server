@@ -31,4 +31,8 @@ public class BuncheolMemberDomainService {
 
         buncheolMemberRepository.saveAll(newBuncheolMembers);
     }
+
+    public void deleteAllByBuncheolId(final Long buncheolId) {
+        buncheolMemberRepository.deleteAllByBuncheolId(buncheolId);
+    }
 }

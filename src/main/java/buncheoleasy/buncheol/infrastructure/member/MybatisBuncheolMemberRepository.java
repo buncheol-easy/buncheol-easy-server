@@ -17,4 +17,9 @@ public class MybatisBuncheolMemberRepository implements BuncheolMemberRepository
         buncheolMemberMapper.insertAll(buncheolMembers);
         return buncheolMembers;
     }
+
+    @Override
+    public void deleteAllByBuncheolId(Long buncheolId) {
+        buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
+    }
 }

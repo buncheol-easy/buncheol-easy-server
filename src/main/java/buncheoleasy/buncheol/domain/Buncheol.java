@@ -60,6 +60,40 @@ public class Buncheol {
         this.status = BuncheolStatus.RECRUITING;
     }
 
+    // MyBatis 조회 전용 생성자
+    private Buncheol(final Long id, final Long hostId, final Long groupId, final String groupName,
+                     final String title, final String description,
+                     final String goodsName, final String storeName,
+                     final long originalPrice, final LocalDateTime deadline, final int shippingDeadlineDays,
+                     final Integer gs25ShippingFee, final Integer cuShippingFee,
+                     final String settlementBank, final String settlementAccount, final String settlementHolder,
+                     final BuncheolStatus status, final LocalDateTime closedAt,
+                     final LocalDateTime createdAt, final LocalDateTime updatedAt) {
+        this.id = id;
+        this.hostId = hostId;
+        this.groupId = groupId;
+        this.groupName = groupName;
+        this.title = title;
+        this.description = description;
+        this.goodsName = goodsName;
+        this.storeName = storeName;
+        this.originalPrice = originalPrice;
+        this.deadline = deadline;
+        this.shippingDeadlineDays = shippingDeadlineDays;
+        this.shippingFeePolicy = ShippingFeePolicy.of(gs25ShippingFee, cuShippingFee);
+        this.settlementInfo = SettlementInfo.of(settlementBank, settlementAccount, settlementHolder);
+        this.status = status;
+        this.closedAt = closedAt;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    public void validateOwner(final Long userId) {
+        if(!hostId.equals(userId)) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION);
+        }
+    }
+
     private void validate(final Long hostId, final BuncheolParams params) {
         validateHostAndParams(hostId, params);
         validateGroupName(params.groupName());

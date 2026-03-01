@@ -19,4 +19,16 @@
         </foreach>
     </insert>
 
+    <!-- 유지 대상 외 이미지 삭제 -->
+    <delete id="deleteByBuncheolIdExcludingIds">
+        DELETE FROM buncheol_images
+        WHERE buncheol_id = #{buncheolId}
+        <if test="keepImageIds != null and keepImageIds.size() > 0">
+            AND id NOT IN
+            <foreach collection="keepImageIds" item="imageId" open="(" separator="," close=")">
+                #{imageId}
+            </foreach>
+        </if>
+    </delete>
+
 </mapper>

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.ImageFile;
+import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -13,7 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +42,24 @@ public class BuncheolController {
         );
         return ResponseEntity
                 .status(HttpStatus.CREATED)
+                .build();
+    }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Void> modifyBuncheol(
+            @AuthenticationPrincipal final Long hostId,
+            @PathVariable final Long id,
+            @Valid @RequestPart("request") final BuncheolModifyRequest request,
+            @RequestPart(value = "images", required = false) final List<MultipartFile> images
+    ) {
+        buncheolService.modifyBuncheol(
+                hostId,
+                id,
+                request,
+                toImageFiles(images)
+        );
+        return ResponseEntity
+                .status(HttpStatus.NO_CONTENT)
                 .build();
     }
 

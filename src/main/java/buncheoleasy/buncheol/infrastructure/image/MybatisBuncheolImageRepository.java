@@ -17,4 +17,9 @@ public class MybatisBuncheolImageRepository implements BuncheolImageRepository {
         buncheolImageMapper.insertAll(buncheolImages);
         return buncheolImages;
     }
+
+    @Override
+    public void deleteByBuncheolIdExcludingIds(Long buncheolId, List<Long> keepImageIds) {
+        buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, keepImageIds);
+    }
 }

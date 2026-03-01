@@ -2,6 +2,8 @@ package buncheoleasy.buncheol.infrastructure;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolParams;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -15,5 +17,15 @@ public class MybatisBuncheolRepository implements BuncheolRepository {
     public Buncheol save(Buncheol buncheol) {
         buncheolMapper.insert(buncheol);
         return buncheol;
+    }
+
+    @Override
+    public Optional<Buncheol> findById(Long id) {
+        return buncheolMapper.findById(id);
+    }
+
+    @Override
+    public void update(Long id, BuncheolParams params) {
+        buncheolMapper.update(id, params);
     }
 }

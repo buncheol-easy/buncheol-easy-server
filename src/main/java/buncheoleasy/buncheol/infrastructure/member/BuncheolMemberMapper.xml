@@ -30,4 +30,10 @@
         </foreach>
     </insert>
 
+    <!-- 분철 멤버 전체 삭제 -->
+    <delete id="deleteAllByBuncheolId">
+        DELETE FROM buncheol_members
+        WHERE buncheol_id = #{buncheolId}
+    </delete>
+
 </mapper>

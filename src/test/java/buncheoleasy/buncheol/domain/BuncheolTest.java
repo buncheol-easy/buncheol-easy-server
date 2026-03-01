@@ -323,4 +323,61 @@ class BuncheolTest {
             assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
         }
     }
+
+    @Nested
+    @DisplayName("소유자 검증 테스트")
+    class ValidateOwnerTest {
+
+        @Test
+        void 개최자가_요청하면_예외가_발생하지_않는다() {
+            // given
+            Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+            // when & then
+            assertThatCode(() -> buncheol.validateOwner(HOST_ID))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void 개최자가_아니면_예외가_발생한다() {
+            // given
+            Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+            // when & then
+            assertThatThrownBy(() -> buncheol.validateOwner(999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+        }
+    }
+
+    @Nested
+    @DisplayName("취소 테스트")
+    class CancelTest {
+
+        @Test
+        void RECRUITING_상태에서_취소하면_CANCELLED로_변경된다() {
+            // given
+            Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+            // when
+            buncheol.cancel();
+
+            // then
+            assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+        }
+
+        @Test
+        void 이미_CANCELLED_상태면_취소에_실패한다() {
+            // given
+            Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+            buncheol.cancel();
+
+            // when & then
+            assertThatThrownBy(buncheol::cancel)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+        }
+    }
 }

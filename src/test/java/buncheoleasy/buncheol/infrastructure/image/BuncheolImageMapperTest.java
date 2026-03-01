@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.infrastructure.image;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 @MybatisTest
@@ -31,6 +33,9 @@ class BuncheolImageMapperTest {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private Long buncheolId;
 
@@ -75,5 +80,63 @@ class BuncheolImageMapperTest {
             assertThatCode(() -> buncheolImageMapper.insertAll(images))
                     .doesNotThrowAnyException();
         }
+    }
+
+    @Nested
+    @DisplayName("유지 대상 외 이미지 삭제 테스트")
+    class DeleteByBuncheolIdExcludingIdsTest {
+
+        @Test
+        void keepImageIds를_제외하고_이미지를_삭제한다() {
+            // given
+            List<BuncheolImage> images = List.of(
+                    BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg"),
+                    BuncheolImage.create(buncheolId, "https://cdn.example.com/image2.jpg"),
+                    BuncheolImage.create(buncheolId, "https://cdn.example.com/image3.jpg")
+            );
+            buncheolImageMapper.insertAll(images);
+
+            List<Long> imageIds = jdbcTemplate.queryForList(
+                    "SELECT id FROM buncheol_images WHERE buncheol_id = ? ORDER BY id",
+                    Long.class,
+                    buncheolId
+            );
+            Long keepId = imageIds.get(1);
+
+            // when
+            buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, List.of(keepId));
+
+            // then
+            List<Long> remainingIds = jdbcTemplate.queryForList(
+                    "SELECT id FROM buncheol_images WHERE buncheol_id = ? ORDER BY id",
+                    Long.class,
+                    buncheolId
+            );
+            assertThat(remainingIds).containsExactly(keepId);
+        }
+
+        @Test
+        void keepImageIds가_비어있으면_해당_분철_이미지를_전체_삭제한다() {
+            // given
+            buncheolImageMapper.insertAll(List.of(
+                    BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg"),
+                    BuncheolImage.create(buncheolId, "https://cdn.example.com/image2.jpg")
+            ));
+            assertThat(countImagesByBuncheolId(buncheolId)).isEqualTo(2);
+
+            // when
+            buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, List.of());
+
+            // then
+            assertThat(countImagesByBuncheolId(buncheolId)).isZero();
+        }
+    }
+
+    private int countImagesByBuncheolId(final Long targetBuncheolId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM buncheol_images WHERE buncheol_id = ?",
+                Integer.class,
+                targetBuncheolId
+        );
     }
 }

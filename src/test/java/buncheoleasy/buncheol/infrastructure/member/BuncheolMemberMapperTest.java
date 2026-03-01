@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.infrastructure.member;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 @MybatisTest
@@ -31,6 +33,9 @@ class BuncheolMemberMapperTest {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private Long buncheolId;
 
@@ -85,5 +90,35 @@ class BuncheolMemberMapperTest {
             assertThatCode(() -> buncheolMemberMapper.insertAll(members))
                     .doesNotThrowAnyException();
         }
+    }
+
+    @Nested
+    @DisplayName("분철 멤버 삭제 테스트")
+    class DeleteAllByBuncheolIdTest {
+
+        @Test
+        void 특정_분철의_멤버를_전체_삭제할_수_있다() {
+            // given
+            List<BuncheolMember> members = List.of(
+                    BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
+                    BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, false, null)
+            );
+            buncheolMemberMapper.insertAll(members);
+            assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);
+
+            // when
+            buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
+
+            // then
+            assertThat(countMembersByBuncheolId(buncheolId)).isZero();
+        }
+    }
+
+    private int countMembersByBuncheolId(final Long targetBuncheolId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM buncheol_members WHERE buncheol_id = ?",
+                Integer.class,
+                targetBuncheolId
+        );
     }
 }

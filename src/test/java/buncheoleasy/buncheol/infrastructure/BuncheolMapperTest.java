@@ -116,4 +116,82 @@ class BuncheolMapperTest {
             assertThat(buncheol.getId()).isNotNull();
         }
     }
+
+    @Nested
+    @DisplayName("분철 조회/수정 테스트")
+    class FindAndUpdateTest {
+
+        @Test
+        void ID로_분철을_조회할_수_있다() {
+            // given
+            Buncheol buncheol = Buncheol.create(hostId, validParams("조회 그룹"));
+            buncheolMapper.insert(buncheol);
+
+            // when
+            Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+
+            // then
+            assertThat(found.getId()).isEqualTo(buncheol.getId());
+            assertThat(found.getHostId()).isEqualTo(hostId);
+            assertThat(found.getGroupName()).isEqualTo("조회 그룹");
+            assertThat(found.getTitle()).isEqualTo("테스트 분철 제목");
+            assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
+        }
+
+        @Test
+        void 분철_기본정보를_수정할_수_있다() {
+            // given
+            Buncheol buncheol = Buncheol.create(hostId, validParams("원본 그룹"));
+            buncheolMapper.insert(buncheol);
+
+            BuncheolParams updatedParams = new BuncheolParams(
+                    null,
+                    "수정 그룹",
+                    "수정 제목",
+                    "수정 설명",
+                    "수정 굿즈",
+                    "수정 스토어",
+                    77_000L,
+                    LocalDateTime.now().plusDays(3),
+                    3,
+                    null,
+                    1800,
+                    "신한은행",
+                    "999-888-777",
+                    "수정예금주"
+            );
+
+            // when
+            buncheolMapper.update(buncheol.getId(), updatedParams);
+            Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+
+            // then
+            assertThat(found.getGroupName()).isEqualTo("수정 그룹");
+            assertThat(found.getTitle()).isEqualTo("수정 제목");
+            assertThat(found.getDescription()).isEqualTo("수정 설명");
+            assertThat(found.getGoodsName()).isEqualTo("수정 굿즈");
+            assertThat(found.getStoreName()).isEqualTo("수정 스토어");
+            assertThat(found.getOriginalPrice()).isEqualTo(77_000L);
+            assertThat(found.getShippingDeadlineDays()).isEqualTo(3);
+            assertThat(found.getShippingFeePolicy().gs25ShippingFee()).isNull();
+            assertThat(found.getShippingFeePolicy().cuShippingFee()).isEqualTo(1800);
+            assertThat(found.getSettlementInfo().bank()).isEqualTo("신한은행");
+            assertThat(found.getSettlementInfo().account()).isEqualTo("999-888-777");
+            assertThat(found.getSettlementInfo().holder()).isEqualTo("수정예금주");
+        }
+
+        @Test
+        void 분철_상태를_수정할_수_있다() {
+            // given
+            Buncheol buncheol = Buncheol.create(hostId, validParams("상태 그룹"));
+            buncheolMapper.insert(buncheol);
+
+            // when
+            buncheolMapper.updateStatus(buncheol.getId(), BuncheolStatus.CANCELLED);
+            Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+
+            // then
+            assertThat(found.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+        }
+    }
 }

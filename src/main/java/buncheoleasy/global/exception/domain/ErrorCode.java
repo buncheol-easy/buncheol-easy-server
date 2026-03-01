@@ -87,6 +87,7 @@ public enum ErrorCode {
 
     BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
     BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
+    BUNCHEOL_CANCEL_NOT_ALLOWED("BCH-050", "현재 상태에서는 분철을 취소할 수 없습니다.", HttpStatus.CONFLICT),
 
     /**
      * GRP - 그룹 관련 에러

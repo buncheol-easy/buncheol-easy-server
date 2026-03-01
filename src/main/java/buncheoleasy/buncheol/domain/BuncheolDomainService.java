@@ -24,4 +24,9 @@ public class BuncheolDomainService {
         // TODO: 유효성 검사 필요 (예: 상태가 XX일 떄는 OO값 수정 불가 등) 추후 하겠음.
         buncheolRepository.update(buncheol.getId(), params);
     }
+
+    public void cancelBuncheol(final Buncheol buncheol) {
+        buncheol.cancel();
+        buncheolRepository.updateStatus(buncheol.getId(), buncheol.getStatus());
+    }
 }

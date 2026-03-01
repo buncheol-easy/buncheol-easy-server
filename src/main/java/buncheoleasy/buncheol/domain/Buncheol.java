@@ -94,6 +94,13 @@ public class Buncheol {
         }
     }
 
+    public void cancel() {
+        if (!status.isCancellable()) {
+            throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+        }
+        status = BuncheolStatus.CANCELLED;
+    }
+
     private void validate(final Long hostId, final BuncheolParams params) {
         validateHostAndParams(hostId, params);
         validateGroupName(params.groupName());

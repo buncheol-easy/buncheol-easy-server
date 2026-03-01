@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -58,9 +59,15 @@ public class BuncheolController {
                 request,
                 toImageFiles(images)
         );
-        return ResponseEntity
-                .status(HttpStatus.NO_CONTENT)
-                .build();
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> cancelBuncheol(
+            @AuthenticationPrincipal final Long hostId,
+            @PathVariable final Long id) {
+        buncheolService.cancelBuncheol(hostId, id);
+        return ResponseEntity.noContent().build();
     }
 
     private List<ImageFile> toImageFiles(final List<MultipartFile> files) {

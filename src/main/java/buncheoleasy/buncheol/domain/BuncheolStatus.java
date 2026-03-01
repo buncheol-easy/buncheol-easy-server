@@ -13,7 +13,18 @@ public enum BuncheolStatus {
     ALL_RECEIVED("전원배송완료"),
     SETTLING("개최자정산중"),
     SETTLED("개최자정산완료"),
-    FINISHED("종료");
+    FINISHED("종료"),
+    CANCELLED("취소");
 
     private final String value;
+
+    public boolean isCancellable() {
+        return switch(this) {
+            case RECRUITING,
+                    CLOSED,
+                    GOODS_ORDERED,
+                    SELLER_SHIPPING -> true;
+            default -> false;
+        };
+    }
 }

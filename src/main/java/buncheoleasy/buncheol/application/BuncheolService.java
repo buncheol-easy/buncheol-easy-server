@@ -99,6 +99,13 @@ public class BuncheolService {
         }
     }
 
+    public void cancelBuncheol(final Long hostId, final Long buncheolId) {
+        Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+        buncheol.validateOwner(hostId);
+        // TODO: 추후 참여자 존재 시 패널티 부과 및 환불 처리 분기 추가
+        buncheolDomainService.cancelBuncheol(buncheol);
+    }
+
     // groupId가 있으면 존재 검증 후 반환, 없으면 null 반환 (그룹명은 분철에 직접 저장)
     private ResolvedGroup resolveGroup(final Long groupId, final String requestedGroupName) {
         if (groupId == null) {

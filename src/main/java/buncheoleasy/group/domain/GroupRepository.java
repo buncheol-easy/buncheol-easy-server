@@ -5,9 +5,9 @@ import java.util.Optional;
 
 public interface GroupRepository {
 
-    boolean existsById(Long id);
+  boolean existsById(Long id);
 
-    Optional<Group> findById(Long id);
+  Optional<Group> findById(Long id);
 
-    List<Group> findByKeyword(String keyword);
+  List<Group> findByKeyword(String keyword);
 }

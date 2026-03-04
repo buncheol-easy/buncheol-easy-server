@@ -12,30 +12,31 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
-/**
- * JWT 인증 실패 시 401 응답을 처리하는 클래스
- */
+/** JWT 인증 실패 시 401 응답을 처리하는 클래스 */
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
-    private final ErrorResponseWriter errorResponseWriter;
+  private final ErrorResponseWriter errorResponseWriter;
 
-    @Override
-    public void commence(final HttpServletRequest request, final HttpServletResponse response,
-                         final AuthenticationException authException) throws IOException {
-        final ErrorCode errorCode = extractErrorCode(request);
-        final ProblemDetail problemDetail = errorCode.toProblemDetail();
-        errorResponseWriter.write(request, response, problemDetail);
+  @Override
+  public void commence(
+      final HttpServletRequest request,
+      final HttpServletResponse response,
+      final AuthenticationException authException)
+      throws IOException {
+    final ErrorCode errorCode = extractErrorCode(request);
+    final ProblemDetail problemDetail = errorCode.toProblemDetail();
+    errorResponseWriter.write(request, response, problemDetail);
+  }
+
+  private ErrorCode extractErrorCode(final HttpServletRequest request) {
+    final Object attribute = request.getAttribute(JwtAuthenticationFilter.EXCEPTION_ATTRIBUTE);
+
+    if (attribute instanceof BusinessException businessException) {
+      return businessException.getErrorCode();
     }
 
-    private ErrorCode extractErrorCode(final HttpServletRequest request) {
-        final Object attribute = request.getAttribute(JwtAuthenticationFilter.EXCEPTION_ATTRIBUTE);
-
-        if (attribute instanceof BusinessException businessException) {
-            return businessException.getErrorCode();
-        }
-
-        return ErrorCode.AUTH_INVALID_TOKEN;
-    }
+    return ErrorCode.AUTH_INVALID_TOKEN;
+  }
 }

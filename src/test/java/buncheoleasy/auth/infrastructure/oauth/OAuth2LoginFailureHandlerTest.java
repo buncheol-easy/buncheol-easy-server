@@ -20,26 +20,32 @@ import org.springframework.security.core.AuthenticationException;
 @DisplayName("OAuth2LoginFailureHandler 단위 테스트")
 class OAuth2LoginFailureHandlerTest {
 
-    @Mock
-    private ErrorResponseWriter errorResponseWriter;
+  @Mock private ErrorResponseWriter errorResponseWriter;
 
-    @Test
-    void 로그인_실패시_표준_에러코드를_응답한다() throws Exception {
-        // given
-        OAuth2LoginFailureHandler handler = new OAuth2LoginFailureHandler(errorResponseWriter);
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/login/oauth2/code/kakao");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        AuthenticationException exception = new AuthenticationException("failed") {};
+  @Test
+  void 로그인_실패시_표준_에러코드를_응답한다() throws Exception {
+    // given
+    OAuth2LoginFailureHandler handler = new OAuth2LoginFailureHandler(errorResponseWriter);
+    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/login/oauth2/code/kakao");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    AuthenticationException exception = new AuthenticationException("failed") {};
 
-        // when
-        handler.onAuthenticationFailure(request, response, exception);
+    // when
+    handler.onAuthenticationFailure(request, response, exception);
 
-        // then
-        ArgumentCaptor<ProblemDetail> captor = ArgumentCaptor.forClass(ProblemDetail.class);
-        then(errorResponseWriter).should().write(org.mockito.ArgumentMatchers.eq(request), org.mockito.ArgumentMatchers.eq(response), captor.capture());
+    // then
+    ArgumentCaptor<ProblemDetail> captor = ArgumentCaptor.forClass(ProblemDetail.class);
+    then(errorResponseWriter)
+        .should()
+        .write(
+            org.mockito.ArgumentMatchers.eq(request),
+            org.mockito.ArgumentMatchers.eq(response),
+            captor.capture());
 
-        ProblemDetail problemDetail = captor.getValue();
-        assertThat(problemDetail.getStatus()).isEqualTo(ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.getHttpStatus().value());
-        assertThat(problemDetail.getProperties().get("code")).isEqualTo(ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.getCode());
-    }
+    ProblemDetail problemDetail = captor.getValue();
+    assertThat(problemDetail.getStatus())
+        .isEqualTo(ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.getHttpStatus().value());
+    assertThat(problemDetail.getProperties().get("code"))
+        .isEqualTo(ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.getCode());
+  }
 }

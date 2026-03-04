@@ -20,58 +20,54 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("BuncheolImageDomainService 단위 테스트")
 class BuncheolImageDomainServiceTest {
 
-    @InjectMocks
-    private BuncheolImageDomainService buncheolImageDomainService;
+  @InjectMocks private BuncheolImageDomainService buncheolImageDomainService;
 
-    @Mock
-    private BuncheolImageRepository buncheolImageRepository;
+  @Mock private BuncheolImageRepository buncheolImageRepository;
 
-    @Nested
-    @DisplayName("이미지 개수 검증 테스트")
-    class ValidateImageCountTest {
+  @Nested
+  @DisplayName("이미지 개수 검증 테스트")
+  class ValidateImageCountTest {
 
-        @Test
-        void 이미지_개수가_3개_이하면_예외가_발생하지_않는다() {
-            // when & then
-            assertThatCode(() -> buncheolImageDomainService.validateImageCount(3))
-                    .doesNotThrowAnyException();
-        }
-
-        @Test
-        void 이미지_개수가_0이면_예외가_발생하지_않는다() {
-            // when & then
-            assertThatCode(() -> buncheolImageDomainService.validateImageCount(0))
-                    .doesNotThrowAnyException();
-        }
-
-        @Test
-        void 이미지_개수가_4개_이상이면_예외가_발생한다() {
-            // when & then
-            assertThatThrownBy(() -> buncheolImageDomainService.validateImageCount(4))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode")
-                    .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED);
-        }
+    @Test
+    void 이미지_개수가_3개_이하면_예외가_발생하지_않는다() {
+      // when & then
+      assertThatCode(() -> buncheolImageDomainService.validateImageCount(3))
+          .doesNotThrowAnyException();
     }
 
-    @Nested
-    @DisplayName("이미지 저장 테스트")
-    class CreateBuncheolImagesTest {
-
-        @Test
-        void 이미지_URL_목록으로_이미지를_저장한다() {
-            // given
-            Long buncheolId = 1L;
-            List<String> imageUrls = List.of(
-                    "https://cdn.example.com/image1.jpg",
-                    "https://cdn.example.com/image2.jpg"
-            );
-
-            // when
-            buncheolImageDomainService.createBuncheolImages(buncheolId, imageUrls);
-
-            // then
-            then(buncheolImageRepository).should().saveAll(anyList());
-        }
+    @Test
+    void 이미지_개수가_0이면_예외가_발생하지_않는다() {
+      // when & then
+      assertThatCode(() -> buncheolImageDomainService.validateImageCount(0))
+          .doesNotThrowAnyException();
     }
+
+    @Test
+    void 이미지_개수가_4개_이상이면_예외가_발생한다() {
+      // when & then
+      assertThatThrownBy(() -> buncheolImageDomainService.validateImageCount(4))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED);
+    }
+  }
+
+  @Nested
+  @DisplayName("이미지 저장 테스트")
+  class CreateBuncheolImagesTest {
+
+    @Test
+    void 이미지_URL_목록으로_이미지를_저장한다() {
+      // given
+      Long buncheolId = 1L;
+      List<String> imageUrls =
+          List.of("https://cdn.example.com/image1.jpg", "https://cdn.example.com/image2.jpg");
+
+      // when
+      buncheolImageDomainService.createBuncheolImages(buncheolId, imageUrls);
+
+      // then
+      then(buncheolImageRepository).should().saveAll(anyList());
+    }
+  }
 }

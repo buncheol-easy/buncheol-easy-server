@@ -21,267 +21,273 @@ import org.springframework.test.context.ActiveProfiles;
 @DisplayName("ShippingAddressMapper 테스트")
 class ShippingAddressMapperTest {
 
-    @Autowired
-    private ShippingAddressMapper shippingAddressMapper;
+  @Autowired private ShippingAddressMapper shippingAddressMapper;
 
-    @Autowired
-    private UserMapper userMapper;
+  @Autowired private UserMapper userMapper;
 
-    private Long userId;
+  private Long userId;
 
-    @BeforeEach
-    void setUp() {
-        User user = User.create("KAKAO", "123456", "test@example.com");
-        userMapper.insert(user);
-        userId = user.getId();
+  @BeforeEach
+  void setUp() {
+    User user = User.create("KAKAO", "123456", "test@example.com");
+    userMapper.insert(user);
+    userId = user.getId();
+  }
+
+  @Nested
+  @DisplayName("배송지 저장 테스트")
+  class InsertTest {
+
+    @Test
+    void 배송지를_저장하면_ID가_할당된다() {
+      // given
+      ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+
+      // when
+      shippingAddressMapper.insert(address);
+
+      // then
+      assertThat(address.getId()).isNotNull();
+      assertThat(address.getId()).isPositive();
     }
 
-    @Nested
-    @DisplayName("배송지 저장 테스트")
-    class InsertTest {
+    @Test
+    void 동일한_유저의_다른_배송지를_여러_개_저장할_수_있다() {
+      // given
+      ShippingAddress address1 = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address2 = ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점");
 
-        @Test
-        void 배송지를_저장하면_ID가_할당된다() {
-            // given
-            ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+      // when
+      shippingAddressMapper.insert(address1);
+      shippingAddressMapper.insert(address2);
 
-            // when
-            shippingAddressMapper.insert(address);
+      // then
+      assertThat(address1.getId()).isNotEqualTo(address2.getId());
+    }
+  }
 
-            // then
-            assertThat(address.getId()).isNotNull();
-            assertThat(address.getId()).isPositive();
-        }
+  @Nested
+  @DisplayName("Id로 배송지 조회 테스트")
+  class FindByIdTest {
 
-        @Test
-        void 동일한_유저의_다른_배송지를_여러_개_저장할_수_있다() {
-            // given
-            ShippingAddress address1 = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
-            ShippingAddress address2 = ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점");
+    @Test
+    void ID로_배송지를_조회할_수_있다() {
+      // given
+      ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+      shippingAddressMapper.insert(address);
 
-            // when
-            shippingAddressMapper.insert(address1);
-            shippingAddressMapper.insert(address2);
+      // when
+      Optional<ShippingAddress> found = shippingAddressMapper.findById(address.getId());
 
-            // then
-            assertThat(address1.getId()).isNotEqualTo(address2.getId());
-        }
+      // then
+      assertThat(found).isPresent();
+      assertThat(found.get().getId()).isEqualTo(address.getId());
+      assertThat(found.get().getUserId()).isEqualTo(userId);
+      assertThat(found.get().getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
+      assertThat(found.get().getStoreName()).isEqualTo("GS25 강남역점");
     }
 
-    @Nested
-    @DisplayName("Id로 배송지 조회 테스트")
-    class FindByIdTest {
+    @Test
+    void 존재하지_않는_ID로_조회하면_empty를_반환한다() {
+      // when
+      Optional<ShippingAddress> found = shippingAddressMapper.findById(999999L);
 
-        @Test
-        void ID로_배송지를_조회할_수_있다() {
-            // given
-            ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
-            shippingAddressMapper.insert(address);
+      // then
+      assertThat(found).isEmpty();
+    }
+  }
 
-            // when
-            Optional<ShippingAddress> found = shippingAddressMapper.findById(address.getId());
+  @Nested
+  @DisplayName("유저의 배송지 목록 조회 테스트")
+  class FindAllByUserTest {
 
-            // then
-            assertThat(found).isPresent();
-            assertThat(found.get().getId()).isEqualTo(address.getId());
-            assertThat(found.get().getUserId()).isEqualTo(userId);
-            assertThat(found.get().getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
-            assertThat(found.get().getStoreName()).isEqualTo("GS25 강남역점");
-        }
+    @Test
+    void userId로_배송지_목록을_조회할_수_있다() {
+      // given
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점"));
 
-        @Test
-        void 존재하지_않는_ID로_조회하면_empty를_반환한다() {
-            // when
-            Optional<ShippingAddress> found = shippingAddressMapper.findById(999999L);
+      // when
+      List<ShippingAddress> addresses = shippingAddressMapper.findAllByUser(userId);
 
-            // then
-            assertThat(found).isEmpty();
-        }
+      // then
+      assertThat(addresses).hasSize(2);
+      assertThat(addresses).extracting(ShippingAddress::getUserId).containsOnly(userId);
     }
 
-    @Nested
-    @DisplayName("유저의 배송지 목록 조회 테스트")
-    class FindAllByUserTest {
+    @Test
+    void 다른_유저의_배송지는_조회되지_않는다() {
+      // given
+      User otherUser = User.create("KAKAO", "other_user", "other@example.com");
+      userMapper.insert(otherUser);
 
-        @Test
-        void userId로_배송지_목록을_조회할_수_있다() {
-            // given
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점"));
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      shippingAddressMapper.insert(
+          ShippingAddress.create(otherUser.getId(), "CU_HALF", "CU 홍대입구점"));
 
-            // when
-            List<ShippingAddress> addresses = shippingAddressMapper.findAllByUser(userId);
+      // when
+      List<ShippingAddress> addresses = shippingAddressMapper.findAllByUser(userId);
 
-            // then
-            assertThat(addresses).hasSize(2);
-            assertThat(addresses).extracting(ShippingAddress::getUserId).containsOnly(userId);
-        }
-
-        @Test
-        void 다른_유저의_배송지는_조회되지_않는다() {
-            // given
-            User otherUser = User.create("KAKAO", "other_user", "other@example.com");
-            userMapper.insert(otherUser);
-
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-            shippingAddressMapper.insert(ShippingAddress.create(otherUser.getId(), "CU_HALF", "CU 홍대입구점"));
-
-            // when
-            List<ShippingAddress> addresses = shippingAddressMapper.findAllByUser(userId);
-
-            // then
-            assertThat(addresses).hasSize(1);
-            assertThat(addresses.getFirst().getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
-        }
-
-        @Test
-        void 배송지가_없으면_빈_리스트를_반환한다() {
-            // when
-            List<ShippingAddress> addresses = shippingAddressMapper.findAllByUser(userId);
-
-            // then
-            assertThat(addresses).isEmpty();
-        }
+      // then
+      assertThat(addresses).hasSize(1);
+      assertThat(addresses.getFirst().getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
     }
 
-    @Nested
-    @DisplayName("배송지 수정 테스트")
-    class UpdateTest {
+    @Test
+    void 배송지가_없으면_빈_리스트를_반환한다() {
+      // when
+      List<ShippingAddress> addresses = shippingAddressMapper.findAllByUser(userId);
 
-        @Test
-        void 배송지_정보를_업데이트할_수_있다() {
-            // given
-            ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
-            shippingAddressMapper.insert(address);
-            address.update("CU_HALF", "CU 홍대입구점");
+      // then
+      assertThat(addresses).isEmpty();
+    }
+  }
 
-            // when
-            shippingAddressMapper.update(address);
+  @Nested
+  @DisplayName("배송지 수정 테스트")
+  class UpdateTest {
 
-            // then
-            ShippingAddress updated = shippingAddressMapper.findById(address.getId()).orElseThrow();
-            assertThat(updated.getShippingMethod()).isEqualTo(ShippingMethod.CU_HALF);
-            assertThat(updated.getStoreName()).isEqualTo("CU 홍대입구점");
-        }
+    @Test
+    void 배송지_정보를_업데이트할_수_있다() {
+      // given
+      ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+      shippingAddressMapper.insert(address);
+      address.update("CU_HALF", "CU 홍대입구점");
+
+      // when
+      shippingAddressMapper.update(address);
+
+      // then
+      ShippingAddress updated = shippingAddressMapper.findById(address.getId()).orElseThrow();
+      assertThat(updated.getShippingMethod()).isEqualTo(ShippingMethod.CU_HALF);
+      assertThat(updated.getStoreName()).isEqualTo("CU 홍대입구점");
+    }
+  }
+
+  @Nested
+  @DisplayName("배송지 삭제 테스트")
+  class DeleteTest {
+
+    @Test
+    void 배송지를_삭제할_수_있다() {
+      // given
+      ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+      shippingAddressMapper.insert(address);
+      Long addressId = address.getId();
+
+      // when
+      shippingAddressMapper.delete(addressId);
+
+      // then
+      assertThat(shippingAddressMapper.findById(addressId)).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("유저 배송지 목록 개수 조회 테스트")
+  class CountByUserIdTest {
+
+    @Test
+    void userId로_배송지_개수를_조회할_수_있다() {
+      // given
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점"));
+
+      // when
+      int count = shippingAddressMapper.countByUserId(userId);
+
+      // then
+      assertThat(count).isEqualTo(2);
     }
 
-    @Nested
-    @DisplayName("배송지 삭제 테스트")
-    class DeleteTest {
+    @Test
+    void 다른_유저의_배송지는_카운트되지_않는다() {
+      // given
+      User otherUser = User.create("KAKAO", "other_user", "other@example.com");
+      userMapper.insert(otherUser);
+      shippingAddressMapper.insert(
+          ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점"));
 
-        @Test
-        void 배송지를_삭제할_수_있다() {
-            // given
-            ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
-            shippingAddressMapper.insert(address);
-            Long addressId = address.getId();
+      // when: userId 기준으로 카운트
+      int count = shippingAddressMapper.countByUserId(userId);
 
-            // when
-            shippingAddressMapper.delete(addressId);
+      // then
+      assertThat(count).isZero();
+    }
+  }
 
-            // then
-            assertThat(shippingAddressMapper.findById(addressId)).isEmpty();
-        }
+  @Nested
+  @DisplayName("유저의 동일한 배송지 존재 여부 확인 테스트")
+  class ExistsTest {
+
+    @Test
+    void 동일한_배송지가_존재하면_true를_반환한다() {
+      // given
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+
+      // when
+      boolean exists =
+          shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
+              userId, "GS25_HALF", "GS25 강남역점");
+
+      // then
+      assertThat(exists).isTrue();
     }
 
-    @Nested
-    @DisplayName("유저 배송지 목록 개수 조회 테스트")
-    class CountByUserIdTest {
+    @Test
+    void 동일한_배송지가_없으면_false를_반환한다() {
+      // when
+      boolean exists =
+          shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
+              userId, "GS25_HALF", "GS25 강남역점");
 
-        @Test
-        void userId로_배송지_개수를_조회할_수_있다() {
-            // given
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점"));
-
-            // when
-            int count = shippingAddressMapper.countByUserId(userId);
-
-            // then
-            assertThat(count).isEqualTo(2);
-        }
-
-        @Test
-        void 다른_유저의_배송지는_카운트되지_않는다() {
-            // given
-            User otherUser = User.create("KAKAO", "other_user", "other@example.com");
-            userMapper.insert(otherUser);
-            shippingAddressMapper.insert(ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점"));
-
-            // when: userId 기준으로 카운트
-            int count = shippingAddressMapper.countByUserId(userId);
-
-            // then
-            assertThat(count).isZero();
-        }
+      // then
+      assertThat(exists).isFalse();
     }
 
-    @Nested
-    @DisplayName("유저의 동일한 배송지 존재 여부 확인 테스트")
-    class ExistsTest {
+    @Test
+    void 배송방법이_다르면_false를_반환한다() {
+      // given
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
 
-        @Test
-        void 동일한_배송지가_존재하면_true를_반환한다() {
-            // given
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      // when
+      boolean exists =
+          shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
+              userId, "CU_HALF", "GS25 강남역점");
 
-            // when
-            boolean exists = shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
-                    userId, "GS25_HALF", "GS25 강남역점");
-
-            // then
-            assertThat(exists).isTrue();
-        }
-
-        @Test
-        void 동일한_배송지가_없으면_false를_반환한다() {
-            // when
-            boolean exists = shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
-                    userId, "GS25_HALF", "GS25 강남역점");
-
-            // then
-            assertThat(exists).isFalse();
-        }
-
-        @Test
-        void 배송방법이_다르면_false를_반환한다() {
-            // given
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-
-            // when
-            boolean exists = shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
-                    userId, "CU_HALF", "GS25 강남역점");
-
-            // then
-            assertThat(exists).isFalse();
-        }
-
-        @Test
-        void 지점명이_다르면_false를_반환한다() {
-            // given
-            shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-
-            // when
-            boolean exists = shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
-                    userId, "GS25_HALF", "GS25 신촌역점");
-
-            // then
-            assertThat(exists).isFalse();
-        }
-
-        @Test
-        void 다른_유저의_동일한_배송지는_해당_유저의_중복으로_처리되지_않는다() {
-            // given
-            User otherUser = User.create("KAKAO", "other_user", "other@example.com");
-            userMapper.insert(otherUser);
-            shippingAddressMapper.insert(ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점"));
-
-            // when: userId 기준으로 조회
-            boolean exists = shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
-                    userId, "GS25_HALF", "GS25 강남역점");
-
-            // then
-            assertThat(exists).isFalse();
-        }
+      // then
+      assertThat(exists).isFalse();
     }
+
+    @Test
+    void 지점명이_다르면_false를_반환한다() {
+      // given
+      shippingAddressMapper.insert(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+
+      // when
+      boolean exists =
+          shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
+              userId, "GS25_HALF", "GS25 신촌역점");
+
+      // then
+      assertThat(exists).isFalse();
+    }
+
+    @Test
+    void 다른_유저의_동일한_배송지는_해당_유저의_중복으로_처리되지_않는다() {
+      // given
+      User otherUser = User.create("KAKAO", "other_user", "other@example.com");
+      userMapper.insert(otherUser);
+      shippingAddressMapper.insert(
+          ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점"));
+
+      // when: userId 기준으로 조회
+      boolean exists =
+          shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
+              userId, "GS25_HALF", "GS25 강남역점");
+
+      // then
+      assertThat(exists).isFalse();
+    }
+  }
 }

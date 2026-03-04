@@ -20,25 +20,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class UserController {
 
-    private final UserService userService;
+  private final UserService userService;
 
-    @DeleteMapping("/me")
-    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal final Long userId) {
-        userService.withdraw(userId);
-        return ResponseEntity.noContent().build();
-    }
+  @DeleteMapping("/me")
+  public ResponseEntity<Void> withdraw(@AuthenticationPrincipal final Long userId) {
+    userService.withdraw(userId);
+    return ResponseEntity.noContent().build();
+  }
 
-    @GetMapping("/me")
-    public ResponseEntity<UserProfileResponse> getUserProfile(@AuthenticationPrincipal final Long userId) {
-        return ResponseEntity
-                .status(HttpStatus.OK)
-                .body(userService.getUserProfile(userId));
-    }
+  @GetMapping("/me")
+  public ResponseEntity<UserProfileResponse> getUserProfile(
+      @AuthenticationPrincipal final Long userId) {
+    return ResponseEntity.status(HttpStatus.OK).body(userService.getUserProfile(userId));
+  }
 
-    @PutMapping("/me")
-    public ResponseEntity<Void> updateProfile(@AuthenticationPrincipal final Long userId,
-                                              @Valid @RequestBody final UpdateUserProfileRequest request) {
-        userService.updateProfile(userId, request);
-        return ResponseEntity.noContent().build();
-    }
+  @PutMapping("/me")
+  public ResponseEntity<Void> updateProfile(
+      @AuthenticationPrincipal final Long userId,
+      @Valid @RequestBody final UpdateUserProfileRequest request) {
+    userService.updateProfile(userId, request);
+    return ResponseEntity.noContent().build();
+  }
 }

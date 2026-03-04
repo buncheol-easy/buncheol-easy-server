@@ -20,61 +20,59 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 @DisplayName("KakaoOidcUserProfileExtractor 단위 테스트")
 class KakaoOidcUserProfileExtractorTest {
 
-    @Mock
-    private OidcUser oidcUser;
+  @Mock private OidcUser oidcUser;
 
-    @Mock
-    private OAuth2User oauth2User;
+  @Mock private OAuth2User oauth2User;
 
-    @Nested
-    @DisplayName("supports 테스트")
-    class SupportsTest {
+  @Nested
+  @DisplayName("supports 테스트")
+  class SupportsTest {
 
-        @Test
-        void registrationId가_kakao이면_true를_반환한다() {
-            KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
+    @Test
+    void registrationId가_kakao이면_true를_반환한다() {
+      KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
 
-            assertThat(extractor.supports("kakao")).isTrue();
-        }
-
-        @Test
-        void registrationId가_kakao가_아니면_false를_반환한다() {
-            KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
-
-            assertThat(extractor.supports("google")).isFalse();
-        }
+      assertThat(extractor.supports("kakao")).isTrue();
     }
 
-    @Nested
-    @DisplayName("extract 테스트")
-    class ExtractTest {
+    @Test
+    void registrationId가_kakao가_아니면_false를_반환한다() {
+      KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
 
-        @Test
-        void OidcUser에서_프로필을_추출한다() {
-            // given
-            KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
-            given(oidcUser.getSubject()).willReturn("provider-id");
-            given(oidcUser.getEmail()).willReturn("test@example.com");
-
-            // when
-            OAuth2UserProfile profile = extractor.extract(oidcUser);
-
-            // then
-            assertThat(profile.provider()).isEqualTo(SocialProvider.KAKAO);
-            assertThat(profile.providerId()).isEqualTo("provider-id");
-            assertThat(profile.email()).isEqualTo("test@example.com");
-        }
-
-        @Test
-        void OidcUser가_아니면_예외가_발생한다() {
-            // given
-            KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
-
-            // when & then
-            assertThatThrownBy(() -> extractor.extract(oauth2User))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode")
-                    .isEqualTo(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
-        }
+      assertThat(extractor.supports("google")).isFalse();
     }
+  }
+
+  @Nested
+  @DisplayName("extract 테스트")
+  class ExtractTest {
+
+    @Test
+    void OidcUser에서_프로필을_추출한다() {
+      // given
+      KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
+      given(oidcUser.getSubject()).willReturn("provider-id");
+      given(oidcUser.getEmail()).willReturn("test@example.com");
+
+      // when
+      OAuth2UserProfile profile = extractor.extract(oidcUser);
+
+      // then
+      assertThat(profile.provider()).isEqualTo(SocialProvider.KAKAO);
+      assertThat(profile.providerId()).isEqualTo("provider-id");
+      assertThat(profile.email()).isEqualTo("test@example.com");
+    }
+
+    @Test
+    void OidcUser가_아니면_예외가_발생한다() {
+      // given
+      KakaoOidcUserProfileExtractor extractor = new KakaoOidcUserProfileExtractor();
+
+      // when & then
+      assertThatThrownBy(() -> extractor.extract(oauth2User))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
+    }
+  }
 }

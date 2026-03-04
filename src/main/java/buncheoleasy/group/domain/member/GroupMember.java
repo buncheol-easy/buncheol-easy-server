@@ -8,9 +8,9 @@ import lombok.Getter;
 @AllArgsConstructor
 public class GroupMember {
 
-    private Long id;
-    private final Long groupId;
-    private final String name;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+  private Long id;
+  private final Long groupId;
+  private final String name;
+  private LocalDateTime createdAt;
+  private LocalDateTime updatedAt;
 }

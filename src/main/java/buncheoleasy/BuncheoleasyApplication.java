@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @EnableAsync
 @SpringBootApplication
 public class BuncheoleasyApplication {
-	public static void main(String[] args) {
-		SpringApplication.run(BuncheoleasyApplication.class, args);
-	}
+  public static void main(String[] args) {
+    SpringApplication.run(BuncheoleasyApplication.class, args);
+  }
 }

@@ -4,7 +4,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 
 public interface OAuth2UserProfileExtractor {
 
-    boolean supports(String registrationId);
+  boolean supports(String registrationId);
 
-    OAuth2UserProfile extract(OAuth2User principal);
+  OAuth2UserProfile extract(OAuth2User principal);
 }

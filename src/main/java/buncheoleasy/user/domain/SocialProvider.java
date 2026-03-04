@@ -8,24 +8,23 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum SocialProvider {
+  KAKAO("kakao");
 
-    KAKAO("kakao");
+  private final String value;
 
-    private final String value;
-
-    public static SocialProvider from(final String name) {
-        if (name == null || name.isBlank()) {
-            throw new BusinessException(ErrorCode.PROVIDER_REQUIRED);
-        }
-        for (SocialProvider provider : values()) {
-            if (provider.name().equals(name)) {
-                return provider;
-            }
-        }
-        throw new BusinessException(ErrorCode.PROVIDER_NOT_FOUND);
+  public static SocialProvider from(final String name) {
+    if (name == null || name.isBlank()) {
+      throw new BusinessException(ErrorCode.PROVIDER_REQUIRED);
     }
-
-    public boolean matched(final String value) {
-        return this.value.equals(value);
+    for (SocialProvider provider : values()) {
+      if (provider.name().equals(name)) {
+        return provider;
+      }
     }
+    throw new BusinessException(ErrorCode.PROVIDER_NOT_FOUND);
+  }
+
+  public boolean matched(final String value) {
+    return this.value.equals(value);
+  }
 }

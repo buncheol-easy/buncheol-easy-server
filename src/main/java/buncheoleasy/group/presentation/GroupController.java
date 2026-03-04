@@ -17,15 +17,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class GroupController {
 
-    private final GroupService groupService;
+  private final GroupService groupService;
 
-    @GetMapping
-    public ResponseEntity<List<GroupResponse>> searchGroups(@RequestParam(required = false) String keyword) {
-        return ResponseEntity.ok(groupService.searchGroups(keyword));
-    }
+  @GetMapping
+  public ResponseEntity<List<GroupResponse>> searchGroups(
+      @RequestParam(required = false) String keyword) {
+    return ResponseEntity.ok(groupService.searchGroups(keyword));
+  }
 
-    @GetMapping("/{groupId}/members")
-    public ResponseEntity<List<GroupMemberResponse>> getGroupMembers(@PathVariable Long groupId) {
-        return ResponseEntity.ok(groupService.getGroupMembers(groupId));
-    }
+  @GetMapping("/{groupId}/members")
+  public ResponseEntity<List<GroupMemberResponse>> getGroupMembers(@PathVariable Long groupId) {
+    return ResponseEntity.ok(groupService.getGroupMembers(groupId));
+  }
 }

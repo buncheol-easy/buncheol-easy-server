@@ -8,7 +8,7 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface BuncheolMemberMapper {
 
-    void insertAll(@Param("buncheolMembers") List<BuncheolMember> buncheolMembers);
+  void insertAll(@Param("buncheolMembers") List<BuncheolMember> buncheolMembers);
 
-    void deleteAllByBuncheolId(Long buncheolId);
+  void deleteAllByBuncheolId(Long buncheolId);
 }

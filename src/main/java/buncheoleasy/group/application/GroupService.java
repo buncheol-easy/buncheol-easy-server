@@ -11,18 +11,16 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class GroupService {
 
-    private final GroupDomainService groupDomainService;
+  private final GroupDomainService groupDomainService;
 
-    public List<GroupResponse> searchGroups(final String keyword) {
-        return groupDomainService.searchGroups(keyword).stream()
-                .map(GroupResponse::from)
-                .toList();
-    }
+  public List<GroupResponse> searchGroups(final String keyword) {
+    return groupDomainService.searchGroups(keyword).stream().map(GroupResponse::from).toList();
+  }
 
-    public List<GroupMemberResponse> getGroupMembers(final Long groupId) {
-        groupDomainService.validateGroupExists(groupId);
-        return groupDomainService.getGroupMembers(groupId).stream()
-                .map(GroupMemberResponse::from)
-                .toList();
-    }
+  public List<GroupMemberResponse> getGroupMembers(final Long groupId) {
+    groupDomainService.validateGroupExists(groupId);
+    return groupDomainService.getGroupMembers(groupId).stream()
+        .map(GroupMemberResponse::from)
+        .toList();
+  }
 }

@@ -6,43 +6,51 @@ import lombok.Getter;
 @Getter
 public class ShippingAddress {
 
-    private Long id;
-    private final Long userId;
-    private ShippingMethod shippingMethod;
-    private String storeName;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+  private Long id;
+  private final Long userId;
+  private ShippingMethod shippingMethod;
+  private String storeName;
+  private LocalDateTime createdAt;
+  private LocalDateTime updatedAt;
 
-    public ShippingAddress(final Long id, final Long userId, final ShippingMethod shippingMethod,
-                           final String storeName, final LocalDateTime createdAt, final LocalDateTime updatedAt) {
-        this.id = id;
-        this.userId = userId;
-        this.shippingMethod = shippingMethod;
-        this.storeName = storeName;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
+  public ShippingAddress(
+      final Long id,
+      final Long userId,
+      final ShippingMethod shippingMethod,
+      final String storeName,
+      final LocalDateTime createdAt,
+      final LocalDateTime updatedAt) {
+    this.id = id;
+    this.userId = userId;
+    this.shippingMethod = shippingMethod;
+    this.storeName = storeName;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
 
-    public ShippingAddress(final Long userId, final ShippingMethod shippingMethod, final String storeName) {
-        this.userId = userId;
-        this.shippingMethod = shippingMethod;
-        this.storeName = storeName;
-    }
+  public ShippingAddress(
+      final Long userId, final ShippingMethod shippingMethod, final String storeName) {
+    this.userId = userId;
+    this.shippingMethod = shippingMethod;
+    this.storeName = storeName;
+  }
 
-    public static ShippingAddress create(final Long userId, final String shippingMethodName, final String storeName) {
-        return new ShippingAddress(userId, ShippingMethod.of(shippingMethodName), storeName);
-    }
+  public static ShippingAddress create(
+      final Long userId, final String shippingMethodName, final String storeName) {
+    return new ShippingAddress(userId, ShippingMethod.of(shippingMethodName), storeName);
+  }
 
-    public void update(final String shippingMethodName, final String storeName) {
-        this.shippingMethod = ShippingMethod.of(shippingMethodName);
-        this.storeName = storeName;
-    }
+  public void update(final String shippingMethodName, final String storeName) {
+    this.shippingMethod = ShippingMethod.of(shippingMethodName);
+    this.storeName = storeName;
+  }
 
-    public boolean isSameAddress(final String shippingMethodName, final String storeName) {
-        return this.shippingMethod.name().equals(shippingMethodName) && this.storeName.equals(storeName);
-    }
+  public boolean isSameAddress(final String shippingMethodName, final String storeName) {
+    return this.shippingMethod.name().equals(shippingMethodName)
+        && this.storeName.equals(storeName);
+  }
 
-    public boolean isOwnedBy(final Long userId) {
-        return this.userId.equals(userId);
-    }
+  public boolean isOwnedBy(final Long userId) {
+    return this.userId.equals(userId);
+  }
 }

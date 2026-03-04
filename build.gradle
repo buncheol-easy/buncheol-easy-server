@@ -1,66 +1,66 @@
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '4.0.2'
-	id 'io.spring.dependency-management' version '1.1.7'
+    id 'java'
+    id 'org.springframework.boot' version '4.0.2'
+    id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'buncheoleasy'
 version = '0.0.1-SNAPSHOT'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 configurations {
-	compileOnly {
-		extendsFrom annotationProcessor
-	}
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
 }
 
 repositories {
-	mavenCentral()
+    mavenCentral()
 }
 
 sourceSets {
-	main {
-		// java 폴더와 resources 폴더를 모두 리소스 소스로 지정
-		resources {
-			srcDirs = ["src/main/java", "src/main/resources"]
-			exclude "**/*.java"
-		}
-	}
+    main {
+        // java 폴더와 resources 폴더를 모두 리소스 소스로 지정
+        resources {
+            srcDirs = ["src/main/java", "src/main/resources"]
+            exclude "**/*.java"
+        }
+    }
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
-	// Mybatis
-	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.0.1'
-	testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:4.0.1'
+    // Mybatis
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.0.1'
+    testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:4.0.1'
 
-	// MySQL
-	runtimeOnly 'com.mysql:mysql-connector-j'
+    // MySQL
+    runtimeOnly 'com.mysql:mysql-connector-j'
 
-	// H2 Database for testing
-	testRuntimeOnly 'com.h2database:h2'
+    // H2 Database for testing
+    testRuntimeOnly 'com.h2database:h2'
 
-	// Spring Security
-	implementation "org.springframework.boot:spring-boot-starter-security"
-	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-	testImplementation 'org.springframework.security:spring-security-test'
+    // Spring Security
+    implementation "org.springframework.boot:spring-boot-starter-security"
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    testImplementation 'org.springframework.security:spring-security-test'
 
-	// JWT
-	implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
@@ -71,14 +71,14 @@ dependencies {
 }
 
 tasks.withType(Test).configureEach {
-	useJUnitPlatform()
+    useJUnitPlatform()
 
-	doFirst {
-		def agent = configurations.testRuntimeClasspath.find {
-			it.name.contains("byte-buddy-agent")
-		}
-		if (agent != null) {
-			jvmArgs "-javaagent:${agent.absolutePath}"
-		}
-	}
+    doFirst {
+        def agent = configurations.testRuntimeClasspath.find {
+            it.name.contains("byte-buddy-agent")
+        }
+        if (agent != null) {
+            jvmArgs "-javaagent:${agent.absolutePath}"
+        }
+    }
 }

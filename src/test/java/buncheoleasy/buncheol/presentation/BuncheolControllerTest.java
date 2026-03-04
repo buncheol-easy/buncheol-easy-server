@@ -39,34 +39,31 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 @DisplayName("BuncheolController 테스트")
 class BuncheolControllerTest {
 
-    private static final Long HOST_ID = 1L;
+  private static final Long HOST_ID = 1L;
 
-    @Autowired
-    private MockMvc mockMvc;
+  @Autowired private MockMvc mockMvc;
 
-    @MockitoBean
-    private BuncheolService buncheolService;
+  @MockitoBean private BuncheolService buncheolService;
 
-    @MockitoBean
-    private JwtTokenProvider jwtTokenProvider;
+  @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
-    }
+  @AfterEach
+  void tearDown() {
+    SecurityContextHolder.clearContext();
+  }
 
-    private RequestPostProcessor mockAuth() {
-        return (MockHttpServletRequest request) -> {
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(HOST_ID, null, Collections.emptyList())
-            );
-            return request;
-        };
-    }
+  private RequestPostProcessor mockAuth() {
+    return (MockHttpServletRequest request) -> {
+      SecurityContextHolder.getContext()
+          .setAuthentication(
+              new UsernamePasswordAuthenticationToken(HOST_ID, null, Collections.emptyList()));
+      return request;
+    };
+  }
 
-    private String validRequestJson() {
-        LocalDateTime future = LocalDateTime.now().plusDays(7);
-        return """
+  private String validRequestJson() {
+    LocalDateTime future = LocalDateTime.now().plusDays(7);
+    return """
                 {
                   "groupName": "테스트 그룹",
                   "title": "테스트 분철 제목",
@@ -87,12 +84,13 @@ class BuncheolControllerTest {
                     }
                   ]
                 }
-                """.formatted(future);
-    }
+                """
+        .formatted(future);
+  }
 
-    private String validModifyRequestJson() {
-        LocalDateTime future = LocalDateTime.now().plusDays(10);
-        return """
+  private String validModifyRequestJson() {
+    LocalDateTime future = LocalDateTime.now().plusDays(10);
+    return """
                 {
                   "groupName": "수정 그룹",
                   "title": "수정 분철 제목",
@@ -114,63 +112,60 @@ class BuncheolControllerTest {
                     }
                   ]
                 }
-                """.formatted(future);
+                """
+        .formatted(future);
+  }
+
+  private MockMultipartHttpServletRequestBuilder modifyMultipartRequest(final Long buncheolId) {
+    return multipart("/v1/buncheols/{id}", buncheolId)
+        .with(
+            request -> {
+              request.setMethod("PUT");
+              return request;
+            });
+  }
+
+  @Nested
+  @DisplayName("분철 개최 테스트")
+  class HoldBuncheolTest {
+
+    @Test
+    void 분철_개최에_성공하면_201을_반환한다() throws Exception {
+      // given
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .andExpect(status().isCreated());
+
+      then(buncheolService).should().holdBuncheol(eq(HOST_ID), any(), any());
     }
 
-    private MockMultipartHttpServletRequestBuilder modifyMultipartRequest(final Long buncheolId) {
-        return multipart("/v1/buncheols/{id}", buncheolId)
-                .with(request -> {
-                    request.setMethod("PUT");
-                    return request;
-                });
+    @Test
+    void 이미지와_함께_분철_개최에_성공하면_201을_반환한다() throws Exception {
+      // given
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      MockMultipartFile imagePart =
+          new MockMultipartFile(
+              "images", "album-cover.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {1, 2, 3});
+
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(imagePart).with(mockAuth()))
+          .andExpect(status().isCreated());
     }
 
-    @Nested
-    @DisplayName("분철 개최 테스트")
-    class HoldBuncheolTest {
-
-        @Test
-        void 분철_개최에_성공하면_201을_반환한다() throws Exception {
-            // given
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    validRequestJson().getBytes()
-            );
-
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isCreated());
-
-            then(buncheolService).should().holdBuncheol(eq(HOST_ID), any(), any());
-        }
-
-        @Test
-        void 이미지와_함께_분철_개최에_성공하면_201을_반환한다() throws Exception {
-            // given
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    validRequestJson().getBytes()
-            );
-            MockMultipartFile imagePart = new MockMultipartFile(
-                    "images", "album-cover.jpg", MediaType.IMAGE_JPEG_VALUE,
-                    new byte[]{1, 2, 3}
-            );
-
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .file(imagePart)
-                            .with(mockAuth()))
-                    .andExpect(status().isCreated());
-        }
-
-        @Test
-        void 제목이_없으면_400을_반환한다() throws Exception {
-            // given
-            LocalDateTime future = LocalDateTime.now().plusDays(7);
-            String invalidJson = """
+    @Test
+    void 제목이_없으면_400을_반환한다() throws Exception {
+      // given
+      LocalDateTime future = LocalDateTime.now().plusDays(7);
+      String invalidJson =
+          """
                     {
                       "groupName": "테스트 그룹",
                       "goodsName": "공식 앨범",
@@ -186,205 +181,209 @@ class BuncheolControllerTest {
                         {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
                       ]
                     }
-                    """.formatted(future);
+                    """
+              .formatted(future);
 
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    invalidJson.getBytes()
-            );
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
 
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())
-                    ));
-        }
-
-        @Test
-        void 배송비가_두_경우_모두_없으면_400을_반환한다() throws Exception {
-            // given
-            LocalDateTime future = LocalDateTime.now().plusDays(7);
-            String invalidJson = """
-                    {
-                      "groupName": "테스트 그룹",
-                      "title": "제목",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
-                      "deadline": "%s",
-                      "shippingDeadlineDays": 7,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
-                      "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
-                      ]
-                    }
-                    """.formatted(future);
-
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    invalidJson.getBytes()
-            );
-
-            willThrow(new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED))
-                    .given(buncheolService).holdBuncheol(eq(HOST_ID), any(), any());
-
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED.getCode())
-                    ));
-        }
-
-        @Test
-        void 그룹ID_없이_그룹명도_없으면_400을_반환한다() throws Exception {
-            // given
-            LocalDateTime future = LocalDateTime.now().plusDays(7);
-            String invalidJson = """
-                    {
-                      "title": "제목",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
-                      "deadline": "%s",
-                      "shippingDeadlineDays": 7,
-                      "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
-                      "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
-                      ]
-                    }
-                    """.formatted(future);
-
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    invalidJson.getBytes()
-            );
-
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())
-                    ));
-        }
-
-        @Test
-        void 마감일이_과거이면_400을_반환한다() throws Exception {
-            // given
-            LocalDateTime past = LocalDateTime.now().minusDays(1);
-            String invalidJson = """
-                    {
-                      "groupName": "테스트 그룹",
-                      "title": "제목",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
-                      "deadline": "%s",
-                      "shippingDeadlineDays": 7,
-                      "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
-                      "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
-                      ]
-                    }
-                    """.formatted(past);
-
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    invalidJson.getBytes()
-            );
-
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())
-                    ));
-        }
-
-        @Test
-        void BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
-            // given
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    validRequestJson().getBytes()
-            );
-
-            willThrow(new BusinessException(ErrorCode.GROUP_NOT_FOUND))
-                    .given(buncheolService).holdBuncheol(eq(HOST_ID), any(), any());
-
-            // when & then
-            mockMvc.perform(multipart("/v1/buncheols")
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isNotFound())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.GROUP_NOT_FOUND.getCode())
-                    ));
-        }
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
-    @Nested
-    @DisplayName("분철 수정 테스트")
-    class ModifyBuncheolTest {
+    @Test
+    void 배송비가_두_경우_모두_없으면_400을_반환한다() throws Exception {
+      // given
+      LocalDateTime future = LocalDateTime.now().plusDays(7);
+      String invalidJson =
+          """
+                    {
+                      "groupName": "테스트 그룹",
+                      "title": "제목",
+                      "goodsName": "공식 앨범",
+                      "storeName": "공식 스토어",
+                      "originalPrice": 50000,
+                      "deadline": "%s",
+                      "shippingDeadlineDays": 7,
+                      "settlementBank": "국민은행",
+                      "settlementAccount": "123-456-789012",
+                      "settlementHolder": "홍길동",
+                      "buncheolMembers": [
+                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                      ]
+                    }
+                    """
+              .formatted(future);
 
-        @Test
-        void 분철_수정에_성공하면_204를_반환한다() throws Exception {
-            // given
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    validModifyRequestJson().getBytes()
-            );
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
 
-            // when & then
-            mockMvc.perform(modifyMultipartRequest(10L)
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isNoContent());
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
 
-            then(buncheolService).should().modifyBuncheol(eq(HOST_ID), eq(10L), any(), any());
-        }
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED.getCode())));
+    }
 
-        @Test
-        void 이미지와_함께_분철_수정에_성공하면_204를_반환한다() throws Exception {
-            // given
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    validModifyRequestJson().getBytes()
-            );
-            MockMultipartFile imagePart = new MockMultipartFile(
-                    "images", "new-image.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{1, 2, 3}
-            );
+    @Test
+    void 그룹ID_없이_그룹명도_없으면_400을_반환한다() throws Exception {
+      // given
+      LocalDateTime future = LocalDateTime.now().plusDays(7);
+      String invalidJson =
+          """
+                    {
+                      "title": "제목",
+                      "goodsName": "공식 앨범",
+                      "storeName": "공식 스토어",
+                      "originalPrice": 50000,
+                      "deadline": "%s",
+                      "shippingDeadlineDays": 7,
+                      "gs25ShippingFee": 3000,
+                      "settlementBank": "국민은행",
+                      "settlementAccount": "123-456-789012",
+                      "settlementHolder": "홍길동",
+                      "buncheolMembers": [
+                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                      ]
+                    }
+                    """
+              .formatted(future);
 
-            // when & then
-            mockMvc.perform(modifyMultipartRequest(10L)
-                            .file(requestPart)
-                            .file(imagePart)
-                            .with(mockAuth()))
-                    .andExpect(status().isNoContent());
-        }
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
 
-        @Test
-        void keepImageIds가_없으면_400을_반환한다() throws Exception {
-            // given
-            LocalDateTime future = LocalDateTime.now().plusDays(10);
-            String invalidJson = """
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+    }
+
+    @Test
+    void 마감일이_과거이면_400을_반환한다() throws Exception {
+      // given
+      LocalDateTime past = LocalDateTime.now().minusDays(1);
+      String invalidJson =
+          """
+                    {
+                      "groupName": "테스트 그룹",
+                      "title": "제목",
+                      "goodsName": "공식 앨범",
+                      "storeName": "공식 스토어",
+                      "originalPrice": 50000,
+                      "deadline": "%s",
+                      "shippingDeadlineDays": 7,
+                      "gs25ShippingFee": 3000,
+                      "settlementBank": "국민은행",
+                      "settlementAccount": "123-456-789012",
+                      "settlementHolder": "홍길동",
+                      "buncheolMembers": [
+                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                      ]
+                    }
+                    """
+              .formatted(past);
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
+
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+    }
+
+    @Test
+    void BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
+      // given
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+
+      willThrow(new BusinessException(ErrorCode.GROUP_NOT_FOUND))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
+
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 수정 테스트")
+  class ModifyBuncheolTest {
+
+    @Test
+    void 분철_수정에_성공하면_204를_반환한다() throws Exception {
+      // given
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+
+      // when & then
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService).should().modifyBuncheol(eq(HOST_ID), eq(10L), any(), any());
+    }
+
+    @Test
+    void 이미지와_함께_분철_수정에_성공하면_204를_반환한다() throws Exception {
+      // given
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+      MockMultipartFile imagePart =
+          new MockMultipartFile(
+              "images", "new-image.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {1, 2, 3});
+
+      // when & then
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).file(imagePart).with(mockAuth()))
+          .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void keepImageIds가_없으면_400을_반환한다() throws Exception {
+      // given
+      LocalDateTime future = LocalDateTime.now().plusDays(10);
+      String invalidJson =
+          """
                     {
                       "groupName": "수정 그룹",
                       "title": "수정 분철 제목",
@@ -401,27 +400,30 @@ class BuncheolControllerTest {
                         {"memberName": "수정멤버A", "instantPrice": 60000, "bidAllowed": false}
                       ]
                     }
-                    """.formatted(future);
+                    """
+              .formatted(future);
 
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes()
-            );
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
 
-            // when & then
-            mockMvc.perform(modifyMultipartRequest(10L)
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())
-                    ));
-        }
+      // when & then
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+    }
 
-        @Test
-        void groupId와_groupName이_모두_없으면_400을_반환한다() throws Exception {
-            // given
-            LocalDateTime future = LocalDateTime.now().plusDays(10);
-            String invalidJson = """
+    @Test
+    void groupId와_groupName이_모두_없으면_400을_반환한다() throws Exception {
+      // given
+      LocalDateTime future = LocalDateTime.now().plusDays(10);
+      String invalidJson =
+          """
                     {
                       "title": "수정 분철 제목",
                       "goodsName": "수정 굿즈",
@@ -438,100 +440,112 @@ class BuncheolControllerTest {
                         {"memberName": "수정멤버A", "instantPrice": 60000, "bidAllowed": false}
                       ]
                     }
-                    """.formatted(future);
+                    """
+              .formatted(future);
 
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes()
-            );
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
 
-            // when & then
-            mockMvc.perform(modifyMultipartRequest(10L)
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())
-                    ));
-        }
-
-        @Test
-        void BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
-            // given
-            MockMultipartFile requestPart = new MockMultipartFile(
-                    "request", "", MediaType.APPLICATION_JSON_VALUE,
-                    validModifyRequestJson().getBytes()
-            );
-            willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND))
-                    .given(buncheolService).modifyBuncheol(eq(HOST_ID), eq(10L), any(), any());
-
-            // when & then
-            mockMvc.perform(modifyMultipartRequest(10L)
-                            .file(requestPart)
-                            .with(mockAuth()))
-                    .andExpect(status().isNotFound())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())
-                    ));
-        }
+      // when & then
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
-    @Nested
-    @DisplayName("분철 취소 테스트")
-    class CancelBuncheolTest {
+    @Test
+    void BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
+      // given
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND))
+          .given(buncheolService)
+          .modifyBuncheol(eq(HOST_ID), eq(10L), any(), any());
 
-        @Test
-        void 분철_취소에_성공하면_204를_반환한다() throws Exception {
-            // when & then
-            mockMvc.perform(delete("/v1/buncheols/{id}", 10L)
-                            .with(mockAuth()))
-                    .andExpect(status().isNoContent());
-
-            then(buncheolService).should().cancelBuncheol(HOST_ID, 10L);
-        }
-
-        @Test
-        void 취소불가_상태면_409를_반환한다() throws Exception {
-            // given
-            willThrow(new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED))
-                    .given(buncheolService).cancelBuncheol(HOST_ID, 10L);
-
-            // when & then
-            mockMvc.perform(delete("/v1/buncheols/{id}", 10L)
-                            .with(mockAuth()))
-                    .andExpect(status().isConflict())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED.getCode())
-                    ));
-        }
-
-        @Test
-        void 분철이_없으면_404를_반환한다() throws Exception {
-            // given
-            willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND))
-                    .given(buncheolService).cancelBuncheol(HOST_ID, 10L);
-
-            // when & then
-            mockMvc.perform(delete("/v1/buncheols/{id}", 10L)
-                            .with(mockAuth()))
-                    .andExpect(status().isNotFound())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())
-                    ));
-        }
-
-        @Test
-        void 소유자가_아니면_403을_반환한다() throws Exception {
-            // given
-            willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
-                    .given(buncheolService).cancelBuncheol(HOST_ID, 10L);
-
-            // when & then
-            mockMvc.perform(delete("/v1/buncheols/{id}", 10L)
-                            .with(mockAuth()))
-                    .andExpect(status().isForbidden())
-                    .andExpect(content().string(
-                            org.hamcrest.Matchers.containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())
-                    ));
-        }
+      // when & then
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }
+  }
+
+  @Nested
+  @DisplayName("분철 취소 테스트")
+  class CancelBuncheolTest {
+
+    @Test
+    void 분철_취소에_성공하면_204를_반환한다() throws Exception {
+      // when & then
+      mockMvc
+          .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService).should().cancelBuncheol(HOST_ID, 10L);
+    }
+
+    @Test
+    void 취소불가_상태면_409를_반환한다() throws Exception {
+      // given
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED))
+          .given(buncheolService)
+          .cancelBuncheol(HOST_ID, 10L);
+
+      // when & then
+      mockMvc
+          .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED.getCode())));
+    }
+
+    @Test
+    void 분철이_없으면_404를_반환한다() throws Exception {
+      // given
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND))
+          .given(buncheolService)
+          .cancelBuncheol(HOST_ID, 10L);
+
+      // when & then
+      mockMvc
+          .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+    }
+
+    @Test
+    void 소유자가_아니면_403을_반환한다() throws Exception {
+      // given
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
+          .given(buncheolService)
+          .cancelBuncheol(HOST_ID, 10L);
+
+      // when & then
+      mockMvc
+          .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isForbidden())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+  }
 }

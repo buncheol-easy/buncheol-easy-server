@@ -23,35 +23,35 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ShippingAddressController {
 
-    private final ShippingAddressService shippingAddressService;
+  private final ShippingAddressService shippingAddressService;
 
-    @PostMapping
-    public ResponseEntity<Void> registerShippingAddress(@AuthenticationPrincipal final Long userId,
-                                                        @Valid @RequestBody final ShippingAddressRequest request) {
-        shippingAddressService.registerShippingAddress(userId, request);
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .build();
-    }
+  @PostMapping
+  public ResponseEntity<Void> registerShippingAddress(
+      @AuthenticationPrincipal final Long userId,
+      @Valid @RequestBody final ShippingAddressRequest request) {
+    shippingAddressService.registerShippingAddress(userId, request);
+    return ResponseEntity.status(HttpStatus.CREATED).build();
+  }
 
-    @GetMapping
-    public ResponseEntity<List<ShippingAddressResponse>> getUserShippingAddresses(
-            @AuthenticationPrincipal final Long userId) {
-        return ResponseEntity.ok(shippingAddressService.getUserShippingAddresses(userId));
-    }
+  @GetMapping
+  public ResponseEntity<List<ShippingAddressResponse>> getUserShippingAddresses(
+      @AuthenticationPrincipal final Long userId) {
+    return ResponseEntity.ok(shippingAddressService.getUserShippingAddresses(userId));
+  }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<Void> modifyShippingAddress(@AuthenticationPrincipal final Long userId,
-                                                      @PathVariable final Long id,
-                                                      @Valid @RequestBody final ShippingAddressRequest request) {
-        shippingAddressService.modifyShippingAddress(userId, id, request);
-        return ResponseEntity.noContent().build();
-    }
+  @PutMapping("/{id}")
+  public ResponseEntity<Void> modifyShippingAddress(
+      @AuthenticationPrincipal final Long userId,
+      @PathVariable final Long id,
+      @Valid @RequestBody final ShippingAddressRequest request) {
+    shippingAddressService.modifyShippingAddress(userId, id, request);
+    return ResponseEntity.noContent().build();
+  }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> removeShippingAddress(@AuthenticationPrincipal final Long userId,
-                                                      @PathVariable final Long id) {
-        shippingAddressService.removeShippingAddress(userId, id);
-        return ResponseEntity.noContent().build();
-    }
+  @DeleteMapping("/{id}")
+  public ResponseEntity<Void> removeShippingAddress(
+      @AuthenticationPrincipal final Long userId, @PathVariable final Long id) {
+    shippingAddressService.removeShippingAddress(userId, id);
+    return ResponseEntity.noContent().build();
+  }
 }

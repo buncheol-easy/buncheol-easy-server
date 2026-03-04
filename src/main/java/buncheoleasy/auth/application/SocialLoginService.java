@@ -15,27 +15,27 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class SocialLoginService {
 
-    private final JwtTokenProvider jwtTokenProvider;
-    private final UserDomainService userDomainService;
-    private final RefreshTokenStore refreshTokenStore;
+  private final JwtTokenProvider jwtTokenProvider;
+  private final UserDomainService userDomainService;
+  private final RefreshTokenStore refreshTokenStore;
 
-    public TokenPair login(final String provider, final String providerId, final String email) {
-        SocialInfo socialInfo = SocialInfo.of(provider, providerId);
-        User user = userDomainService.getOrCreateBySocialLogin(socialInfo, email);
-        return jwtTokenProvider.issueTokens(user.getId());
+  public TokenPair login(final String provider, final String providerId, final String email) {
+    SocialInfo socialInfo = SocialInfo.of(provider, providerId);
+    User user = userDomainService.getOrCreateBySocialLogin(socialInfo, email);
+    return jwtTokenProvider.issueTokens(user.getId());
+  }
+
+  public TokenPair reissueTokens(final String refreshToken) {
+    Long userId = jwtTokenProvider.parseUserIdFromRefreshToken(refreshToken);
+
+    if (!userDomainService.isValidUser(userId)) {
+      throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
     }
 
-    public TokenPair reissueTokens(final String refreshToken) {
-        Long userId = jwtTokenProvider.parseUserIdFromRefreshToken(refreshToken);
+    return jwtTokenProvider.reissueTokens(userId, refreshToken);
+  }
 
-        if (!userDomainService.isValidUser(userId)) {
-            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
-        }
-
-        return jwtTokenProvider.reissueTokens(userId, refreshToken);
-    }
-
-    public void logout(final Long userId) {
-        refreshTokenStore.delete(userId);
-    }
+  public void logout(final Long userId) {
+    refreshTokenStore.delete(userId);
+  }
 }

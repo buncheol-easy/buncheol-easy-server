@@ -19,91 +19,88 @@ import org.springframework.stereotype.Component;
 @Component
 public class JwtTokenProvider {
 
-    private final long accessTokenExpirationSeconds;
-    private final long refreshTokenExpirationSeconds;
-    private final SecretKey accessSecretKey;
-    private final SecretKey refreshSecretKey;
-    private final RefreshTokenStore refreshTokenStore;
+  private final long accessTokenExpirationSeconds;
+  private final long refreshTokenExpirationSeconds;
+  private final SecretKey accessSecretKey;
+  private final SecretKey refreshSecretKey;
+  private final RefreshTokenStore refreshTokenStore;
 
-    public JwtTokenProvider(
-            @Value("${jwt.secret.access-key}") final String accessSecret,
-            @Value("${jwt.secret.refresh-key}") final String refreshSecret,
-            @Value("${jwt.access-token-expiration-seconds}") final long accessTokenExpirationSeconds,
-            @Value("${jwt.refresh-token-expiration-seconds}") final long refreshTokenExpirationSeconds,
-            final RefreshTokenStore refreshTokenStore) {
-        this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
-        this.refreshTokenExpirationSeconds = refreshTokenExpirationSeconds;
-        this.accessSecretKey = Keys.hmacShaKeyFor(accessSecret.getBytes(StandardCharsets.UTF_8));
-        this.refreshSecretKey = Keys.hmacShaKeyFor(refreshSecret.getBytes(StandardCharsets.UTF_8));
-        this.refreshTokenStore = refreshTokenStore;
+  public JwtTokenProvider(
+      @Value("${jwt.secret.access-key}") final String accessSecret,
+      @Value("${jwt.secret.refresh-key}") final String refreshSecret,
+      @Value("${jwt.access-token-expiration-seconds}") final long accessTokenExpirationSeconds,
+      @Value("${jwt.refresh-token-expiration-seconds}") final long refreshTokenExpirationSeconds,
+      final RefreshTokenStore refreshTokenStore) {
+    this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
+    this.refreshTokenExpirationSeconds = refreshTokenExpirationSeconds;
+    this.accessSecretKey = Keys.hmacShaKeyFor(accessSecret.getBytes(StandardCharsets.UTF_8));
+    this.refreshSecretKey = Keys.hmacShaKeyFor(refreshSecret.getBytes(StandardCharsets.UTF_8));
+    this.refreshTokenStore = refreshTokenStore;
+  }
+
+  public Long parseUserIdFromAccessToken(final String token) {
+    final Claims claims = parseClaims(token, accessSecretKey);
+    return parseUserId(claims.getSubject());
+  }
+
+  public Long parseUserIdFromRefreshToken(final String token) {
+    final Claims claims = parseClaims(token, refreshSecretKey);
+    return parseUserId(claims.getSubject());
+  }
+
+  public TokenPair issueTokens(final Long userId) {
+    return new TokenPair(createAccessToken(userId), createRefreshToken(userId));
+  }
+
+  public String createAccessToken(final Long userId) {
+    final Instant now = Instant.now();
+    final Instant expiration = now.plusSeconds(accessTokenExpirationSeconds);
+
+    return Jwts.builder()
+        .subject(String.valueOf(userId))
+        .issuedAt(Date.from(now))
+        .expiration(Date.from(expiration))
+        .signWith(accessSecretKey)
+        .compact();
+  }
+
+  public String createRefreshToken(final Long userId) {
+    final Instant now = Instant.now();
+    final Instant expiration = now.plusSeconds(refreshTokenExpirationSeconds);
+
+    String token =
+        Jwts.builder()
+            .subject(String.valueOf(userId))
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(expiration))
+            .signWith(refreshSecretKey)
+            .compact();
+
+    refreshTokenStore.save(userId, token, refreshTokenExpirationSeconds);
+    return token;
+  }
+
+  public TokenPair reissueTokens(final Long userId, final String oldRefreshToken) {
+    refreshTokenStore.verify(userId, oldRefreshToken);
+    refreshTokenStore.delete(userId);
+    return issueTokens(userId);
+  }
+
+  private Claims parseClaims(final String token, final SecretKey secretKey) {
+    try {
+      return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload();
+    } catch (final ExpiredJwtException exception) {
+      throw new BusinessException(ErrorCode.AUTH_EXPIRED_TOKEN, exception);
+    } catch (final JwtException | IllegalArgumentException exception) {
+      throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN, exception);
     }
+  }
 
-    public Long parseUserIdFromAccessToken(final String token) {
-        final Claims claims = parseClaims(token, accessSecretKey);
-        return parseUserId(claims.getSubject());
+  private Long parseUserId(final String subject) {
+    try {
+      return Long.parseLong(subject);
+    } catch (final NumberFormatException exception) {
+      throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN, exception);
     }
-
-    public Long parseUserIdFromRefreshToken(final String token) {
-        final Claims claims = parseClaims(token, refreshSecretKey);
-        return parseUserId(claims.getSubject());
-    }
-
-    public TokenPair issueTokens(final Long userId) {
-        return new TokenPair(createAccessToken(userId), createRefreshToken(userId));
-    }
-
-    public String createAccessToken(final Long userId) {
-        final Instant now = Instant.now();
-        final Instant expiration = now.plusSeconds(accessTokenExpirationSeconds);
-
-        return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiration))
-                .signWith(accessSecretKey)
-                .compact();
-    }
-
-    public String createRefreshToken(final Long userId) {
-        final Instant now = Instant.now();
-        final Instant expiration = now.plusSeconds(refreshTokenExpirationSeconds);
-
-        String token = Jwts.builder()
-                .subject(String.valueOf(userId))
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiration))
-                .signWith(refreshSecretKey)
-                .compact();
-
-        refreshTokenStore.save(userId, token, refreshTokenExpirationSeconds);
-        return token;
-    }
-    
-    public TokenPair reissueTokens(final Long userId, final String oldRefreshToken) {
-        refreshTokenStore.verify(userId, oldRefreshToken);
-        refreshTokenStore.delete(userId);
-        return issueTokens(userId);
-    }
-
-    private Claims parseClaims(final String token, final SecretKey secretKey) {
-        try {
-            return Jwts.parser()
-                    .verifyWith(secretKey)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
-        } catch (final ExpiredJwtException exception) {
-            throw new BusinessException(ErrorCode.AUTH_EXPIRED_TOKEN, exception);
-        } catch (final JwtException | IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN, exception);
-        }
-    }
-
-    private Long parseUserId(final String subject) {
-        try {
-            return Long.parseLong(subject);
-        } catch (final NumberFormatException exception) {
-            throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN, exception);
-        }
-    }
+  }
 }

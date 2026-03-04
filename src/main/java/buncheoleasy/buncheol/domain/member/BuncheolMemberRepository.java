@@ -4,7 +4,7 @@ import java.util.List;
 
 public interface BuncheolMemberRepository {
 
-    List<BuncheolMember> saveAll(List<BuncheolMember> buncheolMembers);
+  List<BuncheolMember> saveAll(List<BuncheolMember> buncheolMembers);
 
-    void deleteAllByBuncheolId(Long buncheolId);
+  void deleteAllByBuncheolId(Long buncheolId);
 }

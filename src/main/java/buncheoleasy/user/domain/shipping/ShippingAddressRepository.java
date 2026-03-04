@@ -5,17 +5,18 @@ import java.util.Optional;
 
 public interface ShippingAddressRepository {
 
-    ShippingAddress save(ShippingAddress shippingAddress);
+  ShippingAddress save(ShippingAddress shippingAddress);
 
-    void update(ShippingAddress shippingAddress);
+  void update(ShippingAddress shippingAddress);
 
-    void delete(Long id);
+  void delete(Long id);
 
-    Optional<ShippingAddress> findById(Long id);
+  Optional<ShippingAddress> findById(Long id);
 
-    List<ShippingAddress> getUserShippingAddresses(Long userId);
+  List<ShippingAddress> getUserShippingAddresses(Long userId);
 
-    int countByUserId(Long userId);
+  int countByUserId(Long userId);
 
-    boolean existsByUserIdAndShippingMethodAndStoreName(Long userId, String shippingMethod, String storeName);
+  boolean existsByUserIdAndShippingMethodAndStoreName(
+      Long userId, String shippingMethod, String storeName);
 }

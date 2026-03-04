@@ -16,32 +16,38 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class BuncheolImageEventListener {
 
-    private final BuncheolImageUploader imageUploader;
-    private final BuncheolImageDomainService buncheolImageDomainService;
+  private final BuncheolImageUploader imageUploader;
+  private final BuncheolImageDomainService buncheolImageDomainService;
 
-    @TransactionalEventListener
-    @Async
-    public void handleImageUpload(final BuncheolImageUploadEvent event) {
-        List<CompletableFuture<String>> futures = event.images().stream()
-                .map(imageFile -> CompletableFuture.supplyAsync(() ->
-                        imageUploader.uploadBuncheolImageAndGetUrl(event.buncheolId(), imageFile)
-                ))
-                .toList();
+  @TransactionalEventListener
+  @Async
+  public void handleImageUpload(final BuncheolImageUploadEvent event) {
+    List<CompletableFuture<String>> futures =
+        event.images().stream()
+            .map(
+                imageFile ->
+                    CompletableFuture.supplyAsync(
+                        () ->
+                            imageUploader.uploadBuncheolImageAndGetUrl(
+                                event.buncheolId(), imageFile)))
+            .toList();
 
-        List<String> urls = futures.stream()
-                .map(future -> {
-                    try {
-                        return future.join();
-                    } catch (CompletionException e) {
-                        return null;
-                    }
+    List<String> urls =
+        futures.stream()
+            .map(
+                future -> {
+                  try {
+                    return future.join();
+                  } catch (CompletionException e) {
+                    return null;
+                  }
                 })
-                .filter(Objects::nonNull)
-                .toList();
+            .filter(Objects::nonNull)
+            .toList();
 
-        if (!urls.isEmpty()) {
-            log.debug("이미지 {}장 저장 성공", urls.size());
-            buncheolImageDomainService.createBuncheolImages(event.buncheolId(), urls);
-        }
+    if (!urls.isEmpty()) {
+      log.debug("이미지 {}장 저장 성공", urls.size());
+      buncheolImageDomainService.createBuncheolImages(event.buncheolId(), urls);
     }
+  }
 }

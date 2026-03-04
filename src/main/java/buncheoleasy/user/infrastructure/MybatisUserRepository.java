@@ -11,41 +11,41 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class MybatisUserRepository implements UserRepository {
 
-    private final UserMapper userMapper;
+  private final UserMapper userMapper;
 
-    @Override
-    public User save(User user) {
-        userMapper.insert(user);
-        return user;
-    }
+  @Override
+  public User save(User user) {
+    userMapper.insert(user);
+    return user;
+  }
 
-    @Override
-    public void update(User user) {
-        userMapper.update(user);
-    }
+  @Override
+  public void update(User user) {
+    userMapper.update(user);
+  }
 
-    @Override
-    public Optional<User> findById(Long id) {
-        return userMapper.findById(id);
-    }
+  @Override
+  public Optional<User> findById(Long id) {
+    return userMapper.findById(id);
+  }
 
-    @Override
-    public Optional<User> findBySocialInfo(SocialInfo socialInfo) {
-        return userMapper.findBySocialInfo(socialInfo.provider().name(), socialInfo.providerId());
-    }
+  @Override
+  public Optional<User> findBySocialInfo(SocialInfo socialInfo) {
+    return userMapper.findBySocialInfo(socialInfo.provider().name(), socialInfo.providerId());
+  }
 
-    @Override
-    public boolean existsById(Long id) {
-        return userMapper.existsById(id);
-    }
+  @Override
+  public boolean existsById(Long id) {
+    return userMapper.existsById(id);
+  }
 
-    @Override
-    public boolean existsByNicknameExcludingId(String nickname, Long excludeId) {
-        return userMapper.existsByNicknameExcludingId(nickname, excludeId);
-    }
+  @Override
+  public boolean existsByNicknameExcludingId(String nickname, Long excludeId) {
+    return userMapper.existsByNicknameExcludingId(nickname, excludeId);
+  }
 
-    @Override
-    public void withdraw(User user) {
-        userMapper.updateDeletedAt(user.getId(), user.getDeletedAt());
-    }
+  @Override
+  public void withdraw(User user) {
+    userMapper.updateDeletedAt(user.getId(), user.getDeletedAt());
+  }
 }

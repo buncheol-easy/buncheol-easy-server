@@ -10,29 +10,31 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class BuncheolMemberDomainService {
 
-    private final BuncheolMemberRepository buncheolMemberRepository;
+  private final BuncheolMemberRepository buncheolMemberRepository;
 
-    public void createBuncheolMembers(final Long buncheolId, final List<BuncheolMemberParams> params) {
-        if (params == null || params.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
-        }
+  public void createBuncheolMembers(
+      final Long buncheolId, final List<BuncheolMemberParams> params) {
+    if (params == null || params.isEmpty()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
+    }
 
-        List<BuncheolMember> newBuncheolMembers = params.stream()
-                .map(param ->
+    List<BuncheolMember> newBuncheolMembers =
+        params.stream()
+            .map(
+                param ->
                     BuncheolMember.create(
-                            buncheolId,
-                            param.memberId(),
-                            param.memberName(),
-                            param.instantPrice(),
-                            param.bidAllowed(),
-                            param.bidMinPrice()
-                    ))
-                .toList();
+                        buncheolId,
+                        param.memberId(),
+                        param.memberName(),
+                        param.instantPrice(),
+                        param.bidAllowed(),
+                        param.bidMinPrice()))
+            .toList();
 
-        buncheolMemberRepository.saveAll(newBuncheolMembers);
-    }
+    buncheolMemberRepository.saveAll(newBuncheolMembers);
+  }
 
-    public void deleteAllByBuncheolId(final Long buncheolId) {
-        buncheolMemberRepository.deleteAllByBuncheolId(buncheolId);
-    }
+  public void deleteAllByBuncheolId(final Long buncheolId) {
+    buncheolMemberRepository.deleteAllByBuncheolId(buncheolId);
+  }
 }

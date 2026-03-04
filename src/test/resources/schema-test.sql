@@ -99,7 +99,7 @@ CREATE TABLE buncheols
     updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
-    CONSTRAINT fk_buncheols_host  FOREIGN KEY (host_id)  REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_buncheols_host FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_buncheols_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE SET NULL
 );
 
@@ -117,7 +117,7 @@ CREATE TABLE buncheol_members
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
-    CONSTRAINT fk_buncheol_members_member   FOREIGN KEY (member_id)   REFERENCES group_members (id) ON DELETE SET NULL
+    CONSTRAINT fk_buncheol_members_member FOREIGN KEY (member_id) REFERENCES group_members (id) ON DELETE SET NULL
 );
 
 CREATE TABLE buncheol_images

@@ -10,16 +10,16 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class MybatisBuncheolMemberRepository implements BuncheolMemberRepository {
 
-    private final BuncheolMemberMapper buncheolMemberMapper;
+  private final BuncheolMemberMapper buncheolMemberMapper;
 
-    @Override
-    public List<BuncheolMember> saveAll(List<BuncheolMember> buncheolMembers) {
-        buncheolMemberMapper.insertAll(buncheolMembers);
-        return buncheolMembers;
-    }
+  @Override
+  public List<BuncheolMember> saveAll(List<BuncheolMember> buncheolMembers) {
+    buncheolMemberMapper.insertAll(buncheolMembers);
+    return buncheolMembers;
+  }
 
-    @Override
-    public void deleteAllByBuncheolId(Long buncheolId) {
-        buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
-    }
+  @Override
+  public void deleteAllByBuncheolId(Long buncheolId) {
+    buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
+  }
 }

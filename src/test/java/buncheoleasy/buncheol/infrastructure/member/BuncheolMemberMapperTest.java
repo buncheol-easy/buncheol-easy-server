@@ -25,100 +25,108 @@ import org.springframework.test.context.ActiveProfiles;
 @DisplayName("BuncheolMemberMapper 테스트")
 class BuncheolMemberMapperTest {
 
-    @Autowired
-    private BuncheolMemberMapper buncheolMemberMapper;
+  @Autowired private BuncheolMemberMapper buncheolMemberMapper;
 
-    @Autowired
-    private BuncheolMapper buncheolMapper;
+  @Autowired private BuncheolMapper buncheolMapper;
 
-    @Autowired
-    private UserMapper userMapper;
+  @Autowired private UserMapper userMapper;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
-    private Long buncheolId;
+  private Long buncheolId;
 
-    @BeforeEach
-    void setUp() {
-        User host = User.create("KAKAO", "host123", "host@example.com");
-        userMapper.insert(host);
+  @BeforeEach
+  void setUp() {
+    User host = User.create("KAKAO", "host123", "host@example.com");
+    userMapper.insert(host);
 
-        Buncheol buncheol = Buncheol.create(host.getId(), new BuncheolParams(
-                null, "테스트 그룹", "제목", null, "앨범명", "스토어명",
-                50_000L, LocalDateTime.now().plusDays(7), 7,
-                3000, null, "국민은행", "123-456", "홍길동"
-        ));
-        buncheolMapper.insert(buncheol);
-        buncheolId = buncheol.getId();
+    Buncheol buncheol =
+        Buncheol.create(
+            host.getId(),
+            new BuncheolParams(
+                null,
+                "테스트 그룹",
+                "제목",
+                null,
+                "앨범명",
+                "스토어명",
+                50_000L,
+                LocalDateTime.now().plusDays(7),
+                7,
+                3000,
+                null,
+                "국민은행",
+                "123-456",
+                "홍길동"));
+    buncheolMapper.insert(buncheol);
+    buncheolId = buncheol.getId();
+  }
+
+  @Nested
+  @DisplayName("분철 멤버 일괄 저장 테스트")
+  class InsertAllTest {
+
+    @Test
+    void 입찰_불가_멤버를_저장할_수_있다() {
+      // given
+      BuncheolMember member = BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null);
+
+      // when & then
+      assertThatCode(() -> buncheolMemberMapper.insertAll(List.of(member)))
+          .doesNotThrowAnyException();
     }
 
-    @Nested
-    @DisplayName("분철 멤버 일괄 저장 테스트")
-    class InsertAllTest {
+    @Test
+    void 입찰_가능_멤버를_저장할_수_있다() {
+      // given
+      BuncheolMember member =
+          BuncheolMember.create(buncheolId, null, "멤버B", 50_000L, true, 10_000L);
 
-        @Test
-        void 입찰_불가_멤버를_저장할_수_있다() {
-            // given
-            BuncheolMember member = BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null);
-
-            // when & then
-            assertThatCode(() -> buncheolMemberMapper.insertAll(List.of(member)))
-                    .doesNotThrowAnyException();
-        }
-
-        @Test
-        void 입찰_가능_멤버를_저장할_수_있다() {
-            // given
-            BuncheolMember member = BuncheolMember.create(buncheolId, null, "멤버B", 50_000L, true, 10_000L);
-
-            // when & then
-            assertThatCode(() -> buncheolMemberMapper.insertAll(List.of(member)))
-                    .doesNotThrowAnyException();
-        }
-
-        @Test
-        void 여러_멤버를_한번에_저장할_수_있다() {
-            // given
-            List<BuncheolMember> members = List.of(
-                    BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
-                    BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, true, 5_000L),
-                    BuncheolMember.create(buncheolId, null, "멤버C", 20_000L, false, null)
-            );
-
-            // when & then
-            assertThatCode(() -> buncheolMemberMapper.insertAll(members))
-                    .doesNotThrowAnyException();
-        }
+      // when & then
+      assertThatCode(() -> buncheolMemberMapper.insertAll(List.of(member)))
+          .doesNotThrowAnyException();
     }
 
-    @Nested
-    @DisplayName("분철 멤버 삭제 테스트")
-    class DeleteAllByBuncheolIdTest {
+    @Test
+    void 여러_멤버를_한번에_저장할_수_있다() {
+      // given
+      List<BuncheolMember> members =
+          List.of(
+              BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
+              BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, true, 5_000L),
+              BuncheolMember.create(buncheolId, null, "멤버C", 20_000L, false, null));
 
-        @Test
-        void 특정_분철의_멤버를_전체_삭제할_수_있다() {
-            // given
-            List<BuncheolMember> members = List.of(
-                    BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
-                    BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, false, null)
-            );
-            buncheolMemberMapper.insertAll(members);
-            assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);
-
-            // when
-            buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
-
-            // then
-            assertThat(countMembersByBuncheolId(buncheolId)).isZero();
-        }
+      // when & then
+      assertThatCode(() -> buncheolMemberMapper.insertAll(members)).doesNotThrowAnyException();
     }
+  }
 
-    private int countMembersByBuncheolId(final Long targetBuncheolId) {
-        return jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM buncheol_members WHERE buncheol_id = ?",
-                Integer.class,
-                targetBuncheolId
-        );
+  @Nested
+  @DisplayName("분철 멤버 삭제 테스트")
+  class DeleteAllByBuncheolIdTest {
+
+    @Test
+    void 특정_분철의_멤버를_전체_삭제할_수_있다() {
+      // given
+      List<BuncheolMember> members =
+          List.of(
+              BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
+              BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, false, null));
+      buncheolMemberMapper.insertAll(members);
+      assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);
+
+      // when
+      buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
+
+      // then
+      assertThat(countMembersByBuncheolId(buncheolId)).isZero();
     }
+  }
+
+  private int countMembersByBuncheolId(final Long targetBuncheolId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM buncheol_members WHERE buncheol_id = ?",
+        Integer.class,
+        targetBuncheolId);
+  }
 }

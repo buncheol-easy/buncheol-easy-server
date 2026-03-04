@@ -11,16 +11,16 @@ import org.springframework.stereotype.Component;
 @Component
 public class KakaoOidcUserProfileExtractor implements OAuth2UserProfileExtractor {
 
-    @Override
-    public boolean supports(final String registrationId) {
-        return KAKAO.matched(registrationId);
-    }
+  @Override
+  public boolean supports(final String registrationId) {
+    return KAKAO.matched(registrationId);
+  }
 
-    @Override
-    public OAuth2UserProfile extract(final OAuth2User principal) {
-        if (!(principal instanceof OidcUser oidcUser)) {
-            throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
-        }
-        return new OAuth2UserProfile(KAKAO, oidcUser.getSubject(), oidcUser.getEmail());
+  @Override
+  public OAuth2UserProfile extract(final OAuth2User principal) {
+    if (!(principal instanceof OidcUser oidcUser)) {
+      throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
     }
+    return new OAuth2UserProfile(KAKAO, oidcUser.getSubject(), oidcUser.getEmail());
+  }
 }

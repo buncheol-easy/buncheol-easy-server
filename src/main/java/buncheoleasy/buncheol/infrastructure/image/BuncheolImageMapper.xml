@@ -1,34 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="buncheoleasy.buncheol.infrastructure.image.BuncheolImageMapper">
 
-    <!-- 분철 이미지 일괄 저장 -->
-    <insert id="insertAll">
-        INSERT INTO buncheol_images (
-                buncheol_id,
-                image_url,
-                created_at
-        ) VALUES
-        <foreach collection="buncheolImages" item="buncheolImage" separator=",">
-            (
-             #{buncheolImage.buncheolId},
-             #{buncheolImage.imageUrl},
-             NOW()
-            )
-        </foreach>
-    </insert>
+  <!-- 분철 이미지 일괄 저장 -->
+  <insert id="insertAll">
+    INSERT INTO buncheol_images (
+    buncheol_id,
+    image_url,
+    created_at
+    ) VALUES
+    <foreach collection="buncheolImages" item="buncheolImage" separator=",">
+      (
+      #{buncheolImage.buncheolId},
+      #{buncheolImage.imageUrl},
+      NOW()
+      )
+    </foreach>
+  </insert>
 
-    <!-- 유지 대상 외 이미지 삭제 -->
-    <delete id="deleteByBuncheolIdExcludingIds">
-        DELETE FROM buncheol_images
-        WHERE buncheol_id = #{buncheolId}
-        <if test="keepImageIds != null and keepImageIds.size() > 0">
-            AND id NOT IN
-            <foreach collection="keepImageIds" item="imageId" open="(" separator="," close=")">
-                #{imageId}
-            </foreach>
-        </if>
-    </delete>
+  <!-- 유지 대상 외 이미지 삭제 -->
+  <delete id="deleteByBuncheolIdExcludingIds">
+    DELETE FROM buncheol_images
+    WHERE buncheol_id = #{buncheolId}
+    <if test="keepImageIds != null and keepImageIds.size() > 0">
+      AND id NOT IN
+      <foreach collection="keepImageIds" item="imageId" open="(" separator="," close=")">
+        #{imageId}
+      </foreach>
+    </if>
+  </delete>
 
 </mapper>

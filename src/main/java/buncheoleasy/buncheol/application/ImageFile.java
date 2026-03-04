@@ -1,7 +1,3 @@
 package buncheoleasy.buncheol.application;
 
-public record ImageFile(
-        String originalFilename,
-        String contentType,
-        byte[] bytes
-) {}
+public record ImageFile(String originalFilename, String contentType, byte[] bytes) {}

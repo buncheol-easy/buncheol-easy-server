@@ -18,19 +18,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final SocialLoginService socialLoginService;
+  private final SocialLoginService socialLoginService;
 
-    @PostMapping("/reissue-token")
-    public ResponseEntity<TokenPair> reissueToken(@Valid @RequestBody final RefreshTokenRequest request) {
-        TokenPair token = socialLoginService.reissueTokens(request.refreshToken());
-        return ResponseEntity
-                .status(HttpStatus.OK)
-                .body(token);
-    }
+  @PostMapping("/reissue-token")
+  public ResponseEntity<TokenPair> reissueToken(
+      @Valid @RequestBody final RefreshTokenRequest request) {
+    TokenPair token = socialLoginService.reissueTokens(request.refreshToken());
+    return ResponseEntity.status(HttpStatus.OK).body(token);
+  }
 
-    @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@AuthenticationPrincipal final Long userId) {
-        socialLoginService.logout(userId);
-        return ResponseEntity.noContent().build();
-    }
+  @PostMapping("/logout")
+  public ResponseEntity<Void> logout(@AuthenticationPrincipal final Long userId) {
+    socialLoginService.logout(userId);
+    return ResponseEntity.noContent().build();
+  }
 }

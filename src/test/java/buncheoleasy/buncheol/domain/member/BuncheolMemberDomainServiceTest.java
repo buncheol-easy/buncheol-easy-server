@@ -20,54 +20,55 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("BuncheolMemberDomainService 단위 테스트")
 class BuncheolMemberDomainServiceTest {
 
-    @InjectMocks
-    private BuncheolMemberDomainService buncheolMemberDomainService;
+  @InjectMocks private BuncheolMemberDomainService buncheolMemberDomainService;
 
-    @Mock
-    private BuncheolMemberRepository buncheolMemberRepository;
+  @Mock private BuncheolMemberRepository buncheolMemberRepository;
 
-    @Nested
-    @DisplayName("분철 멤버 저장 테스트")
-    class CreateBuncheolMembersTest {
+  @Nested
+  @DisplayName("분철 멤버 저장 테스트")
+  class CreateBuncheolMembersTest {
 
-        @Test
-        void 유효한_멤버_목록으로_저장에_성공한다() {
-            // given
-            Long buncheolId = 1L;
-            List<BuncheolMemberParams> params = List.of(
-                    new BuncheolMemberParams(null, "멤버A", 50_000L, false, null),
-                    new BuncheolMemberParams(null, "멤버B", 30_000L, false, null)
-            );
+    @Test
+    void 유효한_멤버_목록으로_저장에_성공한다() {
+      // given
+      Long buncheolId = 1L;
+      List<BuncheolMemberParams> params =
+          List.of(
+              new BuncheolMemberParams(null, "멤버A", 50_000L, false, null),
+              new BuncheolMemberParams(null, "멤버B", 30_000L, false, null));
 
-            // when
-            buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);
+      // when
+      buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);
 
-            // then
-            then(buncheolMemberRepository).should().saveAll(anyList());
-        }
-
-        @Test
-        void 멤버_목록이_null이면_예외가_발생한다() {
-            // given
-            Long buncheolId = 1L;
-
-            // when & then
-            assertThatThrownBy(() -> buncheolMemberDomainService.createBuncheolMembers(buncheolId, null))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode")
-                    .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
-        }
-
-        @Test
-        void 멤버_목록이_비어있으면_예외가_발생한다() {
-            // given
-            Long buncheolId = 1L;
-
-            // when & then
-            assertThatThrownBy(() -> buncheolMemberDomainService.createBuncheolMembers(buncheolId, Collections.emptyList()))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode")
-                    .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
-        }
+      // then
+      then(buncheolMemberRepository).should().saveAll(anyList());
     }
+
+    @Test
+    void 멤버_목록이_null이면_예외가_발생한다() {
+      // given
+      Long buncheolId = 1L;
+
+      // when & then
+      assertThatThrownBy(() -> buncheolMemberDomainService.createBuncheolMembers(buncheolId, null))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
+    }
+
+    @Test
+    void 멤버_목록이_비어있으면_예외가_발생한다() {
+      // given
+      Long buncheolId = 1L;
+
+      // when & then
+      assertThatThrownBy(
+              () ->
+                  buncheolMemberDomainService.createBuncheolMembers(
+                      buncheolId, Collections.emptyList()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
+    }
+  }
 }

@@ -4,11 +4,11 @@ import java.util.Optional;
 
 public interface BuncheolRepository {
 
-    Buncheol save(Buncheol buncheol);
+  Buncheol save(Buncheol buncheol);
 
-    Optional<Buncheol> findById(Long id);
+  Optional<Buncheol> findById(Long id);
 
-    void update(Long id, BuncheolParams params);
+  void update(Long id, BuncheolParams params);
 
-    void updateStatus(Long id, BuncheolStatus status);
+  void updateStatus(Long id, BuncheolStatus status);
 }

@@ -22,55 +22,54 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
-    private final List<OAuth2UserProfileExtractor> profileExtractors;
-    private final SocialLoginService socialLoginService;
-    private final TokenResponseWriter tokenResponseWriter;
+  private final List<OAuth2UserProfileExtractor> profileExtractors;
+  private final SocialLoginService socialLoginService;
+  private final TokenResponseWriter tokenResponseWriter;
 
-    @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
-                                        Authentication authentication) throws IOException {
-        OAuth2AuthenticationToken oauthToken = getAuthenticationToken(authentication);
-        OAuth2UserProfile profile = getUserProfile(oauthToken);
-        validateSocialEmail(profile.email());
+  @Override
+  public void onAuthenticationSuccess(
+      HttpServletRequest request, HttpServletResponse response, Authentication authentication)
+      throws IOException {
+    OAuth2AuthenticationToken oauthToken = getAuthenticationToken(authentication);
+    OAuth2UserProfile profile = getUserProfile(oauthToken);
+    validateSocialEmail(profile.email());
 
-        TokenPair token = socialLoginService.login(
-                profile.provider().name(),
-                profile.providerId(),
-                profile.email()
-        );
-        log.debug("OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
-        tokenResponseWriter.write(response, token);
+    TokenPair token =
+        socialLoginService.login(profile.provider().name(), profile.providerId(), profile.email());
+    log.debug(
+        "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
+    tokenResponseWriter.write(response, token);
+  }
+
+  private OAuth2UserProfile getUserProfile(final OAuth2AuthenticationToken oauthToken) {
+    String provider = oauthToken.getAuthorizedClientRegistrationId();
+    return extractProfile(provider, oauthToken.getPrincipal());
+  }
+
+  private OAuth2AuthenticationToken getAuthenticationToken(final Authentication authentication) {
+    if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
+      throw new BusinessException(ErrorCode.AUTH_UNSUPPORTED_AUTHENTICATION);
     }
+    return oauthToken;
+  }
 
-    private OAuth2UserProfile getUserProfile(final OAuth2AuthenticationToken oauthToken) {
-        String provider = oauthToken.getAuthorizedClientRegistrationId();
-        return extractProfile(provider, oauthToken.getPrincipal());
-    }
-
-    private OAuth2AuthenticationToken getAuthenticationToken(final Authentication authentication) {
-        if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)) {
-            throw new BusinessException(ErrorCode.AUTH_UNSUPPORTED_AUTHENTICATION);
+  private OAuth2UserProfile extractProfile(final String provider, final OAuth2User principal) {
+    for (OAuth2UserProfileExtractor extractor : profileExtractors) {
+      if (extractor.supports(provider)) {
+        try {
+          return extractor.extract(principal);
+        } catch (RuntimeException exception) {
+          log.warn("소셜 프로필 추출 실패: provider={}, reason={}", provider, exception.getMessage());
+          throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
         }
-        return oauthToken;
+      }
     }
+    throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
+  }
 
-    private OAuth2UserProfile extractProfile(final String provider, final OAuth2User principal) {
-        for (OAuth2UserProfileExtractor extractor : profileExtractors) {
-            if (extractor.supports(provider)) {
-                try {
-                    return extractor.extract(principal);
-                } catch (RuntimeException exception) {
-                    log.warn("소셜 프로필 추출 실패: provider={}, reason={}", provider, exception.getMessage());
-                    throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
-                }
-            }
-        }
-        throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
+  private void validateSocialEmail(final String email) {
+    if (email == null || email.isBlank()) {
+      throw new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
     }
-
-    private void validateSocialEmail(final String email) {
-        if (email == null || email.isBlank()) {
-            throw new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
-        }
-    }
+  }
 }

@@ -10,11 +10,11 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface BuncheolMapper {
 
-    void insert(Buncheol buncheol);
+  void insert(Buncheol buncheol);
 
-    Optional<Buncheol> findById(Long id);
+  Optional<Buncheol> findById(Long id);
 
-    void update(@Param("id") Long id, @Param("params") BuncheolParams params);
+  void update(@Param("id") Long id, @Param("params") BuncheolParams params);
 
-    void updateStatus(@Param("id") Long id, @Param("status") BuncheolStatus status);
+  void updateStatus(@Param("id") Long id, @Param("status") BuncheolStatus status);
 }

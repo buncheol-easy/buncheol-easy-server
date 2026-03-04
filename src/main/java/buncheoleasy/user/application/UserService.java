@@ -16,34 +16,33 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class UserService {
 
-    private final UserDomainService userDomainService;
-    private final RefreshTokenStore refreshTokenStore;
+  private final UserDomainService userDomainService;
+  private final RefreshTokenStore refreshTokenStore;
 
-    public void withdraw(final Long userId) {
-        userDomainService.withdraw(userId);
-        try {
-            refreshTokenStore.delete(userId);
-        } catch (Exception e) {
-            log.warn("회원 탈퇴 후 리프레시 토큰 삭제 실패. userId: {}", userId, e);
-        }
+  public void withdraw(final Long userId) {
+    userDomainService.withdraw(userId);
+    try {
+      refreshTokenStore.delete(userId);
+    } catch (Exception e) {
+      log.warn("회원 탈퇴 후 리프레시 토큰 삭제 실패. userId: {}", userId, e);
+    }
+  }
+
+  public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
+    userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
+  }
+
+  public UserProfileResponse getUserProfile(final Long userId) {
+    User user = userDomainService.getUser(userId);
+
+    if (!user.isProfileCompleted()) {
+      throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
     }
 
-    public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
-        userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
-    }
-
-    public UserProfileResponse getUserProfile(final Long userId) {
-        User user = userDomainService.getUser(userId);
-
-        if (!user.isProfileCompleted()) {
-            throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
-        }
-
-        return UserProfileResponse.of(
-                user.getSocialInfo().provider().name(),
-                user.getEmail().value(),
-                user.getNickname().value(),
-                user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null
-        );
-    }
+    return UserProfileResponse.of(
+        user.getSocialInfo().provider().name(),
+        user.getEmail().value(),
+        user.getNickname().value(),
+        user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null);
+  }
 }

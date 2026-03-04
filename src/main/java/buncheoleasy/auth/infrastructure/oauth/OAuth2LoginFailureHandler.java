@@ -17,13 +17,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
 
-    private final ErrorResponseWriter errorResponseWriter;
+  private final ErrorResponseWriter errorResponseWriter;
 
-    @Override
-    public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
-                                        AuthenticationException exception) throws IOException {
-        log.warn("OIDC 로그인 실패: 원인={}", exception.getMessage());
-        ProblemDetail problemDetail = ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.toProblemDetail();
-        errorResponseWriter.write(request, response, problemDetail);
-    }
+  @Override
+  public void onAuthenticationFailure(
+      HttpServletRequest request, HttpServletResponse response, AuthenticationException exception)
+      throws IOException {
+    log.warn("OIDC 로그인 실패: 원인={}", exception.getMessage());
+    ProblemDetail problemDetail = ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.toProblemDetail();
+    errorResponseWriter.write(request, response, problemDetail);
+  }
 }

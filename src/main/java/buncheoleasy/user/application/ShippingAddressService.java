@@ -15,44 +15,44 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ShippingAddressService {
 
-    private final ShippingAddressDomainService shippingAddressDomainService;
-    private final UserDomainService userDomainService;
+  private final ShippingAddressDomainService shippingAddressDomainService;
+  private final UserDomainService userDomainService;
 
-    public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
-        validateUser(userId);
-        shippingAddressDomainService.createShippingAddress(userId, request.shippingMethod(), request.storeName());
-    }
+  public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
+    validateUser(userId);
+    shippingAddressDomainService.createShippingAddress(
+        userId, request.shippingMethod(), request.storeName());
+  }
 
-    public void modifyShippingAddress(final Long userId, final Long addressId, final ShippingAddressRequest request) {
-        validateUser(userId);
-        shippingAddressDomainService.updateShippingAddress(userId, addressId, request.shippingMethod(),
-                request.storeName());
-    }
+  public void modifyShippingAddress(
+      final Long userId, final Long addressId, final ShippingAddressRequest request) {
+    validateUser(userId);
+    shippingAddressDomainService.updateShippingAddress(
+        userId, addressId, request.shippingMethod(), request.storeName());
+  }
 
-    public void removeShippingAddress(final Long userId, final Long addressId) {
-        validateUser(userId);
-        shippingAddressDomainService.deleteShippingAddress(userId, addressId);
-    }
+  public void removeShippingAddress(final Long userId, final Long addressId) {
+    validateUser(userId);
+    shippingAddressDomainService.deleteShippingAddress(userId, addressId);
+  }
 
-    public List<ShippingAddressResponse> getUserShippingAddresses(final Long userId) {
-        validateUser(userId);
-        return shippingAddressDomainService.getUserShippingAddresses(userId)
-                .stream()
-                .map(this::toResponse)
-                .toList();
-    }
+  public List<ShippingAddressResponse> getUserShippingAddresses(final Long userId) {
+    validateUser(userId);
+    return shippingAddressDomainService.getUserShippingAddresses(userId).stream()
+        .map(this::toResponse)
+        .toList();
+  }
 
-    private void validateUser(final Long userId) {
-        if(!userDomainService.isValidUser(userId)) {
-            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
-        }
+  private void validateUser(final Long userId) {
+    if (!userDomainService.isValidUser(userId)) {
+      throw new BusinessException(ErrorCode.USER_NOT_FOUND);
     }
+  }
 
-    private ShippingAddressResponse toResponse(final ShippingAddress shippingAddress) {
-        return ShippingAddressResponse.of(
-                shippingAddress.getId(),
-                shippingAddress.getShippingMethod().name(),
-                shippingAddress.getStoreName()
-        );
-    }
+  private ShippingAddressResponse toResponse(final ShippingAddress shippingAddress) {
+    return ShippingAddressResponse.of(
+        shippingAddress.getId(),
+        shippingAddress.getShippingMethod().name(),
+        shippingAddress.getStoreName());
+  }
 }

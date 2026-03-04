@@ -10,15 +10,15 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class MybatisGroupMemberRepository implements GroupMemberRepository {
 
-    private final GroupMemberMapper groupMemberMapper;
+  private final GroupMemberMapper groupMemberMapper;
 
-    @Override
-    public List<GroupMember> findAllByGroupIdAndIds(final Long groupId, final List<Long> memberIds) {
-        return groupMemberMapper.selectAllByGroupIdAndIds(groupId, memberIds);
-    }
+  @Override
+  public List<GroupMember> findAllByGroupIdAndIds(final Long groupId, final List<Long> memberIds) {
+    return groupMemberMapper.selectAllByGroupIdAndIds(groupId, memberIds);
+  }
 
-    @Override
-    public List<GroupMember> findAllByGroupId(final Long groupId) {
-        return groupMemberMapper.selectAllByGroupId(groupId);
-    }
+  @Override
+  public List<GroupMember> findAllByGroupId(final Long groupId) {
+    return groupMemberMapper.selectAllByGroupId(groupId);
+  }
 }

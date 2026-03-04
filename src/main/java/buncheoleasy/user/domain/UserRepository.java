@@ -4,17 +4,17 @@ import java.util.Optional;
 
 public interface UserRepository {
 
-    User save(User user);
+  User save(User user);
 
-    void update(User user);
+  void update(User user);
 
-    Optional<User> findById(Long id);
+  Optional<User> findById(Long id);
 
-    Optional<User> findBySocialInfo(SocialInfo socialInfo);
+  Optional<User> findBySocialInfo(SocialInfo socialInfo);
 
-    boolean existsById(Long id);
+  boolean existsById(Long id);
 
-    boolean existsByNicknameExcludingId(String nickname, Long excludeId);
+  boolean existsByNicknameExcludingId(String nickname, Long excludeId);
 
-    void withdraw(User user);
+  void withdraw(User user);
 }

@@ -10,16 +10,16 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class MybatisBuncheolImageRepository implements BuncheolImageRepository {
 
-    private final BuncheolImageMapper buncheolImageMapper;
+  private final BuncheolImageMapper buncheolImageMapper;
 
-    @Override
-    public List<BuncheolImage> saveAll(List<BuncheolImage> buncheolImages) {
-        buncheolImageMapper.insertAll(buncheolImages);
-        return buncheolImages;
-    }
+  @Override
+  public List<BuncheolImage> saveAll(List<BuncheolImage> buncheolImages) {
+    buncheolImageMapper.insertAll(buncheolImages);
+    return buncheolImages;
+  }
 
-    @Override
-    public void deleteByBuncheolIdExcludingIds(Long buncheolId, List<Long> keepImageIds) {
-        buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, keepImageIds);
-    }
+  @Override
+  public void deleteByBuncheolIdExcludingIds(Long buncheolId, List<Long> keepImageIds) {
+    buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, keepImageIds);
+  }
 }

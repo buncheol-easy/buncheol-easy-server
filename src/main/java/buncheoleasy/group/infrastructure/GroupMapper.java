@@ -9,9 +9,9 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface GroupMapper {
 
-    boolean existsById(Long id);
+  boolean existsById(Long id);
 
-    Optional<Group> findById(Long id);
+  Optional<Group> findById(Long id);
 
-    List<Group> selectByKeyword(@Param("keyword") String keyword);
+  List<Group> selectByKeyword(@Param("keyword") String keyword);
 }

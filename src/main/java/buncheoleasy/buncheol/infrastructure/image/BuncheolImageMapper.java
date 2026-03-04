@@ -8,8 +8,8 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface BuncheolImageMapper {
 
-    void insertAll(@Param("buncheolImages") List<BuncheolImage> buncheolImages);
+  void insertAll(@Param("buncheolImages") List<BuncheolImage> buncheolImages);
 
-    void deleteByBuncheolIdExcludingIds(@Param("buncheolId") Long buncheolId,
-                                        @Param("keepImageIds") List<Long> keepImageIds);
+  void deleteByBuncheolIdExcludingIds(
+      @Param("buncheolId") Long buncheolId, @Param("keepImageIds") List<Long> keepImageIds);
 }

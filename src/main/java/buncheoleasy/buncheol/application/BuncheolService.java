@@ -2,7 +2,6 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
-import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -47,7 +46,10 @@ public class BuncheolService {
         // groupId가 있으면 groupName은 DB값으로 채워짐 (요청값 무시), 없으면 요청값 사용
         Buncheol buncheol = buncheolDomainService.createBuncheol(
                 hostId,
-                toBuncheolParams(request, resolvedGroup)
+                request.toParams(
+                        resolvedGroup.groupId(),
+                        resolvedGroup.groupName()
+                )
         );
 
         // 분철 멤버 저장
@@ -80,7 +82,13 @@ public class BuncheolService {
         ResolvedGroup resolvedGroup = resolveGroup(request.groupId(), request.groupName());
 
         // 분철 정보 전체 업데이트
-        buncheolDomainService.updateBuncheol(buncheol, toBuncheolParams(request, resolvedGroup));
+        buncheolDomainService.updateBuncheol(
+                buncheol,
+                request.toParams(
+                    resolvedGroup.groupId(),
+                    resolvedGroup.groupName()
+                )
+        );
 
         // 멤버 교체
         List<BuncheolMemberParams> memberParams = toBuncheolMemberParams(
@@ -116,44 +124,6 @@ public class BuncheolService {
                 groupDomainService
                         .getGroup(groupId)
                         .getName()
-        );
-    }
-
-    private BuncheolParams toBuncheolParams(final HoldBuncheolRequest request, final ResolvedGroup resolvedGroup) {
-        return new BuncheolParams(
-                resolvedGroup.groupId(),
-                resolvedGroup.groupName(),
-                request.title(),
-                request.description(),
-                request.goodsName(),
-                request.storeName(),
-                request.originalPrice(),
-                request.deadline(),
-                request.shippingDeadlineDays(),
-                request.gs25ShippingFee(),
-                request.cuShippingFee(),
-                request.settlementBank(),
-                request.settlementAccount(),
-                request.settlementHolder()
-        );
-    }
-
-    private BuncheolParams toBuncheolParams(final BuncheolModifyRequest request, final ResolvedGroup resolvedGroup) {
-        return new BuncheolParams(
-                resolvedGroup.groupId(),
-                resolvedGroup.groupName(),
-                request.title(),
-                request.description(),
-                request.goodsName(),
-                request.storeName(),
-                request.originalPrice(),
-                request.deadline(),
-                request.shippingDeadlineDays(),
-                request.gs25ShippingFee(),
-                request.cuShippingFee(),
-                request.settlementBank(),
-                request.settlementAccount(),
-                request.settlementHolder()
         );
     }
 

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import buncheoleasy.buncheol.domain.BuncheolParams;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -35,5 +36,24 @@ public record HoldBuncheolRequest(
             return true;
         }
         return groupName != null && !groupName.isBlank();
+    }
+
+    public BuncheolParams toParams(final Long resolvedGroupId, final String resolvedGroupName) {
+        return new BuncheolParams(
+                resolvedGroupId,
+                resolvedGroupName,
+                title,
+                description,
+                goodsName,
+                storeName,
+                originalPrice,
+                deadline,
+                shippingDeadlineDays,
+                gs25ShippingFee,
+                cuShippingFee,
+                settlementBank,
+                settlementAccount,
+                settlementHolder
+        );
     }
 }

@@ -45,6 +45,40 @@ public class BuncheolMember {
     this.bidOption = BidOption.of(instantPrice, bidAllowed, bidMinPrice);
   }
 
+  // MyBatis 조회 전용 생성자
+  private BuncheolMember(
+      final Long id,
+      final Long buncheolId,
+      final Long memberId,
+      final String memberName,
+      final long instantPrice,
+      final boolean bidAllowed,
+      final Long bidMinPrice,
+      final LocalDateTime createdAt,
+      final LocalDateTime updatedAt) {
+    this.id = id;
+    this.buncheolId = buncheolId;
+    this.memberId = memberId;
+    this.memberName = memberName;
+    this.instantPrice = instantPrice;
+    this.bidOption = new BidOption(bidAllowed, bidMinPrice);
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+
+  public void validateBidAllowed() {
+    if (!bidOption.bidAllowed()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED);
+    }
+  }
+
+  public void validateBidAmount(final long bidAmount) {
+    Long bidMinPrice = bidOption.bidMinPrice();
+    if (bidMinPrice == null || bidAmount < bidMinPrice || bidAmount >= instantPrice) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_BID_AMOUNT_INVALID);
+    }
+  }
+
   private void validate(final Long buncheolId, final String memberName, final long instantPrice) {
     validateBuncheolId(buncheolId);
     validateMemberName(memberName);

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
@@ -97,9 +98,33 @@ public class Buncheol {
   }
 
   public void validateOwner(final Long userId) {
-    if (!hostId.equals(userId)) {
+    if (!isHost(userId)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION);
     }
+  }
+
+  public void validateRecruiting() {
+    if (status != BuncheolStatus.RECRUITING) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+    if (!deadline.isAfter(LocalDateTime.now())) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+  }
+
+  public void validateShippingMethodSupported(final ShippingMethod shippingMethod) {
+    boolean supported =
+        switch (shippingMethod) {
+          case GS25_HALF -> shippingFeePolicy.gs25ShippingFee() != null;
+          case CU_HALF -> shippingFeePolicy.cuShippingFee() != null;
+        };
+    if (!supported) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED);
+    }
+  }
+
+  public boolean isHost(final Long userId) {
+    return hostId.equals(userId);
   }
 
   public void cancel() {

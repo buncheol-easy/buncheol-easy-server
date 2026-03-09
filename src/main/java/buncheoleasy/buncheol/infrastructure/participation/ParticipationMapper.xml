@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="buncheoleasy.buncheol.infrastructure.participation.ParticipationMapper">
+
+  <resultMap id="participationResultMap" type="Participation">
+    <constructor>
+      <idArg column="id" javaType="Long"/>
+      <arg column="buncheol_id" javaType="Long"/>
+      <arg column="buncheol_member_id" javaType="Long"/>
+      <arg column="participant_id" javaType="Long"/>
+      <arg column="shipping_address_id" javaType="Long"/>
+      <arg column="type" javaType="ParticipationType"/>
+      <arg column="instant_price_snapshot" javaType="Long"/>
+      <arg column="bid_amount" javaType="Long"/>
+      <arg column="balance_due_amount" javaType="Long"/>
+      <arg column="balance_due_at" javaType="java.time.LocalDateTime"/>
+      <arg column="closed_rank" javaType="Integer"/>
+      <arg column="fail_reason" javaType="String"/>
+      <arg column="finalized_at" javaType="java.time.LocalDateTime"/>
+      <arg column="status" javaType="ParticipationStatus"/>
+      <arg column="created_at" javaType="java.time.LocalDateTime"/>
+      <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+    </constructor>
+  </resultMap>
+
+  <!-- 참여 저장 -->
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO participations (buncheol_id,
+                                buncheol_member_id,
+                                participant_id,
+                                shipping_address_id,
+                                type,
+                                instant_price_snapshot,
+                                bid_amount,
+                                status,
+                                created_at,
+                                updated_at)
+    VALUES (#{buncheolId},
+            #{buncheolMemberId},
+            #{participantId},
+            #{shippingAddressId},
+            #{type},
+            #{instantPriceSnapshot},
+            #{bidAmount},
+            #{status},
+            NOW(),
+            NOW())
+  </insert>
+
+  <!-- 모집중이고 마감 전일 때만 즉시 구매 참여 저장 (원자 조건 insert) -->
+  <insert id="insertInstantIfRecruiting" useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO participations (buncheol_id,
+                                buncheol_member_id,
+                                participant_id,
+                                shipping_address_id,
+                                type,
+                                instant_price_snapshot,
+                                bid_amount,
+                                status,
+                                created_at,
+                                updated_at)
+    SELECT #{buncheolId},
+           #{buncheolMemberId},
+           #{participantId},
+           #{shippingAddressId},
+           #{type},
+           #{instantPriceSnapshot},
+           #{bidAmount},
+           #{status},
+           NOW(),
+           NOW()
+    FROM buncheols
+    WHERE id = #{buncheolId}
+      AND status = 'RECRUITING'
+      AND deadline > NOW()
+  </insert>
+
+  <select id="findById" resultMap="participationResultMap">
+    SELECT id,
+           buncheol_id,
+           buncheol_member_id,
+           participant_id,
+           shipping_address_id,
+           type,
+           instant_price_snapshot,
+           bid_amount,
+           balance_due_amount,
+           balance_due_at,
+           closed_rank,
+           fail_reason,
+           finalized_at,
+           status,
+           created_at,
+           updated_at
+    FROM participations
+    WHERE id = #{id}
+  </select>
+
+  <!-- 특정 멤버 슬롯에서 특정 참여자의 진행 중 BID 참여 조회 -->
+  <select id="findCurrentBidByBuncheolMemberIdAndParticipantId" resultMap="participationResultMap">
+    SELECT id,
+           buncheol_id,
+           buncheol_member_id,
+           participant_id,
+           shipping_address_id,
+           type,
+           instant_price_snapshot,
+           bid_amount,
+           balance_due_amount,
+           balance_due_at,
+           closed_rank,
+           fail_reason,
+           finalized_at,
+           status,
+           created_at,
+           updated_at
+    FROM participations
+    WHERE buncheol_member_id = #{buncheolMemberId}
+      AND participant_id = #{participantId}
+      AND type = 'BID'
+      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID')
+  </select>
+
+  <select id="findActiveByBuncheolMemberIdAndParticipantId" resultMap="participationResultMap">
+    SELECT id,
+           buncheol_id,
+           buncheol_member_id,
+           participant_id,
+           shipping_address_id,
+           type,
+           instant_price_snapshot,
+           bid_amount,
+           balance_due_amount,
+           balance_due_at,
+           closed_rank,
+           fail_reason,
+           finalized_at,
+           status,
+           created_at,
+           updated_at
+    FROM participations
+    WHERE buncheol_member_id = #{buncheolMemberId}
+      AND participant_id = #{participantId}
+      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT', 'CONFIRMED')
+    LIMIT 1
+  </select>
+
+  <!-- 특정 멤버 슬롯에 진행 중이거나 확정된 INSTANT 참여 존재 여부 -->
+  <select id="existsActiveInstantByBuncheolMemberId" resultType="boolean">
+    SELECT COUNT(*) > 0
+    FROM participations
+    WHERE buncheol_member_id = #{buncheolMemberId}
+      AND type = 'INSTANT'
+      AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
+  </select>
+
+  <!-- 참여 수정 (BID 수정용) -->
+  <update id="updateBid">
+    UPDATE participations
+    SET bid_amount          = #{bidAmount},
+        shipping_address_id = #{shippingAddressId},
+        updated_at          = NOW()
+    WHERE id = #{id}
+      AND type = 'BID'
+      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID')
+  </update>
+
+  <update id="updateStatus">
+    UPDATE participations
+    SET balance_due_amount = #{participation.balanceDueAmount},
+        balance_due_at     = #{participation.balanceDueAt},
+        closed_rank        = #{participation.closedRank},
+        fail_reason        = #{participation.failReason},
+        finalized_at       = #{participation.finalizedAt},
+        status             = #{participation.status},
+        updated_at         = NOW()
+    WHERE id = #{participation.id}
+      AND status = #{expectedStatus}
+  </update>
+
+  <!-- 특정 멤버 슬롯의 진행 중 BID 참여 일괄 FAILED 처리 -->
+  <update id="failAllOpenBidsByBuncheolMemberId">
+    UPDATE participations
+    SET status       = 'FAILED',
+        fail_reason  = #{failReason},
+        finalized_at = NOW(),
+        updated_at   = NOW()
+    WHERE buncheol_member_id = #{buncheolMemberId}
+      AND type = 'BID'
+      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT')
+  </update>
+
+</mapper>

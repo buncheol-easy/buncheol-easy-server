@@ -90,6 +90,41 @@ public enum ErrorCode {
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   BUNCHEOL_CANCEL_NOT_ALLOWED("BCH-050", "현재 상태에서는 분철을 취소할 수 없습니다.", HttpStatus.CONFLICT),
 
+  BUNCHEOL_NOT_RECRUITING("BCH-060", "모집 중인 분철이 아닙니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_MEMBER_NOT_FOUND("BCH-061", "해당 분철에 존재하지 않는 멤버입니다.", HttpStatus.NOT_FOUND),
+  PARTICIPATION_MEMBER_ALREADY_TAKEN("BCH-062", "이미 즉시 구매된 멤버입니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_BID_NOT_ALLOWED("BCH-063", "제시가 허용되지 않는 멤버입니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_BID_AMOUNT_INVALID("BCH-064", "제시 금액이 허용 범위를 벗어났습니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED(
+      "BCH-065", "해당 배송 방법은 이 분철에서 지원하지 않습니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_HOST_CANNOT_PARTICIPATE(
+      "BCH-066", "주최자는 자신의 분철에 참여할 수 없습니다.", HttpStatus.FORBIDDEN),
+  PARTICIPATION_BID_UPDATE_NOT_ALLOWED(
+      "BCH-067", "PAYMENT_PENDING 또는 ACTIVE_BID 상태의 제시만 수정할 수 있습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_STATE_TRANSITION_INVALID(
+      "BCH-068", "현재 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_NOT_FOUND("BCH-069", "존재하지 않는 참여입니다.", HttpStatus.NOT_FOUND),
+  PARTICIPATION_BID_ALREADY_EXISTS("BCH-070", "이미 진행 중인 제시가 존재합니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_NO_PERMISSION("BCH-071", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
+  PARTICIPATION_ALREADY_EXISTS("BCH-072", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
+
+  /** PAY - 결제 관련 에러 */
+  PAYMENT_NOT_FOUND("PAY-001", "존재하지 않는 결제입니다.", HttpStatus.NOT_FOUND),
+  PAYMENT_STATE_TRANSITION_INVALID(
+      "PAY-002", "현재 결제 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+  PAYMENT_AMOUNT_MISMATCH("PAY-003", "결제 금액이 일치하지 않습니다.", HttpStatus.BAD_REQUEST),
+  PAYMENT_ALREADY_APPROVED("PAY-004", "이미 승인된 결제입니다.", HttpStatus.CONFLICT),
+  PAYMENT_TOSS_CONFIRM_FAILED("PAY-005", "토스 결제 승인에 실패했습니다.", HttpStatus.BAD_GATEWAY),
+  PAYMENT_ORDER_CREATION_NOT_ALLOWED(
+      "PAY-006", "현재 참여 상태에서는 결제 주문을 생성할 수 없습니다.", HttpStatus.CONFLICT),
+  PAYMENT_NO_PERMISSION("PAY-007", "해당 결제에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
+
+  /** DLV - 배송 관련 에러 */
+  DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
+  DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),
+  DELIVERY_RECEIVER_NICKNAME_REQUIRED("DLV-003", "수령인 닉네임은 필수입니다.", HttpStatus.BAD_REQUEST),
+  DELIVERY_RECEIVER_PHONE_REQUIRED("DLV-004", "수령인 연락처는 필수입니다.", HttpStatus.BAD_REQUEST),
+
   /** GRP - 그룹 관련 에러 */
   GROUP_NOT_FOUND("GRP-001", "존재하지 않는 그룹입니다.", HttpStatus.NOT_FOUND),
   GROUP_MEMBER_NOT_IN_GROUP("GRP-002", "해당 그룹에 속하지 않는 멤버입니다.", HttpStatus.BAD_REQUEST),

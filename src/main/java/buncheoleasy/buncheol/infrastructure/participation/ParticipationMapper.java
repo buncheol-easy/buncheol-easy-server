@@ -1,0 +1,34 @@
+package buncheoleasy.buncheol.infrastructure.participation;
+
+import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import java.util.Optional;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+@Mapper
+public interface ParticipationMapper {
+
+  void insert(Participation participation);
+
+  int insertInstantIfRecruiting(Participation participation);
+
+  Optional<Participation> findById(@Param("id") Long id);
+
+  Optional<Participation> findCurrentBidByBuncheolMemberIdAndParticipantId(
+      @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
+
+  Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
+      @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
+
+  boolean existsActiveInstantByBuncheolMemberId(@Param("buncheolMemberId") Long buncheolMemberId);
+
+  int updateBid(Participation participation);
+
+  int updateStatus(
+      @Param("participation") Participation participation,
+      @Param("expectedStatus") ParticipationStatus expectedStatus);
+
+  void failAllOpenBidsByBuncheolMemberId(
+      @Param("buncheolMemberId") Long buncheolMemberId, @Param("failReason") String failReason);
+}

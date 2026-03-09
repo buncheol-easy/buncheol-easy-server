@@ -37,4 +37,10 @@ public class BuncheolMemberDomainService {
   public void deleteAllByBuncheolId(final Long buncheolId) {
     buncheolMemberRepository.deleteAllByBuncheolId(buncheolId);
   }
+
+  public BuncheolMember getBuncheolMember(final Long id, final Long buncheolId) {
+    return buncheolMemberRepository
+        .findByIdAndBuncheolId(id, buncheolId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
+  }
 }

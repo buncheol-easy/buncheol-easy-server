@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -517,6 +519,70 @@ class BuncheolTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("모집 상태 검증 테스트")
+  class ValidateRecruitingTest {
+
+    @Test
+    void RECRUITING_상태이고_마감전이면_유효하다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+      // when & then
+      assertThatCode(buncheol::validateRecruiting).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 마감일이_지났으면_RECRUITING이어도_예외가_발생한다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      setDeadline(buncheol, LocalDateTime.now().minusSeconds(1));
+
+      // when & then
+      assertThatThrownBy(buncheol::validateRecruiting)
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+  }
+
+  @Nested
+  @DisplayName("배송방법 지원 검증 테스트")
+  class ValidateShippingMethodSupportedTest {
+
+    @Test
+    void 지원하는_배송방법이면_예외가_발생하지_않는다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+      // when & then
+      assertThatCode(() -> buncheol.validateShippingMethodSupported(ShippingMethod.GS25_HALF))
+          .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 지원하지_않는_배송방법이면_예외가_발생한다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+      // when & then
+      assertThatThrownBy(() -> buncheol.validateShippingMethodSupported(ShippingMethod.CU_HALF))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED);
+    }
+  }
+
+  private void setDeadline(final Buncheol buncheol, final LocalDateTime deadline) {
+    try {
+      Field deadlineField = Buncheol.class.getDeclaredField("deadline");
+      deadlineField.setAccessible(true);
+      deadlineField.set(buncheol, deadline);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
     }
   }
 }

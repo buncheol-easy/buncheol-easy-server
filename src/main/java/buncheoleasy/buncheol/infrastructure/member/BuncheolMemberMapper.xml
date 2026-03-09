@@ -38,4 +38,34 @@
     WHERE buncheol_id = #{buncheolId}
   </delete>
 
+  <!-- 분철 멤버 단건 조회 (id + buncheolId) -->
+  <resultMap id="buncheolMemberResultMap" type="BuncheolMember">
+    <constructor>
+      <idArg column="id" javaType="Long"/>
+      <arg column="buncheol_id" javaType="Long"/>
+      <arg column="member_id" javaType="Long"/>
+      <arg column="member_name" javaType="String"/>
+      <arg column="instant_price" javaType="_long"/>
+      <arg column="bid_allowed" javaType="_boolean"/>
+      <arg column="bid_min_price" javaType="Long"/>
+      <arg column="created_at" javaType="java.time.LocalDateTime"/>
+      <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+    </constructor>
+  </resultMap>
+
+  <select id="findByIdAndBuncheolId" resultMap="buncheolMemberResultMap">
+    SELECT id,
+           buncheol_id,
+           member_id,
+           member_name,
+           instant_price,
+           bid_allowed,
+           bid_min_price,
+           created_at,
+           updated_at
+    FROM buncheol_members
+    WHERE id = #{id}
+      AND buncheol_id = #{buncheolId}
+  </select>
+
 </mapper>

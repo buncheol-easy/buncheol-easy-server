@@ -65,7 +65,7 @@ public class ShippingAddressDomainService {
     return shippingAddressRepository.getUserShippingAddresses(userId);
   }
 
-  private ShippingAddress getShippingAddress(final Long id) {
+  public ShippingAddress getShippingAddress(final Long id) {
     return shippingAddressRepository
         .findById(id)
         .orElseThrow(() -> new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND));

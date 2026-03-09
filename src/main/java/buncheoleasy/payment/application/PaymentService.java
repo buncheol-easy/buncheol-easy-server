@@ -64,12 +64,7 @@ public class PaymentService {
   public void confirmPayment(
       final String paymentKey, final String paymentOrderId, final long amount) {
     final ConfirmationPreparation preparation =
-        transactionTemplate.execute(
-            status -> prepareConfirmation(paymentKey, paymentOrderId, amount));
-
-    if (preparation == null) {
-      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-    }
+        prepareConfirmation(paymentKey, paymentOrderId, amount);
 
     if (preparation.alreadyDone()) {
       return;

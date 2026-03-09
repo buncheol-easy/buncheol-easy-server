@@ -27,6 +27,7 @@ public class ParticipationController {
   private final BuncheolParticipationService buncheolParticipationService;
   private final BuncheolCheckoutService buncheolCheckoutService;
 
+  /** 분철 제시 잔금 결제 API */
   @PostMapping("/{participationId}/balance-payment/checkout")
   public ResponseEntity<CreatePaymentOrderResponse> startBalancePaymentCheckout(
       @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
@@ -36,6 +37,7 @@ public class ParticipationController {
         .body(CreatePaymentOrderResponse.from(paymentOrderInfo));
   }
 
+  /** 분철 제시 수정 API */
   @PatchMapping("/{participationId}/bid")
   public ResponseEntity<ParticipationResponse> updateBidParticipation(
       @AuthenticationPrincipal final Long participantId,

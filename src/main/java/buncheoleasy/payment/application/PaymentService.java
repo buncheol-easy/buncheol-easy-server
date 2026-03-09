@@ -44,7 +44,6 @@ public class PaymentService {
     this.transactionTemplate = new TransactionTemplate(transactionManager);
   }
 
-  @Transactional
   public PaymentOrderInfo createPaymentOrder(
       final Long participationId,
       final PaymentPhase paymentPhase,

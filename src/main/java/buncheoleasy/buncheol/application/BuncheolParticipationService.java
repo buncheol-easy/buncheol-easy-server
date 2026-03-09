@@ -17,7 +17,6 @@ import buncheoleasy.payment.domain.PaymentDomainService;
 import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +31,6 @@ public class BuncheolParticipationService {
   private final PaymentDomainService paymentDomainService;
   private final ShippingAddressDomainService shippingAddressDomainService;
 
-  @Transactional
   public Participation createParticipation(
       final Long buncheolId, final Long participantId, final ParticipateRequest request) {
     // 분철 조회 & 참여 가능한 분철인지 확인
@@ -117,7 +115,7 @@ public class BuncheolParticipationService {
     final Participation participation =
         Participation.createInstant(
             buncheolId, buncheolMemberId, participantId, shippingAddressId, instantPriceSnapshot);
-    // 참여 객체를 저장하는 시점에도 해당 분철&멤버에 참여할 수 있는 상황인지 검사하여 저장함.
+    // 즉시구매 참여 객체를 저장하는 시점에도 해당 분철&멤버에 참여할 수 있는 상황인지 검사하여 저장함.
     final boolean created =
         participationDomainService.createInstantParticipationIfRecruiting(participation);
     if (!created) {
@@ -135,15 +133,6 @@ public class BuncheolParticipationService {
     // 제시 가능한지 확인
     buncheolMember.validateBidAllowed();
     buncheolMember.validateBidAmount(bidAmount);
-
-    // 동일한 멤버에게 제시를 했었는지 확인 (했었다면 수정으로 api 호출해야하기 때문에 예외 발생)
-    final Optional<Participation> existing =
-        participationDomainService.findCurrentBidParticipation(
-            buncheolMember.getId(), participantId);
-
-    if (existing.isPresent()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_BID_ALREADY_EXISTS);
-    }
 
     final Participation participation =
         Participation.createBid(

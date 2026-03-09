@@ -102,7 +102,7 @@ public enum ErrorCode {
   PARTICIPATION_BID_UPDATE_NOT_ALLOWED(
       "BCH-067", "PAYMENT_PENDING 또는 ACTIVE_BID 상태의 제시만 수정할 수 있습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_STATE_TRANSITION_INVALID(
-      "BCH-068", "현재 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+      "BCH-068", "현재 참여 상태 또는 참여 유형으로는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_NOT_FOUND("BCH-069", "존재하지 않는 참여입니다.", HttpStatus.NOT_FOUND),
   PARTICIPATION_BID_ALREADY_EXISTS("BCH-070", "이미 진행 중인 제시가 존재합니다.", HttpStatus.CONFLICT),
   PARTICIPATION_NO_PERMISSION("BCH-071", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),

@@ -22,6 +22,7 @@ public class BuncheolParticipationController {
 
   private final BuncheolCheckoutService buncheolCheckoutService;
 
+  /** 분철 참여 API */
   @PostMapping("/checkout")
   public ResponseEntity<ParticipationCheckoutResponse> startCheckout(
       @AuthenticationPrincipal final Long participantId,

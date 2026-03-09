@@ -26,12 +26,6 @@ public class ParticipationDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPATION_NOT_FOUND));
   }
 
-  public Optional<Participation> findCurrentBidParticipation(
-      final Long buncheolMemberId, final Long participantId) {
-    return participationRepository.findCurrentBidByBuncheolMemberIdAndParticipantId(
-        buncheolMemberId, participantId);
-  }
-
   public Optional<Participation> findActiveParticipation(
       final Long buncheolMemberId, final Long participantId) {
     return participationRepository.findActiveByBuncheolMemberIdAndParticipantId(
@@ -44,13 +38,6 @@ public class ParticipationDomainService {
 
   public void failAllOpenBids(final Long buncheolMemberId, final String failReason) {
     participationRepository.failAllOpenBidsByBuncheolMemberId(buncheolMemberId, failReason);
-  }
-
-  public void updateParticipation(final Participation participation) {
-    boolean updated = participationRepository.updateBid(participation);
-    if (!updated) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_BID_UPDATE_NOT_ALLOWED);
-    }
   }
 
   public void updateParticipationStatus(

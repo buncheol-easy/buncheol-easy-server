@@ -49,13 +49,6 @@ public class MybatisParticipationRepository implements ParticipationRepository {
   }
 
   @Override
-  public Optional<Participation> findCurrentBidByBuncheolMemberIdAndParticipantId(
-      final Long buncheolMemberId, final Long participantId) {
-    return participationMapper.findCurrentBidByBuncheolMemberIdAndParticipantId(
-        buncheolMemberId, participantId);
-  }
-
-  @Override
   public Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       final Long buncheolMemberId, final Long participantId) {
     return participationMapper.findActiveByBuncheolMemberIdAndParticipantId(
@@ -65,11 +58,6 @@ public class MybatisParticipationRepository implements ParticipationRepository {
   @Override
   public boolean existsActiveInstantByBuncheolMemberId(final Long buncheolMemberId) {
     return participationMapper.existsActiveInstantByBuncheolMemberId(buncheolMemberId);
-  }
-
-  @Override
-  public boolean updateBid(final Participation participation) {
-    return participationMapper.updateBid(participation) > 0;
   }
 
   @Override

@@ -98,31 +98,6 @@
     WHERE id = #{id}
   </select>
 
-  <!-- 특정 멤버 슬롯에서 특정 참여자의 진행 중 BID 참여 조회 -->
-  <select id="findCurrentBidByBuncheolMemberIdAndParticipantId" resultMap="participationResultMap">
-    SELECT id,
-           buncheol_id,
-           buncheol_member_id,
-           participant_id,
-           shipping_address_id,
-           type,
-           instant_price_snapshot,
-           bid_amount,
-           balance_due_amount,
-           balance_due_at,
-           closed_rank,
-           fail_reason,
-           finalized_at,
-           status,
-           created_at,
-           updated_at
-    FROM participations
-    WHERE buncheol_member_id = #{buncheolMemberId}
-      AND participant_id = #{participantId}
-      AND type = 'BID'
-      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID')
-  </select>
-
   <select id="findActiveByBuncheolMemberIdAndParticipantId" resultMap="participationResultMap">
     SELECT id,
            buncheol_id,
@@ -155,17 +130,6 @@
       AND type = 'INSTANT'
       AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
   </select>
-
-  <!-- 참여 수정 (BID 수정용) -->
-  <update id="updateBid">
-    UPDATE participations
-    SET bid_amount          = #{bidAmount},
-        shipping_address_id = #{shippingAddressId},
-        updated_at          = NOW()
-    WHERE id = #{id}
-      AND type = 'BID'
-      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID')
-  </update>
 
   <update id="updateStatus">
     UPDATE participations

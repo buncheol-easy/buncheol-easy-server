@@ -10,15 +10,10 @@ public interface ParticipationRepository {
 
   Optional<Participation> findById(Long id);
 
-  Optional<Participation> findCurrentBidByBuncheolMemberIdAndParticipantId(
-      Long buncheolMemberId, Long participantId);
-
   Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       Long buncheolMemberId, Long participantId);
 
   boolean existsActiveInstantByBuncheolMemberId(Long buncheolMemberId);
-
-  boolean updateBid(Participation participation);
 
   boolean updateStatus(Participation participation, ParticipationStatus expectedStatus);
 

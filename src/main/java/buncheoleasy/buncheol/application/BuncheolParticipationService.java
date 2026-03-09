@@ -6,20 +6,14 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationType;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
-import buncheoleasy.buncheol.dto.request.UpdateBidRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.payment.domain.Payment;
-import buncheoleasy.payment.domain.PaymentDomainService;
-import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +22,6 @@ public class BuncheolParticipationService {
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
-  private final PaymentDomainService paymentDomainService;
   private final ShippingAddressDomainService shippingAddressDomainService;
 
   public Participation createParticipation(
@@ -60,30 +53,6 @@ public class BuncheolParticipationService {
     }
     return handleBidParticipation(
         buncheolId, buncheolMember, participantId, shippingAddress.getId(), request.bidAmount());
-  }
-
-  @Transactional
-  public Participation updateBidParticipation(
-      final Long participationId, final Long participantId, final UpdateBidRequest request) {
-    final Participation participation =
-        participationDomainService.getParticipation(participationId);
-    validateParticipationOwner(participation, participantId);
-
-    final Buncheol buncheol =
-        validateRecruitingBuncheol(participation.getBuncheolId(), participantId);
-    final BuncheolMember buncheolMember =
-        buncheolMemberDomainService.getBuncheolMember(
-            participation.getBuncheolMemberId(), participation.getBuncheolId());
-    final ShippingAddress shippingAddress =
-        getAndValidateShippingAddress(participantId, buncheol, request.shippingAddressId());
-
-    buncheolMember.validateBidAllowed();
-    buncheolMember.validateBidAmount(request.bidAmount());
-    validateBidAmountAgainstPaidDeposit(participation, request.bidAmount());
-
-    participation.updateBid(request.bidAmount(), shippingAddress.getId());
-    participationDomainService.updateParticipation(participation);
-    return participation;
   }
 
   private Buncheol validateRecruitingBuncheol(final Long buncheolId, final Long participantId) {
@@ -139,32 +108,6 @@ public class BuncheolParticipationService {
             buncheolId, buncheolMember.getId(), participantId, shippingAddressId, bidAmount);
     participationDomainService.createParticipation(participation);
     return participation;
-  }
-
-  private void validateBidAmountAgainstPaidDeposit(
-      final Participation participation, final long bidAmount) {
-    if (participation.getStatus() != ParticipationStatus.ACTIVE_BID) {
-      return;
-    }
-
-    final Payment depositPayment =
-        paymentDomainService
-            .findLatestPaymentByParticipationIdAndPaymentPhase(
-                participation.getId(), PaymentPhase.DEPOSIT)
-            .filter(Payment::isDone)
-            .orElseThrow(
-                () -> new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID));
-
-    if (bidAmount < depositPayment.getAmount()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_BID_AMOUNT_INVALID);
-    }
-  }
-
-  private void validateParticipationOwner(
-      final Participation participation, final Long participantId) {
-    if (!participation.getParticipantId().equals(participantId)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
-    }
   }
 
   private void validateNoActiveParticipation(

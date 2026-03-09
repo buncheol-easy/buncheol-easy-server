@@ -15,15 +15,10 @@ public interface ParticipationMapper {
 
   Optional<Participation> findById(@Param("id") Long id);
 
-  Optional<Participation> findCurrentBidByBuncheolMemberIdAndParticipantId(
-      @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
-
   Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
 
   boolean existsActiveInstantByBuncheolMemberId(@Param("buncheolMemberId") Long buncheolMemberId);
-
-  int updateBid(Participation participation);
 
   int updateStatus(
       @Param("participation") Participation participation,

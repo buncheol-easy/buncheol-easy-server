@@ -99,14 +99,11 @@ public enum ErrorCode {
       "BCH-065", "해당 배송 방법은 이 분철에서 지원하지 않습니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_HOST_CANNOT_PARTICIPATE(
       "BCH-066", "주최자는 자신의 분철에 참여할 수 없습니다.", HttpStatus.FORBIDDEN),
-  PARTICIPATION_BID_UPDATE_NOT_ALLOWED(
-      "BCH-067", "PAYMENT_PENDING 또는 ACTIVE_BID 상태의 제시만 수정할 수 있습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_STATE_TRANSITION_INVALID(
-      "BCH-068", "현재 참여 상태 또는 참여 유형으로는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
-  PARTICIPATION_NOT_FOUND("BCH-069", "존재하지 않는 참여입니다.", HttpStatus.NOT_FOUND),
-  PARTICIPATION_BID_ALREADY_EXISTS("BCH-070", "이미 진행 중인 제시가 존재합니다.", HttpStatus.CONFLICT),
-  PARTICIPATION_NO_PERMISSION("BCH-071", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
-  PARTICIPATION_ALREADY_EXISTS("BCH-072", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
+      "BCH-067", "현재 참여 상태 또는 참여 유형으로는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_NOT_FOUND("BCH-068", "존재하지 않는 참여입니다.", HttpStatus.NOT_FOUND),
+  PARTICIPATION_NO_PERMISSION("BCH-069", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
+  PARTICIPATION_ALREADY_EXISTS("BCH-070", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
 
   /** PAY - 결제 관련 에러 */
   PAYMENT_NOT_FOUND("PAY-001", "존재하지 않는 결제입니다.", HttpStatus.NOT_FOUND),

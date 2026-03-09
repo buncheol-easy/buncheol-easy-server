@@ -139,20 +139,6 @@ public class Participation {
     throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
   }
 
-  // BID 타입 + PAYMENT_PENDING/ACTIVE_BID 상태에서만 제시 수정 가능
-  public void updateBid(final long newBidAmount, final Long newShippingAddressId) {
-    if (type != ParticipationType.BID
-        || (status != ParticipationStatus.PAYMENT_PENDING
-            && status != ParticipationStatus.ACTIVE_BID)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_BID_UPDATE_NOT_ALLOWED);
-    }
-    if (newShippingAddressId == null) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-    this.bidAmount = newBidAmount;
-    this.shippingAddressId = newShippingAddressId;
-  }
-
   // PAYMENT_PENDING → ACTIVE_BID: 예치금 결제 완료 후 제시 활성화 (BID 전용)
   public void activateBidAfterDepositPayment() {
     if (type != ParticipationType.BID || status != ParticipationStatus.PAYMENT_PENDING) {

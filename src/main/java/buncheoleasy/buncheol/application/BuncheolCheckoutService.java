@@ -49,7 +49,6 @@ public class BuncheolCheckoutService {
     return new ParticipationCheckoutInfo(participation, paymentOrder);
   }
 
-  @Transactional
   public PaymentOrderInfo startBalancePaymentCheckout(
       final Long participantId, final Long participationId) {
     final Participation participation =

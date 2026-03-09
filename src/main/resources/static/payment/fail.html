@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <title>결제 실패 처리</title>
+</head>
+<body>
+<h2>결제 실패</h2>
+<p id="failure-summary" style="white-space: pre-wrap"></p>
+
+<label>
+  JWT 토큰
+  <input id="access-token" style="width: 480px" placeholder="Bearer 없이 access token만 입력"/>
+</label>
+<br/>
+<button id="cancel-button" style="margin-top: 20px">실패 처리 반영</button>
+<p id="status-message" style="white-space: pre-wrap"></p>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const paymentOrderId = params.get("orderId");
+  const code = params.get("code");
+  const message = params.get("message");
+  const accessTokenInput = document.getElementById("access-token");
+  const failureSummary = document.getElementById("failure-summary");
+  const statusMessage = document.getElementById("status-message");
+
+  accessTokenInput.value = sessionStorage.getItem("paymentAccessToken") || "";
+  failureSummary.textContent =
+      "paymentOrderId=" + (paymentOrderId || "없음")
+      + "\ncode=" + (code || "없음")
+      + "\nmessage=" + (message || "없음");
+
+  async function cancelPendingPayment() {
+    const accessToken = accessTokenInput.value.trim();
+
+    if (!paymentOrderId) {
+      statusMessage.textContent = "orderId가 없어 실패 처리를 진행할 수 없습니다.";
+      return;
+    }
+
+    if (!accessToken) {
+      statusMessage.textContent = "JWT 토큰을 입력하세요.";
+      return;
+    }
+
+    statusMessage.textContent = "실패 처리 반영 중...";
+
+    try {
+      const response = await fetch("/v1/payments/" + paymentOrderId + "/cancel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + accessToken
+        },
+        body: JSON.stringify({code, message})
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      sessionStorage.setItem("paymentAccessToken", accessToken);
+      statusMessage.textContent = "결제 실패가 반영되었습니다. 참여는 완료되지 않았습니다.";
+    } catch (error) {
+      statusMessage.textContent =
+          error instanceof Error ? error.message : "실패 처리 반영에 실패했습니다.";
+    }
+  }
+
+  document.getElementById("cancel-button").addEventListener("click", cancelPendingPayment);
+
+  if (paymentOrderId && accessTokenInput.value) {
+    cancelPendingPayment();
+  }
+</script>
+</body>
+</html>

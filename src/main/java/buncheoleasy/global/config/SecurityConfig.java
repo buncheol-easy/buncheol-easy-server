@@ -19,7 +19,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
   private static final String[] PUBLIC_PATHS = {
-    "/", "/index.html", "/favicon.ico", "/error", "/v1/auth/reissue-token"
+    "/",
+    "/index.html",
+    "/favicon.ico",
+    "/error",
+    "/v1/auth/reissue-token",
+    "/v1/payments/success",
+    "/v1/payments/fail",
+    "/payment/**"
   };
 
   private static final String[] OAUTH_PATHS = {"/oauth2/**", "/login/oauth2/**"};

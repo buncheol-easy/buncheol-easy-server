@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <title>토스 결제 예제</title>
+  <script src="https://js.tosspayments.com/v1/payment"></script>
+</head>
+<body>
+<h2>토스 결제 최소 예제</h2>
+<label>
+  JWT 토큰
+  <input id="access-token" style="width: 480px" placeholder="Bearer 없이 access token만 입력"/>
+</label>
+<br/>
+<label>
+  분철 ID
+  <input id="buncheol-id" type="number" value="1"/>
+</label>
+<br/>
+<label>
+  멤버 슬롯 ID
+  <input id="buncheol-member-id" type="number" value="1"/>
+</label>
+<br/>
+<label>
+  배송지 ID
+  <input id="shipping-address-id" type="number" value="1"/>
+</label>
+<br/>
+<label>
+  참여 타입
+  <select id="participation-type">
+    <option value="INSTANT">INSTANT</option>
+    <option value="BID">BID</option>
+  </select>
+</label>
+<br/>
+<label>
+  제시 금액
+  <input id="bid-amount" type="number" placeholder="BID일 때만 입력"/>
+</label>
+<br/>
+<button id="payment-button" style="margin-top: 20px">결제하기</button>
+<p id="checkout-result" style="color: #1565c0; white-space: pre-wrap"></p>
+<p id="error-message" style="color: #c62828; white-space: pre-wrap"></p>
+
+<script>
+  document.getElementById("payment-button").addEventListener("click", async function () {
+    const accessToken = document.getElementById("access-token").value.trim();
+    const buncheolId = Number(document.getElementById("buncheol-id").value);
+    const buncheolMemberId = Number(document.getElementById("buncheol-member-id").value);
+    const shippingAddressId = Number(document.getElementById("shipping-address-id").value);
+    const type = document.getElementById("participation-type").value;
+    const bidAmountValue = document.getElementById("bid-amount").value.trim();
+    const bidAmount = bidAmountValue ? Number(bidAmountValue) : null;
+    const checkoutResult = document.getElementById("checkout-result");
+    const errorMessage = document.getElementById("error-message");
+    checkoutResult.textContent = "";
+    errorMessage.textContent = "";
+
+    if (!accessToken) {
+      alert("JWT 토큰을 입력하세요.");
+      return;
+    }
+    if (type === "BID" && !bidAmount) {
+      alert("BID 타입은 제시 금액을 입력하세요.");
+      return;
+    }
+
+    try {
+      const checkoutResponse = await fetch(
+          "/v1/buncheols/" + buncheolId + "/participations/checkout", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + accessToken
+            },
+            body: JSON.stringify({
+              buncheolMemberId,
+              shippingAddressId,
+              type,
+              bidAmount: type === "BID" ? bidAmount : null
+            })
+          }).then(async (res) => {
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        return res.json();
+      });
+
+      checkoutResult.textContent =
+          "participationId=" + checkoutResponse.participationId
+          + ", status=" + checkoutResponse.participationStatus;
+
+      sessionStorage.setItem("paymentAccessToken", accessToken);
+
+      const tossPayments = TossPayments(checkoutResponse.clientKey);
+      await tossPayments.requestPayment("카드", {
+        amount: checkoutResponse.amount,
+        orderId: checkoutResponse.paymentOrderId,
+        orderName: checkoutResponse.paymentOrderName,
+        successUrl: checkoutResponse.successUrl,
+        failUrl: checkoutResponse.failUrl,
+        customerEmail: "customer@example.com",
+        customerName: "홍길동",
+        customerMobilePhone: "01012341234"
+      });
+    } catch (error) {
+      errorMessage.textContent = error instanceof Error ? error.message : "결제 요청에 실패했습니다.";
+    }
+  });
+</script>
+</body>
+</html>

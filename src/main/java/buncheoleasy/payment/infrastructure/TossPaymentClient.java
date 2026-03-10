@@ -3,7 +3,7 @@ package buncheoleasy.payment.infrastructure;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -12,9 +12,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StreamUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
@@ -51,7 +51,7 @@ public class TossPaymentClient {
   public TossConfirmResponse confirm(
       final String paymentKey, final String orderId, final long amount) {
     try {
-      final TossConfirmApiResponse confirmResponse =
+      TossConfirmApiResponse confirmResponse =
           restClient
               .post()
               .uri(tossPaymentsProperties.confirmUrl())
@@ -65,8 +65,6 @@ public class TossPaymentClient {
               .body(TossConfirmApiResponse.class);
 
       return toConfirmResponse(confirmResponse);
-    } catch (TossConfirmRejectedException | TossConfirmUnavailableException e) {
-      throw e;
     } catch (RestClientException e) {
       log.error("토스 결제 승인 호출 중 통신 오류 발생", e);
       throw new TossConfirmUnavailableException(UNKNOWN_ERROR_CODE, CONFIRM_FAILED_MESSAGE, e);
@@ -75,7 +73,7 @@ public class TossPaymentClient {
 
   private SimpleClientHttpRequestFactory createRequestFactory(
       final TossPaymentsProperties tossPaymentsProperties) {
-    final SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(
         Math.toIntExact(tossPaymentsProperties.connectTimeout().toMillis()));
     requestFactory.setReadTimeout(Math.toIntExact(tossPaymentsProperties.readTimeout().toMillis()));
@@ -83,46 +81,48 @@ public class TossPaymentClient {
   }
 
   private RuntimeException toConfirmFailure(final ClientHttpResponse response) throws IOException {
-    final String responseBody =
-        StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8);
-    final TossErrorResponse errorResponse = parseErrorResponse(responseBody);
-    final int statusCode = response.getStatusCode().value();
+    TossErrorResponse errorResponse = parseErrorResponse(response.getBody());
+    HttpStatusCode statusCode = response.getStatusCode();
 
     log.error(
         "토스 결제 승인 실패: status={}, code={}, message={}",
-        statusCode,
+        statusCode.value(),
         errorResponse.code(),
         errorResponse.message());
 
-    if (response.getStatusCode().is4xxClientError()) {
+    if (statusCode.is4xxClientError()) {
       return new TossConfirmRejectedException(errorResponse.code(), errorResponse.message());
     }
     return new TossConfirmUnavailableException(errorResponse.code(), errorResponse.message());
   }
 
-  private TossErrorResponse parseErrorResponse(final String responseBody) {
-    if (responseBody == null || responseBody.isBlank()) {
+  private TossErrorResponse parseErrorResponse(final InputStream responseBodyStream) {
+    if (responseBodyStream == null) {
       return new TossErrorResponse(UNKNOWN_ERROR_CODE, EMPTY_RESPONSE_BODY_MESSAGE);
     }
 
+    TossErrorResponse errorResponse;
     try {
-      final TossErrorResponse errorResponse =
-          objectMapper.readValue(responseBody, TossErrorResponse.class);
-      if (errorResponse == null) {
-        return new TossErrorResponse(UNKNOWN_ERROR_CODE, ERROR_RESPONSE_PARSE_FAILED_MESSAGE);
-      }
-      final String code =
-          errorResponse.code() == null || errorResponse.code().isBlank()
-              ? UNKNOWN_ERROR_CODE
-              : errorResponse.code();
-      final String message =
-          errorResponse.message() == null || errorResponse.message().isBlank()
-              ? CONFIRM_FAILED_MESSAGE
-              : errorResponse.message();
-      return new TossErrorResponse(code, message);
-    } catch (RuntimeException e) {
-      return new TossErrorResponse(UNPARSABLE_ERROR_CODE, responseBody);
+      errorResponse = objectMapper.readValue(responseBodyStream, TossErrorResponse.class);
+    } catch (JacksonException e) {
+      log.warn("토스 에러 응답 파싱 실패", e);
+      return new TossErrorResponse(UNPARSABLE_ERROR_CODE, ERROR_RESPONSE_PARSE_FAILED_MESSAGE);
     }
+
+    if (errorResponse == null) {
+      return new TossErrorResponse(UNKNOWN_ERROR_CODE, ERROR_RESPONSE_PARSE_FAILED_MESSAGE);
+    }
+
+    String code =
+        errorResponse.code() == null || errorResponse.code().isBlank()
+            ? UNKNOWN_ERROR_CODE
+            : errorResponse.code();
+    String message =
+        errorResponse.message() == null || errorResponse.message().isBlank()
+            ? CONFIRM_FAILED_MESSAGE
+            : errorResponse.message();
+
+    return new TossErrorResponse(code, message);
   }
 
   private TossConfirmResponse toConfirmResponse(final TossConfirmApiResponse confirmResponse) {
@@ -134,7 +134,7 @@ public class TossPaymentClient {
       throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
     }
 
-    final String method =
+    String method =
         confirmResponse.method() == null || confirmResponse.method().isBlank()
             ? UNKNOWN_PAYMENT_METHOD
             : confirmResponse.method();

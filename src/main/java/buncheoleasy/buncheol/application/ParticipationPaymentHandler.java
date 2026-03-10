@@ -16,13 +16,14 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ParticipationPaymentHandler implements PaymentCompletionHandler {
 
+  private static final String FAIL_REASON_INSTANT_CONFIRMED = "즉시 구매 확정으로 인한 자동 실패 처리";
+
   private final ParticipationDomainService participationDomainService;
   private final Clock clock;
 
   @Override
   public void validateOwnership(final Long participationId, final Long userId) {
-    final Participation participation =
-        participationDomainService.getParticipation(participationId);
+    Participation participation = participationDomainService.getParticipation(participationId);
     if (!participation.getParticipantId().equals(userId)) {
       throw new BusinessException(ErrorCode.PAYMENT_NO_PERMISSION);
     }
@@ -30,11 +31,10 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
 
   @Override
   public void onPaymentCompleted(final Long participationId, final PaymentPhase paymentPhase) {
-    final Participation participation =
-        participationDomainService.getParticipation(participationId);
+    Participation participation = participationDomainService.getParticipation(participationId);
     final ParticipationStatus previousStatus = participation.getStatus();
 
-    final LocalDateTime now = LocalDateTime.now(clock);
+    LocalDateTime now = LocalDateTime.now(clock);
     switch (paymentPhase) {
       case PaymentPhase.INSTANT -> participation.confirmInstantParticipation(now);
       case PaymentPhase.DEPOSIT -> participation.activateBidAfterDepositPayment();
@@ -46,7 +46,7 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
 
     if (paymentPhase == PaymentPhase.INSTANT) {
       participationDomainService.failAllOpenBids(
-          participation.getBuncheolMemberId(), "즉시 구매 확정으로 인한 자동 실패 처리");
+          participation.getBuncheolMemberId(), FAIL_REASON_INSTANT_CONFIRMED);
     }
   }
 
@@ -56,10 +56,12 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
     if (paymentPhase == PaymentPhase.BALANCE) {
       return;
     }
-    final Participation participation =
-        participationDomainService.getParticipation(participationId);
+
+    Participation participation = participationDomainService.getParticipation(participationId);
     final ParticipationStatus previousStatus = participation.getStatus();
+
     participation.fail(failReason, LocalDateTime.now(clock));
+
     participationDomainService.updateParticipationStatus(participation, previousStatus);
   }
 }

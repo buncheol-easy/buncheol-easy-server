@@ -27,11 +27,11 @@ public class BuncheolParticipationService {
   public Participation createParticipation(
       final Long buncheolId, final Long participantId, final ParticipateRequest request) {
     // 분철 조회 & 참여 가능한 분철인지 확인
-    final Buncheol buncheol = validateRecruitingBuncheol(buncheolId, participantId);
-    final BuncheolMember buncheolMember =
+    Buncheol buncheol = validateRecruitingBuncheol(buncheolId, participantId);
+    BuncheolMember buncheolMember =
         buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheolId);
     // 선택한 배송지 조회 & 해당 분철에서 지원하는 배송 방법인지 확인
-    final ShippingAddress shippingAddress =
+    ShippingAddress shippingAddress =
         getAndValidateShippingAddress(participantId, buncheol, request.shippingAddressId());
 
     // 유저가 이미 같은 분철 멤버에 대해 참여중인지 확인
@@ -56,7 +56,7 @@ public class BuncheolParticipationService {
   }
 
   private Buncheol validateRecruitingBuncheol(final Long buncheolId, final Long participantId) {
-    final Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateRecruiting();
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
@@ -66,7 +66,7 @@ public class BuncheolParticipationService {
 
   private ShippingAddress getAndValidateShippingAddress(
       final Long participantId, final Buncheol buncheol, final Long shippingAddressId) {
-    final ShippingAddress shippingAddress =
+    ShippingAddress shippingAddress =
         shippingAddressDomainService.getShippingAddress(shippingAddressId);
     if (!shippingAddress.isOwnedBy(participantId)) {
       throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
@@ -81,11 +81,11 @@ public class BuncheolParticipationService {
       final Long participantId,
       final Long shippingAddressId,
       final long instantPriceSnapshot) {
-    final Participation participation =
+    Participation participation =
         Participation.createInstant(
             buncheolId, buncheolMemberId, participantId, shippingAddressId, instantPriceSnapshot);
     // 즉시구매 참여 객체를 저장하는 시점에도 해당 분철&멤버에 참여할 수 있는 상황인지 검사하여 저장함.
-    final boolean created =
+    boolean created =
         participationDomainService.createInstantParticipationIfRecruiting(participation);
     if (!created) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
@@ -103,7 +103,7 @@ public class BuncheolParticipationService {
     buncheolMember.validateBidAllowed();
     buncheolMember.validateBidAmount(bidAmount);
 
-    final Participation participation =
+    Participation participation =
         Participation.createBid(
             buncheolId, buncheolMember.getId(), participantId, shippingAddressId, bidAmount);
     participationDomainService.createParticipation(participation);

@@ -16,11 +16,11 @@ public class PaymentDomainService {
     return paymentRepository.save(payment);
   }
 
-  public void updatePending(final Payment payment) {
+  public void updateIfPending(final Payment payment) {
     update(payment, PaymentStatus.PENDING);
   }
 
-  public void updateConfirming(final Payment payment) {
+  public void updateIfConfirming(final Payment payment) {
     update(payment, PaymentStatus.CONFIRMING);
   }
 

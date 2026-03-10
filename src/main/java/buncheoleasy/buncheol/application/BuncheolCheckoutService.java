@@ -26,7 +26,7 @@ public class BuncheolCheckoutService {
   @Transactional
   public ParticipationCheckoutInfo startCheckout(
       final Long buncheolId, final Long participantId, final ParticipateRequest request) {
-    final Participation participation =
+    Participation participation =
         buncheolParticipationService.createParticipation(buncheolId, participantId, request);
 
     final PaymentPhase paymentPhase;
@@ -43,7 +43,7 @@ public class BuncheolCheckoutService {
       paymentOrderName = "분철 제시 예치금 결제";
     }
 
-    final PaymentOrderInfo paymentOrder =
+    PaymentOrderInfo paymentOrder =
         paymentService.createPaymentOrder(
             participation.getId(), paymentPhase, amount, paymentOrderName);
     return new ParticipationCheckoutInfo(participation, paymentOrder);
@@ -51,8 +51,7 @@ public class BuncheolCheckoutService {
 
   public PaymentOrderInfo startBalancePaymentCheckout(
       final Long participantId, final Long participationId) {
-    final Participation participation =
-        participationDomainService.getParticipation(participationId);
+    Participation participation = participationDomainService.getParticipation(participationId);
 
     if (!participation.getParticipantId().equals(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);

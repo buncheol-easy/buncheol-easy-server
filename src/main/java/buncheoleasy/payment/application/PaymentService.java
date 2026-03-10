@@ -11,16 +11,19 @@ import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmResponse
 import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmUnavailableException;
 import buncheoleasy.payment.infrastructure.TossPaymentsProperties;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class PaymentService {
+
+  private static final String FAIL_REASON_PAYMENT_ORDER_EXPIRED = "참여 조건 변경으로 기존 결제 주문 만료";
 
   private final PaymentDomainService paymentDomainService;
   private final PaymentCompletionHandler paymentCompletionHandler;
@@ -31,31 +34,18 @@ public class PaymentService {
   @Value("${app.base-url}")
   private String baseUrl;
 
-  public PaymentService(
-      final PaymentDomainService paymentDomainService,
-      final PaymentCompletionHandler paymentCompletionHandler,
-      final TossPaymentClient tossPaymentClient,
-      final TossPaymentsProperties tossPaymentsProperties,
-      final PlatformTransactionManager transactionManager) {
-    this.paymentDomainService = paymentDomainService;
-    this.paymentCompletionHandler = paymentCompletionHandler;
-    this.tossPaymentClient = tossPaymentClient;
-    this.tossPaymentsProperties = tossPaymentsProperties;
-    this.transactionTemplate = new TransactionTemplate(transactionManager);
-  }
-
   public PaymentOrderInfo createPaymentOrder(
       final Long participationId,
       final PaymentPhase paymentPhase,
       final long amount,
       final String paymentOrderName) {
-    final Payment existingPaymentOrder = getReusablePayment(participationId, paymentPhase, amount);
+    Payment existingPaymentOrder = getReusablePayment(participationId, paymentPhase, amount);
 
     if (existingPaymentOrder != null) {
       return toPaymentOrderInfo(existingPaymentOrder, paymentOrderName);
     }
 
-    final Payment paymentOrder =
+    Payment paymentOrder =
         Payment.createPayment(participationId, paymentPhase, generatePaymentOrderId(), amount);
     paymentDomainService.create(paymentOrder);
     return toPaymentOrderInfo(paymentOrder, paymentOrderName);
@@ -63,25 +53,31 @@ public class PaymentService {
 
   public void confirmPayment(
       final String paymentKey, final String paymentOrderId, final long amount) {
-    final ConfirmationPreparation preparation =
-        prepareConfirmation(paymentKey, paymentOrderId, amount);
-
-    if (preparation.alreadyDone()) {
+    boolean alreadyDone = prepareConfirmation(paymentKey, paymentOrderId, amount);
+    if (alreadyDone) {
       return;
     }
 
-    final TossConfirmResponse tossResponse;
+    TossConfirmResponse tossResponse;
     try {
       tossResponse = tossPaymentClient.confirm(paymentKey, paymentOrderId, amount);
     } catch (TossConfirmRejectedException e) {
-      final String failReason = buildFailReason(e.errorCode(), e.getMessage());
+      /** Toss에서 거절한 승인 요청 예외 (error-code: 4xx) */
+      String failReason = buildFailReason(e.errorCode(), e.getMessage());
+
+      // payment 객체 fail처리
       transactionTemplate.executeWithoutResult(
           status -> failConfirmingPayment(paymentOrderId, paymentKey, failReason));
+
       throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
     } catch (TossConfirmUnavailableException e) {
-      // TODO: CONFIRMING 장기 잔류 결제를 토스 조회로 재조정하는 reconciliation 로직 추가
+      // TODO: 해당 예외 발생 시 payment 는 confirming 으로 남는데, 스케줄러로 이 confirming payment 보정 작업 해줘야 함.
+      /**
+       * 알 수 없는 예외 (예: 네트워크 통신 실패, 토스 서버 장애 등) 실제 Toss 서버에서는 결제 승인이 되었는데 돌아오는 네트워크에서 장애가 난 것일 수 있기
+       * 때문에 fail처리 해서는 안됨.
+       */
       log.warn(
-          "토스 결제 승인 결과 확인 불가: paymentOrderId={}, code={}, message={}",
+          "토스 결제 승인 결과 불확실: Payment_status=CONFIRMING 유지, paymentOrderId={}, code={}, message={}",
           paymentOrderId,
           e.errorCode(),
           e.getMessage());
@@ -94,6 +90,7 @@ public class PaymentService {
           paymentOrderId,
           amount,
           tossResponse.totalAmount());
+      // TODO: 금액 불일치 발생 시 결제 조회/보정 또는 자동 환불 정책 추가 (거의 발생하지는 않지만 방어 로직)
       throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
     }
 
@@ -111,7 +108,7 @@ public class PaymentService {
   @Transactional
   public void cancelPendingPayment(
       final Long userId, final String paymentOrderId, final String code, final String message) {
-    final Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
+    Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
     paymentCompletionHandler.validateOwnership(payment.getParticipationId(), userId);
 
     if (payment.isFailed()) {
@@ -126,9 +123,9 @@ public class PaymentService {
       throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
     }
 
-    final String failReason = buildFailReason(code, message);
+    String failReason = buildFailReason(code, message);
     payment.fail(failReason);
-    paymentDomainService.updatePending(payment);
+    paymentDomainService.updateIfPending(payment);
     paymentCompletionHandler.onPaymentFailed(
         payment.getParticipationId(), payment.getPaymentPhase(), failReason);
     log.info("결제 취소 처리: paymentOrderId={}, reason={}", paymentOrderId, failReason);
@@ -136,7 +133,7 @@ public class PaymentService {
 
   private Payment getReusablePayment(
       final Long participationId, final PaymentPhase paymentPhase, final long expectedAmount) {
-    final Payment payment =
+    Payment payment =
         paymentDomainService
             .findLatestPaymentByParticipationIdAndPaymentPhase(participationId, paymentPhase)
             .orElse(null);
@@ -146,8 +143,8 @@ public class PaymentService {
     }
     if (payment.isPending()) {
       if (payment.getAmount() != expectedAmount) {
-        payment.fail("참여 조건 변경으로 기존 결제 주문 만료");
-        paymentDomainService.updatePending(payment);
+        payment.fail(FAIL_REASON_PAYMENT_ORDER_EXPIRED);
+        paymentDomainService.updateIfPending(payment);
         return null;
       }
       return payment;
@@ -172,80 +169,75 @@ public class PaymentService {
         baseUrl + "/v1/payments/fail");
   }
 
-  private void validateAlreadyApprovedPayment(final Payment payment, final String paymentKey) {
-    if (payment.getPaymentKey() != null && payment.getPaymentKey().equals(paymentKey)) {
-      return;
-    }
-    throw new BusinessException(ErrorCode.PAYMENT_ALREADY_APPROVED);
-  }
-
-  private void validateConfirmingPayment(final Payment payment, final String paymentKey) {
-    if (payment.getPaymentKey() != null && payment.getPaymentKey().equals(paymentKey)) {
-      return;
-    }
-    throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
-  }
-
   private String buildFailReason(final String code, final String message) {
-    final String safeCode = code == null || code.isBlank() ? "UNKNOWN" : code;
-    final String safeMessage = message == null || message.isBlank() ? "결제 실패" : message;
+    String safeCode = code == null || code.isBlank() ? "UNKNOWN" : code;
+    String safeMessage = message == null || message.isBlank() ? "결제 실패" : message;
     return safeCode + ": " + safeMessage;
   }
 
-  private ConfirmationPreparation prepareConfirmation(
+  private boolean prepareConfirmation(
       final String paymentKey, final String paymentOrderId, final long amount) {
-    final Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
+    Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
 
+    // 결제가 이미 결제 완료 상태이면?
     if (payment.isDone()) {
-      validateAlreadyApprovedPayment(payment, paymentKey);
+      validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_ALREADY_APPROVED);
       log.info("이미 승인된 결제 (멱등 처리): paymentOrderId={}", paymentOrderId);
-      return ConfirmationPreparation.done();
+      return true;
     }
 
+    // 금액이 다르면 이상한 요청
     if (payment.getAmount() != amount) {
       throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
     }
 
+    // payment가 pending 상태일 경우: 해당 payment 객체의 첫 결제 승인 요청
     if (payment.isPending()) {
       payment.startConfirm(paymentKey);
-      paymentDomainService.updatePending(payment);
-      return ConfirmationPreparation.ready();
+      paymentDomainService.updateIfPending(payment);
+      return false;
     }
 
+    // payment가 confirming 상태일 경우: 해당 payment 객체에 결제 승인을 시도했던 적이 있고 그 요청이 실패하여, 결제 승인 중으로 남아있는 상태
     if (payment.isConfirming()) {
-      validateConfirmingPayment(payment, paymentKey);
-      log.info("진행 중인 결제 승인 재시도: paymentOrderId={}", paymentOrderId);
-      return ConfirmationPreparation.ready();
+      validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
+      log.info("실패 했던 결제 승인 재시도: paymentOrderId={}", paymentOrderId);
+      return false;
     }
 
     throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
   }
 
   private void completeConfirmation(final String paymentOrderId, final String paymentKey) {
-    final Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
+    Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
 
     if (payment.isDone()) {
-      validateAlreadyApprovedPayment(payment, paymentKey);
+      // 이 요청이 이미 완료된 같은 결제건의 재호출인가?
+      validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_ALREADY_APPROVED);
       return;
     }
 
+    // 정상 흐름이라면 현 시점에 payment가 confirming 상태여야함.
     if (!payment.isConfirming()) {
       throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
     }
 
-    validateConfirmingPayment(payment, paymentKey);
+    // 지금 처리 중인 결제와 같은 paymentKey 요청인가?
+    validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
+
     payment.completeConfirm();
-    paymentDomainService.updateConfirming(payment);
+    paymentDomainService.updateIfConfirming(payment);
     paymentCompletionHandler.onPaymentCompleted(
         payment.getParticipationId(), payment.getPaymentPhase());
   }
 
   private void failConfirmingPayment(
       final String paymentOrderId, final String paymentKey, final String failReason) {
-    final Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
+    Payment payment = paymentDomainService.getPaymentByOrderId(paymentOrderId);
 
+    // 결제가 이미 결제 완료 상태이면?
     if (payment.isDone()) {
-      validateAlreadyApprovedPayment(payment, paymentKey);
+      validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_ALREADY_APPROVED);
       return;
     }
 
@@ -257,25 +249,28 @@ public class PaymentService {
       throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
     }
 
-    validateConfirmingPayment(payment, paymentKey);
+    // 지금 처리 중인 결제와 같은 paymentKey 요청인가?
+    validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
+
     payment.failConfirm(failReason);
-    paymentDomainService.updateConfirming(payment);
+    paymentDomainService.updateIfConfirming(payment);
     paymentCompletionHandler.onPaymentFailed(
         payment.getParticipationId(), payment.getPaymentPhase(), failReason);
   }
 
-  private String generatePaymentOrderId() {
-    return "order_" + UUID.randomUUID().toString().replace("-", "");
+  /**
+   * 현재 들어온 결제 객체에 대한 승인 요청이, 이미 해당 결제 객체로 승인한 결제 요청인지 확인 아닐 경우, 한 결제 객체는 하나의 결제 승인을 가져야 하기 때문에 예외
+   * 맞을 경우, 따닥과 같은 같은 결제에 대한 결제 승인 중복 요청으로 예외는 아님.
+   */
+  private void validateSamePaymentKey(
+      final Payment payment, final String paymentKey, final ErrorCode errorCode) {
+    if (payment.getPaymentKey() != null && payment.getPaymentKey().equals(paymentKey)) {
+      return;
+    }
+    throw new BusinessException(errorCode);
   }
 
-  private record ConfirmationPreparation(boolean alreadyDone) {
-
-    private static ConfirmationPreparation done() {
-      return new ConfirmationPreparation(true);
-    }
-
-    private static ConfirmationPreparation ready() {
-      return new ConfirmationPreparation(false);
-    }
+  private String generatePaymentOrderId() {
+    return "order_" + UUID.randomUUID().toString().replace("-", "");
   }
 }

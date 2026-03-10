@@ -125,7 +125,7 @@ public class PaymentService {
 
     String failReason = buildFailReason(code, message);
     payment.fail(failReason);
-    paymentDomainService.updateIfPending(payment);
+    paymentDomainService.updatePendingPayment(payment);
     paymentCompletionHandler.onPaymentFailed(
         payment.getParticipationId(), payment.getPaymentPhase(), failReason);
     log.info("결제 취소 처리: paymentOrderId={}, reason={}", paymentOrderId, failReason);
@@ -144,7 +144,7 @@ public class PaymentService {
     if (payment.isPending()) {
       if (payment.getAmount() != expectedAmount) {
         payment.fail(FAIL_REASON_PAYMENT_ORDER_EXPIRED);
-        paymentDomainService.updateIfPending(payment);
+        paymentDomainService.updatePendingPayment(payment);
         return null;
       }
       return payment;
@@ -194,7 +194,7 @@ public class PaymentService {
     // payment가 pending 상태일 경우: 해당 payment 객체의 첫 결제 승인 요청
     if (payment.isPending()) {
       payment.startConfirm(paymentKey);
-      paymentDomainService.updateIfPending(payment);
+      paymentDomainService.updatePendingPayment(payment);
       return false;
     }
 
@@ -226,7 +226,7 @@ public class PaymentService {
     validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
 
     payment.completeConfirm();
-    paymentDomainService.updateIfConfirming(payment);
+    paymentDomainService.updateConfirmingPayment(payment);
     paymentCompletionHandler.onPaymentCompleted(
         payment.getParticipationId(), payment.getPaymentPhase());
   }
@@ -253,7 +253,7 @@ public class PaymentService {
     validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
 
     payment.failConfirm(failReason);
-    paymentDomainService.updateIfConfirming(payment);
+    paymentDomainService.updateConfirmingPayment(payment);
     paymentCompletionHandler.onPaymentFailed(
         payment.getParticipationId(), payment.getPaymentPhase(), failReason);
   }

@@ -1,7 +1,5 @@
 package buncheoleasy.payment.infrastructure;
 
-import buncheoleasy.global.exception.domain.BusinessException;
-import buncheoleasy.global.exception.domain.ErrorCode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
@@ -131,7 +129,7 @@ public class TossPaymentClient {
         || confirmResponse.approvedAt() == null
         || confirmResponse.approvedAt().isBlank()) {
       log.error("토스 결제 승인 응답 필수값 누락: response={}", confirmResponse);
-      throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
+      throw new TossConfirmUnavailableException(UNKNOWN_ERROR_CODE, "토스 결제 승인 응답 필수값 누락");
     }
 
     String method =

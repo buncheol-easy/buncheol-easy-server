@@ -143,4 +143,65 @@ class BuncheolMemberTest {
           .doesNotThrowAnyException();
     }
   }
+
+  @Nested
+  @DisplayName("가격 수정 테스트")
+  class UpdatePricingTest {
+
+    @Test
+    void 즉시구매가와_입찰옵션을_정상_수정한다() {
+      // given
+      BuncheolMember member =
+          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, INSTANT_PRICE, false, null);
+
+      // when
+      member.updatePricing(60_000L, true, 20_000L);
+
+      // then
+      assertThat(member.getInstantPrice()).isEqualTo(60_000L);
+      assertThat(member.getBidOption().bidAllowed()).isTrue();
+      assertThat(member.getBidOption().bidMinPrice()).isEqualTo(20_000L);
+    }
+
+    @Test
+    void 입찰_허용에서_비허용으로_변경한다() {
+      // given
+      BuncheolMember member =
+          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, INSTANT_PRICE, true, 20_000L);
+
+      // when
+      member.updatePricing(INSTANT_PRICE, false, null);
+
+      // then
+      assertThat(member.getBidOption().bidAllowed()).isFalse();
+      assertThat(member.getBidOption().bidMinPrice()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1L})
+    void 수정_즉시구매가가_0_이하면_예외가_발생한다(long price) {
+      // given
+      BuncheolMember member =
+          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, INSTANT_PRICE, false, null);
+
+      // when & then
+      assertThatThrownBy(() -> member.updatePricing(price, false, null))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
+    }
+
+    @Test
+    void 제시최소금액이_즉시구매가_이상이면_예외가_발생한다() {
+      // given
+      BuncheolMember member =
+          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, INSTANT_PRICE, false, null);
+
+      // when & then
+      assertThatThrownBy(() -> member.updatePricing(INSTANT_PRICE, true, INSTANT_PRICE))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID);
+    }
+  }
 }

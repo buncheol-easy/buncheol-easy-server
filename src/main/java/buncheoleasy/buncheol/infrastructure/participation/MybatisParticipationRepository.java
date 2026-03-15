@@ -1,11 +1,16 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
+import buncheoleasy.buncheol.domain.participation.MemberParticipationPresence;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
@@ -57,6 +62,22 @@ public class MybatisParticipationRepository implements ParticipationRepository {
   @Override
   public boolean existsActiveInstantByBuncheolMemberId(final Long buncheolMemberId) {
     return participationMapper.existsActiveInstantByBuncheolMemberId(buncheolMemberId);
+  }
+
+  @Override
+  public boolean existsActiveByBuncheolId(final Long buncheolId) {
+    return participationMapper.existsActiveByBuncheolId(buncheolId);
+  }
+
+  @Override
+  public List<MemberParticipationPresence> findActiveParticipationPresencesByBuncheolId(
+      final Long buncheolId) {
+    return participationMapper.findActiveParticipationPresencesByBuncheolId(buncheolId);
+  }
+
+  @Override
+  public Set<ShippingMethod> findActiveShippingMethodsByBuncheolId(final Long buncheolId) {
+    return new HashSet<>(participationMapper.findActiveShippingMethodsByBuncheolId(buncheolId));
   }
 
   @Override

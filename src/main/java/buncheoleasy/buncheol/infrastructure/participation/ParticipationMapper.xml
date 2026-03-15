@@ -135,6 +135,38 @@
     WHERE active_instant_member_id = #{buncheolMemberId}
   </select>
 
+  <!-- 분철 단위 활성 참여 존재 여부 -->
+  <select id="existsActiveByBuncheolId" resultType="boolean">
+    SELECT COUNT(*) > 0
+    FROM participations
+    WHERE buncheol_id = #{buncheolId}
+      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT', 'CONFIRMED')
+  </select>
+
+  <!-- 멤버별 활성 참여 존재 여부 -->
+  <select id="findActiveParticipationPresencesByBuncheolId"
+    resultType="MemberParticipationPresence">
+    SELECT buncheol_member_id,
+           MAX(IF(type = 'INSTANT' AND status IN ('PAYMENT_PENDING', 'CONFIRMED'), 1,
+                  0))                                    AS has_active_instant,
+           MAX(IF(type = 'BID' AND status IN
+                                   ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT',
+                                    'CONFIRMED'), 1, 0)) AS has_active_bid
+    FROM participations
+    WHERE buncheol_id = #{buncheolId}
+      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT', 'CONFIRMED')
+    GROUP BY buncheol_member_id
+  </select>
+
+  <!-- 활성 참여에서 사용된 배송 방법 조회 -->
+  <select id="findActiveShippingMethodsByBuncheolId" resultType="ShippingMethod">
+    SELECT DISTINCT sa.shipping_method
+    FROM participations p
+           JOIN shipping_addresses sa ON p.shipping_address_id = sa.id
+    WHERE p.buncheol_id = #{buncheolId}
+      AND p.status IN ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT', 'CONFIRMED')
+  </select>
+
   <update id="updateStatus">
     UPDATE participations
     SET balance_due_amount = #{participation.balanceDueAmount},

@@ -116,6 +116,21 @@
     WHERE id = #{id}
   </update>
 
+  <!-- 분철 부분 업데이트 (참여자 존재 시) -->
+  <update id="updatePartial">
+    UPDATE buncheols
+    SET title              = #{params.title},
+        description        = #{params.description},
+        deadline           = #{params.deadline},
+        settlement_bank    = #{params.settlementBank},
+        settlement_account = #{params.settlementAccount},
+        settlement_holder  = #{params.settlementHolder},
+        gs25_shipping_fee  = #{params.gs25ShippingFee},
+        cu_shipping_fee    = #{params.cuShippingFee},
+        updated_at         = NOW()
+    WHERE id = #{id}
+  </update>
+
   <!-- 분철 상태 업데이트 -->
   <update id="updateStatus">
     UPDATE buncheols

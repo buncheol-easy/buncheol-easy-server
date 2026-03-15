@@ -15,4 +15,10 @@ public interface BuncheolMemberMapper {
 
   Optional<BuncheolMember> findByIdAndBuncheolId(
       @Param("id") Long id, @Param("buncheolId") Long buncheolId);
+
+  List<BuncheolMember> findAllByBuncheolId(@Param("buncheolId") Long buncheolId);
+
+  void update(BuncheolMember buncheolMember);
+
+  void deleteById(@Param("id") Long id);
 }

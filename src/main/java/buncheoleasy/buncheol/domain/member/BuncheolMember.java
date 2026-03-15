@@ -15,7 +15,7 @@ public class BuncheolMember {
   private final Long memberId;
   private final String memberName;
   private long instantPrice;
-  private final BidOption bidOption;
+  private BidOption bidOption;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
 
@@ -64,6 +64,13 @@ public class BuncheolMember {
     this.bidOption = new BidOption(bidAllowed, bidMinPrice);
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
+  }
+
+  public void updatePricing(
+      final long newInstantPrice, final boolean newBidAllowed, final Long newBidMinPrice) {
+    validateInstantPrice(newInstantPrice);
+    this.instantPrice = newInstantPrice;
+    this.bidOption = BidOption.of(newInstantPrice, newBidAllowed, newBidMinPrice);
   }
 
   public void validateBidAllowed() {

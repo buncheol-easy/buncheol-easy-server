@@ -28,4 +28,19 @@ public class MybatisBuncheolMemberRepository implements BuncheolMemberRepository
   public Optional<BuncheolMember> findByIdAndBuncheolId(Long id, Long buncheolId) {
     return buncheolMemberMapper.findByIdAndBuncheolId(id, buncheolId);
   }
+
+  @Override
+  public List<BuncheolMember> findAllByBuncheolId(Long buncheolId) {
+    return buncheolMemberMapper.findAllByBuncheolId(buncheolId);
+  }
+
+  @Override
+  public void update(BuncheolMember buncheolMember) {
+    buncheolMemberMapper.update(buncheolMember);
+  }
+
+  @Override
+  public void deleteById(Long id) {
+    buncheolMemberMapper.deleteById(id);
+  }
 }

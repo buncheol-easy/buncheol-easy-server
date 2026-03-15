@@ -68,4 +68,36 @@
       AND buncheol_id = #{buncheolId}
   </select>
 
+  <!-- 분철 전체 멤버 목록 조회 -->
+  <select id="findAllByBuncheolId" resultMap="buncheolMemberResultMap">
+    SELECT id,
+           buncheol_id,
+           member_id,
+           member_name,
+           instant_price,
+           bid_allowed,
+           bid_min_price,
+           created_at,
+           updated_at
+    FROM buncheol_members
+    WHERE buncheol_id = #{buncheolId}
+  </select>
+
+  <!-- 개별 멤버 업데이트 -->
+  <update id="update">
+    UPDATE buncheol_members
+    SET instant_price = #{instantPrice},
+        bid_allowed   = #{bidOption.bidAllowed},
+        bid_min_price = #{bidOption.bidMinPrice},
+        updated_at    = NOW()
+    WHERE id = #{id}
+  </update>
+
+  <!-- 개별 멤버 삭제 -->
+  <delete id="deleteById">
+    DELETE
+    FROM buncheol_members
+    WHERE id = #{id}
+  </delete>
+
 </mapper>

@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.request;
 
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolPartialParams;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Future;
@@ -29,6 +30,7 @@ public record BuncheolModifyRequest(
     @NotBlank @Size(max = 50) String settlementHolder,
     @NotNull List<Long> keepImageIds,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
+
   // 커스텀 그룹 생성 시(groupId == null)에만 groupName 필수
   @AssertTrue
   public boolean isGroupNameValidForGroupType() {
@@ -54,5 +56,17 @@ public record BuncheolModifyRequest(
         settlementBank,
         settlementAccount,
         settlementHolder);
+  }
+
+  public BuncheolPartialParams toPartialParams() {
+    return new BuncheolPartialParams(
+        title,
+        description,
+        deadline,
+        settlementBank,
+        settlementAccount,
+        settlementHolder,
+        gs25ShippingFee,
+        cuShippingFee);
   }
 }

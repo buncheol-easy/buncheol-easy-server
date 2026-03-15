@@ -5,11 +5,13 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record BuncheolMemberRequest(
+    Long buncheolMemberId,
     Long memberId,
     @Size(max = 100) String memberName,
     @Positive long instantPrice,
     boolean bidAllowed,
     @Positive Long bidMinPrice) {
+
   // 제시 허용일 경우 제시 최소 금액 필수
   @AssertTrue
   public boolean isBidMinPriceValidWhenBidAllowed() {

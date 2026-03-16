@@ -15,8 +15,8 @@ import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolModificationPolicy;
 import buncheoleasy.buncheol.domain.BuncheolParams;
-import buncheoleasy.buncheol.domain.BuncheolPartialParams;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BidOption;
@@ -45,6 +45,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -57,6 +58,8 @@ class BuncheolServiceTest {
   @InjectMocks private BuncheolService buncheolService;
 
   @Mock private BuncheolDomainService buncheolDomainService;
+
+  @Spy private BuncheolModificationPolicy buncheolModificationPolicy;
 
   @Mock private BuncheolImageDomainService buncheolImageDomainService;
 
@@ -71,8 +74,6 @@ class BuncheolServiceTest {
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
 
   @Captor private ArgumentCaptor<List<BuncheolMemberParams>> buncheolMemberParamsCaptor;
-
-  @Captor private ArgumentCaptor<BuncheolPartialParams> partialParamsCaptor;
 
   private HoldBuncheolRequest customGroupRequest() {
     return new HoldBuncheolRequest(
@@ -807,7 +808,7 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 허용_필드만_변경하면_부분_업데이트에_성공한다() {
+    void 허용_필드만_변경하면_업데이트에_성공한다() {
       // given
       Long hostId = 1L;
       Long buncheolId = 10L;
@@ -833,14 +834,14 @@ class BuncheolServiceTest {
       // then
       then(buncheolDomainService)
           .should()
-          .updateBuncheolPartial(eq(buncheol), partialParamsCaptor.capture());
-      BuncheolPartialParams partial = partialParamsCaptor.getValue();
-      assertThat(partial.title()).isEqualTo("수정 제목");
-      assertThat(partial.settlementBank()).isEqualTo("수정은행");
+          .updateBuncheol(eq(buncheol), buncheolParamsCaptor.capture());
+      BuncheolParams params = buncheolParamsCaptor.getValue();
+      assertThat(params.title()).isEqualTo("수정 제목");
+      assertThat(params.settlementBank()).isEqualTo("수정은행");
     }
 
     @Test
-    void 사용_중인_배송비_변경_시_BCH084_에러가_발생한다() {
+    void 사용_중인_배송비_변경_시_BCH085_에러가_발생한다() {
       // given
       Long hostId = 1L;
       Long buncheolId = 10L;
@@ -922,7 +923,7 @@ class BuncheolServiceTest {
       buncheolService.modifyBuncheol(hostId, buncheolId, request, List.of());
 
       // then
-      then(buncheolDomainService).should().updateBuncheolPartial(eq(buncheol), any());
+      then(buncheolDomainService).should().updateBuncheol(eq(buncheol), any());
     }
 
     @Test
@@ -1091,9 +1092,6 @@ class BuncheolServiceTest {
               List.of(),
               List.of(new BuncheolMemberRequest(1L, null, "멤버A", 60_000L, true, 20_000L)));
 
-      BuncheolMember existingMember =
-          BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, true, 25_000L);
-      // ID 설정을 위해 reflection 사용 대신 mock으로
       BuncheolMember mockMember = mock(BuncheolMember.class);
       given(mockMember.getId()).willReturn(1L);
       given(mockMember.getInstantPrice()).willReturn(50_000L);
@@ -1118,7 +1116,7 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 제시만_있는_멤버_bidMinPrice_올리기_시_BCH083_에러가_발생한다() {
+    void 제시만_있는_멤버_bidMinPrice_올리기_시_BCH084_에러가_발생한다() {
       // given
       Long hostId = 1L;
       Long buncheolId = 10L;
@@ -1311,7 +1309,7 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 존재하지_않는_buncheolMemberId_시_BCH085_에러가_발생한다() {
+    void 존재하지_않는_buncheolMemberId_시_BCH086_에러가_발생한다() {
       // given
       Long hostId = 1L;
       Long buncheolId = 10L;

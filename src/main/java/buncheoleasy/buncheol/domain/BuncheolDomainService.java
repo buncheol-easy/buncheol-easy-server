@@ -25,10 +25,6 @@ public class BuncheolDomainService {
     buncheolRepository.update(buncheol.getId(), params);
   }
 
-  public void updateBuncheolPartial(final Buncheol buncheol, final BuncheolPartialParams params) {
-    buncheolRepository.updatePartial(buncheol.getId(), params);
-  }
-
   public void cancelBuncheol(final Buncheol buncheol) {
     buncheol.cancel();
     buncheolRepository.updateStatus(buncheol.getId(), buncheol.getStatus());

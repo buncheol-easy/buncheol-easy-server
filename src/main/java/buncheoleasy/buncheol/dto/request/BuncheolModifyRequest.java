@@ -1,7 +1,6 @@
 package buncheoleasy.buncheol.dto.request;
 
 import buncheoleasy.buncheol.domain.BuncheolParams;
-import buncheoleasy.buncheol.domain.BuncheolPartialParams;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Future;
@@ -56,17 +55,5 @@ public record BuncheolModifyRequest(
         settlementBank,
         settlementAccount,
         settlementHolder);
-  }
-
-  public BuncheolPartialParams toPartialParams() {
-    return new BuncheolPartialParams(
-        title,
-        description,
-        deadline,
-        settlementBank,
-        settlementAccount,
-        settlementHolder,
-        gs25ShippingFee,
-        cuShippingFee);
   }
 }

@@ -2,6 +2,8 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolModificationPolicy;
+import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
@@ -16,25 +18,25 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BuncheolService {
 
   private final BuncheolDomainService buncheolDomainService;
+  private final BuncheolModificationPolicy buncheolModificationPolicy;
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationRepository participationRepository;
@@ -88,7 +90,7 @@ public class BuncheolService {
       modifyWithParticipants(buncheol, buncheolId, request, resolvedGroup);
     }
 
-    // 이미지 처리 (공통)
+    // 이미지 처리
     buncheolImageDomainService.deleteImagesExcluding(buncheolId, request.keepImageIds());
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(new BuncheolImageUploadEvent(buncheolId, images));
@@ -125,52 +127,24 @@ public class BuncheolService {
       final Long buncheolId,
       final BuncheolModifyRequest request,
       final ResolvedGroup resolvedGroup) {
-    // 잠긴 필드 검증
-    validateLockedFields(buncheol, request, resolvedGroup);
+    BuncheolParams requestedState =
+        request.toParams(resolvedGroup.groupId(), resolvedGroup.groupName());
 
-    // 배송비 검증
+    // 분철 활성 참여자들이 선택한 배송 방법 조회
     Set<ShippingMethod> usedShippingMethods =
         participationRepository.findActiveShippingMethodsByBuncheolId(buncheolId);
-    validateShippingFeeModification(buncheol, request, usedShippingMethods);
 
-    // 부분 업데이트
-    buncheolDomainService.updateBuncheolPartial(buncheol, request.toPartialParams());
+    // 수정 불가 필드 + 배송비 검증
+    buncheolModificationPolicy.validateBuncheolFieldChange(
+        buncheol, requestedState, usedShippingMethods);
+
+    // 분철 정보 업데이트
+    buncheolDomainService.updateBuncheol(buncheol, requestedState);
 
     // 멤버 조정
     List<MemberParticipationPresence> presences =
         participationRepository.findActiveParticipationPresencesByBuncheolId(buncheolId);
     reconcileMembers(buncheolId, resolvedGroup.groupId(), request.buncheolMembers(), presences);
-  }
-
-  private void validateLockedFields(
-      final Buncheol buncheol,
-      final BuncheolModifyRequest request,
-      final ResolvedGroup resolvedGroup) {
-    if (!Objects.equals(buncheol.getGroupId(), resolvedGroup.groupId())
-        || !Objects.equals(buncheol.getGroupName(), resolvedGroup.groupName())
-        || !Objects.equals(buncheol.getGoodsName(), request.goodsName())
-        || !Objects.equals(buncheol.getStoreName(), request.storeName())
-        || buncheol.getOriginalPrice() != request.originalPrice()
-        || buncheol.getShippingDeadlineDays() != request.shippingDeadlineDays()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_FIELD_LOCKED);
-    }
-  }
-
-  /** 수정하려는 배송방법을 선택하여 분철에 참여한 참여자가 있다면 예외를 발생시키는 메서드 */
-  private void validateShippingFeeModification(
-      final Buncheol buncheol,
-      final BuncheolModifyRequest request,
-      final Set<ShippingMethod> usedShippingMethods) {
-    if (usedShippingMethods.contains(ShippingMethod.GS25_HALF)
-        && !Objects.equals(
-            buncheol.getShippingFeePolicy().gs25ShippingFee(), request.gs25ShippingFee())) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_SHIPPING_FEE_LOCKED);
-    }
-    if (usedShippingMethods.contains(ShippingMethod.CU_HALF)
-        && !Objects.equals(
-            buncheol.getShippingFeePolicy().cuShippingFee(), request.cuShippingFee())) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_SHIPPING_FEE_LOCKED);
-    }
   }
 
   private void reconcileMembers(
@@ -180,32 +154,39 @@ public class BuncheolService {
       final List<MemberParticipationPresence> presences) {
     List<BuncheolMember> existingMembers =
         buncheolMemberDomainService.findAllByBuncheolId(buncheolId);
-    Map<Long, BuncheolMember> existingMap =
-        existingMembers.stream()
-            .collect(Collectors.toMap(BuncheolMember::getId, Function.identity()));
-    Map<Long, MemberParticipationPresence> presenceMap =
-        presences.stream()
-            .collect(
-                Collectors.toMap(
-                    MemberParticipationPresence::buncheolMemberId, Function.identity()));
+    // buncheolMemberId -> Entity map으로 변환
+    Map<Long, BuncheolMember> existingIdMap = toMap(existingMembers);
+    Map<Long, MemberParticipationPresence> presenceMap = toPresenceMap(presences);
 
-    // 요청 멤버를 신규/기존으로 분류
-    Map<Boolean, List<BuncheolMemberRequest>> partitioned =
-        requestMembers.stream()
-            .collect(Collectors.partitioningBy(req -> req.buncheolMemberId() == null));
-    List<BuncheolMemberRequest> newRequests = partitioned.get(true);
-    List<BuncheolMemberRequest> existingRequests = partitioned.get(false);
+    List<BuncheolMemberRequest> newRequests = new ArrayList<>();
+    List<BuncheolMemberRequest> existingRequests = new ArrayList<>();
+    classifyRequests(requestMembers, newRequests, existingRequests);
 
-    List<Long> existingIds =
-        existingRequests.stream().map(BuncheolMemberRequest::buncheolMemberId).toList();
-    if (existingIds.size() != new HashSet<>(existingIds).size()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_MEMBER_DUPLICATED);
-    }
-    Set<Long> requestedExistingIds = new HashSet<>(existingIds);
+    Set<Long> requestedExistingIds =
+        existingRequests.stream()
+            .map(BuncheolMemberRequest::buncheolMemberId)
+            .collect(Collectors.toSet());
 
     deleteRemovedMembers(existingMembers, requestedExistingIds, presenceMap);
-    updateExistingMembers(existingRequests, existingMap, presenceMap);
+    updateExistingMembers(existingRequests, existingIdMap, presenceMap);
     createNewMembers(buncheolId, resolvedGroupId, newRequests);
+  }
+
+  private void classifyRequests(
+      final List<BuncheolMemberRequest> requestMembers,
+      final List<BuncheolMemberRequest> newRequests,
+      final List<BuncheolMemberRequest> existingRequests) {
+    Set<Long> seenIds = new HashSet<>();
+    for (BuncheolMemberRequest req : requestMembers) {
+      if (req.buncheolMemberId() == null) {
+        newRequests.add(req);
+      } else {
+        if (!seenIds.add(req.buncheolMemberId())) {
+          throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_MEMBER_DUPLICATED);
+        }
+        existingRequests.add(req);
+      }
+    }
   }
 
   private void deleteRemovedMembers(
@@ -213,36 +194,29 @@ public class BuncheolService {
       final Set<Long> requestedExistingIds,
       final Map<Long, MemberParticipationPresence> presenceMap) {
     for (BuncheolMember existing : existingMembers) {
-      // 삭제하지 않는다면
       if (requestedExistingIds.contains(existing.getId())) {
         continue;
       }
-      // 삭제할건데, 참여자가 있는 분철 멤버라면?
-      if (presenceMap.containsKey(existing.getId())) {
-        throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_MEMBER_DELETE_LOCKED);
-      }
+      buncheolModificationPolicy.validateMemberDeletion(presenceMap.get(existing.getId()));
       buncheolMemberDomainService.deleteById(existing.getId());
     }
   }
 
   private void updateExistingMembers(
       final List<BuncheolMemberRequest> existingRequests,
-      final Map<Long, BuncheolMember> existingMap,
+      final Map<Long, BuncheolMember> existingIdMap,
       final Map<Long, MemberParticipationPresence> presenceMap) {
     for (BuncheolMemberRequest req : existingRequests) {
-      BuncheolMember existing = existingMap.get(req.buncheolMemberId());
+      BuncheolMember existing = existingIdMap.get(req.buncheolMemberId());
       if (existing == null) {
         throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_MEMBER_NOT_FOUND);
       }
 
       MemberParticipationPresence presence = presenceMap.get(req.buncheolMemberId());
-      if (presence == null) {
-        existing.updatePricing(req.instantPrice(), req.bidAllowed(), req.bidMinPrice());
-        buncheolMemberDomainService.updateBuncheolMember(existing);
-      } else if (presence.hasActiveInstant()) { // 즉시구매 참여가 존재할 경우
-        validateInstantMemberUnchanged(existing, req);
-      } else if (presence.hasActiveBid()) { // 제시 참여가 존재할 경우
-        validateBidOnlyMemberModification(existing, req);
+      buncheolModificationPolicy.validateMemberPricingChange(
+          existing, presence, req.instantPrice(), req.bidAllowed(), req.bidMinPrice());
+
+      if (presence == null || !presence.hasActiveInstant()) {
         existing.updatePricing(req.instantPrice(), req.bidAllowed(), req.bidMinPrice());
         buncheolMemberDomainService.updateBuncheolMember(existing);
       }
@@ -260,31 +234,16 @@ public class BuncheolService {
     buncheolMemberDomainService.createBuncheolMembers(buncheolId, newParams);
   }
 
-  private void validateInstantMemberUnchanged(
-      final BuncheolMember existing, final BuncheolMemberRequest req) {
-    if (existing.getInstantPrice() != req.instantPrice()
-        || existing.getBidOption().bidAllowed() != req.bidAllowed()
-        || !Objects.equals(existing.getBidOption().bidMinPrice(), req.bidMinPrice())) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_MEMBER_PRICE_LOCKED);
-    }
+  private Map<Long, BuncheolMember> toMap(final List<BuncheolMember> members) {
+    return members.stream().collect(Collectors.toMap(BuncheolMember::getId, Function.identity()));
   }
 
-  private void validateBidOnlyMemberModification(
-      final BuncheolMember existing, final BuncheolMemberRequest req) {
-    // bidAllowed 비활성화 불가 (제시 참여자가 있으므로)
-    if (existing.getBidOption().bidAllowed() && !req.bidAllowed()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_BID_DISABLE_LOCKED);
-    }
-    // bidMinPrice 올리기 불가
-    if (existing.getBidOption().bidAllowed()
-        && req.bidMinPrice() != null
-        && existing.getBidOption().bidMinPrice() != null
-        && req.bidMinPrice() > existing.getBidOption().bidMinPrice()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_BID_MIN_INCREASE_LOCKED);
-    }
+  private Map<Long, MemberParticipationPresence> toPresenceMap(
+      final List<MemberParticipationPresence> presences) {
+    return presences.stream()
+        .collect(
+            Collectors.toMap(MemberParticipationPresence::buncheolMemberId, Function.identity()));
   }
-
-  // ── 공통 유틸 ──
 
   // groupId가 있으면 존재 검증 후 반환, 없으면 null 반환 (그룹명은 분철에 직접 저장)
   private ResolvedGroup resolveGroup(final Long groupId, final String requestedGroupName) {

@@ -10,7 +10,5 @@ public interface BuncheolRepository {
 
   void update(Long id, BuncheolParams params);
 
-  void updatePartial(Long id, BuncheolPartialParams params);
-
   void updateStatus(Long id, BuncheolStatus status);
 }

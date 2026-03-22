@@ -178,6 +178,7 @@ CREATE INDEX idx_participations_buncheol_id ON participations (buncheol_id);
 CREATE UNIQUE INDEX uq_participations_confirmed_member ON participations (confirmed_member_id);
 CREATE UNIQUE INDEX uq_participations_active_instant_member ON participations (active_instant_member_id);
 CREATE UNIQUE INDEX uq_participations_active_member_participant ON participations (buncheol_member_id, active_participant_id);
+CREATE INDEX idx_participations_member_type_status ON participations (buncheol_member_id, type, status);
 
 CREATE TABLE payments
 (

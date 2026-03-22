@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS participations
     UNIQUE INDEX uq_participations_active_member_participant (buncheol_member_id, active_participant_id),
     UNIQUE INDEX uq_participations_confirmed_member (confirmed_member_id),
     UNIQUE INDEX uq_participations_active_instant_member (active_instant_member_id),
+    INDEX idx_participations_member_type_status (buncheol_member_id, type, status),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)

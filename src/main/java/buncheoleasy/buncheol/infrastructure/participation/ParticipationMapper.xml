@@ -25,8 +25,8 @@
     </constructor>
   </resultMap>
 
-  <!-- 참여 저장 -->
-  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+  <!-- 해당 멤버 슬롯에 활성 즉시구매가 없을 때만 제시 참여 저장 (원자 조건 insert) -->
+  <insert id="insertBidIfNoActiveInstant" useGeneratedKeys="true" keyProperty="id">
     INSERT INTO participations (buncheol_id,
                                 buncheol_member_id,
                                 participant_id,
@@ -37,16 +37,23 @@
                                 status,
                                 created_at,
                                 updated_at)
-    VALUES (#{buncheolId},
-            #{buncheolMemberId},
-            #{participantId},
-            #{shippingAddressId},
-            #{type},
-            #{instantPriceSnapshot},
-            #{bidAmount},
-            #{status},
-            NOW(),
-            NOW())
+    SELECT #{buncheolId},
+           #{buncheolMemberId},
+           #{participantId},
+           #{shippingAddressId},
+           #{type},
+           #{instantPriceSnapshot},
+           #{bidAmount},
+           #{status},
+           NOW(),
+           NOW()
+    FROM buncheols
+    WHERE id = #{buncheolId}
+      AND status = 'RECRUITING'
+      AND deadline > NOW()
+      AND NOT EXISTS (SELECT 1
+                      FROM participations p
+                      WHERE p.active_instant_member_id = #{buncheolMemberId})
   </insert>
 
   <!-- 모집중이고 마감 전일 때만 즉시 구매 참여 저장 (원자 조건 insert) -->
@@ -117,8 +124,7 @@
            updated_at
     FROM participations
     WHERE buncheol_member_id = #{buncheolMemberId}
-      AND participant_id = #{participantId}
-      AND status IN ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT', 'CONFIRMED')
+      AND active_participant_id = #{participantId}
     LIMIT 1
   </select>
 
@@ -126,9 +132,7 @@
   <select id="existsActiveInstantByBuncheolMemberId" resultType="boolean">
     SELECT COUNT(*) > 0
     FROM participations
-    WHERE buncheol_member_id = #{buncheolMemberId}
-      AND type = 'INSTANT'
-      AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
+    WHERE active_instant_member_id = #{buncheolMemberId}
   </select>
 
   <update id="updateStatus">

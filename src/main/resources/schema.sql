@@ -196,14 +196,14 @@ CREATE TABLE IF NOT EXISTS participations
     PRIMARY KEY (id),
 
     INDEX idx_participations_buncheol_id (buncheol_id),
-    _active_participant_id   BIGINT GENERATED ALWAYS AS (
+    active_participant_id    BIGINT GENERATED ALWAYS AS (
                                  IF(status IN
                                     ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT',
                                      'CONFIRMED'),
                                     participant_id, NULL)
                                  ) STORED COMMENT '활성 상태일 때만 participant_id 값',
 
-    UNIQUE INDEX uq_participations_active_member_participant (buncheol_member_id, _active_participant_id),
+    UNIQUE INDEX uq_participations_active_member_participant (buncheol_member_id, active_participant_id),
     UNIQUE INDEX uq_participations_confirmed_member (confirmed_member_id),
     UNIQUE INDEX uq_participations_active_instant_member (active_instant_member_id),
 

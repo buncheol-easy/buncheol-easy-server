@@ -34,6 +34,7 @@ public class PaymentService {
   @Value("${app.base-url}")
   private String baseUrl;
 
+  @Transactional
   public PaymentOrderInfo createPaymentOrder(
       final Long participationId,
       final PaymentPhase paymentPhase,

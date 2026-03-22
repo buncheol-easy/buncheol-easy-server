@@ -12,12 +12,12 @@ public class ParticipationDomainService {
 
   private final ParticipationRepository participationRepository;
 
-  public Participation createParticipation(final Participation participation) {
-    return participationRepository.save(participation);
-  }
-
   public boolean createInstantParticipationIfRecruiting(final Participation participation) {
     return participationRepository.saveInstantIfRecruiting(participation);
+  }
+
+  public boolean createBidParticipationIfNoActiveInstant(final Participation participation) {
+    return participationRepository.saveBidIfNoActiveInstant(participation);
   }
 
   public Participation getParticipation(final Long id) {

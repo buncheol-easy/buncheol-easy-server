@@ -25,25 +25,6 @@ class ParticipationDomainServiceTest {
   @Mock private ParticipationRepository participationRepository;
 
   @Nested
-  @DisplayName("참여 생성 테스트")
-  class CreateParticipationTest {
-
-    @Test
-    void 참여_생성에_성공한다() {
-      // given
-      Participation participation = Participation.createBid(1L, 10L, 100L, 200L, 30_000L);
-      given(participationRepository.save(participation)).willReturn(participation);
-
-      // when
-      Participation result = participationDomainService.createParticipation(participation);
-
-      // then
-      assertThat(result).isSameAs(participation);
-      then(participationRepository).should().save(participation);
-    }
-  }
-
-  @Nested
   @DisplayName("즉시 구매 참여 생성 테스트")
   class CreateInstantParticipationIfRecruitingTest {
 

@@ -106,7 +106,16 @@ public class BuncheolParticipationService {
     Participation participation =
         Participation.createBid(
             buncheolId, buncheolMember.getId(), participantId, shippingAddressId, bidAmount);
-    participationDomainService.createParticipation(participation);
+    // 제시 참여 객체를 저장하는 시점에도 모집중이고 활성 즉시구매가 없는지 검사하여 저장함.
+    boolean created =
+        participationDomainService.createBidParticipationIfNoActiveInstant(participation);
+    if (!created) {
+      // 활성 즉시구매가 존재하면 품절, 아니면 모집 종료
+      if (participationDomainService.isInstantSlotTaken(buncheolMember.getId())) {
+        throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_ALREADY_TAKEN);
+      }
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
     return participation;
   }
 

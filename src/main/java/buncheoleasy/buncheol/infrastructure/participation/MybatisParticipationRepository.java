@@ -17,19 +17,18 @@ public class MybatisParticipationRepository implements ParticipationRepository {
   private final ParticipationMapper participationMapper;
 
   @Override
-  public Participation save(final Participation participation) {
-    try {
-      participationMapper.insert(participation);
-    } catch (DuplicateKeyException ex) {
-      throw translateDuplicateKey(ex);
-    }
-    return participation;
-  }
-
-  @Override
   public boolean saveInstantIfRecruiting(final Participation participation) {
     try {
       return participationMapper.insertInstantIfRecruiting(participation) > 0;
+    } catch (DuplicateKeyException ex) {
+      throw translateDuplicateKey(ex);
+    }
+  }
+
+  @Override
+  public boolean saveBidIfNoActiveInstant(final Participation participation) {
+    try {
+      return participationMapper.insertBidIfNoActiveInstant(participation) > 0;
     } catch (DuplicateKeyException ex) {
       throw translateDuplicateKey(ex);
     }

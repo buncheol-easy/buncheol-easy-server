@@ -192,8 +192,8 @@ class BuncheolParticipationServiceTest {
           new ParticipateRequest(
               BUNCHEOL_MEMBER_ID, SHIPPING_ADDRESS_ID, ParticipationType.BID, 30_000L);
 
-      given(participationDomainService.createParticipation(any()))
-          .willAnswer(inv -> inv.getArgument(0));
+      given(participationDomainService.createBidParticipationIfNoActiveInstant(any()))
+          .willReturn(true);
 
       // when
       Participation result =
@@ -205,7 +205,9 @@ class BuncheolParticipationServiceTest {
 
       then(member).should().validateBidAllowed();
       then(member).should().validateBidAmount(30_000L);
-      then(participationDomainService).should().createParticipation(any(Participation.class));
+      then(participationDomainService)
+          .should()
+          .createBidParticipationIfNoActiveInstant(any(Participation.class));
     }
 
     @Test
@@ -235,7 +237,9 @@ class BuncheolParticipationServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED);
 
-      then(participationDomainService).should(never()).createParticipation(any());
+      then(participationDomainService)
+          .should(never())
+          .createBidParticipationIfNoActiveInstant(any());
     }
   }
 

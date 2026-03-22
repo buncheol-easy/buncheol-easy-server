@@ -9,9 +9,9 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface ParticipationMapper {
 
-  void insert(Participation participation);
-
   int insertInstantIfRecruiting(Participation participation);
+
+  int insertBidIfNoActiveInstant(Participation participation);
 
   Optional<Participation> findById(@Param("id") Long id);
 

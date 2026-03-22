@@ -4,9 +4,9 @@ import java.util.Optional;
 
 public interface ParticipationRepository {
 
-  Participation save(Participation participation);
-
   boolean saveInstantIfRecruiting(Participation participation);
+
+  boolean saveBidIfNoActiveInstant(Participation participation);
 
   Optional<Participation> findById(Long id);
 

@@ -362,7 +362,7 @@ class PaymentServiceTest {
       assertThatThrownBy(() -> paymentService.confirmPayment(PAYMENT_KEY, ORDER_ID, AMOUNT))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
+          .isEqualTo(ErrorCode.PAYMENT_TOSS_CONFIRM_REJECTED);
 
       assertThat(payment.isFailed()).isTrue();
       then(paymentCompletionHandler)
@@ -384,7 +384,7 @@ class PaymentServiceTest {
       assertThatThrownBy(() -> paymentService.confirmPayment(PAYMENT_KEY, ORDER_ID, AMOUNT))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
+          .isEqualTo(ErrorCode.PAYMENT_TOSS_CONFIRM_UNAVAILABLE);
 
       // CONFIRMING 유지, fail 처리하지 않음
       assertThat(payment.isConfirming()).isTrue();

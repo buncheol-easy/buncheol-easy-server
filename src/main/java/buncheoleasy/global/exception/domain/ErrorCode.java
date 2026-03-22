@@ -111,7 +111,9 @@ public enum ErrorCode {
       "PAY-002", "현재 결제 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
   PAYMENT_AMOUNT_MISMATCH("PAY-003", "결제 금액이 일치하지 않습니다.", HttpStatus.BAD_REQUEST),
   PAYMENT_ALREADY_APPROVED("PAY-004", "이미 승인된 결제입니다.", HttpStatus.CONFLICT),
-  PAYMENT_TOSS_CONFIRM_FAILED("PAY-005", "토스 결제 승인에 실패했습니다.", HttpStatus.BAD_GATEWAY),
+  PAYMENT_TOSS_CONFIRM_REJECTED("PAY-005", "결제 승인이 거절되었습니다.", HttpStatus.BAD_GATEWAY),
+  PAYMENT_TOSS_CONFIRM_UNAVAILABLE(
+      "PAY-008", "결제 처리 중 오류가 발생했습니다.", HttpStatus.SERVICE_UNAVAILABLE),
   PAYMENT_ORDER_CREATION_NOT_ALLOWED(
       "PAY-006", "현재 참여 상태에서는 결제 주문을 생성할 수 없습니다.", HttpStatus.CONFLICT),
   PAYMENT_NO_PERMISSION("PAY-007", "해당 결제에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),

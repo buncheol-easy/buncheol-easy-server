@@ -85,7 +85,7 @@ class PaymentControllerTest {
     @Test
     void 결제_승인_실패시_예외가_전파된다() throws Exception {
       // given
-      willThrow(new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED))
+      willThrow(new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_REJECTED))
           .given(paymentService)
           .confirmPayment("toss_key", "order_123", 50_000L);
 
@@ -99,7 +99,7 @@ class PaymentControllerTest {
           .andExpect(
               content()
                   .string(
-                      Matchers.containsString(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED.getCode())));
+                      Matchers.containsString(ErrorCode.PAYMENT_TOSS_CONFIRM_REJECTED.getCode())));
     }
   }
 

@@ -70,7 +70,7 @@ public class PaymentService {
       transactionTemplate.executeWithoutResult(
           status -> failConfirmingPayment(paymentOrderId, paymentKey, failReason));
 
-      throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
+      throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_REJECTED);
     } catch (TossConfirmUnavailableException e) {
       // TODO: 해당 예외 발생 시 payment 는 confirming 으로 남는데, 스케줄러로 이 confirming payment 보정 작업 해줘야 함.
       /**
@@ -82,7 +82,7 @@ public class PaymentService {
           paymentOrderId,
           e.errorCode(),
           e.getMessage());
-      throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_FAILED);
+      throw new BusinessException(ErrorCode.PAYMENT_TOSS_CONFIRM_UNAVAILABLE);
     }
 
     if (tossResponse.totalAmount() != amount) {

@@ -10,8 +10,10 @@ import buncheoleasy.payment.domain.PaymentPhase;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ParticipationPaymentHandler implements PaymentCompletionHandler {
@@ -54,6 +56,7 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
   public void onPaymentFailed(
       final Long participationId, final PaymentPhase paymentPhase, final String failReason) {
     if (paymentPhase == PaymentPhase.BALANCE) {
+      log.warn("잔금 결제 실패 - participationId: {}, reason: {}", participationId, failReason);
       return;
     }
 

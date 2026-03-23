@@ -101,14 +101,16 @@ public class BuncheolService {
       final Long hostId, final Long buncheolId, final BuncheolStatus nextStatus) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
-    buncheolDomainService.advanceBuncheolStatus(buncheol, nextStatus);
+    final BuncheolStatus previousStatus = buncheol.getStatus();
+    buncheolDomainService.advanceBuncheolStatus(buncheol, nextStatus, previousStatus);
   }
 
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
     // TODO: 추후 참여자 존재 시 패널티 부과 및 환불 처리 분기 추가
-    buncheolDomainService.cancelBuncheol(buncheol);
+    final BuncheolStatus previousStatus = buncheol.getStatus();
+    buncheolDomainService.cancelBuncheol(buncheol, previousStatus);
   }
 
   /** 참여자 없는 경우 분철 수정: 전체 업데이트 + 멤버 삭제 후 재생성 */

@@ -202,13 +202,32 @@ class BuncheolMapperTest {
       // given
       Buncheol buncheol = Buncheol.create(hostId, validParams("상태 그룹"));
       buncheolMapper.insert(buncheol);
+      BuncheolStatus expectedStatus = buncheol.getStatus();
+      buncheol.cancel();
 
       // when
-      buncheolMapper.updateStatus(buncheol.getId(), BuncheolStatus.CANCELLED);
+      int updated = buncheolMapper.updateStatus(buncheol, expectedStatus);
       Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
 
       // then
+      assertThat(updated).isEqualTo(1);
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+    }
+
+    @Test
+    void 예상_상태가_다르면_업데이트되지_않는다() {
+      // given
+      Buncheol buncheol = Buncheol.create(hostId, validParams("낙관적 잠금"));
+      buncheolMapper.insert(buncheol);
+      buncheol.cancel();
+
+      // when — expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)
+      int updated = buncheolMapper.updateStatus(buncheol, BuncheolStatus.CLOSED);
+      Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+
+      // then
+      assertThat(updated).isEqualTo(0);
+      assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
   }
 }

@@ -10,5 +10,5 @@ public interface BuncheolRepository {
 
   void update(Long id, BuncheolParams params);
 
-  void updateStatus(Long id, BuncheolStatus status);
+  boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus);
 }

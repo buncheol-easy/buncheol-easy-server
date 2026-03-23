@@ -16,5 +16,6 @@ public interface BuncheolMapper {
 
   void update(@Param("id") Long id, @Param("params") BuncheolParams params);
 
-  void updateStatus(@Param("id") Long id, @Param("status") BuncheolStatus status);
+  int updateStatus(
+      @Param("buncheol") Buncheol buncheol, @Param("expectedStatus") BuncheolStatus expectedStatus);
 }

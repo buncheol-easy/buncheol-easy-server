@@ -25,13 +25,23 @@ public class BuncheolDomainService {
     buncheolRepository.update(buncheol.getId(), params);
   }
 
-  public void cancelBuncheol(final Buncheol buncheol) {
+  public void cancelBuncheol(final Buncheol buncheol, final BuncheolStatus expectedStatus) {
     buncheol.cancel();
-    buncheolRepository.updateStatus(buncheol.getId(), buncheol.getStatus());
+    updateBuncheolStatus(buncheol, expectedStatus);
   }
 
-  public void advanceBuncheolStatus(final Buncheol buncheol, final BuncheolStatus nextStatus) {
+  public void advanceBuncheolStatus(
+      final Buncheol buncheol,
+      final BuncheolStatus nextStatus,
+      final BuncheolStatus expectedStatus) {
     buncheol.advanceStatus(nextStatus);
-    buncheolRepository.updateStatus(buncheol.getId(), buncheol.getStatus());
+    updateBuncheolStatus(buncheol, expectedStatus);
+  }
+
+  private void updateBuncheolStatus(final Buncheol buncheol, final BuncheolStatus expectedStatus) {
+    boolean updated = buncheolRepository.updateStatus(buncheol, expectedStatus);
+    if (!updated) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED);
+    }
   }
 }

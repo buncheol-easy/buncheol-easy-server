@@ -31,7 +31,7 @@ public class MybatisBuncheolRepository implements BuncheolRepository {
   }
 
   @Override
-  public void updateStatus(Long id, BuncheolStatus status) {
-    buncheolMapper.updateStatus(id, status);
+  public boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus) {
+    return buncheolMapper.updateStatus(buncheol, expectedStatus) > 0;
   }
 }

@@ -119,9 +119,10 @@
   <!-- 분철 상태 업데이트 -->
   <update id="updateStatus">
     UPDATE buncheols
-    SET status     = #{status},
+    SET status     = #{buncheol.status},
         updated_at = NOW()
-    WHERE id = #{id}
+    WHERE id = #{buncheol.id}
+      AND status = #{expectedStatus}
   </update>
 
 </mapper>

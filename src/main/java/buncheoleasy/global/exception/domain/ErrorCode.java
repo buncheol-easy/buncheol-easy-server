@@ -89,6 +89,7 @@ public enum ErrorCode {
   BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   BUNCHEOL_CANCEL_NOT_ALLOWED("BCH-050", "현재 상태에서는 분철을 취소할 수 없습니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED("BCH-051", "현재 상태에서 해당 상태로 변경할 수 없습니다.", HttpStatus.CONFLICT),
 
   BUNCHEOL_NOT_RECRUITING("BCH-060", "모집 중인 분철이 아닙니다.", HttpStatus.CONFLICT),
   PARTICIPATION_MEMBER_NOT_FOUND("BCH-061", "해당 분철에 존재하지 않는 멤버입니다.", HttpStatus.NOT_FOUND),
@@ -138,6 +139,11 @@ public enum ErrorCode {
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_RECEIVER_NICKNAME_REQUIRED("DLV-003", "수령인 닉네임은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_RECEIVER_PHONE_REQUIRED("DLV-004", "수령인 연락처는 필수입니다.", HttpStatus.BAD_REQUEST),
+  DELIVERY_TRACKING_NUMBER_REQUIRED("DLV-005", "운송장 번호는 필수입니다.", HttpStatus.BAD_REQUEST),
+  DELIVERY_NOT_FOUND("DLV-006", "배송 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+  DELIVERY_STATE_TRANSITION_INVALID(
+      "DLV-007", "현재 배송 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+  DELIVERY_NO_PERMISSION("DLV-008", "배송 정보에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
 
   /** GRP - 그룹 관련 에러 */
   GROUP_NOT_FOUND("GRP-001", "존재하지 않는 그룹입니다.", HttpStatus.NOT_FOUND),

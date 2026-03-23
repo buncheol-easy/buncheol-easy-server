@@ -1,5 +1,6 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
+DROP TABLE IF EXISTS deliveries;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS participations;
 DROP TABLE IF EXISTS buncheol_images;
@@ -206,3 +207,26 @@ CREATE TABLE payments
 
 CREATE INDEX idx_payments_participation_id ON payments (participation_id);
 CREATE INDEX idx_payments_tx_type_status ON payments (tx_type, status);
+
+CREATE TABLE deliveries
+(
+    id                     BIGINT       NOT NULL AUTO_INCREMENT,
+    participation_id       BIGINT       NOT NULL,
+    shipping_method        VARCHAR(20)  NOT NULL,
+    store_name             VARCHAR(100) NOT NULL,
+    receiver_nickname      VARCHAR(20)  NOT NULL,
+    receiver_phone_number  VARCHAR(15)  NOT NULL,
+    tracking_number        VARCHAR(100) NULL,
+    tracking_registered_at TIMESTAMP    NULL,
+    delivered_at           TIMESTAMP    NULL,
+    received_at            TIMESTAMP    NULL,
+    status                 VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED',
+    created_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_deliveries_participation FOREIGN KEY (participation_id) REFERENCES participations (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX uq_deliveries_participation_id ON deliveries (participation_id);
+CREATE INDEX idx_deliveries_status ON deliveries (status);

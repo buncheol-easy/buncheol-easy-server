@@ -11,17 +11,28 @@ import static org.mockito.Mockito.never;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.domain.PaymentPhase;
+import buncheoleasy.user.domain.Nickname;
+import buncheoleasy.user.domain.PhoneNumber;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserDomainService;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -34,6 +45,9 @@ class ParticipationPaymentHandlerTest {
   @InjectMocks private ParticipationPaymentHandler participationPaymentHandler;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private DeliveryDomainService deliveryDomainService;
+  @Mock private ShippingAddressDomainService shippingAddressDomainService;
+  @Mock private UserDomainService userDomainService;
 
   @Spy
   private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneId.of("Asia/Seoul"));
@@ -41,19 +55,43 @@ class ParticipationPaymentHandlerTest {
   private static final Long PARTICIPATION_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long BUNCHEOL_MEMBER_ID = 10L;
+  private static final Long SHIPPING_ADDRESS_ID = 200L;
 
   private Participation createInstantParticipation() {
     Participation participation =
-        Participation.createInstant(1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, 200L, 50_000L);
+        Participation.createInstant(
+            1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, 50_000L);
     setId(participation, PARTICIPATION_ID);
     return participation;
   }
 
   private Participation createBidParticipation() {
     Participation participation =
-        Participation.createBid(1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, 200L, 30_000L);
+        Participation.createBid(
+            1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, 30_000L);
     setId(participation, PARTICIPATION_ID);
     return participation;
+  }
+
+  private void stubDeliverySnapshot() {
+    ShippingAddress shippingAddress =
+        new ShippingAddress(
+            SHIPPING_ADDRESS_ID,
+            PARTICIPANT_ID,
+            ShippingMethod.GS25_HALF,
+            "GS25 강남점",
+            LocalDateTime.now(),
+            LocalDateTime.now());
+    given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
+        .willReturn(shippingAddress);
+
+    User user = User.create("KAKAO", "kakao123", "test@test.com");
+    setFieldValue(user, "nickname", Nickname.of("TestUser"));
+    setFieldValue(user, "phoneNumber", PhoneNumber.of("01012345678"));
+    given(userDomainService.getUser(PARTICIPANT_ID)).willReturn(user);
+
+    given(deliveryDomainService.createDelivery(any(Delivery.class)))
+        .willAnswer(invocation -> invocation.getArgument(0));
   }
 
   @Nested
@@ -110,6 +148,7 @@ class ParticipationPaymentHandlerTest {
       then(participationDomainService)
           .should()
           .failAllOpenBids(eq(BUNCHEOL_MEMBER_ID), any(String.class));
+      then(deliveryDomainService).should(never()).createDelivery(any());
     }
 
     @Test
@@ -128,6 +167,7 @@ class ParticipationPaymentHandlerTest {
           .should()
           .updateParticipationStatus(participation, ParticipationStatus.PAYMENT_PENDING);
       then(participationDomainService).should(never()).failAllOpenBids(any(), any());
+      then(deliveryDomainService).should(never()).createDelivery(any());
     }
 
     @Test
@@ -137,6 +177,7 @@ class ParticipationPaymentHandlerTest {
       setStatus(participation, ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
+      stubDeliverySnapshot();
 
       // when
       participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.BALANCE);
@@ -148,6 +189,66 @@ class ParticipationPaymentHandlerTest {
           .should()
           .updateParticipationStatus(participation, ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       then(participationDomainService).should(never()).failAllOpenBids(any(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("배송 스냅샷 생성 테스트")
+  class DeliverySnapshotTest {
+
+    @Test
+    void 즉시_구매_결제_완료시_배송_스냅샷이_생성되지_않는다() {
+      // INSTANT 확정 참여의 배송 스냅샷은 분철 마감 시점에 일괄 생성
+      // given
+      Participation participation = createInstantParticipation();
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      // when
+      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.INSTANT);
+
+      // then
+      then(deliveryDomainService).should(never()).createDelivery(any());
+    }
+
+    @Test
+    void 잔금_결제_완료시_배송_스냅샷이_생성된다() {
+      // given
+      Participation participation = createBidParticipation();
+      setStatus(participation, ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      stubDeliverySnapshot();
+
+      // when
+      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.BALANCE);
+
+      // then
+      ArgumentCaptor<Delivery> deliveryCaptor = ArgumentCaptor.forClass(Delivery.class);
+      then(deliveryDomainService).should().createDelivery(deliveryCaptor.capture());
+
+      Delivery delivery = deliveryCaptor.getValue();
+      assertThat(delivery.getParticipationId()).isEqualTo(PARTICIPATION_ID);
+      assertThat(delivery.getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
+      assertThat(delivery.getStoreName()).isEqualTo("GS25 강남점");
+      assertThat(delivery.getReceiverNickname()).isEqualTo("TestUser");
+      assertThat(delivery.getReceiverPhoneNumber()).isEqualTo("01012345678");
+    }
+
+    @Test
+    void 예치금_결제_완료시_배송_스냅샷이_생성되지_않는다() {
+      // given
+      Participation participation = createBidParticipation();
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      // when
+      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.DEPOSIT);
+
+      // then
+      then(deliveryDomainService).should(never()).createDelivery(any());
+      then(shippingAddressDomainService).should(never()).getShippingAddress(any());
+      then(userDomainService).should(never()).getUser(any());
     }
   }
 

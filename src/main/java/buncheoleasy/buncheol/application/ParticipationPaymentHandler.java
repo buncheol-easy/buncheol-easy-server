@@ -3,10 +3,16 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentCompletionHandler;
 import buncheoleasy.payment.domain.PaymentPhase;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserDomainService;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +27,9 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
   private static final String FAIL_REASON_INSTANT_CONFIRMED = "즉시 구매 확정으로 인한 자동 실패 처리";
 
   private final ParticipationDomainService participationDomainService;
+  private final DeliveryDomainService deliveryDomainService;
+  private final ShippingAddressDomainService shippingAddressDomainService;
+  private final UserDomainService userDomainService;
   private final Clock clock;
 
   @Override
@@ -50,6 +59,26 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
       participationDomainService.failAllOpenBids(
           participation.getBuncheolMemberId(), FAIL_REASON_INSTANT_CONFIRMED);
     }
+
+    // INSTANT 확정 참여의 배송 스냅샷은 분철 마감 시점에 일괄 생성 (TODO: 마감 로직 구현 시 처리)
+    if (paymentPhase == PaymentPhase.BALANCE) {
+      createDeliverySnapshot(participation);
+    }
+  }
+
+  private void createDeliverySnapshot(final Participation participation) {
+    ShippingAddress shippingAddress =
+        shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
+    User user = userDomainService.getUser(participation.getParticipantId());
+
+    Delivery delivery =
+        Delivery.createSnapshot(
+            participation.getId(),
+            shippingAddress.getShippingMethod(),
+            shippingAddress.getStoreName(),
+            user.getNickname().value(),
+            user.getPhoneNumber().value());
+    deliveryDomainService.createDelivery(delivery);
   }
 
   @Override

@@ -6,11 +6,13 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.LocalDateTime;
@@ -546,6 +548,58 @@ class BuncheolControllerTest {
                   .string(
                       org.hamcrest.Matchers.containsString(
                           ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 상태 진행 API 테스트")
+  class AdvanceBuncheolStatusTest {
+
+    @Test
+    void 정상_요청시_204를_반환한다() throws Exception {
+      // when & then
+      mockMvc
+          .perform(
+              patch("/v1/buncheols/{id}/status", 10L)
+                  .with(mockAuth())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"status\": \"GOODS_ORDERED\"}"))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .advanceBuncheolStatus(HOST_ID, 10L, BuncheolStatus.GOODS_ORDERED);
+    }
+
+    @Test
+    void status가_없으면_400을_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              patch("/v1/buncheols/{id}/status", 10L)
+                  .with(mockAuth())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{}"))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 전이_불가한_상태면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED))
+          .given(buncheolService)
+          .advanceBuncheolStatus(HOST_ID, 10L, BuncheolStatus.GOODS_ORDERED);
+
+      mockMvc
+          .perform(
+              patch("/v1/buncheols/{id}/status", 10L)
+                  .with(mockAuth())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"status\": \"GOODS_ORDERED\"}"))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      org.hamcrest.Matchers.containsString(
+                          ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED.getCode())));
     }
   }
 }

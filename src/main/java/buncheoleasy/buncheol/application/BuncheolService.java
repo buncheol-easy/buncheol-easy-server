@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolModificationPolicy;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
@@ -26,7 +27,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -95,6 +95,13 @@ public class BuncheolService {
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(new BuncheolImageUploadEvent(buncheolId, images));
     }
+  }
+
+  public void advanceBuncheolStatus(
+      final Long hostId, final Long buncheolId, final BuncheolStatus nextStatus) {
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    buncheol.validateOwner(hostId);
+    buncheolDomainService.advanceBuncheolStatus(buncheol, nextStatus);
   }
 
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {

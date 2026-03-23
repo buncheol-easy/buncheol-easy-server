@@ -29,4 +29,9 @@ public class BuncheolDomainService {
     buncheol.cancel();
     buncheolRepository.updateStatus(buncheol.getId(), buncheol.getStatus());
   }
+
+  public void advanceBuncheolStatus(final Buncheol buncheol, final BuncheolStatus nextStatus) {
+    buncheol.advanceStatus(nextStatus);
+    buncheolRepository.updateStatus(buncheol.getId(), buncheol.getStatus());
+  }
 }

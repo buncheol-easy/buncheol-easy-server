@@ -23,4 +23,13 @@ public enum BuncheolStatus {
       default -> false;
     };
   }
+
+  // 개최자가 수동으로 진행 가능한 전이 (마감 제외)
+  public boolean canAdvanceTo(BuncheolStatus next) {
+    return switch (this) {
+      case CLOSED -> next == GOODS_ORDERED;
+      case GOODS_ORDERED -> next == SELLER_SHIPPING;
+      default -> false;
+    };
+  }
 }

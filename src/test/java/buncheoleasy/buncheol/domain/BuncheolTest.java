@@ -576,6 +576,59 @@ class BuncheolTest {
     }
   }
 
+  @Nested
+  @DisplayName("상태 진행 테스트")
+  class AdvanceStatusTest {
+
+    @Test
+    void CLOSED에서_GOODS_ORDERED로_상태_전이에_성공한다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      setStatus(buncheol, BuncheolStatus.CLOSED);
+
+      // when
+      buncheol.advanceStatus(BuncheolStatus.GOODS_ORDERED);
+
+      // then
+      assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.GOODS_ORDERED);
+    }
+
+    @Test
+    void GOODS_ORDERED에서_SELLER_SHIPPING으로_상태_전이에_성공한다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      setStatus(buncheol, BuncheolStatus.GOODS_ORDERED);
+
+      // when
+      buncheol.advanceStatus(BuncheolStatus.SELLER_SHIPPING);
+
+      // then
+      assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.SELLER_SHIPPING);
+    }
+
+    @Test
+    void 허용되지_않은_전이시_예외가_발생한다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+
+      // when & then (RECRUITING → GOODS_ORDERED 불가)
+      assertThatThrownBy(() -> buncheol.advanceStatus(BuncheolStatus.GOODS_ORDERED))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED);
+    }
+  }
+
+  private void setStatus(final Buncheol buncheol, final BuncheolStatus status) {
+    try {
+      Field statusField = Buncheol.class.getDeclaredField("status");
+      statusField.setAccessible(true);
+      statusField.set(buncheol, status);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   private void setDeadline(final Buncheol buncheol, final LocalDateTime deadline) {
     try {
       Field deadlineField = Buncheol.class.getDeclaredField("deadline");

@@ -36,6 +36,14 @@ spring:
             issuer-uri: https://kauth.kakao.com
             authorization-uri: https://kauth.kakao.com/oauth/authorize
             token-uri: https://kauth.kakao.com/oauth/token
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
   data:
     redis:
       host: localhost

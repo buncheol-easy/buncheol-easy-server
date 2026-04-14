@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS `groups`
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     name       VARCHAR(100) NOT NULL COMMENT '그룹명',
+    image      VARCHAR(500) NULL COMMENT '이미지 URL',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS group_members
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     group_id   BIGINT       NOT NULL,
     name       VARCHAR(100) NOT NULL COMMENT '멤버명',
+    image      VARCHAR(500) NULL COMMENT '이미지 URL',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

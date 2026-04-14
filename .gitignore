@@ -40,6 +40,6 @@ out/
 .claude/
 CLAUDE.md
 
-### application.yaml ###
-*.yaml
+### secrets ###
+.env
 dump.rdb

@@ -1,0 +1,49 @@
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-test.sql
+
+mybatis:
+  mapper-locations: classpath:buncheoleasy/**/infrastructure/**/*.xml
+  type-aliases-package: buncheoleasy
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    buncheoleasy: TRACE
+    org.mybatis: DEBUG
+    org.springframework.jdbc: DEBUG
+    org.springframework.transaction: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.h2: DEBUG
+
+jwt:
+  secret:
+    access-key: test-jwt-access-secret-key-for-local-tests-only
+    refresh-key: test-jwt-refresh-secret-key-for-local-tests-only
+  access-token-expiration-seconds: 1800
+  refresh-token-expiration-seconds: 1209600
+
+app:
+  base-url: http://localhost:8080
+
+delivery:
+  tracker:
+    api-url: https://test.tracker.delivery/graphql
+    client-id: test-client-id
+    client-secret: test-client-secret
+    callback-url: http://localhost:8080/v1/deliveries/webhook/callback
+    connect-timeout: 3s
+    read-timeout: 5s
+
+toss:
+  payments:
+    client-key: test_ck_test
+    secret-key: test_sk_test

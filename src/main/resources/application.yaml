@@ -1,0 +1,100 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+
+  application:
+    name: buncheoleasy
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/buncheoleasy_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: root
+    password: root1234
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+            client-name: Kakao
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-authentication-method: client_secret_post
+            scope:
+              - account_email
+              - openid
+
+        provider:
+          kakao:
+            issuer-uri: https://kauth.kakao.com
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+mybatis:
+  # XML 파일 위치 설정
+  mapper-locations: classpath:buncheoleasy/**/infrastructure/**/*.xml
+  # SQL 결과값을 담을 객체의 패키지 경로 (XML에서 resultType에 패키지명 생략 가능하게 해줌)
+  type-aliases-package: buncheoleasy
+  configuration:
+    # 카멜케이스 자동 변환 (DB의 user_id를 자바의 userId로 매핑)
+    map-underscore-to-camel-case: true
+    # MyBatis 실행 SQL/파라미터 로그 출력
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    buncheoleasy.buncheol: TRACE
+    org.springframework.security: TRACE  # TRACE로 변경하면 더 자세함
+    buncheoleasy.auth: TRACE
+    org.mybatis: TRACE
+    org.apache.ibatis: TRACE
+    org.springframework.jdbc: TRACE
+
+jwt:
+  secret:
+    access-key: ${JWT_ACCESS_KEY}
+    refresh-key: ${JWT_REFRESH_KEY}
+  access-token-expiration-seconds: 7200   # 2시간
+  refresh-token-expiration-seconds: 1209600 # 14일
+
+cloud:
+  aws:
+    region:
+      static: ap-northeast-2
+    credentials:
+      access-key: ${AWS_ACCESS_KEY}
+      secret-key: ${AWS_SECRET_KEY}
+    s3:
+      bucket: buncheol-easy
+      origin: https://buncheol-easy.s3.ap-northeast-2.amazonaws.com
+
+app:
+  base-url: http://localhost:8080
+
+delivery:
+  tracker:
+    api-url: https://apis.tracker.delivery/graphql
+    client-id: ${DELIVERY_TRACKER_CLIENT_ID:AA51v5vLZjyCdwZYhCmguSbp}
+    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET:kEZaK7wH3XbZkN9vPr4jauO1qMCCNYUz8juRuBAN4EJ}
+    callback-url: ${DELIVERY_TRACKER_CALLBACK_URL:http://localhost:8080/v1/deliveries/webhook/callback}
+    connect-timeout: 3s
+    read-timeout: 5s
+
+toss:
+  payments:
+    client-key: ${TOSS_CLIENT_KEY}
+    secret-key: ${TOSS_SECRET_KEY}
+    confirm-url: "https://api.tosspayments.com/v1/payments/confirm"
+    connect-timeout: 3s
+    read-timeout: 5s

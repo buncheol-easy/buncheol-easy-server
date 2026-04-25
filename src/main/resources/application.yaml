@@ -5,16 +5,8 @@ spring:
   application:
     name: buncheoleasy
 
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/buncheoleasy_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: root
-    password: root1234
-
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema.sql
+  profiles:
+    default: local
 
   security:
     oauth2:
@@ -36,17 +28,13 @@ spring:
             issuer-uri: https://kauth.kakao.com
             authorization-uri: https://kauth.kakao.com/oauth/authorize
             token-uri: https://kauth.kakao.com/oauth/token
+
   jpa:
     hibernate:
       ddl-auto: none
     properties:
       hibernate:
         format_sql: true
-
-  data:
-    redis:
-      host: localhost
-      port: 6379
 
 mybatis:
   # XML 파일 위치 설정
@@ -58,15 +46,6 @@ mybatis:
     map-underscore-to-camel-case: true
     # MyBatis 실행 SQL/파라미터 로그 출력
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
-logging:
-  level:
-    buncheoleasy.buncheol: TRACE
-    org.springframework.security: TRACE  # TRACE로 변경하면 더 자세함
-    buncheoleasy.auth: TRACE
-    org.mybatis: TRACE
-    org.apache.ibatis: TRACE
-    org.springframework.jdbc: TRACE
 
 jwt:
   secret:
@@ -86,15 +65,11 @@ cloud:
       bucket: buncheol-easy
       origin: https://buncheol-easy.s3.ap-northeast-2.amazonaws.com
 
-app:
-  base-url: http://localhost:8080
-
 delivery:
   tracker:
     api-url: https://apis.tracker.delivery/graphql
-    client-id: ${DELIVERY_TRACKER_CLIENT_ID:AA51v5vLZjyCdwZYhCmguSbp}
-    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET:kEZaK7wH3XbZkN9vPr4jauO1qMCCNYUz8juRuBAN4EJ}
-    callback-url: ${DELIVERY_TRACKER_CALLBACK_URL:http://localhost:8080/v1/deliveries/webhook/callback}
+    client-id: ${DELIVERY_TRACKER_CLIENT_ID}
+    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET}
     connect-timeout: 3s
     read-timeout: 5s
 

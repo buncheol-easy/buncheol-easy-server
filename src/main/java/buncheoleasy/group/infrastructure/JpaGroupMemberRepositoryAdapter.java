@@ -14,6 +14,9 @@ public class JpaGroupMemberRepositoryAdapter implements GroupMemberRepository {
 
   @Override
   public List<GroupMember> findAllByGroupIdAndIds(Long groupId, List<Long> memberIds) {
+    if (memberIds.isEmpty()) {
+      return List.of();
+    }
     return jpaGroupMemberRepository.findAllByGroupIdAndIds(groupId, memberIds);
   }
 

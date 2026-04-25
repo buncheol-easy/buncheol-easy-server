@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaGroupRepository extends JpaRepository<Group, Long> {
 
-  @Query("SELECT g FROM Group g WHERE :keyword IS NULL OR g.name LIKE %:keyword%")
+  @Query(
+      "SELECT g FROM Group g WHERE :keyword IS NULL OR g.name LIKE %:keyword% ORDER BY g.name")
   List<Group> findByKeyword(@Param("keyword") String keyword);
 }

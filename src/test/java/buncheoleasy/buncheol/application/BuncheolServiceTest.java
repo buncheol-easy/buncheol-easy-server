@@ -280,11 +280,11 @@ class BuncheolServiceTest {
       Long groupId = 100L;
       Long groupMemberId = 200L;
 
-      Group group = new Group(groupId, "공식 그룹명", LocalDateTime.now(), LocalDateTime.now());
+      Group group = new Group(groupId, "공식 그룹명", null, LocalDateTime.now(), LocalDateTime.now());
       given(groupDomainService.getGroup(groupId)).willReturn(group);
 
       GroupMember groupMember =
-          new GroupMember(groupMemberId, groupId, "멤버A", LocalDateTime.now(), LocalDateTime.now());
+          new GroupMember(groupMemberId, groupId, "멤버A", null, LocalDateTime.now(), LocalDateTime.now());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(groupId), anyList()))
           .willReturn(List.of(groupMember));
 
@@ -327,7 +327,7 @@ class BuncheolServiceTest {
       Long hostId = 1L;
       Long groupId = 100L;
 
-      Group group = new Group(groupId, "공식 그룹명", LocalDateTime.now(), LocalDateTime.now());
+      Group group = new Group(groupId, "공식 그룹명", null, LocalDateTime.now(), LocalDateTime.now());
       given(groupDomainService.getGroup(groupId)).willReturn(group);
 
       HoldBuncheolRequest request =
@@ -350,7 +350,7 @@ class BuncheolServiceTest {
       Long groupId = 100L;
       Long groupMemberId = 200L;
 
-      Group group = new Group(groupId, "공식 그룹명", LocalDateTime.now(), LocalDateTime.now());
+      Group group = new Group(groupId, "공식 그룹명", null, LocalDateTime.now(), LocalDateTime.now());
       given(groupDomainService.getGroup(groupId)).willReturn(group);
 
       HoldBuncheolRequest request =
@@ -451,12 +451,12 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(buncheolId)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(buncheolId)).willReturn(false);
       given(groupDomainService.getGroup(groupId))
-          .willReturn(new Group(groupId, "공식 그룹명", LocalDateTime.now(), LocalDateTime.now()));
+          .willReturn(new Group(groupId, "공식 그룹명", null, LocalDateTime.now(), LocalDateTime.now()));
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(groupId), anyList()))
           .willReturn(
               List.of(
                   new GroupMember(
-                      memberId, groupId, "멤버A", LocalDateTime.now(), LocalDateTime.now())));
+                      memberId, groupId, "멤버A", null, LocalDateTime.now(), LocalDateTime.now())));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when
@@ -656,7 +656,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(buncheolId)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(buncheolId)).willReturn(false);
       given(groupDomainService.getGroup(groupId))
-          .willReturn(new Group(groupId, "공식 그룹명", LocalDateTime.now(), LocalDateTime.now()));
+          .willReturn(new Group(groupId, "공식 그룹명", null, LocalDateTime.now(), LocalDateTime.now()));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -698,7 +698,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(buncheolId)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(buncheolId)).willReturn(false);
       given(groupDomainService.getGroup(groupId))
-          .willReturn(new Group(groupId, "공식 그룹명", LocalDateTime.now(), LocalDateTime.now()));
+          .willReturn(new Group(groupId, "공식 그룹명", null, LocalDateTime.now(), LocalDateTime.now()));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then

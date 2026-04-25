@@ -58,6 +58,7 @@ CREATE TABLE `groups`
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     name       VARCHAR(100) NOT NULL,
+    image      VARCHAR(500) NULL,
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -71,6 +72,7 @@ CREATE TABLE group_members
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     group_id   BIGINT       NOT NULL,
     name       VARCHAR(100) NOT NULL,
+    image      VARCHAR(500) NULL,
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

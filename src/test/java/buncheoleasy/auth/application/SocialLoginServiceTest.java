@@ -15,7 +15,6 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.SocialInfo;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
-import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -24,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("SocialLoginService 단위 테스트")
@@ -48,18 +48,8 @@ class SocialLoginServiceTest {
       String providerId = "social_123";
       String email = "test@example.com";
       Long userId = 1L;
-      User user =
-          new User(
-              userId,
-              provider,
-              providerId,
-              "테스트닉네임",
-              email,
-              null,
-              false,
-              LocalDateTime.now(),
-              LocalDateTime.now(),
-              null);
+      User user = User.create(provider, providerId, email);
+      ReflectionTestUtils.setField(user, "id", userId);
       TokenPair expected = new TokenPair("access-token", "refresh-token");
 
       given(userDomainService.getOrCreateBySocialLogin(any(SocialInfo.class), eq(email)))

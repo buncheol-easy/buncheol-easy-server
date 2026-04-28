@@ -2,9 +2,13 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import java.util.regex.Pattern;
 
-public record SocialInfo(SocialProvider provider, String providerId) {
+@Embeddable
+public record SocialInfo(@Enumerated(EnumType.STRING) SocialProvider provider, String providerId) {
 
   private static final Pattern PROVIDER_ID_REGEX = Pattern.compile("^[a-zA-Z0-9_-]+$");
   private static final int MAX_LENGTH = 100;

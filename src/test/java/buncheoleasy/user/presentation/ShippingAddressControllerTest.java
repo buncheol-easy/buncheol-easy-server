@@ -1,5 +1,6 @@
 package buncheoleasy.user.presentation;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -15,6 +16,7 @@ import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.application.ShippingAddressService;
+import buncheoleasy.user.dto.request.ShippingAddressRequest;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import java.util.Collections;
 import java.util.List;
@@ -75,7 +77,7 @@ class ShippingAddressControllerTest {
         .should()
         .registerShippingAddress(
             USER_ID,
-            new buncheoleasy.user.dto.request.ShippingAddressRequest("GS25_HALF", "GS25 강남역점"));
+            new ShippingAddressRequest("GS25_HALF", "GS25 강남역점"));
   }
 
   @Test
@@ -90,7 +92,7 @@ class ShippingAddressControllerTest {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+                    containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
@@ -100,7 +102,7 @@ class ShippingAddressControllerTest {
         .modifyShippingAddress(
             USER_ID,
             10L,
-            new buncheoleasy.user.dto.request.ShippingAddressRequest("CU_HALF", "CU 홍대입구점"));
+            new ShippingAddressRequest("CU_HALF", "CU 홍대입구점"));
 
     mockMvc
         .perform(
@@ -112,7 +114,7 @@ class ShippingAddressControllerTest {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.containsString(
+                    containsString(
                         ErrorCode.SHIPPING_ADDRESS_FORBIDDEN.getCode())));
   }
 
@@ -128,7 +130,7 @@ class ShippingAddressControllerTest {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.containsString(
+                    containsString(
                         ErrorCode.SHIPPING_ADDRESS_NOT_FOUND.getCode())));
   }
 

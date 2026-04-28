@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.participation.MemberParticipationPresence;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationType;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -205,6 +206,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public void failAllOpenBidsByBuncheolMemberId(
       final Long buncheolMemberId, final String failReason) {
     jpaParticipationRepository.failAllOpenBidsByBuncheolMemberId(
-        buncheolMemberId, failReason, LocalDateTime.now(), OPEN_BID_STATUSES);
+        buncheolMemberId,
+        failReason,
+        LocalDateTime.now(),
+        OPEN_BID_STATUSES,
+        ParticipationStatus.FAILED,
+        ParticipationType.BID);
   }
 }

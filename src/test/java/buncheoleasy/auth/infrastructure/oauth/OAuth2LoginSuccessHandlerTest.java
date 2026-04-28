@@ -1,6 +1,9 @@
 package buncheoleasy.auth.infrastructure.oauth;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
@@ -10,6 +13,7 @@ import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.auth.infrastructure.response.TokenResponseWriter;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.SocialProvider;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -51,7 +55,7 @@ class OAuth2LoginSuccessHandlerTest {
               principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
       OAuth2UserProfile profile =
           new OAuth2UserProfile(
-              buncheoleasy.user.domain.SocialProvider.KAKAO, "provider-id", "test@example.com");
+              SocialProvider.KAKAO, "provider-id", "test@example.com");
       TokenPair tokenPair = new TokenPair("access", "refresh");
 
       given(profileExtractor.supports("kakao")).willReturn(true);
@@ -67,7 +71,7 @@ class OAuth2LoginSuccessHandlerTest {
       then(socialLoginService).should().login("KAKAO", "provider-id", "test@example.com");
       then(tokenResponseWriter)
           .should()
-          .write(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(tokenPair));
+          .write(any(), eq(tokenPair));
     }
 
     @Test
@@ -123,7 +127,7 @@ class OAuth2LoginSuccessHandlerTest {
           new OAuth2AuthenticationToken(
               principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
       OAuth2UserProfile profile =
-          new OAuth2UserProfile(buncheoleasy.user.domain.SocialProvider.KAKAO, "provider-id", null);
+          new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", null);
 
       given(profileExtractor.supports("kakao")).willReturn(true);
       given(profileExtractor.extract(principal)).willReturn(profile);
@@ -140,9 +144,9 @@ class OAuth2LoginSuccessHandlerTest {
       then(socialLoginService)
           .should(never())
           .login(
-              org.mockito.ArgumentMatchers.anyString(),
-              org.mockito.ArgumentMatchers.anyString(),
-              org.mockito.ArgumentMatchers.any());
+              anyString(),
+              anyString(),
+              any());
       then(tokenResponseWriter).shouldHaveNoInteractions();
     }
   }

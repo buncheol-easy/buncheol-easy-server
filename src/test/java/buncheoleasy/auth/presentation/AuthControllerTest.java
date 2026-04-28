@@ -1,5 +1,6 @@
 package buncheoleasy.auth.presentation;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -82,7 +83,7 @@ class AuthControllerTest {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+                    containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
@@ -99,7 +100,7 @@ class AuthControllerTest {
         .andExpect(
             content()
                 .string(
-                    org.hamcrest.Matchers.containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
+                    containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
   }
 
   @Test

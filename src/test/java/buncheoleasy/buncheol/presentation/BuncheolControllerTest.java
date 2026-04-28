@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.presentation;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.then;
@@ -197,7 +198,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
@@ -240,7 +241,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED.getCode())));
     }
 
@@ -279,7 +280,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
@@ -319,7 +320,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
@@ -341,7 +342,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
+                      containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }
   }
 
@@ -416,7 +417,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
@@ -456,7 +457,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
@@ -477,7 +478,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }
   }
@@ -510,7 +511,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED.getCode())));
     }
 
@@ -528,7 +529,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }
 
@@ -546,7 +547,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
     }
   }
@@ -598,7 +599,7 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(
-                      org.hamcrest.Matchers.containsString(
+                      containsString(
                           ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED.getCode())));
     }
   }

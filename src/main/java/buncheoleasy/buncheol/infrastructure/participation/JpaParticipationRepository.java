@@ -2,6 +2,8 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationType;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +61,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.shippingAddressId = sa.id "
           + "AND p.buncheolId = :buncheolId "
           + "AND p.status IN :activeStatuses")
-  List<buncheoleasy.user.domain.shipping.ShippingMethod> findActiveShippingMethodsByBuncheolId(
+  List<ShippingMethod> findActiveShippingMethodsByBuncheolId(
       @Param("buncheolId") Long buncheolId,
       @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
 
@@ -90,16 +92,18 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
-          + "SET p.status = buncheoleasy.buncheol.domain.participation.ParticipationStatus.FAILED, "
+          + "SET p.status = :failedStatus, "
           + "    p.failReason = :failReason, "
           + "    p.finalizedAt = :now, "
           + "    p.updatedAt = :now "
           + "WHERE p.buncheolMemberId = :buncheolMemberId "
-          + "AND p.type = buncheoleasy.buncheol.domain.participation.ParticipationType.BID "
+          + "AND p.type = :bidType "
           + "AND p.status IN :openBidStatuses")
   int failAllOpenBidsByBuncheolMemberId(
       @Param("buncheolMemberId") Long buncheolMemberId,
       @Param("failReason") String failReason,
       @Param("now") LocalDateTime now,
-      @Param("openBidStatuses") List<ParticipationStatus> openBidStatuses);
+      @Param("openBidStatuses") List<ParticipationStatus> openBidStatuses,
+      @Param("failedStatus") ParticipationStatus failedStatus,
+      @Param("bidType") ParticipationType bidType);
 }

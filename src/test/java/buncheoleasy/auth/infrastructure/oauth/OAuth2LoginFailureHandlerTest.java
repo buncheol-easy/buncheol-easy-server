@@ -1,6 +1,7 @@
 package buncheoleasy.auth.infrastructure.oauth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.auth.infrastructure.response.ErrorResponseWriter;
@@ -38,8 +39,8 @@ class OAuth2LoginFailureHandlerTest {
     then(errorResponseWriter)
         .should()
         .write(
-            org.mockito.ArgumentMatchers.eq(request),
-            org.mockito.ArgumentMatchers.eq(response),
+            eq(request),
+            eq(response),
             captor.capture());
 
     ProblemDetail problemDetail = captor.getValue();

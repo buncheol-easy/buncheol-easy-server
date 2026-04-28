@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.then;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationPolicy;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationType;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -127,7 +128,7 @@ class BuncheolCheckoutServiceTest {
       setFieldValue(
           participation,
           "status",
-          buncheoleasy.buncheol.domain.participation.ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+          ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       setFieldValue(participation, "balanceDueAmount", 25_000L);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
@@ -198,7 +199,7 @@ class BuncheolCheckoutServiceTest {
       setFieldValue(
           participation,
           "status",
-          buncheoleasy.buncheol.domain.participation.ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+          ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       // balanceDueAmount is null by default
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
@@ -223,7 +224,7 @@ class BuncheolCheckoutServiceTest {
       setFieldValue(
           participation,
           "status",
-          buncheoleasy.buncheol.domain.participation.ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+          ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       setFieldValue(participation, "balanceDueAmount", 0L);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))

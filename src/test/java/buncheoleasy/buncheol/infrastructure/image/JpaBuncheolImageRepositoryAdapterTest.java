@@ -5,44 +5,47 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
-import buncheoleasy.buncheol.infrastructure.BuncheolMapper;
-import buncheoleasy.user.domain.User;
-import buncheoleasy.user.infrastructure.UserMapper;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.infrastructure.TestUserFixture;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
-@MybatisTest
+@SpringBootTest
 @ActiveProfiles("test")
-@DisplayName("BuncheolImageMapper 테스트")
-class BuncheolImageMapperTest {
+@Transactional
+@DisplayName("JpaBuncheolImageRepositoryAdapter 테스트")
+class JpaBuncheolImageRepositoryAdapterTest {
 
-  @Autowired private BuncheolImageMapper buncheolImageMapper;
+  @Autowired private BuncheolImageRepository buncheolImageRepository;
 
-  @Autowired private BuncheolMapper buncheolMapper;
-
-  @Autowired private UserMapper userMapper;
+  @Autowired private BuncheolRepository buncheolRepository;
 
   @Autowired private JdbcTemplate jdbcTemplate;
+
+  @PersistenceContext private EntityManager em;
 
   private Long buncheolId;
 
   @BeforeEach
   void setUp() {
-    User host = User.create("KAKAO", "host123", "host@example.com");
-    userMapper.insert(host);
+    Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
 
     Buncheol buncheol =
         Buncheol.create(
-            host.getId(),
+            hostId,
             new BuncheolParams(
                 null,
                 "테스트 그룹",
@@ -58,35 +61,38 @@ class BuncheolImageMapperTest {
                 "국민은행",
                 "123-456",
                 "홍길동"));
-    buncheolMapper.insert(buncheol);
+    buncheolRepository.save(buncheol);
+    em.flush();
+    em.clear();
     buncheolId = buncheol.getId();
   }
 
   @Nested
   @DisplayName("분철 이미지 일괄 저장 테스트")
-  class InsertAllTest {
+  class SaveAllTest {
 
     @Test
     void 이미지_한_장을_저장할_수_있다() {
-      // given
       BuncheolImage image = BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg");
 
-      // when & then
-      assertThatCode(() -> buncheolImageMapper.insertAll(List.of(image)))
+      assertThatCode(() -> buncheolImageRepository.saveAll(List.of(image)))
           .doesNotThrowAnyException();
     }
 
     @Test
     void 이미지_여러_장을_한번에_저장할_수_있다() {
-      // given
       List<BuncheolImage> images =
           List.of(
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg"),
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image2.jpg"),
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image3.jpg"));
 
-      // when & then
-      assertThatCode(() -> buncheolImageMapper.insertAll(images)).doesNotThrowAnyException();
+      assertThatCode(() -> buncheolImageRepository.saveAll(images)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 빈_리스트를_저장해도_예외가_발생하지_않는다() {
+      assertThatCode(() -> buncheolImageRepository.saveAll(List.of())).doesNotThrowAnyException();
     }
   }
 
@@ -96,13 +102,13 @@ class BuncheolImageMapperTest {
 
     @Test
     void keepImageIds를_제외하고_이미지를_삭제한다() {
-      // given
       List<BuncheolImage> images =
           List.of(
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg"),
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image2.jpg"),
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image3.jpg"));
-      buncheolImageMapper.insertAll(images);
+      buncheolImageRepository.saveAll(images);
+      em.flush();
 
       List<Long> imageIds =
           jdbcTemplate.queryForList(
@@ -111,10 +117,8 @@ class BuncheolImageMapperTest {
               buncheolId);
       Long keepId = imageIds.get(1);
 
-      // when
-      buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, List.of(keepId));
+      buncheolImageRepository.deleteByBuncheolIdExcludingIds(buncheolId, List.of(keepId));
 
-      // then
       List<Long> remainingIds =
           jdbcTemplate.queryForList(
               "SELECT id FROM buncheol_images WHERE buncheol_id = ? ORDER BY id",
@@ -125,17 +129,15 @@ class BuncheolImageMapperTest {
 
     @Test
     void keepImageIds가_비어있으면_해당_분철_이미지를_전체_삭제한다() {
-      // given
-      buncheolImageMapper.insertAll(
+      buncheolImageRepository.saveAll(
           List.of(
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg"),
               BuncheolImage.create(buncheolId, "https://cdn.example.com/image2.jpg")));
+      em.flush();
       assertThat(countImagesByBuncheolId(buncheolId)).isEqualTo(2);
 
-      // when
-      buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, List.of());
+      buncheolImageRepository.deleteByBuncheolIdExcludingIds(buncheolId, List.of());
 
-      // then
       assertThat(countImagesByBuncheolId(buncheolId)).isZero();
     }
   }

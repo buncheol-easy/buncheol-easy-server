@@ -2,17 +2,37 @@ package buncheoleasy.buncheol.domain.image;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+@Entity
+@Table(name = "buncheol_images")
 @Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BuncheolImage {
 
   private static final int MAX_IMAGE_URL_LENGTH = 500;
 
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
-  private final Long buncheolId;
-  private final String imageUrl;
+
+  @Column(name = "buncheol_id", nullable = false, updatable = false)
+  private Long buncheolId;
+
+  @Column(name = "image_url", nullable = false, length = 500, updatable = false)
+  private String imageUrl;
+
+  @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
 
   public static BuncheolImage create(final Long buncheolId, final String imageUrl) {
@@ -43,5 +63,10 @@ public class BuncheolImage {
     if (imageUrl.length() > MAX_IMAGE_URL_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
     }
+  }
+
+  @PrePersist
+  void onCreate() {
+    this.createdAt = LocalDateTime.now();
   }
 }

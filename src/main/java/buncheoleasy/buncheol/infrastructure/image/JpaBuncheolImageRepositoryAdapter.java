@@ -8,18 +8,24 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 @RequiredArgsConstructor
-public class MybatisBuncheolImageRepository implements BuncheolImageRepository {
+public class JpaBuncheolImageRepositoryAdapter implements BuncheolImageRepository {
 
-  private final BuncheolImageMapper buncheolImageMapper;
+  private final JpaBuncheolImageRepository jpaBuncheolImageRepository;
 
   @Override
   public List<BuncheolImage> saveAll(List<BuncheolImage> buncheolImages) {
-    buncheolImageMapper.insertAll(buncheolImages);
-    return buncheolImages;
+    if (buncheolImages.isEmpty()) {
+      return List.of();
+    }
+    return jpaBuncheolImageRepository.saveAll(buncheolImages);
   }
 
   @Override
   public void deleteByBuncheolIdExcludingIds(Long buncheolId, List<Long> keepImageIds) {
-    buncheolImageMapper.deleteByBuncheolIdExcludingIds(buncheolId, keepImageIds);
+    if (keepImageIds == null || keepImageIds.isEmpty()) {
+      jpaBuncheolImageRepository.deleteAllByBuncheolId(buncheolId);
+      return;
+    }
+    jpaBuncheolImageRepository.deleteByBuncheolIdAndIdNotIn(buncheolId, keepImageIds);
   }
 }

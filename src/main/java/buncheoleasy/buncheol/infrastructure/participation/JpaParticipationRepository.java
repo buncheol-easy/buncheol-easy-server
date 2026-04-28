@@ -57,9 +57,9 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   @Query(
       "SELECT DISTINCT sa.shippingMethod "
-          + "FROM Participation p, ShippingAddress sa "
-          + "WHERE p.shippingAddressId = sa.id "
-          + "AND p.buncheolId = :buncheolId "
+          + "FROM Participation p "
+          + "JOIN ShippingAddress sa ON p.shippingAddressId = sa.id "
+          + "WHERE p.buncheolId = :buncheolId "
           + "AND p.status IN :activeStatuses")
   List<ShippingMethod> findActiveShippingMethodsByBuncheolId(
       @Param("buncheolId") Long buncheolId,

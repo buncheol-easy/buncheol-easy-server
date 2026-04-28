@@ -56,28 +56,28 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
 
+  private static final String INSERT_PARTICIPATION_BASE =
+      "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+          + " shipping_address_id, type, instant_price_snapshot, bid_amount, status,"
+          + " created_at, updated_at) "
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW() "
+          + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > NOW()";
+
+  private static final String INSERT_INSTANT_SQL = INSERT_PARTICIPATION_BASE;
+
+  private static final String INSERT_BID_SQL =
+      INSERT_PARTICIPATION_BASE
+          + " AND NOT EXISTS (SELECT 1 FROM participations p"
+          + " WHERE p.active_instant_member_id = ?)";
+
   @Override
   public boolean saveInstantIfRecruiting(final Participation participation) {
-    return executeConditionalInsert(
-        participation,
-        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-            + " shipping_address_id, type, instant_price_snapshot, bid_amount, status,"
-            + " created_at, updated_at) "
-            + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW() "
-            + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > NOW()");
+    return executeConditionalInsert(participation, INSERT_INSTANT_SQL, false);
   }
 
   @Override
   public boolean saveBidIfNoActiveInstant(final Participation participation) {
-    return executeConditionalInsert(
-        participation,
-        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-            + " shipping_address_id, type, instant_price_snapshot, bid_amount, status,"
-            + " created_at, updated_at) "
-            + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW() "
-            + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > NOW() "
-            + "AND NOT EXISTS (SELECT 1 FROM participations p"
-            + " WHERE p.active_instant_member_id = ?)");
+    return executeConditionalInsert(participation, INSERT_BID_SQL, true);
   }
 
   /**
@@ -85,7 +85,8 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
    * 회수하지 못하므로 raw JDBC 를 사용한다. UNIQUE 제약 위반은 DuplicateKeyException 으로 변환되어 BusinessException 으로
    * 전파한다.
    */
-  private boolean executeConditionalInsert(final Participation p, final String sql) {
+  private boolean executeConditionalInsert(
+      final Participation p, final String sql, final boolean requiresInstantCheck) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     int affected;
     try {
@@ -96,7 +97,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                     connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
                 bindCommonParams(ps, p);
                 ps.setLong(9, p.getBuncheolId()); // WHERE id = ?
-                if (sql.contains("active_instant_member_id")) {
+                if (requiresInstantCheck) {
                   ps.setLong(10, p.getBuncheolMemberId()); // NOT EXISTS subquery
                 }
                 return ps;

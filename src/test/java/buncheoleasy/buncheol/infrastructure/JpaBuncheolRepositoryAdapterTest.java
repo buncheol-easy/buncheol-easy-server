@@ -4,34 +4,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import buncheoleasy.user.domain.User;
-import buncheoleasy.user.infrastructure.UserMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
-@MybatisTest
+@SpringBootTest
 @ActiveProfiles("test")
-@DisplayName("BuncheolMapper 테스트")
-class BuncheolMapperTest {
+@Transactional
+@DisplayName("JpaBuncheolRepositoryAdapter 테스트")
+class JpaBuncheolRepositoryAdapterTest {
 
-  @Autowired private BuncheolMapper buncheolMapper;
+  @Autowired private BuncheolRepository buncheolRepository;
 
-  @Autowired private UserMapper userMapper;
+  @Autowired private JdbcTemplate jdbcTemplate;
+
+  @PersistenceContext private EntityManager em;
 
   private Long hostId;
 
   @BeforeEach
   void setUp() {
-    User host = User.create("KAKAO", "host123", "host@example.com");
-    userMapper.insert(host);
-    hostId = host.getId();
+    hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
   }
 
   private BuncheolParams validParams(String groupName) {
@@ -52,38 +56,40 @@ class BuncheolMapperTest {
         "홍길동");
   }
 
+  private Buncheol persistAndReload(Buncheol buncheol) {
+    buncheolRepository.save(buncheol);
+    em.flush();
+    em.clear();
+    return buncheol;
+  }
+
   @Nested
   @DisplayName("분철 저장 테스트")
-  class InsertTest {
+  class SaveTest {
 
     @Test
-    void 분철을_저장할_수_있다() {
-      // given
+    void 분철을_저장하면_ID가_할당된다() {
       Buncheol buncheol = Buncheol.create(hostId, validParams("테스트 그룹"));
 
-      // when
-      buncheolMapper.insert(buncheol);
+      buncheolRepository.save(buncheol);
+      em.flush();
 
-      // then
       assertThat(buncheol.getId()).isNotNull();
       assertThat(buncheol.getId()).isPositive();
     }
 
     @Test
     void 저장된_분철의_초기_상태는_RECRUITING이다() {
-      // given
       Buncheol buncheol = Buncheol.create(hostId, validParams("테스트 그룹"));
 
-      // when
-      buncheolMapper.insert(buncheol);
+      buncheolRepository.save(buncheol);
+      em.flush();
 
-      // then
       assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
 
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
-      // given
       BuncheolParams params =
           new BuncheolParams(
               null,
@@ -102,14 +108,14 @@ class BuncheolMapperTest {
               "홍길동");
       Buncheol buncheol = Buncheol.create(hostId, params);
 
-      // when & then
-      buncheolMapper.insert(buncheol);
+      buncheolRepository.save(buncheol);
+      em.flush();
+
       assertThat(buncheol.getId()).isNotNull();
     }
 
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
-      // given
       BuncheolParams params =
           new BuncheolParams(
               null,
@@ -128,8 +134,9 @@ class BuncheolMapperTest {
               "홍길동");
       Buncheol buncheol = Buncheol.create(hostId, params);
 
-      // when & then
-      buncheolMapper.insert(buncheol);
+      buncheolRepository.save(buncheol);
+      em.flush();
+
       assertThat(buncheol.getId()).isNotNull();
     }
   }
@@ -140,14 +147,10 @@ class BuncheolMapperTest {
 
     @Test
     void ID로_분철을_조회할_수_있다() {
-      // given
-      Buncheol buncheol = Buncheol.create(hostId, validParams("조회 그룹"));
-      buncheolMapper.insert(buncheol);
+      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("조회 그룹")));
 
-      // when
-      Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+      Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
 
-      // then
       assertThat(found.getId()).isEqualTo(buncheol.getId());
       assertThat(found.getHostId()).isEqualTo(hostId);
       assertThat(found.getGroupName()).isEqualTo("조회 그룹");
@@ -156,10 +159,8 @@ class BuncheolMapperTest {
     }
 
     @Test
-    void 분철_기본정보를_수정할_수_있다() {
-      // given
-      Buncheol buncheol = Buncheol.create(hostId, validParams("원본 그룹"));
-      buncheolMapper.insert(buncheol);
+    void 도메인_update_호출_시_더티체킹으로_DB가_갱신된다() {
+      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("원본 그룹")));
 
       BuncheolParams updatedParams =
           new BuncheolParams(
@@ -178,11 +179,13 @@ class BuncheolMapperTest {
               "999-888-777",
               "수정예금주");
 
-      // when
-      buncheolMapper.update(buncheol.getId(), updatedParams);
-      Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+      // managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
+      Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
+      managed.update(updatedParams);
+      em.flush();
+      em.clear();
 
-      // then
+      Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
       assertThat(found.getGroupName()).isEqualTo("수정 그룹");
       assertThat(found.getTitle()).isEqualTo("수정 제목");
       assertThat(found.getDescription()).isEqualTo("수정 설명");
@@ -199,34 +202,27 @@ class BuncheolMapperTest {
 
     @Test
     void 분철_상태를_수정할_수_있다() {
-      // given
-      Buncheol buncheol = Buncheol.create(hostId, validParams("상태 그룹"));
-      buncheolMapper.insert(buncheol);
+      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("상태 그룹")));
       BuncheolStatus expectedStatus = buncheol.getStatus();
       buncheol.cancel();
 
-      // when
-      int updated = buncheolMapper.updateStatus(buncheol, expectedStatus);
-      Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+      boolean updated = buncheolRepository.updateStatus(buncheol, expectedStatus);
 
-      // then
-      assertThat(updated).isEqualTo(1);
+      Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
+      assertThat(updated).isTrue();
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
     }
 
     @Test
     void 예상_상태가_다르면_업데이트되지_않는다() {
-      // given
-      Buncheol buncheol = Buncheol.create(hostId, validParams("낙관적 잠금"));
-      buncheolMapper.insert(buncheol);
+      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("낙관적 잠금")));
       buncheol.cancel();
 
-      // when — expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)
-      int updated = buncheolMapper.updateStatus(buncheol, BuncheolStatus.CLOSED);
-      Buncheol found = buncheolMapper.findById(buncheol.getId()).orElseThrow();
+      // expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)
+      boolean updated = buncheolRepository.updateStatus(buncheol, BuncheolStatus.CLOSED);
 
-      // then
-      assertThat(updated).isEqualTo(0);
+      Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
+      assertThat(updated).isFalse();
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
   }

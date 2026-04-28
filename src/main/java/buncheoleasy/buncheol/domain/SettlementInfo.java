@@ -2,8 +2,14 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
 
-public record SettlementInfo(String bank, String account, String holder) {
+@Embeddable
+public record SettlementInfo(
+    @Column(name = "settlement_bank", nullable = false, length = 50) String bank,
+    @Column(name = "settlement_account", nullable = false, length = 50) String account,
+    @Column(name = "settlement_holder", nullable = false, length = 50) String holder) {
 
   private static final int BANK_MAX_LENGTH = 50;
   private static final int ACCOUNT_MAX_LENGTH = 50;
@@ -19,7 +25,7 @@ public record SettlementInfo(String bank, String account, String holder) {
     return new SettlementInfo(bank, account, holder);
   }
 
-  private void validateBank(final String value) {
+  private static void validateBank(final String value) {
     if (value == null || value.isBlank()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
@@ -28,7 +34,7 @@ public record SettlementInfo(String bank, String account, String holder) {
     }
   }
 
-  private void validateAccount(final String value) {
+  private static void validateAccount(final String value) {
     if (value == null || value.isBlank()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
@@ -37,7 +43,7 @@ public record SettlementInfo(String bank, String account, String holder) {
     }
   }
 
-  private void validateHolder(final String value) {
+  private static void validateHolder(final String value) {
     if (value == null || value.isBlank()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }

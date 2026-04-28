@@ -48,10 +48,6 @@ public class BuncheolMemberDomainService {
     return buncheolMemberRepository.findAllByBuncheolId(buncheolId);
   }
 
-  public void updateBuncheolMember(final BuncheolMember member) {
-    buncheolMemberRepository.update(member);
-  }
-
   public void deleteById(final Long id) {
     buncheolMemberRepository.deleteById(id);
   }

@@ -2,8 +2,13 @@ package buncheoleasy.buncheol.domain.member;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
 
-public record BidOption(boolean bidAllowed, Long bidMinPrice) {
+@Embeddable
+public record BidOption(
+    @Column(name = "bid_allowed", nullable = false) boolean bidAllowed,
+    @Column(name = "bid_min_price") Long bidMinPrice) {
 
   public static BidOption of(
       final long instantPrice, final boolean bidAllowed, final Long bidMinPrice) {

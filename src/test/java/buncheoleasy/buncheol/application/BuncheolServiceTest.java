@@ -284,7 +284,8 @@ class BuncheolServiceTest {
       given(groupDomainService.getGroup(groupId)).willReturn(group);
 
       GroupMember groupMember =
-          new GroupMember(groupMemberId, groupId, "멤버A", null, LocalDateTime.now(), LocalDateTime.now());
+          new GroupMember(
+              groupMemberId, groupId, "멤버A", null, LocalDateTime.now(), LocalDateTime.now());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(groupId), anyList()))
           .willReturn(List.of(groupMember));
 
@@ -1110,9 +1111,8 @@ class BuncheolServiceTest {
       // when
       buncheolService.modifyBuncheol(hostId, buncheolId, request, List.of());
 
-      // then
+      // then: 더티체크에 맡기므로 도메인 메서드 호출만 검증
       then(mockMember).should().updatePricing(60_000L, true, 20_000L);
-      then(buncheolMemberDomainService).should().updateBuncheolMember(mockMember);
     }
 
     @Test

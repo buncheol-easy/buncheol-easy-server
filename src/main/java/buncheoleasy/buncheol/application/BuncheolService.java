@@ -226,8 +226,8 @@ public class BuncheolService {
           existing, presence, req.instantPrice(), req.bidAllowed(), req.bidMinPrice());
 
       if (presence == null || !presence.hasActiveInstant()) {
+        // managed 엔티티이므로 도메인 메서드 호출만으로 트랜잭션 커밋 시 dirty UPDATE 가 자동 발행된다.
         existing.updatePricing(req.instantPrice(), req.bidAllowed(), req.bidMinPrice());
-        buncheolMemberDomainService.updateBuncheolMember(existing);
       }
     }
   }

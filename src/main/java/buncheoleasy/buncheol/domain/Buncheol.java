@@ -39,15 +39,15 @@ public class Buncheol {
   @Column(name = "host_id", nullable = false, updatable = false)
   private Long hostId;
 
-  // 대상 K-pop 그룹 FK. 그룹 마스터에 없는 커스텀 그룹이면 NULL.
-  @Column(name = "group_id")
+  // 대상 K-pop 그룹 FK.
+  @Column(name = "group_id", nullable = false)
   private Long groupId;
 
-  // 화면 표시용 그룹명 스냅샷. groupId 가 NULL(커스텀 그룹)이거나 마스터 그룹명이 바뀌어도 분철 시점 이름이 유지된다.
+  // 화면 표시용 그룹명 스냅샷. 마스터 그룹명이 바뀌어도 분철 시점 이름이 유지된다.
   @Column(name = "group_name", nullable = false, length = 100)
   private String groupName;
 
-  // 화면 표시용 그룹 이미지 스냅샷. 커스텀 그룹이면 NULL.
+  // 화면 표시용 그룹 이미지 스냅샷.
   @Column(name = "group_image", length = 500)
   private String groupImage;
 
@@ -180,6 +180,7 @@ public class Buncheol {
 
   private void validate(final Long hostId, final BuncheolParams params) {
     validateHostAndParams(hostId, params);
+    validateGroupId(params.groupId());
     validateGroupName(params.groupName());
     validateGroupImage(params.groupImage());
     validateTitle(params.title());
@@ -193,6 +194,12 @@ public class Buncheol {
 
   private void validateHostAndParams(final Long hostId, final BuncheolParams params) {
     if (hostId == null || params == null) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+    }
+  }
+
+  private void validateGroupId(final Long value) {
+    if (value == null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
   }

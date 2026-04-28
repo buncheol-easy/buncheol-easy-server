@@ -1,13 +1,12 @@
 package buncheoleasy.buncheol.dto.request;
 
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
 
 public record BuncheolMemberRequest(
     Long buncheolMemberId,
-    Long memberId,
-    @Size(max = 100) String memberName,
+    @NotNull Long memberId,
     @Positive long instantPrice,
     boolean bidAllowed,
     @Positive Long bidMinPrice) {
@@ -19,14 +18,5 @@ public record BuncheolMemberRequest(
       return true;
     }
     return bidMinPrice != null;
-  }
-
-  // 커스텀 멤버 생성 시(memberId == null)에만 memberName 필수
-  @AssertTrue
-  public boolean isMemberNameValidForMemberType() {
-    if (memberId != null) {
-      return true;
-    }
-    return memberName != null && !memberName.isBlank();
   }
 }

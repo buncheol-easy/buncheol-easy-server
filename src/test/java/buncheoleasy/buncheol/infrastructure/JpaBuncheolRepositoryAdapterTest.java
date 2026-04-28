@@ -32,15 +32,17 @@ class JpaBuncheolRepositoryAdapterTest {
   @PersistenceContext private EntityManager em;
 
   private Long hostId;
+  private Long groupId;
 
   @BeforeEach
   void setUp() {
     hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
+    groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹 마스터");
   }
 
   private BuncheolParams validParams(String groupName) {
     return new BuncheolParams(
-        null,
+        groupId,
         groupName,
         null,
         "테스트 분철 제목",
@@ -93,7 +95,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void gs25_배송비만_설정하여_저장할_수_있다() {
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              groupId,
               "그룹명",
               null,
               "제목",
@@ -120,7 +122,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void cu_배송비만_설정하여_저장할_수_있다() {
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              groupId,
               "그룹명",
               null,
               "제목",
@@ -167,7 +169,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
       BuncheolParams updatedParams =
           new BuncheolParams(
-              null,
+              groupId,
               "수정 그룹",
               null,
               "수정 제목",

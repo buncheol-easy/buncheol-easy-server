@@ -28,7 +28,7 @@ class BuncheolMemberTest {
     void 입찰_불가_멤버_생성에_성공한다() {
       // when
       BuncheolMember member =
-          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, INSTANT_PRICE, false, null);
+          BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, INSTANT_PRICE, false, null);
 
       // then
       assertThat(member.getBuncheolId()).isEqualTo(BUNCHEOL_ID);
@@ -45,7 +45,8 @@ class BuncheolMemberTest {
 
       // when
       BuncheolMember member =
-          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, INSTANT_PRICE, true, bidMinPrice);
+          BuncheolMember.create(
+              BUNCHEOL_ID, 1L, MEMBER_NAME, null, INSTANT_PRICE, true, bidMinPrice);
 
       // then
       assertThat(member.getBidOption().bidAllowed()).isTrue();
@@ -70,7 +71,8 @@ class BuncheolMemberTest {
     void buncheolId가_null이면_예외가_발생한다() {
       // when & then
       assertThatThrownBy(
-              () -> BuncheolMember.create(null, null, MEMBER_NAME, null, INSTANT_PRICE, false, null))
+              () ->
+                  BuncheolMember.create(null, null, MEMBER_NAME, null, INSTANT_PRICE, false, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -88,7 +90,8 @@ class BuncheolMemberTest {
       // when & then
       assertThatThrownBy(
               () ->
-                  BuncheolMember.create(BUNCHEOL_ID, null, memberName, null, INSTANT_PRICE, false, null))
+                  BuncheolMember.create(
+                      BUNCHEOL_ID, 1L, memberName, null, INSTANT_PRICE, false, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -101,7 +104,9 @@ class BuncheolMemberTest {
 
       // when & then
       assertThatThrownBy(
-              () -> BuncheolMember.create(BUNCHEOL_ID, null, longName, null, INSTANT_PRICE, false, null))
+              () ->
+                  BuncheolMember.create(
+                      BUNCHEOL_ID, 1L, longName, null, INSTANT_PRICE, false, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_NAME_LENGTH_INVALID);
@@ -116,7 +121,7 @@ class BuncheolMemberTest {
       assertThatCode(
               () ->
                   BuncheolMember.create(
-                      BUNCHEOL_ID, null, maxLengthName, null, INSTANT_PRICE, false, null))
+                      BUNCHEOL_ID, 1L, maxLengthName, null, INSTANT_PRICE, false, null))
           .doesNotThrowAnyException();
     }
   }
@@ -130,7 +135,7 @@ class BuncheolMemberTest {
     void 즉시_구매_가격이_0_이하면_예외가_발생한다(long price) {
       // when & then
       assertThatThrownBy(
-              () -> BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, price, false, null))
+              () -> BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, price, false, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
@@ -139,7 +144,8 @@ class BuncheolMemberTest {
     @Test
     void 즉시_구매_가격이_양수면_유효하다() {
       // when & then
-      assertThatCode(() -> BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, 1L, false, null))
+      assertThatCode(
+              () -> BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, 1L, false, null))
           .doesNotThrowAnyException();
     }
   }
@@ -152,7 +158,7 @@ class BuncheolMemberTest {
     void 즉시구매가와_입찰옵션을_정상_수정한다() {
       // given
       BuncheolMember member =
-          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, INSTANT_PRICE, false, null);
+          BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, INSTANT_PRICE, false, null);
 
       // when
       member.updatePricing(60_000L, true, 20_000L);
@@ -167,7 +173,7 @@ class BuncheolMemberTest {
     void 입찰_허용에서_비허용으로_변경한다() {
       // given
       BuncheolMember member =
-          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, INSTANT_PRICE, true, 20_000L);
+          BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, INSTANT_PRICE, true, 20_000L);
 
       // when
       member.updatePricing(INSTANT_PRICE, false, null);
@@ -182,7 +188,7 @@ class BuncheolMemberTest {
     void 수정_즉시구매가가_0_이하면_예외가_발생한다(long price) {
       // given
       BuncheolMember member =
-          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, INSTANT_PRICE, false, null);
+          BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, INSTANT_PRICE, false, null);
 
       // when & then
       assertThatThrownBy(() -> member.updatePricing(price, false, null))
@@ -195,7 +201,7 @@ class BuncheolMemberTest {
     void 제시최소금액이_즉시구매가_이상이면_예외가_발생한다() {
       // given
       BuncheolMember member =
-          BuncheolMember.create(BUNCHEOL_ID, null, MEMBER_NAME, null, INSTANT_PRICE, false, null);
+          BuncheolMember.create(BUNCHEOL_ID, 1L, MEMBER_NAME, null, INSTANT_PRICE, false, null);
 
       // when & then
       assertThatThrownBy(() -> member.updatePricing(INSTANT_PRICE, true, INSTANT_PRICE))

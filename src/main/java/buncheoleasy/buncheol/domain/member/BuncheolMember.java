@@ -32,15 +32,15 @@ public class BuncheolMember {
   @Column(name = "buncheol_id", nullable = false, updatable = false)
   private Long buncheolId;
 
-  // group_members FK. 그룹 멤버 마스터에 없는 커스텀 멤버면 NULL.
-  @Column(name = "member_id", updatable = false)
+  // group_members FK.
+  @Column(name = "member_id", nullable = false, updatable = false)
   private Long memberId;
 
-  // 화면 표시용 멤버명 스냅샷. memberId 가 NULL(커스텀)이거나 마스터 명칭 변경되어도 분철 시점 이름 유지.
+  // 화면 표시용 멤버명 스냅샷. 마스터 명칭이 변경되어도 분철 시점 이름이 유지된다.
   @Column(name = "member_name", nullable = false, length = 100, updatable = false)
   private String memberName;
 
-  // 화면 표시용 멤버 이미지 스냅샷. 커스텀 멤버면 NULL.
+  // 화면 표시용 멤버 이미지 스냅샷.
   @Column(name = "member_image", length = 500, updatable = false)
   private String memberImage;
 
@@ -77,7 +77,7 @@ public class BuncheolMember {
       final long instantPrice,
       final boolean bidAllowed,
       final Long bidMinPrice) {
-    validate(buncheolId, memberName, memberImage, instantPrice);
+    validate(buncheolId, memberId, memberName, memberImage, instantPrice);
     this.buncheolId = buncheolId;
     this.memberId = memberId;
     this.memberName = memberName;
@@ -108,10 +108,12 @@ public class BuncheolMember {
 
   private void validate(
       final Long buncheolId,
+      final Long memberId,
       final String memberName,
       final String memberImage,
       final long instantPrice) {
     validateBuncheolId(buncheolId);
+    validateMemberId(memberId);
     validateMemberName(memberName);
     validateMemberImage(memberImage);
     validateInstantPrice(instantPrice);
@@ -119,6 +121,12 @@ public class BuncheolMember {
 
   private void validateBuncheolId(final Long buncheolId) {
     if (buncheolId == null) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+    }
+  }
+
+  private void validateMemberId(final Long memberId) {
+    if (memberId == null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
   }

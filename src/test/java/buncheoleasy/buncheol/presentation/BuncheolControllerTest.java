@@ -68,7 +68,7 @@ class BuncheolControllerTest {
     LocalDateTime future = LocalDateTime.now().plusDays(7);
     return """
                 {
-                  "groupName": "테스트 그룹",
+                  "groupId": 100,
                   "title": "테스트 분철 제목",
                   "goodsName": "공식 앨범",
                   "storeName": "공식 스토어",
@@ -81,7 +81,7 @@ class BuncheolControllerTest {
                   "settlementHolder": "홍길동",
                   "buncheolMembers": [
                     {
-                      "memberName": "멤버A",
+                      "memberId": 200,
                       "instantPrice": 50000,
                       "bidAllowed": false
                     }
@@ -95,7 +95,7 @@ class BuncheolControllerTest {
     LocalDateTime future = LocalDateTime.now().plusDays(10);
     return """
                 {
-                  "groupName": "수정 그룹",
+                  "groupId": 100,
                   "title": "수정 분철 제목",
                   "goodsName": "수정 굿즈",
                   "storeName": "수정 스토어",
@@ -109,7 +109,7 @@ class BuncheolControllerTest {
                   "keepImageIds": [1, 2],
                   "buncheolMembers": [
                     {
-                      "memberName": "수정멤버A",
+                      "memberId": 200,
                       "instantPrice": 60000,
                       "bidAllowed": false
                     }
@@ -170,7 +170,7 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "테스트 그룹",
+                      "groupId": 100,
                       "goodsName": "공식 앨범",
                       "storeName": "공식 스토어",
                       "originalPrice": 50000,
@@ -181,7 +181,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
                       ]
                     }
                     """
@@ -205,7 +205,7 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "테스트 그룹",
+                      "groupId": 100,
                       "title": "제목",
                       "goodsName": "공식 앨범",
                       "storeName": "공식 스토어",
@@ -216,7 +216,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
                       ]
                     }
                     """
@@ -239,7 +239,7 @@ class BuncheolControllerTest {
     }
 
     @Test
-    void 그룹ID_없이_그룹명도_없으면_400을_반환한다() throws Exception {
+    void groupId가_없으면_400을_반환한다() throws Exception {
       // given
       LocalDateTime future = LocalDateTime.now().plusDays(7);
       String invalidJson =
@@ -256,7 +256,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
                       ]
                     }
                     """
@@ -280,7 +280,7 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "테스트 그룹",
+                      "groupId": 100,
                       "title": "제목",
                       "goodsName": "공식 앨범",
                       "storeName": "공식 스토어",
@@ -292,7 +292,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
                       ]
                     }
                     """
@@ -370,7 +370,7 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "수정 그룹",
+                      "groupId": 100,
                       "title": "수정 분철 제목",
                       "goodsName": "수정 굿즈",
                       "storeName": "수정 스토어",
@@ -382,7 +382,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "333-222-111",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "수정멤버A", "instantPrice": 60000, "bidAllowed": false}
+                        {"memberId": 200, "instantPrice": 60000, "bidAllowed": false}
                       ]
                     }
                     """
@@ -400,7 +400,7 @@ class BuncheolControllerTest {
     }
 
     @Test
-    void groupId와_groupName이_모두_없으면_400을_반환한다() throws Exception {
+    void groupId가_없으면_400을_반환한다() throws Exception {
       // given
       LocalDateTime future = LocalDateTime.now().plusDays(10);
       String invalidJson =
@@ -418,7 +418,7 @@ class BuncheolControllerTest {
                       "settlementHolder": "홍길동",
                       "keepImageIds": [],
                       "buncheolMembers": [
-                        {"memberName": "수정멤버A", "instantPrice": 60000, "bidAllowed": false}
+                        {"memberId": 200, "instantPrice": 60000, "bidAllowed": false}
                       ]
                     }
                     """

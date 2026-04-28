@@ -24,7 +24,7 @@ class BuncheolTest {
 
   private BuncheolParams validParams() {
     return new BuncheolParams(
-        null,
+        1L,
         "테스트 그룹",
         null,
         "테스트 분철 제목",
@@ -87,7 +87,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               groupName,
               null,
               "제목",
@@ -116,7 +116,7 @@ class BuncheolTest {
       String longGroupName = "가".repeat(101);
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               longGroupName,
               null,
               "제목",
@@ -151,7 +151,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               title,
@@ -180,7 +180,7 @@ class BuncheolTest {
       String longTitle = "가".repeat(201);
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               longTitle,
@@ -213,7 +213,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -239,7 +239,7 @@ class BuncheolTest {
       String longDescription = "가".repeat(301);
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -274,7 +274,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -308,7 +308,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -336,7 +336,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -367,7 +367,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -400,7 +400,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null, "그룹명", null, "제목", null, "앨범명", "스토어명", 50_000L, null, 7, 3000, null, "국민은행",
+              1L, "그룹명", null, "제목", null, "앨범명", "스토어명", 50_000L, null, 7, 3000, null, "국민은행",
               "123-456", "홍길동");
 
       // when & then
@@ -416,7 +416,7 @@ class BuncheolTest {
       LocalDateTime pastDeadline = LocalDateTime.now().minusDays(1);
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",
@@ -444,7 +444,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null,
+              1L,
               "그룹명",
               null,
               "제목",

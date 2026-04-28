@@ -69,11 +69,8 @@ public enum ErrorCode {
 
   BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_NAME_REQUIRED("BCH-022", "그룹을 직접 입력한 경우 멤버 이름은 필수입니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_NAME_LENGTH_INVALID(
       "BCH-023", "분철 멤버 이름은 100자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_OFFICIAL_GROUP_MEMBER_ID_REQUIRED(
-      "BCH-024", "공식 그룹의 분철 멤버는 멤버 ID가 필수입니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_PRICE_INVALID("BCH-025", "분철 멤버 즉시 구매가는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_BID_MIN_PRICE_REQUIRED(
       "BCH-026", "제시 허용 시 제시 최소 금액은 필수입니다.", HttpStatus.BAD_REQUEST),

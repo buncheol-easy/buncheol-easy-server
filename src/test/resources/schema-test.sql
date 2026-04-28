@@ -87,7 +87,7 @@ CREATE TABLE buncheols
 (
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     host_id                BIGINT       NOT NULL,
-    group_id               BIGINT       NULL,
+    group_id               BIGINT       NOT NULL,
     group_name             VARCHAR(100) NOT NULL,
     group_image            VARCHAR(500) NULL,
     title                  VARCHAR(200) NOT NULL,
@@ -109,7 +109,7 @@ CREATE TABLE buncheols
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheols_host FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_buncheols_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE SET NULL
+    CONSTRAINT fk_buncheols_group FOREIGN KEY (group_id) REFERENCES `groups` (id)
 );
 
 CREATE INDEX idx_buncheols_group_id ON buncheols (group_id);
@@ -120,7 +120,7 @@ CREATE TABLE buncheol_members
 (
     id            BIGINT       NOT NULL AUTO_INCREMENT,
     buncheol_id   BIGINT       NOT NULL,
-    member_id     BIGINT       NULL,
+    member_id     BIGINT       NOT NULL,
     member_name   VARCHAR(100) NOT NULL,
     member_image  VARCHAR(500) NULL,
     instant_price BIGINT       NOT NULL,
@@ -131,7 +131,7 @@ CREATE TABLE buncheol_members
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
-    CONSTRAINT fk_buncheol_members_member FOREIGN KEY (member_id) REFERENCES group_members (id) ON DELETE SET NULL
+    CONSTRAINT fk_buncheol_members_member FOREIGN KEY (member_id) REFERENCES group_members (id)
 );
 
 CREATE INDEX idx_buncheol_members_buncheol_id ON buncheol_members (buncheol_id);

@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -42,12 +43,13 @@ class JpaBuncheolImageRepositoryAdapterTest {
   @BeforeEach
   void setUp() {
     Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
+    Long groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹");
 
     Buncheol buncheol =
         Buncheol.create(
             hostId,
             new BuncheolParams(
-                null,
+                groupId,
                 "테스트 그룹",
                 null,
                 "제목",

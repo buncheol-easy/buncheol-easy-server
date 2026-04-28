@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS buncheols
 (
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     host_id                BIGINT       NOT NULL COMMENT '개최자',
-    group_id               BIGINT       NULL COMMENT '대상 그룹 (NULL이면 커스텀 그룹)',
-    group_name             VARCHAR(100) NOT NULL COMMENT '그룹명 (반정규화/커스텀)',
-    group_image            VARCHAR(500) NULL COMMENT '그룹 이미지 URL 스냅샷 (커스텀 그룹은 NULL)',
+    group_id               BIGINT       NOT NULL COMMENT '대상 그룹',
+    group_name             VARCHAR(100) NOT NULL COMMENT '그룹명 스냅샷 (반정규화)',
+    group_image            VARCHAR(500) NULL COMMENT '그룹 이미지 URL 스냅샷 (반정규화)',
     title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
     description            TEXT         NULL COMMENT '분철 설명',
     goods_name             VARCHAR(200) NOT NULL COMMENT '굿즈명',
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS buncheols
             REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_buncheols_group
         FOREIGN KEY (group_id)
-            REFERENCES `groups` (id) ON DELETE SET NULL
+            REFERENCES `groups` (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -130,9 +130,9 @@ CREATE TABLE IF NOT EXISTS buncheol_members
 (
     id            BIGINT       NOT NULL AUTO_INCREMENT,
     buncheol_id   BIGINT       NOT NULL,
-    member_id     BIGINT       NULL COMMENT '대상 멤버 (NULL이면 커스텀 멤버)',
-    member_name   VARCHAR(100) NOT NULL COMMENT '멤버명 (반정규화/커스텀)',
-    member_image  VARCHAR(500) NULL COMMENT '멤버 이미지 URL 스냅샷 (커스텀 멤버는 NULL)',
+    member_id     BIGINT       NOT NULL COMMENT '대상 멤버',
+    member_name   VARCHAR(100) NOT NULL COMMENT '멤버명 스냅샷 (반정규화)',
+    member_image  VARCHAR(500) NULL COMMENT '멤버 이미지 URL 스냅샷 (반정규화)',
     instant_price BIGINT       NOT NULL COMMENT '즉시 구매 가격',
     bid_allowed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '제시 가능 여부',
     bid_min_price BIGINT       NULL COMMENT '제시 최소 금액',
@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS buncheol_members
             REFERENCES buncheols (id) ON DELETE CASCADE,
     CONSTRAINT fk_buncheol_members_member
         FOREIGN KEY (member_id)
-            REFERENCES group_members (id) ON DELETE SET NULL
+            REFERENCES group_members (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

@@ -27,12 +27,13 @@ public class UserDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
   }
 
+  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
   public void withdraw(final Long id) {
     User user = getUser(id);
     user.withdraw();
-    userRepository.withdraw(user);
   }
 
+  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
   public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
     User user = getUser(id);
 
@@ -42,8 +43,6 @@ public class UserDomainService {
 
     user.updateNickname(nickname);
     user.updatePhoneNumber(phoneNumber);
-
-    userRepository.update(user);
   }
 
   private User createNewSocialUser(final SocialInfo socialInfo, final String email) {

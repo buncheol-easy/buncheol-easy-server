@@ -22,7 +22,7 @@ public class BuncheolDomainService {
   }
 
   public void updateBuncheol(final Buncheol buncheol, final BuncheolParams params) {
-    buncheolRepository.update(buncheol.getId(), params);
+    buncheol.update(params);
   }
 
   public void cancelBuncheol(final Buncheol buncheol, final BuncheolStatus expectedStatus) {

@@ -8,7 +8,5 @@ public interface BuncheolRepository {
 
   Optional<Buncheol> findById(Long id);
 
-  void update(Long id, BuncheolParams params);
-
   boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus);
 }

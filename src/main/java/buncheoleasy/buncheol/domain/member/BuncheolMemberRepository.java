@@ -13,7 +13,5 @@ public interface BuncheolMemberRepository {
 
   List<BuncheolMember> findAllByBuncheolId(Long buncheolId);
 
-  void update(BuncheolMember buncheolMember);
-
   void deleteById(Long id);
 }

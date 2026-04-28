@@ -2,21 +2,54 @@ package buncheoleasy.buncheol.domain.member;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+@Entity
+@Table(name = "buncheol_members")
 @Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BuncheolMember {
 
   private static final int MEMBER_NAME_MAX_LENGTH = 100;
 
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
-  private final Long buncheolId;
-  private final Long memberId;
-  private final String memberName;
+
+  @Column(name = "buncheol_id", nullable = false, updatable = false)
+  private Long buncheolId;
+
+  // group_members FK. 그룹 멤버 마스터에 없는 커스텀 멤버면 NULL.
+  @Column(name = "member_id", updatable = false)
+  private Long memberId;
+
+  // 화면 표시용 멤버명 스냅샷. memberId 가 NULL(커스텀)이거나 마스터 명칭 변경되어도 분철 시점 이름 유지.
+  @Column(name = "member_name", nullable = false, length = 100, updatable = false)
+  private String memberName;
+
+  // 즉시구매가. 이 금액을 결제하면 곧바로 CONFIRMED 로 슬롯 확정. BID 참여의 제시가 상한이기도 함.
+  @Column(name = "instant_price", nullable = false)
   private long instantPrice;
-  private BidOption bidOption;
+
+  // 제시(BID) 허용 여부 + 최소 제시가. 허용 시 [bidMinPrice, instantPrice) 범위 내 자유 제시 가능.
+  @Embedded private BidOption bidOption;
+
+  @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
+
+  @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
   public static BuncheolMember create(
@@ -43,27 +76,6 @@ public class BuncheolMember {
     this.memberName = memberName;
     this.instantPrice = instantPrice;
     this.bidOption = BidOption.of(instantPrice, bidAllowed, bidMinPrice);
-  }
-
-  // MyBatis 조회 전용 생성자
-  private BuncheolMember(
-      final Long id,
-      final Long buncheolId,
-      final Long memberId,
-      final String memberName,
-      final long instantPrice,
-      final boolean bidAllowed,
-      final Long bidMinPrice,
-      final LocalDateTime createdAt,
-      final LocalDateTime updatedAt) {
-    this.id = id;
-    this.buncheolId = buncheolId;
-    this.memberId = memberId;
-    this.memberName = memberName;
-    this.instantPrice = instantPrice;
-    this.bidOption = new BidOption(bidAllowed, bidMinPrice);
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
   }
 
   public void updatePricing(
@@ -111,5 +123,17 @@ public class BuncheolMember {
     if (instantPrice <= 0) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
     }
+  }
+
+  @PrePersist
+  void onCreate() {
+    LocalDateTime now = LocalDateTime.now();
+    this.createdAt = now;
+    this.updatedAt = now;
+  }
+
+  @PreUpdate
+  void onUpdate() {
+    this.updatedAt = LocalDateTime.now();
   }
 }

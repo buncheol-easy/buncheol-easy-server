@@ -7,8 +7,6 @@ public interface ShippingAddressRepository {
 
   ShippingAddress save(ShippingAddress shippingAddress);
 
-  void update(ShippingAddress shippingAddress);
-
   void delete(Long id);
 
   Optional<ShippingAddress> findById(Long id);

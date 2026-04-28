@@ -106,7 +106,7 @@ class ShippingAddressDomainServiceTest {
 
     @Test
     void 배송지를_정상적으로_수정할_수_있다() {
-      // given
+      // given: 더티체킹에 위임하므로 repository 의 명시적 update 호출은 없음
       Long userId = 1L;
       Long addressId = 10L;
       ShippingAddress address = savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점");
@@ -122,7 +122,6 @@ class ShippingAddressDomainServiceTest {
       // then
       assertThat(address.getShippingMethod()).isEqualTo(ShippingMethod.CU_HALF);
       assertThat(address.getStoreName()).isEqualTo("CU 홍대입구점");
-      then(shippingAddressRepository).should().update(address);
     }
 
     @Test
@@ -138,12 +137,10 @@ class ShippingAddressDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
-
-      then(shippingAddressRepository).should(never()).update(any());
     }
 
     @Test
-    void 다른_유저의_배송지를_수정하면_예외가_발생한다() {
+    void 다른_유저의_배송지를_수정하면_예외가_발생하고_엔티티는_변경되지_않는다() {
       // given
       Long addressId = 10L;
       ShippingAddress address = savedAddress(addressId, 2L, "GS25_HALF", "GS25 강남역점");
@@ -158,11 +155,12 @@ class ShippingAddressDomainServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
 
-      then(shippingAddressRepository).should(never()).update(any());
+      assertThat(address.getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
+      assertThat(address.getStoreName()).isEqualTo("GS25 강남역점");
     }
 
     @Test
-    void 다른_내용으로_수정할_때_이미_존재하는_배송지이면_예외가_발생한다() {
+    void 다른_내용으로_수정할_때_이미_존재하는_배송지이면_예외가_발생하고_엔티티는_변경되지_않는다() {
       // given
       Long userId = 1L;
       Long addressId = 10L;
@@ -182,7 +180,8 @@ class ShippingAddressDomainServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
 
-      then(shippingAddressRepository).should(never()).update(any());
+      assertThat(address.getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
+      assertThat(address.getStoreName()).isEqualTo("GS25 강남역점");
     }
   }
 

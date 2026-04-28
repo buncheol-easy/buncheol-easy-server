@@ -2,52 +2,47 @@ package buncheoleasy.user.infrastructure.shipping;
 
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
-@RequiredArgsConstructor
 @Repository
-public class MybatisShippingAddressRepository implements ShippingAddressRepository {
+@RequiredArgsConstructor
+public class JpaShippingAddressRepositoryAdapter implements ShippingAddressRepository {
 
-  private final ShippingAddressMapper shippingAddressMapper;
+  private final JpaShippingAddressRepository jpaShippingAddressRepository;
 
   @Override
   public ShippingAddress save(ShippingAddress shippingAddress) {
-    shippingAddressMapper.insert(shippingAddress);
-    return shippingAddress;
-  }
-
-  @Override
-  public void update(ShippingAddress shippingAddress) {
-    shippingAddressMapper.update(shippingAddress);
+    return jpaShippingAddressRepository.save(shippingAddress);
   }
 
   @Override
   public void delete(Long id) {
-    shippingAddressMapper.delete(id);
+    jpaShippingAddressRepository.deleteById(id);
   }
 
   @Override
   public Optional<ShippingAddress> findById(Long id) {
-    return shippingAddressMapper.findById(id);
+    return jpaShippingAddressRepository.findById(id);
   }
 
   @Override
   public List<ShippingAddress> getUserShippingAddresses(Long userId) {
-    return shippingAddressMapper.findAllByUser(userId);
+    return jpaShippingAddressRepository.findAllByUserId(userId);
   }
 
   @Override
   public int countByUserId(Long userId) {
-    return shippingAddressMapper.countByUserId(userId);
+    return jpaShippingAddressRepository.countByUserId(userId);
   }
 
   @Override
   public boolean existsByUserIdAndShippingMethodAndStoreName(
       Long userId, String shippingMethod, String storeName) {
-    return shippingAddressMapper.existsByUserIdAndShippingMethodAndStoreName(
-        userId, shippingMethod, storeName);
+    return jpaShippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(
+        userId, ShippingMethod.of(shippingMethod), storeName);
   }
 }

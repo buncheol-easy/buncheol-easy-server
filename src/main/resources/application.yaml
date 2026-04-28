@@ -48,25 +48,13 @@ spring:
       host: localhost
       port: 6379
 
-mybatis:
-  # XML 파일 위치 설정
-  mapper-locations: classpath:buncheoleasy/**/infrastructure/**/*.xml
-  # SQL 결과값을 담을 객체의 패키지 경로 (XML에서 resultType에 패키지명 생략 가능하게 해줌)
-  type-aliases-package: buncheoleasy
-  configuration:
-    # 카멜케이스 자동 변환 (DB의 user_id를 자바의 userId로 매핑)
-    map-underscore-to-camel-case: true
-    # MyBatis 실행 SQL/파라미터 로그 출력
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
 logging:
   level:
     buncheoleasy.buncheol: TRACE
     org.springframework.security: TRACE  # TRACE로 변경하면 더 자세함
     buncheoleasy.auth: TRACE
-    org.mybatis: TRACE
-    org.apache.ibatis: TRACE
     org.springframework.jdbc: TRACE
+    org.hibernate.SQL: DEBUG
 
 jwt:
   secret:

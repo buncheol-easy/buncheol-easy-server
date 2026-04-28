@@ -1,59 +1,79 @@
 package buncheoleasy.user.domain;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.SQLRestriction;
 
+@Entity
+@Table(name = "users")
+@SQLRestriction("deleted_at IS NULL")
 @Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {
 
   private static final String NICKNAME_PREFIX = "Guest";
   private static final int RANDOM_SUFFIX_LENGTH = 10;
 
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
-  private final SocialInfo socialInfo;
-  private final Email email;
+
+  @Embedded private SocialInfo socialInfo;
+
+  @Convert(converter = EmailConverter.class)
+  @Column(name = "email", nullable = false, length = 320)
+  private Email email;
+
+  @Convert(converter = NicknameConverter.class)
+  @Column(name = "nickname", nullable = false, length = 20)
   private Nickname nickname;
+
+  @Convert(converter = PhoneNumberConverter.class)
+  @Column(name = "phone_number", length = 15)
   private PhoneNumber phoneNumber;
+
+  // 프로필 설정 완료 여부. 첫 phoneNumber 등록 시 true 로 전이. 소셜 가입 직후엔 false (전화번호 미입력 상태).
+  @Column(name = "profile_completed", nullable = false)
   private boolean profileCompleted;
+
+  @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
+
+  @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
+
+  // 회원 탈퇴 soft delete 시각. NULL 이면 활성 유저. @SQLRestriction 으로 모든 조회에서 자동 제외.
+  @Column(name = "deleted_at")
   private LocalDateTime deletedAt;
 
-  public User(
-      final Long id,
-      final String provider,
-      final String providerId,
-      final String nickname,
-      final String email,
-      final String phoneNumber,
-      final Boolean profileCompleted,
-      final LocalDateTime createdAt,
-      final LocalDateTime updatedAt,
-      final LocalDateTime deletedAt) {
-    this.id = id;
-    this.socialInfo = SocialInfo.of(provider, providerId);
-    this.nickname = Nickname.of(nickname);
-    this.email = Email.of(email);
-    this.phoneNumber = phoneNumber != null ? new PhoneNumber(phoneNumber) : null;
-    this.profileCompleted = profileCompleted != null ? profileCompleted : false;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
-    this.deletedAt = deletedAt;
-  }
-
   public static User create(final String provider, final String providerId, final String email) {
-    return new User(provider, providerId, email);
+    return new User(
+        SocialInfo.of(provider, providerId),
+        Email.of(email),
+        Nickname.of(generateRandomNickname()));
   }
 
-  private User(final String provider, final String providerId, final String email) {
-    this.socialInfo = SocialInfo.of(provider, providerId);
-    this.email = Email.of(email);
-    this.nickname = Nickname.of(generateRandomNickname());
+  private User(final SocialInfo socialInfo, final Email email, final Nickname nickname) {
+    this.socialInfo = socialInfo;
+    this.email = email;
+    this.nickname = nickname;
     this.profileCompleted = false;
   }
 
-  private String generateRandomNickname() {
+  private static String generateRandomNickname() {
     String cleanUuid = UUID.randomUUID().toString().replace("-", "");
     String uniqueSuffix = cleanUuid.substring(0, RANDOM_SUFFIX_LENGTH);
     return NICKNAME_PREFIX + uniqueSuffix;
@@ -77,5 +97,17 @@ public class User {
 
   public void withdraw() {
     this.deletedAt = LocalDateTime.now();
+  }
+
+  @PrePersist
+  void onCreate() {
+    LocalDateTime now = LocalDateTime.now();
+    this.createdAt = now;
+    this.updatedAt = now;
+  }
+
+  @PreUpdate
+  void onUpdate() {
+    this.updatedAt = LocalDateTime.now();
   }
 }

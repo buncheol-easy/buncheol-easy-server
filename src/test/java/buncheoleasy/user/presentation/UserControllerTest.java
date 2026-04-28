@@ -1,5 +1,6 @@
 package buncheoleasy.user.presentation;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -82,10 +83,7 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"nickname\":\"테스트@유저\",\"phoneNumber\":\"01012345678\"}"))
         .andExpect(status().isBadRequest())
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
@@ -95,9 +93,7 @@ class UserControllerTest {
     mockMvc
         .perform(delete("/v1/users/me").with(mockAuth()))
         .andExpect(status().isNotFound())
-        .andExpect(
-            content()
-                .string(org.hamcrest.Matchers.containsString(ErrorCode.USER_NOT_FOUND.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.USER_NOT_FOUND.getCode())));
   }
 
   @Test

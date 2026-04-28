@@ -1,5 +1,6 @@
 package buncheoleasy.delivery.presentation;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -97,11 +98,7 @@ class DeliveryControllerTest {
                   .contentType(MediaType.APPLICATION_JSON)
                   .content("{\"trackingNumber\": \"TRACK123\"}"))
           .andExpect(status().isForbidden())
-          .andExpect(
-              content()
-                  .string(
-                      org.hamcrest.Matchers.containsString(
-                          ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
     }
 
     @Test
@@ -142,11 +139,7 @@ class DeliveryControllerTest {
       mockMvc
           .perform(post("/v1/deliveries/{id}/receipt", 10L).with(mockAuth()))
           .andExpect(status().isForbidden())
-          .andExpect(
-              content()
-                  .string(
-                      org.hamcrest.Matchers.containsString(
-                          ErrorCode.DELIVERY_NO_PERMISSION.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.DELIVERY_NO_PERMISSION.getCode())));
     }
 
     @Test

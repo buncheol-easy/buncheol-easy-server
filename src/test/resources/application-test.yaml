@@ -12,16 +12,9 @@ spring:
       mode: always
       schema-locations: classpath:schema-test.sql
 
-mybatis:
-  mapper-locations: classpath:buncheoleasy/**/infrastructure/**/*.xml
-  type-aliases-package: buncheoleasy
-  configuration:
-    map-underscore-to-camel-case: true
-
 logging:
   level:
     buncheoleasy: TRACE
-    org.mybatis: DEBUG
     org.springframework.jdbc: DEBUG
     org.springframework.transaction: DEBUG
     org.hibernate.SQL: DEBUG

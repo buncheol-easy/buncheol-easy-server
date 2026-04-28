@@ -3,10 +3,26 @@ package buncheoleasy.buncheol.domain;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+@Entity
+@Table(name = "buncheols")
 @Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Buncheol {
 
   private static final int GROUP_NAME_MAX_LENGTH = 100;
@@ -15,22 +31,60 @@ public class Buncheol {
   private static final int GOODS_NAME_MAX_LENGTH = 200;
   private static final int STORE_NAME_MAX_LENGTH = 200;
 
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
-  private final Long hostId;
-  private final Long groupId;
-  private final String groupName;
+
+  @Column(name = "host_id", nullable = false, updatable = false)
+  private Long hostId;
+
+  // 대상 K-pop 그룹 FK. 그룹 마스터에 없는 커스텀 그룹이면 NULL.
+  @Column(name = "group_id")
+  private Long groupId;
+
+  // 화면 표시용 그룹명 스냅샷. groupId 가 NULL(커스텀 그룹)이거나 마스터 그룹명이 바뀌어도 분철 시점 이름이 유지된다.
+  @Column(name = "group_name", nullable = false, length = 100)
+  private String groupName;
+
+  @Column(nullable = false, length = 200)
   private String title;
-  private String description;
-  private final String goodsName;
-  private final String storeName;
-  private final long originalPrice;
+
+  @Column private String description;
+
+  @Column(name = "goods_name", nullable = false, length = 200)
+  private String goodsName;
+
+  @Column(name = "store_name", nullable = false, length = 200)
+  private String storeName;
+
+  // 굿즈 1세트(전 멤버 분량) 정가. 분철 정산 기준 금액.
+  @Column(name = "original_price", nullable = false)
+  private long originalPrice;
+
+  // 참여(즉시구매·제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
+  @Column(nullable = false)
   private LocalDateTime deadline;
-  private final int shippingDeadlineDays;
-  private final ShippingFeePolicy shippingFeePolicy;
-  private final SettlementInfo settlementInfo;
+
+  // 호스트가 굿즈를 수령한 후 참여자에게 발송해야 하는 마감 기한(일수).
+  @Column(name = "shipping_deadline_days", nullable = false)
+  private int shippingDeadlineDays;
+
+  @Embedded private ShippingFeePolicy shippingFeePolicy;
+
+  @Embedded private SettlementInfo settlementInfo;
+
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 30)
   private BuncheolStatus status;
+
+  // 분철이 RECRUITING → CLOSED 로 실제 마감된 시각 (deadline 도달 또는 호스트 수동 마감).
+  @Column(name = "closed_at")
   private LocalDateTime closedAt;
+
+  @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
+
+  @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
   public static Buncheol create(final Long hostId, final BuncheolParams params) {
@@ -56,45 +110,21 @@ public class Buncheol {
     this.status = BuncheolStatus.RECRUITING;
   }
 
-  // MyBatis 조회 전용 생성자
-  private Buncheol(
-      final Long id,
-      final Long hostId,
-      final Long groupId,
-      final String groupName,
-      final String title,
-      final String description,
-      final String goodsName,
-      final String storeName,
-      final long originalPrice,
-      final LocalDateTime deadline,
-      final int shippingDeadlineDays,
-      final Integer gs25ShippingFee,
-      final Integer cuShippingFee,
-      final String settlementBank,
-      final String settlementAccount,
-      final String settlementHolder,
-      final BuncheolStatus status,
-      final LocalDateTime closedAt,
-      final LocalDateTime createdAt,
-      final LocalDateTime updatedAt) {
-    this.id = id;
-    this.hostId = hostId;
-    this.groupId = groupId;
-    this.groupName = groupName;
-    this.title = title;
-    this.description = description;
-    this.goodsName = goodsName;
-    this.storeName = storeName;
-    this.originalPrice = originalPrice;
-    this.deadline = deadline;
-    this.shippingDeadlineDays = shippingDeadlineDays;
-    this.shippingFeePolicy = ShippingFeePolicy.of(gs25ShippingFee, cuShippingFee);
-    this.settlementInfo = SettlementInfo.of(settlementBank, settlementAccount, settlementHolder);
-    this.status = status;
-    this.closedAt = closedAt;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+  public void update(final BuncheolParams params) {
+    validate(this.hostId, params);
+    this.groupId = params.groupId();
+    this.groupName = params.groupName();
+    this.title = params.title();
+    this.description = params.description();
+    this.goodsName = params.goodsName();
+    this.storeName = params.storeName();
+    this.originalPrice = params.originalPrice();
+    this.deadline = params.deadline();
+    this.shippingDeadlineDays = params.shippingDeadlineDays();
+    this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
+    this.settlementInfo =
+        SettlementInfo.of(
+            params.settlementBank(), params.settlementAccount(), params.settlementHolder());
   }
 
   public void validateOwner(final Long userId) {
@@ -217,5 +247,17 @@ public class Buncheol {
     if (deadline == null || !deadline.isAfter(LocalDateTime.now())) {
       throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
     }
+  }
+
+  @PrePersist
+  void onCreate() {
+    LocalDateTime now = LocalDateTime.now();
+    this.createdAt = now;
+    this.updatedAt = now;
+  }
+
+  @PreUpdate
+  void onUpdate() {
+    this.updatedAt = LocalDateTime.now();
   }
 }

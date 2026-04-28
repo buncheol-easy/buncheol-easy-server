@@ -5,44 +5,47 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
-import buncheoleasy.buncheol.infrastructure.BuncheolMapper;
-import buncheoleasy.user.domain.User;
-import buncheoleasy.user.infrastructure.UserMapper;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.infrastructure.TestUserFixture;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
-@MybatisTest
+@SpringBootTest
 @ActiveProfiles("test")
-@DisplayName("BuncheolMemberMapper 테스트")
-class BuncheolMemberMapperTest {
+@Transactional
+@DisplayName("JpaBuncheolMemberRepositoryAdapter 테스트")
+class JpaBuncheolMemberRepositoryAdapterTest {
 
-  @Autowired private BuncheolMemberMapper buncheolMemberMapper;
+  @Autowired private BuncheolMemberRepository buncheolMemberRepository;
 
-  @Autowired private BuncheolMapper buncheolMapper;
-
-  @Autowired private UserMapper userMapper;
+  @Autowired private BuncheolRepository buncheolRepository;
 
   @Autowired private JdbcTemplate jdbcTemplate;
+
+  @PersistenceContext private EntityManager em;
 
   private Long buncheolId;
 
   @BeforeEach
   void setUp() {
-    User host = User.create("KAKAO", "host123", "host@example.com");
-    userMapper.insert(host);
+    Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
 
     Buncheol buncheol =
         Buncheol.create(
-            host.getId(),
+            hostId,
             new BuncheolParams(
                 null,
                 "테스트 그룹",
@@ -58,46 +61,42 @@ class BuncheolMemberMapperTest {
                 "국민은행",
                 "123-456",
                 "홍길동"));
-    buncheolMapper.insert(buncheol);
+    buncheolRepository.save(buncheol);
+    em.flush();
+    em.clear();
     buncheolId = buncheol.getId();
   }
 
   @Nested
   @DisplayName("분철 멤버 일괄 저장 테스트")
-  class InsertAllTest {
+  class SaveAllTest {
 
     @Test
     void 입찰_불가_멤버를_저장할_수_있다() {
-      // given
       BuncheolMember member = BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null);
 
-      // when & then
-      assertThatCode(() -> buncheolMemberMapper.insertAll(List.of(member)))
+      assertThatCode(() -> buncheolMemberRepository.saveAll(List.of(member)))
           .doesNotThrowAnyException();
     }
 
     @Test
     void 입찰_가능_멤버를_저장할_수_있다() {
-      // given
       BuncheolMember member =
           BuncheolMember.create(buncheolId, null, "멤버B", 50_000L, true, 10_000L);
 
-      // when & then
-      assertThatCode(() -> buncheolMemberMapper.insertAll(List.of(member)))
+      assertThatCode(() -> buncheolMemberRepository.saveAll(List.of(member)))
           .doesNotThrowAnyException();
     }
 
     @Test
     void 여러_멤버를_한번에_저장할_수_있다() {
-      // given
       List<BuncheolMember> members =
           List.of(
               BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
               BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, true, 5_000L),
               BuncheolMember.create(buncheolId, null, "멤버C", 20_000L, false, null));
 
-      // when & then
-      assertThatCode(() -> buncheolMemberMapper.insertAll(members)).doesNotThrowAnyException();
+      assertThatCode(() -> buncheolMemberRepository.saveAll(members)).doesNotThrowAnyException();
     }
   }
 
@@ -107,18 +106,16 @@ class BuncheolMemberMapperTest {
 
     @Test
     void 특정_분철의_멤버를_전체_삭제할_수_있다() {
-      // given
       List<BuncheolMember> members =
           List.of(
               BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
               BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, false, null));
-      buncheolMemberMapper.insertAll(members);
+      buncheolMemberRepository.saveAll(members);
+      em.flush();
       assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);
 
-      // when
-      buncheolMemberMapper.deleteAllByBuncheolId(buncheolId);
+      buncheolMemberRepository.deleteAllByBuncheolId(buncheolId);
 
-      // then
       assertThat(countMembersByBuncheolId(buncheolId)).isZero();
     }
   }

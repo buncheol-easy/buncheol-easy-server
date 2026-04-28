@@ -1,5 +1,6 @@
 package buncheoleasy.auth.presentation;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -79,10 +80,7 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"\"}"))
         .andExpect(status().isBadRequest())
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
@@ -96,10 +94,7 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"invalid-refresh\"}"))
         .andExpect(status().isUnauthorized())
-        .andExpect(
-            content()
-                .string(
-                    org.hamcrest.Matchers.containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
   }
 
   @Test

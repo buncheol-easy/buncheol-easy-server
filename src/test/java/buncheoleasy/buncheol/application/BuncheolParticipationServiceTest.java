@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
@@ -219,8 +220,7 @@ class BuncheolParticipationServiceTest {
       mockNoActiveParticipation();
       mockInstantSlotNotTaken();
 
-      org.mockito.BDDMockito.willThrow(
-              new BusinessException(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED))
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED))
           .given(member)
           .validateBidAllowed();
 
@@ -251,7 +251,7 @@ class BuncheolParticipationServiceTest {
     void 분철_모집중이_아니면_예외가_발생한다() {
       // given
       Buncheol buncheol = mockBuncheol();
-      org.mockito.BDDMockito.willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
           .given(buncheol)
           .validateRecruiting();
 

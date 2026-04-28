@@ -127,8 +127,8 @@ class UserDomainServiceTest {
   class WithdrawTest {
 
     @Test
-    void 회원_탈퇴_시_withdraw_후_repository에_반영된다() {
-      // given
+    void 회원_탈퇴_시_엔티티의_deletedAt이_설정된다() {
+      // given: 더티체킹에 위임하므로 repository 의 명시적 update/withdraw 호출은 없음
       User user = User.create("KAKAO", "123456", "test@example.com");
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
@@ -137,7 +137,6 @@ class UserDomainServiceTest {
 
       // then
       assertThat(user.getDeletedAt()).isNotNull();
-      then(userRepository).should().withdraw(user);
     }
 
     @Test
@@ -158,8 +157,8 @@ class UserDomainServiceTest {
   class UpdateProfileTest {
 
     @Test
-    void 닉네임_중복이_없으면_프로필을_업데이트한다() {
-      // given
+    void 닉네임_중복이_없으면_엔티티에_변경사항이_반영된다() {
+      // given: 더티체킹에 위임하므로 repository 의 명시적 update 호출은 없음
       User user = User.create("KAKAO", "123456", "test@example.com");
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
       given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
@@ -170,13 +169,13 @@ class UserDomainServiceTest {
       // then
       assertThat(user.getNickname().value()).isEqualTo("새닉네임");
       assertThat(user.getPhoneNumber().value()).isEqualTo("01012345678");
-      then(userRepository).should().update(user);
     }
 
     @Test
-    void 닉네임이_중복되면_예외가_발생한다() {
+    void 닉네임이_중복되면_예외가_발생하고_엔티티는_변경되지_않는다() {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");
+      String originalNickname = user.getNickname().value();
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
       given(userRepository.existsByNicknameExcludingId("중복닉네임", 1L)).willReturn(true);
 
@@ -186,7 +185,8 @@ class UserDomainServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NICKNAME_DUPLICATE);
 
-      then(userRepository).should(never()).update(any());
+      assertThat(user.getNickname().value()).isEqualTo(originalNickname);
+      assertThat(user.getPhoneNumber()).isNull();
     }
 
     @Test
@@ -199,8 +199,6 @@ class UserDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
-
-      then(userRepository).should(never()).update(any());
     }
   }
 }

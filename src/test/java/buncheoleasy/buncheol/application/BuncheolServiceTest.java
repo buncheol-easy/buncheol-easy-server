@@ -17,6 +17,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolModificationPolicy;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BidOption;
@@ -284,7 +285,8 @@ class BuncheolServiceTest {
       given(groupDomainService.getGroup(groupId)).willReturn(group);
 
       GroupMember groupMember =
-          new GroupMember(groupMemberId, groupId, "멤버A", null, LocalDateTime.now(), LocalDateTime.now());
+          new GroupMember(
+              groupMemberId, groupId, "멤버A", null, LocalDateTime.now(), LocalDateTime.now());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(groupId), anyList()))
           .willReturn(List.of(groupMember));
 
@@ -1110,9 +1112,8 @@ class BuncheolServiceTest {
       // when
       buncheolService.modifyBuncheol(hostId, buncheolId, request, List.of());
 
-      // then
+      // then: 더티체크에 맡기므로 도메인 메서드 호출만 검증
       then(mockMember).should().updatePricing(60_000L, true, 20_000L);
-      then(buncheolMemberDomainService).should().updateBuncheolMember(mockMember);
     }
 
     @Test
@@ -1367,17 +1368,14 @@ class BuncheolServiceTest {
       Long buncheolId = 10L;
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(buncheolId)).willReturn(buncheol);
-      given(buncheol.getStatus())
-          .willReturn(buncheoleasy.buncheol.domain.BuncheolStatus.RECRUITING);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
 
       // when
       buncheolService.cancelBuncheol(hostId, buncheolId);
 
       // then
       then(buncheol).should().validateOwner(hostId);
-      then(buncheolDomainService)
-          .should()
-          .cancelBuncheol(buncheol, buncheoleasy.buncheol.domain.BuncheolStatus.RECRUITING);
+      then(buncheolDomainService).should().cancelBuncheol(buncheol, BuncheolStatus.RECRUITING);
     }
 
     @Test
@@ -1429,21 +1427,17 @@ class BuncheolServiceTest {
       Long buncheolId = 10L;
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(buncheolId)).willReturn(buncheol);
-      given(buncheol.getStatus()).willReturn(buncheoleasy.buncheol.domain.BuncheolStatus.CLOSED);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.CLOSED);
       willDoNothing().given(buncheol).validateOwner(hostId);
 
       // when
-      buncheolService.advanceBuncheolStatus(
-          hostId, buncheolId, buncheoleasy.buncheol.domain.BuncheolStatus.GOODS_ORDERED);
+      buncheolService.advanceBuncheolStatus(hostId, buncheolId, BuncheolStatus.GOODS_ORDERED);
 
       // then
       then(buncheol).should().validateOwner(hostId);
       then(buncheolDomainService)
           .should()
-          .advanceBuncheolStatus(
-              buncheol,
-              buncheoleasy.buncheol.domain.BuncheolStatus.GOODS_ORDERED,
-              buncheoleasy.buncheol.domain.BuncheolStatus.CLOSED);
+          .advanceBuncheolStatus(buncheol, BuncheolStatus.GOODS_ORDERED, BuncheolStatus.CLOSED);
     }
 
     @Test
@@ -1461,9 +1455,7 @@ class BuncheolServiceTest {
       assertThatThrownBy(
               () ->
                   buncheolService.advanceBuncheolStatus(
-                      hostId,
-                      buncheolId,
-                      buncheoleasy.buncheol.domain.BuncheolStatus.GOODS_ORDERED))
+                      hostId, buncheolId, BuncheolStatus.GOODS_ORDERED))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
@@ -1478,22 +1470,17 @@ class BuncheolServiceTest {
       Long buncheolId = 10L;
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(buncheolId)).willReturn(buncheol);
-      given(buncheol.getStatus()).willReturn(buncheoleasy.buncheol.domain.BuncheolStatus.CLOSED);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.CLOSED);
       willDoNothing().given(buncheol).validateOwner(hostId);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED))
           .given(buncheolDomainService)
-          .advanceBuncheolStatus(
-              buncheol,
-              buncheoleasy.buncheol.domain.BuncheolStatus.GOODS_ORDERED,
-              buncheoleasy.buncheol.domain.BuncheolStatus.CLOSED);
+          .advanceBuncheolStatus(buncheol, BuncheolStatus.GOODS_ORDERED, BuncheolStatus.CLOSED);
 
       // when & then
       assertThatThrownBy(
               () ->
                   buncheolService.advanceBuncheolStatus(
-                      hostId,
-                      buncheolId,
-                      buncheoleasy.buncheol.domain.BuncheolStatus.GOODS_ORDERED))
+                      hostId, buncheolId, BuncheolStatus.GOODS_ORDERED))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED);

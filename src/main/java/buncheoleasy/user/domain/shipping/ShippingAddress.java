@@ -1,16 +1,44 @@
 package buncheoleasy.user.domain.shipping;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+@Entity
+@Table(name = "shipping_addresses")
 @Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ShippingAddress {
 
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
-  private final Long userId;
+
+  @Column(name = "user_id", nullable = false, updatable = false)
+  private Long userId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "shipping_method", nullable = false, length = 20)
   private ShippingMethod shippingMethod;
+
+  @Column(name = "store_name", nullable = false, length = 100)
   private String storeName;
+
+  @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
+
+  @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
   public ShippingAddress(
@@ -28,7 +56,7 @@ public class ShippingAddress {
     this.updatedAt = updatedAt;
   }
 
-  public ShippingAddress(
+  private ShippingAddress(
       final Long userId, final ShippingMethod shippingMethod, final String storeName) {
     this.userId = userId;
     this.shippingMethod = shippingMethod;
@@ -52,5 +80,17 @@ public class ShippingAddress {
 
   public boolean isOwnedBy(final Long userId) {
     return this.userId.equals(userId);
+  }
+
+  @PrePersist
+  void onCreate() {
+    LocalDateTime now = LocalDateTime.now();
+    this.createdAt = now;
+    this.updatedAt = now;
+  }
+
+  @PreUpdate
+  void onUpdate() {
+    this.updatedAt = LocalDateTime.now();
   }
 }

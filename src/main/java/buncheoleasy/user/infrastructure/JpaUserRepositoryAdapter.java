@@ -1,5 +1,6 @@
 package buncheoleasy.user.infrastructure;
 
+import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.SocialInfo;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
@@ -9,43 +10,32 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 @RequiredArgsConstructor
-public class MybatisUserRepository implements UserRepository {
+public class JpaUserRepositoryAdapter implements UserRepository {
 
-  private final UserMapper userMapper;
+  private final JpaUserRepository jpaUserRepository;
 
   @Override
   public User save(User user) {
-    userMapper.insert(user);
-    return user;
-  }
-
-  @Override
-  public void update(User user) {
-    userMapper.update(user);
+    return jpaUserRepository.save(user);
   }
 
   @Override
   public Optional<User> findById(Long id) {
-    return userMapper.findById(id);
+    return jpaUserRepository.findById(id);
   }
 
   @Override
   public Optional<User> findBySocialInfo(SocialInfo socialInfo) {
-    return userMapper.findBySocialInfo(socialInfo.provider().name(), socialInfo.providerId());
+    return jpaUserRepository.findBySocialInfo(socialInfo.provider(), socialInfo.providerId());
   }
 
   @Override
   public boolean existsById(Long id) {
-    return userMapper.existsById(id);
+    return jpaUserRepository.existsById(id);
   }
 
   @Override
   public boolean existsByNicknameExcludingId(String nickname, Long excludeId) {
-    return userMapper.existsByNicknameExcludingId(nickname, excludeId);
-  }
-
-  @Override
-  public void withdraw(User user) {
-    userMapper.updateDeletedAt(user.getId(), user.getDeletedAt());
+    return jpaUserRepository.existsByNicknameAndIdNot(Nickname.of(nickname), excludeId);
   }
 }

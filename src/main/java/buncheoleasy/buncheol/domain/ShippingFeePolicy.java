@@ -2,8 +2,13 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
 
-public record ShippingFeePolicy(Integer gs25ShippingFee, Integer cuShippingFee) {
+@Embeddable
+public record ShippingFeePolicy(
+    @Column(name = "gs25_shipping_fee") Integer gs25ShippingFee,
+    @Column(name = "cu_shipping_fee") Integer cuShippingFee) {
 
   public ShippingFeePolicy {
     validateAtLeastOneFeeProvided(gs25ShippingFee, cuShippingFee);

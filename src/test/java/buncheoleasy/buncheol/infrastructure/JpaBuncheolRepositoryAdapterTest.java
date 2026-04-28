@@ -56,7 +56,7 @@ class JpaBuncheolRepositoryAdapterTest {
         "홍길동");
   }
 
-  private Buncheol persistAndReload(Buncheol buncheol) {
+  private Buncheol persistAndDetach(Buncheol buncheol) {
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();
@@ -147,7 +147,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void ID로_분철을_조회할_수_있다() {
-      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("조회 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("조회 그룹")));
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
 
@@ -160,7 +160,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 도메인_update_호출_시_더티체킹으로_DB가_갱신된다() {
-      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("원본 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("원본 그룹")));
 
       BuncheolParams updatedParams =
           new BuncheolParams(
@@ -202,7 +202,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 분철_상태를_수정할_수_있다() {
-      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("상태 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("상태 그룹")));
       BuncheolStatus expectedStatus = buncheol.getStatus();
       buncheol.cancel();
 
@@ -215,7 +215,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 예상_상태가_다르면_업데이트되지_않는다() {
-      Buncheol buncheol = persistAndReload(Buncheol.create(hostId, validParams("낙관적 잠금")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("낙관적 잠금")));
       buncheol.cancel();
 
       // expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)

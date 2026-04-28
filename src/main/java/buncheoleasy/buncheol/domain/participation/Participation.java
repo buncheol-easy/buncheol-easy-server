@@ -23,6 +23,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Participation {
 
+  // 일반 save 경로 외에 JpaParticipationRepositoryAdapter 의 conditional INSERT 흐름에서
+  // ReflectionUtils 로 직접 주입되는 필드. 필드명·타입 변경 시 어댑터의 정적 ID_FIELD 초기화도 함께 갱신할 것.
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;

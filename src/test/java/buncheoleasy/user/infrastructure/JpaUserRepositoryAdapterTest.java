@@ -26,7 +26,7 @@ class JpaUserRepositoryAdapterTest {
 
   @PersistenceContext private EntityManager em;
 
-  private User persistAndReload(User user) {
+  private User persistAndDetach(User user) {
     userRepository.save(user);
     em.flush();
     em.clear();
@@ -59,7 +59,7 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void ID로_User를_조회할_수_있다() {
       // given
-      User user = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      User user = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
       Long userId = user.getId();
 
       // when
@@ -96,7 +96,7 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void provider와_providerId로_User를_조회할_수_있다() {
       // given
-      User user = persistAndReload(User.create("KAKAO", "social_123", "social@example.com"));
+      User user = persistAndDetach(User.create("KAKAO", "social_123", "social@example.com"));
 
       // when
       User foundUser =
@@ -127,7 +127,7 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void 존재하는_ID면_true를_반환한다() {
       // given
-      User user = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      User user = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
 
       // when
       boolean exists = userRepository.existsById(user.getId());
@@ -174,7 +174,7 @@ class JpaUserRepositoryAdapterTest {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");
       user.updateNickname("내닉네임");
-      User saved = persistAndReload(user);
+      User saved = persistAndDetach(user);
 
       // when: 자신의 ID를 제외하고 확인
       boolean exists = userRepository.existsByNicknameExcludingId("내닉네임", saved.getId());
@@ -200,7 +200,7 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void managed_엔티티의_도메인_메서드_호출_시_더티체크로_DB가_갱신된다() {
       // given
-      User saved = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
       String newNickname = "새닉네임";
       String newPhoneNumber = "01012345678";
 
@@ -226,7 +226,7 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void 회원_탈퇴_시_deletedAt이_설정되고_조회되지_않는다() {
       // given
-      User saved = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
       Long userId = saved.getId();
 
       // when: managed 엔티티에 withdraw() 호출 → flush 시 dirty UPDATE 로 deletedAt 반영
@@ -243,7 +243,7 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void 탈퇴_후_existsById도_false를_반환한다() {
       // given
-      User saved = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
       Long userId = saved.getId();
 
       User managed = userRepository.findById(userId).orElseThrow();

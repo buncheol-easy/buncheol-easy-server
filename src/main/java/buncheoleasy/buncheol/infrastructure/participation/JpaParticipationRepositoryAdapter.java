@@ -46,6 +46,9 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           ParticipationStatus.AWAITING_BALANCE_PAYMENT,
           ParticipationStatus.CONFIRMED);
 
+  private static final List<String> ACTIVE_STATUS_NAMES =
+      ACTIVE_STATUSES.stream().map(ParticipationStatus::name).toList();
+
   private static final List<ParticipationStatus> OPEN_BID_STATUSES =
       List.of(
           ParticipationStatus.PAYMENT_PENDING,
@@ -66,17 +69,17 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
 
-  private static final String INSERT_PARTICIPATION_BASE =
+  /** INSTANT 참여용 conditional INSERT. 분철이 모집중이고 마감 전일 때만 삽입. */
+  private static final String INSERT_INSTANT_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
           + " shipping_address_id, type, instant_price_snapshot, bid_amount, status,"
           + " created_at, updated_at) "
           + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW() "
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > NOW()";
 
-  private static final String INSERT_INSTANT_SQL = INSERT_PARTICIPATION_BASE;
-
+  /** BID 참여용 conditional INSERT. INSTANT 조건 + 해당 멤버 슬롯에 활성 즉시구매가 없을 때만 삽입. */
   private static final String INSERT_BID_SQL =
-      INSERT_PARTICIPATION_BASE
+      INSERT_INSTANT_SQL
           + " AND NOT EXISTS (SELECT 1 FROM participations p"
           + " WHERE p.active_instant_member_id = ?)";
 
@@ -191,9 +194,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public Set<ShippingMethod> findActiveShippingMethodsByBuncheolId(final Long buncheolId) {
-    return new HashSet<>(
-        jpaParticipationRepository.findActiveShippingMethodsByBuncheolId(
-            buncheolId, ACTIVE_STATUSES));
+    return jpaParticipationRepository
+        .findActiveShippingMethodNamesByBuncheolId(buncheolId, ACTIVE_STATUS_NAMES)
+        .stream()
+        .map(ShippingMethod::valueOf)
+        .collect(java.util.stream.Collectors.toSet());
   }
 
   @Override

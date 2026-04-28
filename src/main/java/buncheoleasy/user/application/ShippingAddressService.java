@@ -19,6 +19,7 @@ public class ShippingAddressService {
   private final ShippingAddressDomainService shippingAddressDomainService;
   private final UserDomainService userDomainService;
 
+  @Transactional
   public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
     validateUser(userId);
     shippingAddressDomainService.createShippingAddress(

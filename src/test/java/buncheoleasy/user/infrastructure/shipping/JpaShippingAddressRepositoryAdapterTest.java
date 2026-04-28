@@ -43,7 +43,7 @@ class JpaShippingAddressRepositoryAdapterTest {
     userId = user.getId();
   }
 
-  private ShippingAddress saveAndReload(ShippingAddress address) {
+  private ShippingAddress saveAndDetach(ShippingAddress address) {
     shippingAddressRepository.save(address);
     em.flush();
     em.clear();
@@ -92,7 +92,7 @@ class JpaShippingAddressRepositoryAdapterTest {
     void ID로_배송지를_조회할_수_있다() {
       // given
       ShippingAddress address =
-          saveAndReload(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
 
       // when
       Optional<ShippingAddress> found = shippingAddressRepository.findById(address.getId());
@@ -173,7 +173,7 @@ class JpaShippingAddressRepositoryAdapterTest {
     void managed_엔티티의_도메인_메서드_호출_시_더티체크로_DB가_갱신된다() {
       // given
       ShippingAddress saved =
-          saveAndReload(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
 
       // when: managed 엔티티에 도메인 메서드만 호출 → flush 시 dirty UPDATE
       ShippingAddress managed = shippingAddressRepository.findById(saved.getId()).orElseThrow();
@@ -196,7 +196,7 @@ class JpaShippingAddressRepositoryAdapterTest {
     void 배송지를_삭제할_수_있다() {
       // given
       ShippingAddress address =
-          saveAndReload(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
       Long addressId = address.getId();
 
       // when

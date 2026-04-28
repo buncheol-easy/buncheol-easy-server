@@ -3,7 +3,6 @@ package buncheoleasy.buncheol.infrastructure.participation;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationType;
-import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -66,15 +65,20 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       nativeQuery = true)
   List<Object[]> findActiveParticipationPresenceRows(@Param("buncheolId") Long buncheolId);
 
+  /**
+   * 활성 참여들이 사용 중인 배송 방법 목록. 모듈 경계 보호를 위해 user 모듈의 ShippingAddress 엔티티를 직접 JPQL JOIN 하지 않고 native
+   * query 로 테이블만 조인한다. 결과 String 은 어댑터에서 ShippingMethod enum 으로 변환.
+   */
   @Query(
-      "SELECT DISTINCT sa.shippingMethod "
-          + "FROM Participation p "
-          + "JOIN ShippingAddress sa ON p.shippingAddressId = sa.id "
-          + "WHERE p.buncheolId = :buncheolId "
-          + "AND p.status IN :activeStatuses")
-  List<ShippingMethod> findActiveShippingMethodsByBuncheolId(
-      @Param("buncheolId") Long buncheolId,
-      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+      value =
+          "SELECT DISTINCT sa.shipping_method "
+              + "FROM participations p "
+              + "JOIN shipping_addresses sa ON p.shipping_address_id = sa.id "
+              + "WHERE p.buncheol_id = :buncheolId "
+              + "AND p.status IN (:activeStatuses)",
+      nativeQuery = true)
+  List<String> findActiveShippingMethodNamesByBuncheolId(
+      @Param("buncheolId") Long buncheolId, @Param("activeStatuses") List<String> activeStatuses);
 
   /** status 가 expectedStatus 인 경우에만 갱신 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

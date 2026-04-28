@@ -49,6 +49,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
             new BuncheolParams(
                 null,
                 "테스트 그룹",
+                null,
                 "제목",
                 null,
                 "앨범명",

@@ -39,10 +39,14 @@ public record BuncheolModifyRequest(
     return groupName != null && !groupName.isBlank();
   }
 
-  public BuncheolParams toParams(final Long resolvedGroupId, final String resolvedGroupName) {
+  public BuncheolParams toParams(
+      final Long resolvedGroupId,
+      final String resolvedGroupName,
+      final String resolvedGroupImage) {
     return new BuncheolParams(
         resolvedGroupId,
         resolvedGroupName,
+        resolvedGroupImage,
         title,
         description,
         goodsName,

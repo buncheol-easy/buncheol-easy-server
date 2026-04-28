@@ -26,6 +26,7 @@ public class BuncheolMemberDomainService {
                         buncheolId,
                         param.memberId(),
                         param.memberName(),
+                        param.memberImage(),
                         param.instantPrice(),
                         param.bidAllowed(),
                         param.bidMinPrice()))

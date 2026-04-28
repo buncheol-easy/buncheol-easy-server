@@ -26,6 +26,7 @@ class BuncheolTest {
     return new BuncheolParams(
         null,
         "테스트 그룹",
+        null,
         "테스트 분철 제목",
         "분철 설명입니다.",
         "공식 앨범",
@@ -88,6 +89,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               groupName,
+              null,
               "제목",
               null,
               "앨범명",
@@ -116,6 +118,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               longGroupName,
+              null,
               "제목",
               null,
               "앨범명",
@@ -150,6 +153,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               title,
               null,
               "앨범명",
@@ -178,6 +182,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               longTitle,
               null,
               "앨범명",
@@ -210,6 +215,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -235,6 +241,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               longDescription,
               "앨범명",
@@ -269,6 +276,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               goodsName,
@@ -302,6 +310,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -329,6 +338,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -359,6 +369,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -389,7 +400,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              null, "그룹명", "제목", null, "앨범명", "스토어명", 50_000L, null, 7, 3000, null, "국민은행",
+              null, "그룹명", null, "제목", null, "앨범명", "스토어명", 50_000L, null, 7, 3000, null, "국민은행",
               "123-456", "홍길동");
 
       // when & then
@@ -407,6 +418,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -434,6 +446,7 @@ class BuncheolTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",

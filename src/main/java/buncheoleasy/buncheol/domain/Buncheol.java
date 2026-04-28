@@ -26,6 +26,7 @@ import lombok.NoArgsConstructor;
 public class Buncheol {
 
   private static final int GROUP_NAME_MAX_LENGTH = 100;
+  private static final int GROUP_IMAGE_MAX_LENGTH = 500;
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
   private static final int GOODS_NAME_MAX_LENGTH = 200;
@@ -45,6 +46,10 @@ public class Buncheol {
   // 화면 표시용 그룹명 스냅샷. groupId 가 NULL(커스텀 그룹)이거나 마스터 그룹명이 바뀌어도 분철 시점 이름이 유지된다.
   @Column(name = "group_name", nullable = false, length = 100)
   private String groupName;
+
+  // 화면 표시용 그룹 이미지 스냅샷. 커스텀 그룹이면 NULL.
+  @Column(name = "group_image", length = 500)
+  private String groupImage;
 
   @Column(nullable = false, length = 200)
   private String title;
@@ -96,6 +101,7 @@ public class Buncheol {
     this.hostId = hostId;
     this.groupId = params.groupId();
     this.groupName = params.groupName();
+    this.groupImage = params.groupImage();
     this.title = params.title();
     this.description = params.description();
     this.goodsName = params.goodsName();
@@ -114,6 +120,7 @@ public class Buncheol {
     validate(this.hostId, params);
     this.groupId = params.groupId();
     this.groupName = params.groupName();
+    this.groupImage = params.groupImage();
     this.title = params.title();
     this.description = params.description();
     this.goodsName = params.goodsName();
@@ -174,6 +181,7 @@ public class Buncheol {
   private void validate(final Long hostId, final BuncheolParams params) {
     validateHostAndParams(hostId, params);
     validateGroupName(params.groupName());
+    validateGroupImage(params.groupImage());
     validateTitle(params.title());
     validateDescription(params.description());
     validateGoodsName(params.goodsName());
@@ -195,6 +203,12 @@ public class Buncheol {
     }
     if (value.length() > GROUP_NAME_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+    }
+  }
+
+  private void validateGroupImage(final String value) {
+    if (value != null && value.length() > GROUP_IMAGE_MAX_LENGTH) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
     }
   }
 

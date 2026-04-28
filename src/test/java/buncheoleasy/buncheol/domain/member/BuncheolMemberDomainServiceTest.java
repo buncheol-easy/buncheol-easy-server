@@ -34,8 +34,8 @@ class BuncheolMemberDomainServiceTest {
       Long buncheolId = 1L;
       List<BuncheolMemberParams> params =
           List.of(
-              new BuncheolMemberParams(null, "멤버A", 50_000L, false, null),
-              new BuncheolMemberParams(null, "멤버B", 30_000L, false, null));
+              new BuncheolMemberParams(null, "멤버A", null, 50_000L, false, null),
+              new BuncheolMemberParams(null, "멤버B", null, 30_000L, false, null));
 
       // when
       buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);

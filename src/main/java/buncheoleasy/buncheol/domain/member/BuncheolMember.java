@@ -23,6 +23,7 @@ import lombok.NoArgsConstructor;
 public class BuncheolMember {
 
   private static final int MEMBER_NAME_MAX_LENGTH = 100;
+  private static final int MEMBER_IMAGE_MAX_LENGTH = 500;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,6 +39,10 @@ public class BuncheolMember {
   // 화면 표시용 멤버명 스냅샷. memberId 가 NULL(커스텀)이거나 마스터 명칭 변경되어도 분철 시점 이름 유지.
   @Column(name = "member_name", nullable = false, length = 100, updatable = false)
   private String memberName;
+
+  // 화면 표시용 멤버 이미지 스냅샷. 커스텀 멤버면 NULL.
+  @Column(name = "member_image", length = 500, updatable = false)
+  private String memberImage;
 
   // 즉시구매가. 이 금액을 결제하면 곧바로 CONFIRMED 로 슬롯 확정. BID 참여의 제시가 상한이기도 함.
   @Column(name = "instant_price", nullable = false)
@@ -56,24 +61,27 @@ public class BuncheolMember {
       final Long buncheolId,
       final Long memberId,
       final String memberName,
+      final String memberImage,
       final long instantPrice,
       final boolean bidAllowed,
       final Long bidMinPrice) {
     return new BuncheolMember(
-        buncheolId, memberId, memberName, instantPrice, bidAllowed, bidMinPrice);
+        buncheolId, memberId, memberName, memberImage, instantPrice, bidAllowed, bidMinPrice);
   }
 
   private BuncheolMember(
       final Long buncheolId,
       final Long memberId,
       final String memberName,
+      final String memberImage,
       final long instantPrice,
       final boolean bidAllowed,
       final Long bidMinPrice) {
-    validate(buncheolId, memberName, instantPrice);
+    validate(buncheolId, memberName, memberImage, instantPrice);
     this.buncheolId = buncheolId;
     this.memberId = memberId;
     this.memberName = memberName;
+    this.memberImage = memberImage;
     this.instantPrice = instantPrice;
     this.bidOption = BidOption.of(instantPrice, bidAllowed, bidMinPrice);
   }
@@ -98,9 +106,14 @@ public class BuncheolMember {
     }
   }
 
-  private void validate(final Long buncheolId, final String memberName, final long instantPrice) {
+  private void validate(
+      final Long buncheolId,
+      final String memberName,
+      final String memberImage,
+      final long instantPrice) {
     validateBuncheolId(buncheolId);
     validateMemberName(memberName);
+    validateMemberImage(memberImage);
     validateInstantPrice(instantPrice);
   }
 
@@ -116,6 +129,12 @@ public class BuncheolMember {
     }
     if (memberName.length() > MEMBER_NAME_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_NAME_LENGTH_INVALID);
+    }
+  }
+
+  private void validateMemberImage(final String memberImage) {
+    if (memberImage != null && memberImage.length() > MEMBER_IMAGE_MAX_LENGTH) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
     }
   }
 

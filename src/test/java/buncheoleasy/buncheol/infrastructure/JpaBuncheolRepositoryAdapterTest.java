@@ -42,6 +42,7 @@ class JpaBuncheolRepositoryAdapterTest {
     return new BuncheolParams(
         null,
         groupName,
+        null,
         "테스트 분철 제목",
         "분철 설명입니다.",
         "공식 앨범",
@@ -94,6 +95,7 @@ class JpaBuncheolRepositoryAdapterTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -120,6 +122,7 @@ class JpaBuncheolRepositoryAdapterTest {
           new BuncheolParams(
               null,
               "그룹명",
+              null,
               "제목",
               null,
               "앨범명",
@@ -166,6 +169,7 @@ class JpaBuncheolRepositoryAdapterTest {
           new BuncheolParams(
               null,
               "수정 그룹",
+              null,
               "수정 제목",
               "수정 설명",
               "수정 굿즈",

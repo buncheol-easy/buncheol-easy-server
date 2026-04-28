@@ -1,6 +1,5 @@
 package buncheoleasy.user.domain;
 
-import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Embedded;
@@ -32,14 +31,7 @@ public class User {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Embedded
-  @AttributeOverride(
-      name = "provider",
-      column = @Column(name = "provider", nullable = false, length = 20))
-  @AttributeOverride(
-      name = "providerId",
-      column = @Column(name = "provider_id", nullable = false, length = 100))
-  private SocialInfo socialInfo;
+  @Embedded private SocialInfo socialInfo;
 
   @Convert(converter = EmailConverter.class)
   @Column(name = "email", nullable = false, length = 320)
@@ -68,12 +60,17 @@ public class User {
   private LocalDateTime deletedAt;
 
   public static User create(final String provider, final String providerId, final String email) {
-    User user = new User();
-    user.socialInfo = SocialInfo.of(provider, providerId);
-    user.email = Email.of(email);
-    user.nickname = Nickname.of(generateRandomNickname());
-    user.profileCompleted = false;
-    return user;
+    return new User(
+        SocialInfo.of(provider, providerId),
+        Email.of(email),
+        Nickname.of(generateRandomNickname()));
+  }
+
+  private User(final SocialInfo socialInfo, final Email email, final Nickname nickname) {
+    this.socialInfo = socialInfo;
+    this.email = email;
+    this.nickname = nickname;
+    this.profileCompleted = false;
   }
 
   private static String generateRandomNickname() {

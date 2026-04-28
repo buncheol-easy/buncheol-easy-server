@@ -195,11 +195,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
     @Test
@@ -239,10 +235,7 @@ class BuncheolControllerTest {
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
           .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED.getCode())));
+              content().string(containsString(ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED.getCode())));
     }
 
     @Test
@@ -277,11 +270,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
     @Test
@@ -317,11 +306,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
     @Test
@@ -339,10 +324,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
           .andExpect(status().isNotFound())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }
   }
 
@@ -414,11 +396,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
     @Test
@@ -454,11 +432,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.INVALID_INPUT_VALUE.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
     @Test
@@ -475,11 +449,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
           .andExpect(status().isNotFound())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }
   }
 
@@ -509,10 +479,7 @@ class BuncheolControllerTest {
           .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
           .andExpect(status().isConflict())
           .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED.getCode())));
+              content().string(containsString(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED.getCode())));
     }
 
     @Test
@@ -526,11 +493,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
           .andExpect(status().isNotFound())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }
 
     @Test
@@ -544,11 +507,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
           .andExpect(status().isForbidden())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
     }
   }
 
@@ -598,9 +557,7 @@ class BuncheolControllerTest {
           .andExpect(status().isConflict())
           .andExpect(
               content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED.getCode())));
+                  .string(containsString(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED.getCode())));
     }
   }
 }

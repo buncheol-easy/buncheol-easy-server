@@ -125,10 +125,7 @@ class BuncheolCheckoutServiceTest {
       Participation participation =
           Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
       setId(participation, PARTICIPATION_ID);
-      setFieldValue(
-          participation,
-          "status",
-          ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+      setFieldValue(participation, "status", ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       setFieldValue(participation, "balanceDueAmount", 25_000L);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
@@ -196,10 +193,7 @@ class BuncheolCheckoutServiceTest {
       Participation participation =
           Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
       setId(participation, PARTICIPATION_ID);
-      setFieldValue(
-          participation,
-          "status",
-          ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+      setFieldValue(participation, "status", ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       // balanceDueAmount is null by default
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
@@ -221,10 +215,7 @@ class BuncheolCheckoutServiceTest {
       Participation participation =
           Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
       setId(participation, PARTICIPATION_ID);
-      setFieldValue(
-          participation,
-          "status",
-          ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+      setFieldValue(participation, "status", ParticipationStatus.AWAITING_BALANCE_PAYMENT);
       setFieldValue(participation, "balanceDueAmount", 0L);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))

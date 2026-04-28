@@ -80,10 +80,7 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"\"}"))
         .andExpect(status().isBadRequest())
-        .andExpect(
-            content()
-                .string(
-                    containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
@@ -97,10 +94,7 @@ class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"invalid-refresh\"}"))
         .andExpect(status().isUnauthorized())
-        .andExpect(
-            content()
-                .string(
-                    containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.AUTH_INVALID_TOKEN.getCode())));
   }
 
   @Test

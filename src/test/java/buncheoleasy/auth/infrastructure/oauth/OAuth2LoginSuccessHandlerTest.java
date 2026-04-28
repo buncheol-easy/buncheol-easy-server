@@ -54,8 +54,7 @@ class OAuth2LoginSuccessHandlerTest {
           new OAuth2AuthenticationToken(
               principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
       OAuth2UserProfile profile =
-          new OAuth2UserProfile(
-              SocialProvider.KAKAO, "provider-id", "test@example.com");
+          new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com");
       TokenPair tokenPair = new TokenPair("access", "refresh");
 
       given(profileExtractor.supports("kakao")).willReturn(true);
@@ -69,9 +68,7 @@ class OAuth2LoginSuccessHandlerTest {
 
       // then
       then(socialLoginService).should().login("KAKAO", "provider-id", "test@example.com");
-      then(tokenResponseWriter)
-          .should()
-          .write(any(), eq(tokenPair));
+      then(tokenResponseWriter).should().write(any(), eq(tokenPair));
     }
 
     @Test
@@ -126,8 +123,7 @@ class OAuth2LoginSuccessHandlerTest {
       OAuth2AuthenticationToken authentication =
           new OAuth2AuthenticationToken(
               principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
-      OAuth2UserProfile profile =
-          new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", null);
+      OAuth2UserProfile profile = new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", null);
 
       given(profileExtractor.supports("kakao")).willReturn(true);
       given(profileExtractor.extract(principal)).willReturn(profile);
@@ -141,12 +137,7 @@ class OAuth2LoginSuccessHandlerTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
 
-      then(socialLoginService)
-          .should(never())
-          .login(
-              anyString(),
-              anyString(),
-              any());
+      then(socialLoginService).should(never()).login(anyString(), anyString(), any());
       then(tokenResponseWriter).shouldHaveNoInteractions();
     }
   }

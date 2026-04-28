@@ -220,8 +220,7 @@ class BuncheolParticipationServiceTest {
       mockNoActiveParticipation();
       mockInstantSlotNotTaken();
 
-      willThrow(
-              new BusinessException(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED))
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED))
           .given(member)
           .validateBidAllowed();
 

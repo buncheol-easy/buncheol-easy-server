@@ -36,12 +36,7 @@ class OAuth2LoginFailureHandlerTest {
 
     // then
     ArgumentCaptor<ProblemDetail> captor = ArgumentCaptor.forClass(ProblemDetail.class);
-    then(errorResponseWriter)
-        .should()
-        .write(
-            eq(request),
-            eq(response),
-            captor.capture());
+    then(errorResponseWriter).should().write(eq(request), eq(response), captor.capture());
 
     ProblemDetail problemDetail = captor.getValue();
     assertThat(problemDetail.getStatus())

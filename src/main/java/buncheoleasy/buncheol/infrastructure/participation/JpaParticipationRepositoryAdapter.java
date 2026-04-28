@@ -25,6 +25,16 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.ReflectionUtils;
 
+/**
+ * Participation 리포지토리 어댑터. JPA 와 raw JdbcTemplate 을 의도적으로 혼용한다:
+ *
+ * <ul>
+ *   <li>일반 CRUD·쿼리는 {@link JpaParticipationRepository} (Spring Data JPA) 로 처리한다.
+ *   <li>원자 조건 INSERT (`INSERT ... SELECT FROM buncheols WHERE status='RECRUITING' ...`) 는 JPA save
+ *       로 표현 불가하므로 {@link JdbcTemplate} + {@link KeyHolder} 로 직접 수행하고 generated PK 를 회수해 엔티티에
+ *       리플렉션으로 주입한다.
+ * </ul>
+ */
 @Repository
 @RequiredArgsConstructor
 public class JpaParticipationRepositoryAdapter implements ParticipationRepository {

@@ -14,7 +14,13 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaParticipationRepository extends JpaRepository<Participation, Long> {
 
-  /** active_participant_id (DB STORED 컬럼) 로 활성 참여 조회. */
+  /**
+   * active_participant_id (DB STORED 컬럼) 로 활성 참여 조회.
+   *
+   * <p>active_participant_id 는 schema.sql 의 participations 테이블에 정의된 STORED generated column 으로
+   * status 가 활성 상태일 때만 participant_id 값을 가지며 비활성 상태면 NULL. 코드 레벨에서 엔티티에 매핑하지 않고 이 native query 에서만
+   * 사용한다.
+   */
   @Query(
       value =
           "SELECT * FROM participations "
@@ -24,7 +30,12 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
 
-  /** active_instant_member_id (DB STORED 컬럼) 로 활성 즉시구매 존재 여부 확인. */
+  /**
+   * active_instant_member_id (DB STORED 컬럼) 로 활성 즉시구매 존재 여부 확인.
+   *
+   * <p>active_instant_member_id 는 schema.sql 의 participations 테이블에 정의된 STORED generated column 으로
+   * type='INSTANT' 이고 status 가 활성 상태일 때만 buncheol_member_id 값을 가진다.
+   */
   @Query(
       value =
           "SELECT COUNT(*) > 0 FROM participations "

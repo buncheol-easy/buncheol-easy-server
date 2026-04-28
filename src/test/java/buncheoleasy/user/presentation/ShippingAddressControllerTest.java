@@ -75,9 +75,7 @@ class ShippingAddressControllerTest {
 
     then(shippingAddressService)
         .should()
-        .registerShippingAddress(
-            USER_ID,
-            new ShippingAddressRequest("GS25_HALF", "GS25 강남역점"));
+        .registerShippingAddress(USER_ID, new ShippingAddressRequest("GS25_HALF", "GS25 강남역점"));
   }
 
   @Test
@@ -89,20 +87,14 @@ class ShippingAddressControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"\"}"))
         .andExpect(status().isBadRequest())
-        .andExpect(
-            content()
-                .string(
-                    containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
   void 배송지_수정_중_BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
     willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN))
         .given(shippingAddressService)
-        .modifyShippingAddress(
-            USER_ID,
-            10L,
-            new ShippingAddressRequest("CU_HALF", "CU 홍대입구점"));
+        .modifyShippingAddress(USER_ID, 10L, new ShippingAddressRequest("CU_HALF", "CU 홍대입구점"));
 
     mockMvc
         .perform(
@@ -112,10 +104,7 @@ class ShippingAddressControllerTest {
                 .content("{\"shippingMethod\":\"CU_HALF\",\"storeName\":\"CU 홍대입구점\"}"))
         .andExpect(status().isForbidden())
         .andExpect(
-            content()
-                .string(
-                    containsString(
-                        ErrorCode.SHIPPING_ADDRESS_FORBIDDEN.getCode())));
+            content().string(containsString(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN.getCode())));
   }
 
   @Test
@@ -128,10 +117,7 @@ class ShippingAddressControllerTest {
         .perform(delete("/v1/users/me/shipping-addresses/10").with(mockAuth()))
         .andExpect(status().isNotFound())
         .andExpect(
-            content()
-                .string(
-                    containsString(
-                        ErrorCode.SHIPPING_ADDRESS_NOT_FOUND.getCode())));
+            content().string(containsString(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND.getCode())));
   }
 
   @Test

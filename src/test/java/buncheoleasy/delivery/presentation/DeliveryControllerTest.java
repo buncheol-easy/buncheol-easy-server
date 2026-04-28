@@ -98,11 +98,7 @@ class DeliveryControllerTest {
                   .contentType(MediaType.APPLICATION_JSON)
                   .content("{\"trackingNumber\": \"TRACK123\"}"))
           .andExpect(status().isForbidden())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
     }
 
     @Test
@@ -143,11 +139,7 @@ class DeliveryControllerTest {
       mockMvc
           .perform(post("/v1/deliveries/{id}/receipt", 10L).with(mockAuth()))
           .andExpect(status().isForbidden())
-          .andExpect(
-              content()
-                  .string(
-                      containsString(
-                          ErrorCode.DELIVERY_NO_PERMISSION.getCode())));
+          .andExpect(content().string(containsString(ErrorCode.DELIVERY_NO_PERMISSION.getCode())));
     }
 
     @Test

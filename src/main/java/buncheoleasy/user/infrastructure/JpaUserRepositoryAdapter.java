@@ -20,11 +20,6 @@ public class JpaUserRepositoryAdapter implements UserRepository {
   }
 
   @Override
-  public void update(User user) {
-    jpaUserRepository.save(user);
-  }
-
-  @Override
   public Optional<User> findById(Long id) {
     return jpaUserRepository.findById(id);
   }
@@ -42,10 +37,5 @@ public class JpaUserRepositoryAdapter implements UserRepository {
   @Override
   public boolean existsByNicknameExcludingId(String nickname, Long excludeId) {
     return jpaUserRepository.existsByNicknameAndIdNot(Nickname.of(nickname), excludeId);
-  }
-
-  @Override
-  public void withdraw(User user) {
-    jpaUserRepository.save(user);
   }
 }

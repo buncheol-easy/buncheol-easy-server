@@ -10,6 +10,7 @@ import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +25,7 @@ public class ShippingAddressService {
         userId, request.shippingMethod(), request.storeName());
   }
 
+  @Transactional
   public void modifyShippingAddress(
       final Long userId, final Long addressId, final ShippingAddressRequest request) {
     validateUser(userId);

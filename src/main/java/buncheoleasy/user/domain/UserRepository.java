@@ -6,8 +6,6 @@ public interface UserRepository {
 
   User save(User user);
 
-  void update(User user);
-
   Optional<User> findById(Long id);
 
   Optional<User> findBySocialInfo(SocialInfo socialInfo);
@@ -15,6 +13,4 @@ public interface UserRepository {
   boolean existsById(Long id);
 
   boolean existsByNicknameExcludingId(String nickname, Long excludeId);
-
-  void withdraw(User user);
 }

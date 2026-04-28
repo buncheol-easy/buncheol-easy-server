@@ -170,20 +170,19 @@ class JpaShippingAddressRepositoryAdapterTest {
   class UpdateTest {
 
     @Test
-    void 배송지_정보를_업데이트할_수_있다() {
+    void managed_엔티티의_도메인_메서드_호출_시_더티체크로_DB가_갱신된다() {
       // given
-      ShippingAddress address =
+      ShippingAddress saved =
           saveAndReload(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-      ShippingAddress managed = shippingAddressRepository.findById(address.getId()).orElseThrow();
-      managed.update("CU_HALF", "CU 홍대입구점");
 
-      // when
-      shippingAddressRepository.update(managed);
+      // when: managed 엔티티에 도메인 메서드만 호출 → flush 시 dirty UPDATE
+      ShippingAddress managed = shippingAddressRepository.findById(saved.getId()).orElseThrow();
+      managed.update("CU_HALF", "CU 홍대입구점");
       em.flush();
       em.clear();
 
       // then
-      ShippingAddress updated = shippingAddressRepository.findById(address.getId()).orElseThrow();
+      ShippingAddress updated = shippingAddressRepository.findById(saved.getId()).orElseThrow();
       assertThat(updated.getShippingMethod()).isEqualTo(ShippingMethod.CU_HALF);
       assertThat(updated.getStoreName()).isEqualTo("CU 홍대입구점");
     }

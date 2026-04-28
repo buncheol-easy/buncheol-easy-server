@@ -20,11 +20,6 @@ public class JpaShippingAddressRepositoryAdapter implements ShippingAddressRepos
   }
 
   @Override
-  public void update(ShippingAddress shippingAddress) {
-    jpaShippingAddressRepository.save(shippingAddress);
-  }
-
-  @Override
   public void delete(Long id) {
     jpaShippingAddressRepository.deleteById(id);
   }

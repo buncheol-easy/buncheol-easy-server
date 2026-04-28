@@ -198,21 +198,21 @@ class JpaUserRepositoryAdapterTest {
   class UpdateTest {
 
     @Test
-    void User_정보를_업데이트할_수_있다() {
+    void managed_엔티티의_도메인_메서드_호출_시_더티체크로_DB가_갱신된다() {
       // given
-      User user = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      User saved = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
       String newNickname = "새닉네임";
       String newPhoneNumber = "01012345678";
-      user.updateNickname(newNickname);
-      user.updatePhoneNumber(newPhoneNumber);
 
-      // when
-      userRepository.update(user);
+      // when: managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
+      User managed = userRepository.findById(saved.getId()).orElseThrow();
+      managed.updateNickname(newNickname);
+      managed.updatePhoneNumber(newPhoneNumber);
       em.flush();
       em.clear();
 
       // then
-      User updated = userRepository.findById(user.getId()).orElseThrow();
+      User updated = userRepository.findById(saved.getId()).orElseThrow();
       assertThat(updated.getNickname().value()).isEqualTo(newNickname);
       assertThat(updated.getPhoneNumber().value()).isEqualTo(newPhoneNumber);
       assertThat(updated.isProfileCompleted()).isTrue();
@@ -226,17 +226,16 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void 회원_탈퇴_시_deletedAt이_설정되고_조회되지_않는다() {
       // given
-      User user = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
-      Long userId = user.getId();
+      User saved = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      Long userId = saved.getId();
 
-      user.withdraw();
-
-      // when
-      userRepository.withdraw(user);
+      // when: managed 엔티티에 withdraw() 호출 → flush 시 dirty UPDATE 로 deletedAt 반영
+      User managed = userRepository.findById(userId).orElseThrow();
+      managed.withdraw();
       em.flush();
       em.clear();
 
-      // then
+      // then: @SQLRestriction 으로 자동 제외되어 조회되지 않는다
       User found = userRepository.findById(userId).orElse(null);
       assertThat(found).isNull();
     }
@@ -244,11 +243,11 @@ class JpaUserRepositoryAdapterTest {
     @Test
     void 탈퇴_후_existsById도_false를_반환한다() {
       // given
-      User user = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
-      Long userId = user.getId();
+      User saved = persistAndReload(User.create("KAKAO", "123456", "test@example.com"));
+      Long userId = saved.getId();
 
-      user.withdraw();
-      userRepository.withdraw(user);
+      User managed = userRepository.findById(userId).orElseThrow();
+      managed.withdraw();
       em.flush();
       em.clear();
 

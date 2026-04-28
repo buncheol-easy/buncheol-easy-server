@@ -32,6 +32,7 @@ public class ShippingAddressDomainService {
     return shippingAddressRepository.save(shippingAddress);
   }
 
+  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
   public void updateShippingAddress(
       final Long userId, final Long id, final String shippingMethod, final String storeName) {
     ShippingAddress shippingAddress = getShippingAddress(id);
@@ -48,7 +49,6 @@ public class ShippingAddressDomainService {
     }
 
     shippingAddress.update(shippingMethod, storeName);
-    shippingAddressRepository.update(shippingAddress);
   }
 
   public void deleteShippingAddress(final Long userId, final Long id) {

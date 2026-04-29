@@ -29,9 +29,7 @@ class BuncheolTest {
         null,
         "테스트 분철 제목",
         "분철 설명입니다.",
-        "공식 앨범",
         "공식 스토어",
-        50_000L,
         FUTURE_DEADLINE,
         7,
         3000,
@@ -92,9 +90,7 @@ class BuncheolTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               7,
               3000,
@@ -121,9 +117,7 @@ class BuncheolTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               7,
               3000,
@@ -156,9 +150,7 @@ class BuncheolTest {
               null,
               title,
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               7,
               3000,
@@ -185,9 +177,7 @@ class BuncheolTest {
               null,
               longTitle,
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               7,
               3000,
@@ -218,9 +208,7 @@ class BuncheolTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               7,
               3000,
@@ -244,9 +232,7 @@ class BuncheolTest {
               null,
               "제목",
               longDescription,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               7,
               3000,
@@ -260,100 +246,6 @@ class BuncheolTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  @Nested
-  @DisplayName("굿즈명 검증 테스트")
-  class ValidateGoodsNameTest {
-
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"   "})
-    void 굿즈명이_null이거나_빈_값이면_예외가_발생한다(String goodsName) {
-      // given
-      BuncheolParams params =
-          new BuncheolParams(
-              1L,
-              "그룹명",
-              null,
-              "제목",
-              null,
-              goodsName,
-              "스토어명",
-              50_000L,
-              FUTURE_DEADLINE,
-              7,
-              3000,
-              null,
-              "국민은행",
-              "123-456",
-              "홍길동");
-
-      // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-  }
-
-  @Nested
-  @DisplayName("원가 검증 테스트")
-  class ValidateOriginalPriceTest {
-
-    @ParameterizedTest
-    @ValueSource(longs = {0L, -1L, -100_000L})
-    void 원가가_0_이하면_예외가_발생한다(long price) {
-      // given
-      BuncheolParams params =
-          new BuncheolParams(
-              1L,
-              "그룹명",
-              null,
-              "제목",
-              null,
-              "앨범명",
-              "스토어명",
-              price,
-              FUTURE_DEADLINE,
-              7,
-              3000,
-              null,
-              "국민은행",
-              "123-456",
-              "홍길동");
-
-      // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_PRICE_INVALID);
-    }
-
-    @Test
-    void 원가가_양수면_유효하다() {
-      // given
-      BuncheolParams params =
-          new BuncheolParams(
-              1L,
-              "그룹명",
-              null,
-              "제목",
-              null,
-              "앨범명",
-              "스토어명",
-              1L,
-              FUTURE_DEADLINE,
-              7,
-              3000,
-              null,
-              "국민은행",
-              "123-456",
-              "홍길동");
-
-      // when & then
-      assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
     }
   }
 
@@ -372,9 +264,7 @@ class BuncheolTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               FUTURE_DEADLINE,
               days,
               3000,
@@ -400,8 +290,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              1L, "그룹명", null, "제목", null, "앨범명", "스토어명", 50_000L, null, 7, 3000, null, "국민은행",
-              "123-456", "홍길동");
+              1L, "그룹명", null, "제목", null, "스토어명", null, 7, 3000, null, "국민은행", "123-456", "홍길동");
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -421,9 +310,7 @@ class BuncheolTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               pastDeadline,
               7,
               3000,
@@ -449,9 +336,7 @@ class BuncheolTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              50_000L,
               LocalDateTime.now().plusSeconds(1),
               7,
               3000,

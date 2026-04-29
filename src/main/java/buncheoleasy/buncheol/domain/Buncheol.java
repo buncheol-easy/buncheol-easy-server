@@ -29,7 +29,6 @@ public class Buncheol {
   private static final int GROUP_IMAGE_MAX_LENGTH = 500;
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
-  private static final int GOODS_NAME_MAX_LENGTH = 200;
   private static final int STORE_NAME_MAX_LENGTH = 200;
 
   @Id
@@ -56,17 +55,10 @@ public class Buncheol {
 
   @Column private String description;
 
-  @Column(name = "goods_name", nullable = false, length = 200)
-  private String goodsName;
-
   @Column(name = "store_name", nullable = false, length = 200)
   private String storeName;
 
-  // 굿즈 1세트(전 멤버 분량) 정가. 분철 정산 기준 금액.
-  @Column(name = "original_price", nullable = false)
-  private long originalPrice;
-
-  // 참여(즉시구매·제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
+  // 참여(제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
   @Column(nullable = false)
   private LocalDateTime deadline;
 
@@ -104,9 +96,7 @@ public class Buncheol {
     this.groupImage = params.groupImage();
     this.title = params.title();
     this.description = params.description();
-    this.goodsName = params.goodsName();
     this.storeName = params.storeName();
-    this.originalPrice = params.originalPrice();
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
@@ -123,9 +113,7 @@ public class Buncheol {
     this.groupImage = params.groupImage();
     this.title = params.title();
     this.description = params.description();
-    this.goodsName = params.goodsName();
     this.storeName = params.storeName();
-    this.originalPrice = params.originalPrice();
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
@@ -185,9 +173,7 @@ public class Buncheol {
     validateGroupImage(params.groupImage());
     validateTitle(params.title());
     validateDescription(params.description());
-    validateGoodsName(params.goodsName());
     validateStoreName(params.storeName());
-    validateOriginalPrice(params.originalPrice());
     validateShippingDeadlineDays(params.shippingDeadlineDays());
     validateDeadline(params.deadline());
   }
@@ -234,27 +220,12 @@ public class Buncheol {
     }
   }
 
-  private void validateGoodsName(final String value) {
-    if (value == null || value.isBlank()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-    if (value.length() > GOODS_NAME_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
   private void validateStoreName(final String value) {
     if (value == null || value.isBlank()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
     if (value.length() > STORE_NAME_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  private void validateOriginalPrice(final long value) {
-    if (value <= 0) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_PRICE_INVALID);
     }
   }
 

@@ -92,9 +92,7 @@ CREATE TABLE buncheols
     group_image            VARCHAR(500) NULL,
     title                  VARCHAR(200) NOT NULL,
     description            TEXT         NULL,
-    goods_name             VARCHAR(200) NOT NULL,
     store_name             VARCHAR(200) NOT NULL,
-    original_price         BIGINT       NOT NULL,
     deadline               TIMESTAMP    NOT NULL,
     shipping_deadline_days INT          NOT NULL,
     gs25_shipping_fee      INT          NULL,
@@ -113,7 +111,6 @@ CREATE TABLE buncheols
 );
 
 CREATE INDEX idx_buncheols_group_id ON buncheols (group_id);
-CREATE INDEX idx_buncheols_goods_name ON buncheols (goods_name);
 CREATE INDEX idx_buncheols_title ON buncheols (title);
 
 CREATE TABLE buncheol_members

@@ -47,9 +47,7 @@ class JpaBuncheolRepositoryAdapterTest {
         null,
         "테스트 분철 제목",
         "분철 설명입니다.",
-        "공식 앨범",
         "공식 스토어",
-        50_000L,
         LocalDateTime.now().plusDays(7),
         7,
         3000,
@@ -100,9 +98,7 @@ class JpaBuncheolRepositoryAdapterTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              30_000L,
               LocalDateTime.now().plusDays(7),
               5,
               2500,
@@ -127,9 +123,7 @@ class JpaBuncheolRepositoryAdapterTest {
               null,
               "제목",
               null,
-              "앨범명",
               "스토어명",
-              30_000L,
               LocalDateTime.now().plusDays(7),
               5,
               null,
@@ -174,9 +168,7 @@ class JpaBuncheolRepositoryAdapterTest {
               null,
               "수정 제목",
               "수정 설명",
-              "수정 굿즈",
               "수정 스토어",
-              77_000L,
               LocalDateTime.now().plusDays(3),
               3,
               null,
@@ -195,9 +187,7 @@ class JpaBuncheolRepositoryAdapterTest {
       assertThat(found.getGroupName()).isEqualTo("수정 그룹");
       assertThat(found.getTitle()).isEqualTo("수정 제목");
       assertThat(found.getDescription()).isEqualTo("수정 설명");
-      assertThat(found.getGoodsName()).isEqualTo("수정 굿즈");
       assertThat(found.getStoreName()).isEqualTo("수정 스토어");
-      assertThat(found.getOriginalPrice()).isEqualTo(77_000L);
       assertThat(found.getShippingDeadlineDays()).isEqualTo(3);
       assertThat(found.getShippingFeePolicy().gs25ShippingFee()).isNull();
       assertThat(found.getShippingFeePolicy().cuShippingFee()).isEqualTo(1800);

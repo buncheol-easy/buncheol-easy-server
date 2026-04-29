@@ -93,3 +93,12 @@ toss:
     confirm-url: "https://api.tosspayments.com/v1/payments/confirm"
     connect-timeout: 3s
     read-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

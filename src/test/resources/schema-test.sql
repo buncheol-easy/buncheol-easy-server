@@ -123,9 +123,7 @@ CREATE TABLE buncheol_members
     member_id     BIGINT       NOT NULL,
     member_name   VARCHAR(100) NOT NULL,
     member_image  VARCHAR(500) NULL,
-    instant_price BIGINT       NOT NULL,
-    bid_allowed   BOOLEAN      NOT NULL DEFAULT FALSE,
-    bid_min_price BIGINT       NULL,
+    bid_min_price BIGINT       NOT NULL,
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -151,26 +149,22 @@ CREATE INDEX idx_buncheol_images_buncheol_id ON buncheol_images (buncheol_id);
 
 CREATE TABLE participations
 (
-    id                       BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id              BIGINT       NOT NULL,
-    buncheol_member_id       BIGINT       NOT NULL,
-    participant_id           BIGINT       NOT NULL,
-    shipping_address_id      BIGINT       NOT NULL,
-    type                     VARCHAR(20)  NOT NULL,
-    instant_price_snapshot   BIGINT       NULL,
-    bid_amount               BIGINT       NULL,
-    balance_due_amount       BIGINT       NULL,
-    balance_due_at           TIMESTAMP    NULL,
-    closed_rank              INT          NULL,
-    fail_reason              VARCHAR(100) NULL,
-    finalized_at             TIMESTAMP    NULL,
-    status                   VARCHAR(30)  NOT NULL,
+    id                    BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id           BIGINT       NOT NULL,
+    buncheol_member_id    BIGINT       NOT NULL,
+    participant_id        BIGINT       NOT NULL,
+    shipping_address_id   BIGINT       NOT NULL,
+    bid_amount            BIGINT       NOT NULL,
+    due_at                TIMESTAMP    NULL,
+    closed_rank           INT          NULL,
+    fail_reason           VARCHAR(100) NULL,
+    finalized_at          TIMESTAMP    NULL,
+    status                VARCHAR(30)  NOT NULL,
     -- H2 generated column 안정성 이슈로 테스트 스키마에서는 일반 컬럼으로 유지
-    confirmed_member_id      BIGINT       NULL,
-    active_instant_member_id BIGINT       NULL,
-    active_participant_id    BIGINT       NULL,
-    created_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    confirmed_member_id   BIGINT       NULL,
+    active_participant_id BIGINT       NULL,
+    created_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -181,16 +175,14 @@ CREATE TABLE participations
 
 CREATE INDEX idx_participations_buncheol_id ON participations (buncheol_id);
 CREATE UNIQUE INDEX uq_participations_confirmed_member ON participations (confirmed_member_id);
-CREATE UNIQUE INDEX uq_participations_active_instant_member ON participations (active_instant_member_id);
 CREATE UNIQUE INDEX uq_participations_active_member_participant ON participations (buncheol_member_id, active_participant_id);
-CREATE INDEX idx_participations_member_type_status ON participations (buncheol_member_id, type, status);
+CREATE INDEX idx_participations_member_status ON participations (buncheol_member_id, status);
 
 CREATE TABLE payments
 (
     id                BIGINT       NOT NULL AUTO_INCREMENT,
     participation_id  BIGINT       NOT NULL,
     tx_type           VARCHAR(20)  NOT NULL,
-    payment_phase     VARCHAR(20)  NOT NULL,
     order_id          VARCHAR(100) NOT NULL,
     payment_key       VARCHAR(200) NULL,
     parent_payment_id BIGINT       NULL,

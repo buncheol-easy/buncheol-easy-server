@@ -3,7 +3,6 @@ package buncheoleasy.buncheol.domain.member;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -44,12 +43,9 @@ public class BuncheolMember {
   @Column(name = "member_image", length = 500, updatable = false)
   private String memberImage;
 
-  // 즉시구매가. 이 금액을 결제하면 곧바로 CONFIRMED 로 슬롯 확정. BID 참여의 제시가 상한이기도 함.
-  @Column(name = "instant_price", nullable = false)
-  private long instantPrice;
-
-  // 제시(BID) 허용 여부 + 최소 제시가. 허용 시 [bidMinPrice, instantPrice) 범위 내 자유 제시 가능.
-  @Embedded private BidOption bidOption;
+  // 호스트가 설정한 제시 최소 금액. 모든 참여는 BID 이며 이 금액 이상으로 제시해야 한다. 상한은 없다.
+  @Column(name = "bid_min_price", nullable = false)
+  private long bidMinPrice;
 
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
@@ -62,11 +58,8 @@ public class BuncheolMember {
       final Long memberId,
       final String memberName,
       final String memberImage,
-      final long instantPrice,
-      final boolean bidAllowed,
-      final Long bidMinPrice) {
-    return new BuncheolMember(
-        buncheolId, memberId, memberName, memberImage, instantPrice, bidAllowed, bidMinPrice);
+      final long bidMinPrice) {
+    return new BuncheolMember(buncheolId, memberId, memberName, memberImage, bidMinPrice);
   }
 
   private BuncheolMember(
@@ -74,34 +67,22 @@ public class BuncheolMember {
       final Long memberId,
       final String memberName,
       final String memberImage,
-      final long instantPrice,
-      final boolean bidAllowed,
-      final Long bidMinPrice) {
-    validate(buncheolId, memberId, memberName, memberImage, instantPrice);
+      final long bidMinPrice) {
+    validate(buncheolId, memberId, memberName, memberImage, bidMinPrice);
     this.buncheolId = buncheolId;
     this.memberId = memberId;
     this.memberName = memberName;
     this.memberImage = memberImage;
-    this.instantPrice = instantPrice;
-    this.bidOption = BidOption.of(instantPrice, bidAllowed, bidMinPrice);
+    this.bidMinPrice = bidMinPrice;
   }
 
-  public void updatePricing(
-      final long newInstantPrice, final boolean newBidAllowed, final Long newBidMinPrice) {
-    validateInstantPrice(newInstantPrice);
-    this.instantPrice = newInstantPrice;
-    this.bidOption = BidOption.of(newInstantPrice, newBidAllowed, newBidMinPrice);
-  }
-
-  public void validateBidAllowed() {
-    if (!bidOption.bidAllowed()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_BID_NOT_ALLOWED);
-    }
+  public void updateBidMinPrice(final long newBidMinPrice) {
+    validateBidMinPrice(newBidMinPrice);
+    this.bidMinPrice = newBidMinPrice;
   }
 
   public void validateBidAmount(final long bidAmount) {
-    Long bidMinPrice = bidOption.bidMinPrice();
-    if (bidMinPrice == null || bidAmount < bidMinPrice || bidAmount >= instantPrice) {
+    if (bidAmount < bidMinPrice) {
       throw new BusinessException(ErrorCode.PARTICIPATION_BID_AMOUNT_INVALID);
     }
   }
@@ -111,12 +92,12 @@ public class BuncheolMember {
       final Long memberId,
       final String memberName,
       final String memberImage,
-      final long instantPrice) {
+      final long bidMinPrice) {
     validateBuncheolId(buncheolId);
     validateMemberId(memberId);
     validateMemberName(memberName);
     validateMemberImage(memberImage);
-    validateInstantPrice(instantPrice);
+    validateBidMinPrice(bidMinPrice);
   }
 
   private void validateBuncheolId(final Long buncheolId) {
@@ -146,9 +127,9 @@ public class BuncheolMember {
     }
   }
 
-  private void validateInstantPrice(final long instantPrice) {
-    if (instantPrice <= 0) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
+  private void validateBidMinPrice(final long bidMinPrice) {
+    if (bidMinPrice <= 0) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID);
     }
   }
 

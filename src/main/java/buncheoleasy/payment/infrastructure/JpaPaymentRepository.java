@@ -1,7 +1,6 @@
 package buncheoleasy.payment.infrastructure;
 
 import buncheoleasy.payment.domain.Payment;
-import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.payment.domain.PaymentStatus;
 import buncheoleasy.payment.domain.PaymentTxType;
 import java.time.LocalDateTime;
@@ -15,8 +14,8 @@ interface JpaPaymentRepository extends JpaRepository<Payment, Long> {
 
   Optional<Payment> findByOrderId(String orderId);
 
-  Optional<Payment> findTop1ByParticipationIdAndPaymentPhaseAndTxTypeOrderByCreatedAtDescIdDesc(
-      Long participationId, PaymentPhase paymentPhase, PaymentTxType txType);
+  Optional<Payment> findTop1ByParticipationIdAndTxTypeOrderByCreatedAtDescIdDesc(
+      Long participationId, PaymentTxType txType);
 
   /** status 가 expectedStatus 인 경우에만 수정 가능한 필드를 갱신한다 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

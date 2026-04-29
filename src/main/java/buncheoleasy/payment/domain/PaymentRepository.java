@@ -10,6 +10,5 @@ public interface PaymentRepository {
 
   Optional<Payment> findByOrderId(String orderId);
 
-  Optional<Payment> findLatestPaymentByParticipationIdAndPaymentPhase(
-      Long participationId, PaymentPhase paymentPhase);
+  Optional<Payment> findLatestByParticipationId(Long participationId);
 }

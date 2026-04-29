@@ -31,7 +31,7 @@ class PaymentDomainServiceTest {
     @Test
     void 결제_생성에_성공한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.INSTANT, "order_123", 50_000L);
+      Payment payment = Payment.createPayment(1L, "order_123", 50_000L);
       given(paymentRepository.save(payment)).willReturn(payment);
 
       // when
@@ -49,7 +49,7 @@ class PaymentDomainServiceTest {
     @Test
     void PENDING_상태_결제_업데이트에_성공한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.INSTANT, "order_123", 50_000L);
+      Payment payment = Payment.createPayment(1L, "order_123", 50_000L);
       given(paymentRepository.update(payment, PaymentStatus.PENDING)).willReturn(true);
 
       // when & then (예외 없이 완료)
@@ -60,7 +60,7 @@ class PaymentDomainServiceTest {
     @Test
     void 업데이트_실패시_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.INSTANT, "order_123", 50_000L);
+      Payment payment = Payment.createPayment(1L, "order_123", 50_000L);
       given(paymentRepository.update(payment, PaymentStatus.PENDING)).willReturn(false);
 
       // when & then
@@ -78,7 +78,7 @@ class PaymentDomainServiceTest {
     @Test
     void CONFIRMING_상태_결제_업데이트에_성공한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.INSTANT, "order_123", 50_000L);
+      Payment payment = Payment.createPayment(1L, "order_123", 50_000L);
       given(paymentRepository.update(payment, PaymentStatus.CONFIRMING)).willReturn(true);
 
       // when & then
@@ -89,7 +89,7 @@ class PaymentDomainServiceTest {
     @Test
     void 업데이트_실패시_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.INSTANT, "order_123", 50_000L);
+      Payment payment = Payment.createPayment(1L, "order_123", 50_000L);
       given(paymentRepository.update(payment, PaymentStatus.CONFIRMING)).willReturn(false);
 
       // when & then
@@ -107,7 +107,7 @@ class PaymentDomainServiceTest {
     @Test
     void 존재하는_결제를_조회한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.INSTANT, "order_123", 50_000L);
+      Payment payment = Payment.createPayment(1L, "order_123", 50_000L);
       given(paymentRepository.findByOrderId("order_123")).willReturn(Optional.of(payment));
 
       // when
@@ -137,16 +137,11 @@ class PaymentDomainServiceTest {
     @Test
     void 결제가_존재하면_반환한다() {
       // given
-      Payment payment = Payment.createPayment(1L, PaymentPhase.DEPOSIT, "order_456", 5_000L);
-      given(
-              paymentRepository.findLatestPaymentByParticipationIdAndPaymentPhase(
-                  1L, PaymentPhase.DEPOSIT))
-          .willReturn(Optional.of(payment));
+      Payment payment = Payment.createPayment(1L, "order_456", 5_000L);
+      given(paymentRepository.findLatestByParticipationId(1L)).willReturn(Optional.of(payment));
 
       // when
-      Optional<Payment> result =
-          paymentDomainService.findLatestPaymentByParticipationIdAndPaymentPhase(
-              1L, PaymentPhase.DEPOSIT);
+      Optional<Payment> result = paymentDomainService.findLatestByParticipationId(1L);
 
       // then
       assertThat(result).isPresent();
@@ -156,15 +151,10 @@ class PaymentDomainServiceTest {
     @Test
     void 결제가_없으면_빈_Optional을_반환한다() {
       // given
-      given(
-              paymentRepository.findLatestPaymentByParticipationIdAndPaymentPhase(
-                  1L, PaymentPhase.DEPOSIT))
-          .willReturn(Optional.empty());
+      given(paymentRepository.findLatestByParticipationId(1L)).willReturn(Optional.empty());
 
       // when
-      Optional<Payment> result =
-          paymentDomainService.findLatestPaymentByParticipationIdAndPaymentPhase(
-              1L, PaymentPhase.DEPOSIT);
+      Optional<Payment> result = paymentDomainService.findLatestByParticipationId(1L);
 
       // then
       assertThat(result).isEmpty();

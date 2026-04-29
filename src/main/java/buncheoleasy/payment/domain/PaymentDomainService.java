@@ -37,9 +37,7 @@ public class PaymentDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
   }
 
-  public Optional<Payment> findLatestPaymentByParticipationIdAndPaymentPhase(
-      final Long participationId, final PaymentPhase paymentPhase) {
-    return paymentRepository.findLatestPaymentByParticipationIdAndPaymentPhase(
-        participationId, paymentPhase);
+  public Optional<Payment> findLatestByParticipationId(final Long participationId) {
+    return paymentRepository.findLatestByParticipationId(participationId);
   }
 }

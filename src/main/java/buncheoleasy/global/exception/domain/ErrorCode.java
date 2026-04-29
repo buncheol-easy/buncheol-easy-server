@@ -71,13 +71,7 @@ public enum ErrorCode {
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_NAME_LENGTH_INVALID(
       "BCH-023", "분철 멤버 이름은 100자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_PRICE_INVALID("BCH-025", "분철 멤버 즉시 구매가는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_BID_MIN_PRICE_REQUIRED(
-      "BCH-026", "제시 허용 시 제시 최소 금액은 필수입니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID(
-      "BCH-027", "제시 최소 금액은 즉시 구매가보다 작아야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_BID_MIN_PRICE_FORBIDDEN(
-      "BCH-028", "제시 미허용 시 제시 최소 금액은 입력할 수 없습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID("BCH-027", "제시 최소 금액은 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 3개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_REQUIRED("BCH-041", "이미지 URL은 필수입니다.", HttpStatus.BAD_REQUEST),
@@ -90,25 +84,19 @@ public enum ErrorCode {
 
   BUNCHEOL_NOT_RECRUITING("BCH-060", "모집 중인 분철이 아닙니다.", HttpStatus.CONFLICT),
   PARTICIPATION_MEMBER_NOT_FOUND("BCH-061", "해당 분철에 존재하지 않는 멤버입니다.", HttpStatus.NOT_FOUND),
-  PARTICIPATION_MEMBER_ALREADY_TAKEN("BCH-062", "이미 즉시 구매된 멤버입니다.", HttpStatus.CONFLICT),
-  PARTICIPATION_BID_NOT_ALLOWED("BCH-063", "제시가 허용되지 않는 멤버입니다.", HttpStatus.BAD_REQUEST),
-  PARTICIPATION_BID_AMOUNT_INVALID("BCH-064", "제시 금액이 허용 범위를 벗어났습니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_BID_AMOUNT_INVALID("BCH-064", "제시 금액이 최소 금액보다 작습니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED(
       "BCH-065", "해당 배송 방법은 이 분철에서 지원하지 않습니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_HOST_CANNOT_PARTICIPATE(
       "BCH-066", "주최자는 자신의 분철에 참여할 수 없습니다.", HttpStatus.FORBIDDEN),
   PARTICIPATION_STATE_TRANSITION_INVALID(
-      "BCH-067", "현재 참여 상태 또는 참여 유형으로는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+      "BCH-067", "현재 참여 상태에서는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_NOT_FOUND("BCH-068", "존재하지 않는 참여입니다.", HttpStatus.NOT_FOUND),
   PARTICIPATION_NO_PERMISSION("BCH-069", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   PARTICIPATION_ALREADY_EXISTS("BCH-070", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
 
   BUNCHEOL_MODIFY_FIELD_LOCKED("BCH-080", "참여자가 존재하여 해당 항목을 수정할 수 없습니다.", HttpStatus.CONFLICT),
   BUNCHEOL_MODIFY_MEMBER_DELETE_LOCKED("BCH-081", "활성 참여가 있는 멤버는 삭제할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_MODIFY_MEMBER_PRICE_LOCKED(
-      "BCH-082", "즉시 구매 참여자가 있는 멤버의 가격은 수정할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_MODIFY_BID_DISABLE_LOCKED(
-      "BCH-083", "제시 참여자가 있는 경우 제시를 비활성화할 수 없습니다.", HttpStatus.CONFLICT),
   BUNCHEOL_MODIFY_BID_MIN_INCREASE_LOCKED(
       "BCH-084", "제시 참여자가 있는 경우 제시 최소 금액을 올릴 수 없습니다.", HttpStatus.CONFLICT),
   BUNCHEOL_MODIFY_SHIPPING_FEE_LOCKED(

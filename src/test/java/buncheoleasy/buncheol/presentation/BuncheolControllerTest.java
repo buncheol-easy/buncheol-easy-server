@@ -82,8 +82,7 @@ class BuncheolControllerTest {
                   "buncheolMembers": [
                     {
                       "memberId": 200,
-                      "instantPrice": 50000,
-                      "bidAllowed": false
+                      "bidMinPrice": 50000
                     }
                   ]
                 }
@@ -110,8 +109,7 @@ class BuncheolControllerTest {
                   "buncheolMembers": [
                     {
                       "memberId": 200,
-                      "instantPrice": 60000,
-                      "bidAllowed": false
+                      "bidMinPrice": 60000
                     }
                   ]
                 }
@@ -181,7 +179,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -216,7 +214,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -256,7 +254,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -292,7 +290,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "123-456-789012",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberId": 200, "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -382,7 +380,7 @@ class BuncheolControllerTest {
                       "settlementAccount": "333-222-111",
                       "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberId": 200, "instantPrice": 60000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 60000}
                       ]
                     }
                     """
@@ -418,7 +416,7 @@ class BuncheolControllerTest {
                       "settlementHolder": "홍길동",
                       "keepImageIds": [],
                       "buncheolMembers": [
-                        {"memberId": 200, "instantPrice": 60000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 60000}
                       ]
                     }
                     """

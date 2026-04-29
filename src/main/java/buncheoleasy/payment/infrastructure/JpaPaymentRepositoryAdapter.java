@@ -1,7 +1,6 @@
 package buncheoleasy.payment.infrastructure;
 
 import buncheoleasy.payment.domain.Payment;
-import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.payment.domain.PaymentRepository;
 import buncheoleasy.payment.domain.PaymentStatus;
 import buncheoleasy.payment.domain.PaymentTxType;
@@ -41,10 +40,8 @@ public class JpaPaymentRepositoryAdapter implements PaymentRepository {
   }
 
   @Override
-  public Optional<Payment> findLatestPaymentByParticipationIdAndPaymentPhase(
-      final Long participationId, final PaymentPhase paymentPhase) {
-    return jpaPaymentRepository
-        .findTop1ByParticipationIdAndPaymentPhaseAndTxTypeOrderByCreatedAtDescIdDesc(
-            participationId, paymentPhase, PaymentTxType.PAYMENT);
+  public Optional<Payment> findLatestByParticipationId(final Long participationId) {
+    return jpaPaymentRepository.findTop1ByParticipationIdAndTxTypeOrderByCreatedAtDescIdDesc(
+        participationId, PaymentTxType.PAYMENT);
   }
 }

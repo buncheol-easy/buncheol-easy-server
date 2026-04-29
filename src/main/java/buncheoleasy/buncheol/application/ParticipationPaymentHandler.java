@@ -8,7 +8,6 @@ import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentCompletionHandler;
-import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
@@ -23,8 +22,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class ParticipationPaymentHandler implements PaymentCompletionHandler {
-
-  private static final String FAIL_REASON_INSTANT_CONFIRMED = "즉시 구매 확정으로 인한 자동 실패 처리";
 
   private final ParticipationDomainService participationDomainService;
   private final DeliveryDomainService deliveryDomainService;
@@ -41,29 +38,16 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
   }
 
   @Override
-  public void onPaymentCompleted(final Long participationId, final PaymentPhase paymentPhase) {
+  public void onPaymentCompleted(final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
     final ParticipationStatus previousStatus = participation.getStatus();
 
     LocalDateTime now = LocalDateTime.now(clock);
-    switch (paymentPhase) {
-      case PaymentPhase.INSTANT -> participation.confirmInstantParticipation(now);
-      case PaymentPhase.DEPOSIT -> participation.activateBidAfterDepositPayment();
-      case PaymentPhase.BALANCE -> participation.confirmBalancePayment(now);
-      default -> throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-    }
+    participation.completePayment(now);
 
     participationDomainService.updateParticipationStatus(participation, previousStatus);
 
-    if (paymentPhase == PaymentPhase.INSTANT) {
-      participationDomainService.failAllOpenBids(
-          participation.getBuncheolMemberId(), FAIL_REASON_INSTANT_CONFIRMED);
-    }
-
-    // INSTANT 확정 참여의 배송 스냅샷은 분철 마감 시점에 일괄 생성 (TODO: 마감 로직 구현 시 처리)
-    if (paymentPhase == PaymentPhase.BALANCE) {
-      createDeliverySnapshot(participation);
-    }
+    createDeliverySnapshot(participation);
   }
 
   private void createDeliverySnapshot(final Participation participation) {
@@ -82,18 +66,7 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
   }
 
   @Override
-  public void onPaymentFailed(
-      final Long participationId, final PaymentPhase paymentPhase, final String failReason) {
-    if (paymentPhase == PaymentPhase.BALANCE) {
-      log.warn("잔금 결제 실패 - participationId: {}, reason: {}", participationId, failReason);
-      return;
-    }
-
-    Participation participation = participationDomainService.getParticipation(participationId);
-    final ParticipationStatus previousStatus = participation.getStatus();
-
-    participation.fail(failReason, LocalDateTime.now(clock));
-
-    participationDomainService.updateParticipationStatus(participation, previousStatus);
+  public void onPaymentFailed(final Long participationId, final String failReason) {
+    log.warn("낙찰자 결제 실패 - participationId: {}, reason: {}", participationId, failReason);
   }
 }

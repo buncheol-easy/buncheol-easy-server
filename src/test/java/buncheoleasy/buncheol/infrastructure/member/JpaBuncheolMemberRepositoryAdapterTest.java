@@ -40,12 +40,16 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
   private Long buncheolId;
   private Long memberId;
+  private Long memberId2;
+  private Long memberId3;
 
   @BeforeEach
   void setUp() {
     Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
     Long groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹");
-    memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버");
+    memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버1");
+    memberId2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버2");
+    memberId3 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버3");
 
     Buncheol buncheol =
         Buncheol.create(
@@ -75,8 +79,8 @@ class JpaBuncheolMemberRepositoryAdapterTest {
       List<BuncheolMember> members =
           List.of(
               BuncheolMember.create(buncheolId, memberId, 50_000L),
-              BuncheolMember.create(buncheolId, memberId, 5_000L),
-              BuncheolMember.create(buncheolId, memberId, 20_000L));
+              BuncheolMember.create(buncheolId, memberId2, 5_000L),
+              BuncheolMember.create(buncheolId, memberId3, 20_000L));
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(members)).doesNotThrowAnyException();
     }
@@ -91,7 +95,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
       List<BuncheolMember> members =
           List.of(
               BuncheolMember.create(buncheolId, memberId, 50_000L),
-              BuncheolMember.create(buncheolId, memberId, 30_000L));
+              BuncheolMember.create(buncheolId, memberId2, 30_000L));
       buncheolMemberRepository.saveAll(members);
       em.flush();
       assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);

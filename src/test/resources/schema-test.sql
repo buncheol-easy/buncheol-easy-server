@@ -126,6 +126,7 @@ CREATE TABLE buncheol_members
 );
 
 CREATE INDEX idx_buncheol_members_buncheol_id ON buncheol_members (buncheol_id);
+CREATE UNIQUE INDEX uq_buncheol_members_buncheol_member ON buncheol_members (buncheol_id, member_id);
 
 CREATE TABLE buncheol_images
 (

@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS buncheol_members
     PRIMARY KEY (id),
 
     INDEX idx_buncheol_members_buncheol_id (buncheol_id),
+    UNIQUE INDEX uq_buncheol_members_buncheol_member (buncheol_id, member_id),
 
     CONSTRAINT fk_buncheol_members_buncheol
         FOREIGN KEY (buncheol_id)
@@ -207,7 +208,7 @@ CREATE TABLE IF NOT EXISTS participations
 
     CONSTRAINT fk_participations_shipping_address
         FOREIGN KEY (shipping_address_id)
-            REFERENCES shipping_addresses (id) ON DELETE CASCADE
+            REFERENCES shipping_addresses (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

@@ -91,7 +91,6 @@ public class Buncheol {
 
   public void update(final BuncheolParams params) {
     validate(this.hostId, params);
-    this.groupId = params.groupId();
     this.title = params.title();
     this.description = params.description();
     this.purchaseSite = params.purchaseSite();

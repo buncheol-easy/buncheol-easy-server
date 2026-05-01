@@ -43,13 +43,12 @@ public class BuncheolModificationPolicy {
   }
 
   private void validateLockedFields(final Buncheol buncheol, final BuncheolParams params) {
-    boolean groupChanged = !Objects.equals(buncheol.getGroupId(), params.groupId());
     boolean purchaseSiteChanged =
         !Objects.equals(buncheol.getPurchaseSite(), params.purchaseSite());
     boolean shippingDeadlineChanged =
         buncheol.getShippingDeadlineDays() != params.shippingDeadlineDays();
 
-    if (groupChanged || purchaseSiteChanged || shippingDeadlineChanged) {
+    if (purchaseSiteChanged || shippingDeadlineChanged) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_FIELD_LOCKED);
     }
   }

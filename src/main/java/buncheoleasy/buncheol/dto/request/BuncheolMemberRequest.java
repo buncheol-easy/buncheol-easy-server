@@ -1,7 +1,12 @@
 package buncheoleasy.buncheol.dto.request;
 
+import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
-public record BuncheolMemberRequest(
-    Long buncheolMemberId, @NotNull Long memberId, @NotNull @Positive Long bidMinPrice) {}
+public record BuncheolMemberRequest(@NotNull Long memberId, @NotNull @Positive Long bidMinPrice) {
+
+  public BuncheolMemberParams toParams() {
+    return new BuncheolMemberParams(memberId, bidMinPrice);
+  }
+}

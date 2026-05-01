@@ -89,7 +89,6 @@ class BuncheolControllerTest {
     LocalDateTime future = LocalDateTime.now().plusDays(10);
     return """
                 {
-                  "groupId": 100,
                   "title": "수정 분철 제목",
                   "purchaseSite": "수정 스토어",
                   "deadline": "%s",
@@ -338,43 +337,11 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupId": 100,
                       "title": "수정 분철 제목",
                       "purchaseSite": "수정 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,
-                      "buncheolMembers": [
-                        {"memberId": 200, "bidMinPrice": 60000}
-                      ]
-                    }
-                    """
-              .formatted(future);
-
-      MockMultipartFile requestPart =
-          new MockMultipartFile(
-              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
-
-      // when & then
-      mockMvc
-          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
-          .andExpect(status().isBadRequest())
-          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
-    }
-
-    @Test
-    void groupId가_없으면_400을_반환한다() throws Exception {
-      // given
-      LocalDateTime future = LocalDateTime.now().plusDays(10);
-      String invalidJson =
-          """
-                    {
-                      "title": "수정 분철 제목",
-                      "purchaseSite": "수정 스토어",
-                      "deadline": "%s",
-                      "shippingDeadlineDays": 5,
-                      "gs25ShippingFee": 3500,
-                      "keepImageIds": [],
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 60000}
                       ]

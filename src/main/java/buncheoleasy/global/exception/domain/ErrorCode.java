@@ -101,10 +101,6 @@ public enum ErrorCode {
       "BCH-084", "제시 참여자가 있는 경우 제시 최소 금액을 올릴 수 없습니다.", HttpStatus.CONFLICT),
   BUNCHEOL_MODIFY_SHIPPING_FEE_LOCKED(
       "BCH-085", "참여자가 사용 중인 배송 방법의 배송비는 수정할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_MODIFY_MEMBER_NOT_FOUND(
-      "BCH-086", "수정 요청의 멤버 ID가 해당 분철에 존재하지 않습니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MODIFY_MEMBER_DUPLICATED(
-      "BCH-087", "수정 요청에 중복된 멤버 ID가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
 
   /** PAY - 결제 관련 에러 */
   PAYMENT_NOT_FOUND("PAY-001", "존재하지 않는 결제입니다.", HttpStatus.NOT_FOUND),

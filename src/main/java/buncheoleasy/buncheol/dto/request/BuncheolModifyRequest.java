@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record BuncheolModifyRequest(
-    @NotNull Long groupId,
     @NotBlank @Size(max = 200) String title,
     @Size(max = 300) String description,
     @NotBlank @Size(max = 200) String purchaseSite,
@@ -23,9 +22,9 @@ public record BuncheolModifyRequest(
     @NotNull List<Long> keepImageIds,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
-  public BuncheolParams toParams() {
+  public BuncheolParams toParams(final Long currentGroupId) {
     return new BuncheolParams(
-        groupId,
+        currentGroupId,
         title,
         description,
         purchaseSite,

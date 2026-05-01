@@ -1,4 +1,3 @@
 package buncheoleasy.buncheol.domain.member;
 
-public record BuncheolMemberParams(
-    Long memberId, String memberName, String memberImage, long bidMinPrice) {}
+public record BuncheolMemberParams(Long memberId, long bidMinPrice) {}

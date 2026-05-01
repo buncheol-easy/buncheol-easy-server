@@ -68,8 +68,6 @@ public enum ErrorCode {
 
   BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_NAME_LENGTH_INVALID(
-      "BCH-023", "분철 멤버 이름은 100자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID("BCH-027", "제시 최소 금액은 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 3개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),

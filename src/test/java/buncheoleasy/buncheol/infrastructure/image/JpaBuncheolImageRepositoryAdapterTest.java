@@ -50,8 +50,6 @@ class JpaBuncheolImageRepositoryAdapterTest {
             hostId,
             new BuncheolParams(
                 groupId,
-                "테스트 그룹",
-                null,
                 "제목",
                 null,
                 "스토어명",

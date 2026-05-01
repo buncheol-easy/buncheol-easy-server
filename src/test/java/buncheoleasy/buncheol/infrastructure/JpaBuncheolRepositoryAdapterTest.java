@@ -40,11 +40,9 @@ class JpaBuncheolRepositoryAdapterTest {
     groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹 마스터");
   }
 
-  private BuncheolParams validParams(String groupName) {
+  private BuncheolParams validParams() {
     return new BuncheolParams(
         groupId,
-        groupName,
-        null,
         "테스트 분철 제목",
         "분철 설명입니다.",
         "공식 스토어",
@@ -70,7 +68,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 분철을_저장하면_ID가_할당된다() {
-      Buncheol buncheol = Buncheol.create(hostId, validParams("테스트 그룹"));
+      Buncheol buncheol = Buncheol.create(hostId, validParams());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -81,7 +79,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 저장된_분철의_초기_상태는_RECRUITING이다() {
-      Buncheol buncheol = Buncheol.create(hostId, validParams("테스트 그룹"));
+      Buncheol buncheol = Buncheol.create(hostId, validParams());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -94,8 +92,6 @@ class JpaBuncheolRepositoryAdapterTest {
       BuncheolParams params =
           new BuncheolParams(
               groupId,
-              "그룹명",
-              null,
               "제목",
               null,
               "스토어명",
@@ -119,8 +115,6 @@ class JpaBuncheolRepositoryAdapterTest {
       BuncheolParams params =
           new BuncheolParams(
               groupId,
-              "그룹명",
-              null,
               "제목",
               null,
               "스토어명",
@@ -146,26 +140,24 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void ID로_분철을_조회할_수_있다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("조회 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
 
       assertThat(found.getId()).isEqualTo(buncheol.getId());
       assertThat(found.getHostId()).isEqualTo(hostId);
-      assertThat(found.getGroupName()).isEqualTo("조회 그룹");
+      assertThat(found.getGroupId()).isEqualTo(groupId);
       assertThat(found.getTitle()).isEqualTo("테스트 분철 제목");
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
 
     @Test
     void 도메인_update_호출_시_더티체킹으로_DB가_갱신된다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("원본 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
 
       BuncheolParams updatedParams =
           new BuncheolParams(
               groupId,
-              "수정 그룹",
-              null,
               "수정 제목",
               "수정 설명",
               "수정 스토어",
@@ -184,7 +176,6 @@ class JpaBuncheolRepositoryAdapterTest {
       em.clear();
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      assertThat(found.getGroupName()).isEqualTo("수정 그룹");
       assertThat(found.getTitle()).isEqualTo("수정 제목");
       assertThat(found.getDescription()).isEqualTo("수정 설명");
       assertThat(found.getStoreName()).isEqualTo("수정 스토어");
@@ -198,7 +189,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 분철_상태를_수정할_수_있다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("상태 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
       BuncheolStatus expectedStatus = buncheol.getStatus();
       buncheol.cancel();
 
@@ -211,7 +202,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 예상_상태가_다르면_업데이트되지_않는다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("낙관적 잠금")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
       buncheol.cancel();
 
       // expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)

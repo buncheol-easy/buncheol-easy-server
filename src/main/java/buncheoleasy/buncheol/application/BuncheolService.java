@@ -16,9 +16,7 @@ import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupDomainService;
-import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,16 +47,12 @@ public class BuncheolService {
       final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
     buncheolImageDomainService.validateImageCount(images.size());
 
-    ResolvedGroup resolvedGroup = resolveGroup(request.groupId());
+    groupDomainService.validateGroupExists(request.groupId());
 
     List<BuncheolMemberParams> buncheolMemberParams =
-        toBuncheolMemberParams(resolvedGroup.groupId(), request.buncheolMembers());
+        toBuncheolMemberParams(request.groupId(), request.buncheolMembers());
 
-    Buncheol buncheol =
-        buncheolDomainService.createBuncheol(
-            hostId,
-            request.toParams(
-                resolvedGroup.groupId(), resolvedGroup.groupName(), resolvedGroup.groupImage()));
+    Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, request.toParams());
 
     // 분철 멤버 저장
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), buncheolMemberParams);
@@ -81,15 +75,15 @@ public class BuncheolService {
 
     buncheolImageDomainService.validateImageCount(request.keepImageIds().size() + images.size());
 
-    ResolvedGroup resolvedGroup = resolveGroup(request.groupId());
+    groupDomainService.validateGroupExists(request.groupId());
 
     boolean hasParticipants = participationRepository.existsActiveByBuncheolId(buncheolId);
 
     // 분철에 참여가 하나도 없는 경우
     if (!hasParticipants) {
-      modifyWithoutParticipants(buncheol, buncheolId, request, resolvedGroup);
+      modifyWithoutParticipants(buncheol, buncheolId, request);
     } else { // 분철에 참여가 하나 이상 존재하는 경우
-      modifyWithParticipants(buncheol, buncheolId, request, resolvedGroup);
+      modifyWithParticipants(buncheol, buncheolId, request);
     }
 
     // 이미지 처리
@@ -117,18 +111,12 @@ public class BuncheolService {
 
   /** 참여자 없는 경우 분철 수정: 전체 업데이트 + 멤버 삭제 후 재생성 */
   private void modifyWithoutParticipants(
-      final Buncheol buncheol,
-      final Long buncheolId,
-      final BuncheolModifyRequest request,
-      final ResolvedGroup resolvedGroup) {
+      final Buncheol buncheol, final Long buncheolId, final BuncheolModifyRequest request) {
     // 분철 정보 업데이트
-    buncheolDomainService.updateBuncheol(
-        buncheol,
-        request.toParams(
-            resolvedGroup.groupId(), resolvedGroup.groupName(), resolvedGroup.groupImage()));
+    buncheolDomainService.updateBuncheol(buncheol, request.toParams());
 
     List<BuncheolMemberParams> memberParams =
-        toBuncheolMemberParams(resolvedGroup.groupId(), request.buncheolMembers());
+        toBuncheolMemberParams(request.groupId(), request.buncheolMembers());
     // 멤버 전체삭제 후 재생성
     buncheolMemberDomainService.deleteAllByBuncheolId(buncheolId);
     buncheolMemberDomainService.createBuncheolMembers(buncheolId, memberParams);
@@ -136,13 +124,8 @@ public class BuncheolService {
 
   /** 참여자 있는 경우 분철 수정: 일부 항목 수정 제한 */
   private void modifyWithParticipants(
-      final Buncheol buncheol,
-      final Long buncheolId,
-      final BuncheolModifyRequest request,
-      final ResolvedGroup resolvedGroup) {
-    BuncheolParams requestedState =
-        request.toParams(
-            resolvedGroup.groupId(), resolvedGroup.groupName(), resolvedGroup.groupImage());
+      final Buncheol buncheol, final Long buncheolId, final BuncheolModifyRequest request) {
+    BuncheolParams requestedState = request.toParams();
 
     // 분철 활성 참여자들이 선택한 배송 방법 조회
     Set<ShippingMethod> usedShippingMethods =
@@ -158,12 +141,12 @@ public class BuncheolService {
     // 멤버 조정
     List<MemberParticipationPresence> presences =
         participationRepository.findActiveParticipationPresencesByBuncheolId(buncheolId);
-    reconcileMembers(buncheolId, resolvedGroup.groupId(), request.buncheolMembers(), presences);
+    reconcileMembers(buncheolId, request.groupId(), request.buncheolMembers(), presences);
   }
 
   private void reconcileMembers(
       final Long buncheolId,
-      final Long resolvedGroupId,
+      final Long groupId,
       final List<BuncheolMemberRequest> requestMembers,
       final List<MemberParticipationPresence> presences) {
     List<BuncheolMember> existingMembers =
@@ -183,7 +166,7 @@ public class BuncheolService {
 
     deleteRemovedMembers(existingMembers, requestedExistingIds, presenceMap);
     updateExistingMembers(existingRequests, existingIdMap, presenceMap);
-    createNewMembers(buncheolId, resolvedGroupId, newRequests);
+    createNewMembers(buncheolId, groupId, newRequests);
   }
 
   private void classifyRequests(
@@ -235,13 +218,11 @@ public class BuncheolService {
   }
 
   private void createNewMembers(
-      final Long buncheolId,
-      final Long resolvedGroupId,
-      final List<BuncheolMemberRequest> newRequests) {
+      final Long buncheolId, final Long groupId, final List<BuncheolMemberRequest> newRequests) {
     if (newRequests.isEmpty()) {
       return;
     }
-    List<BuncheolMemberParams> newParams = toBuncheolMemberParams(resolvedGroupId, newRequests);
+    List<BuncheolMemberParams> newParams = toBuncheolMemberParams(groupId, newRequests);
     buncheolMemberDomainService.createBuncheolMembers(buncheolId, newParams);
   }
 
@@ -256,24 +237,14 @@ public class BuncheolService {
             Collectors.toMap(MemberParticipationPresence::buncheolMemberId, Function.identity()));
   }
 
-  // 마스터에서 name/image 스냅샷
-  private ResolvedGroup resolveGroup(final Long groupId) {
-    Group group = groupDomainService.getGroup(groupId);
-    return new ResolvedGroup(groupId, group.getName(), group.getImage());
-  }
-
   private List<BuncheolMemberParams> toBuncheolMemberParams(
       final Long groupId, final List<BuncheolMemberRequest> requests) {
     List<Long> memberIds = extractAndValidateMemberIds(requests);
-    Map<Long, GroupMember> memberSnapshots = loadMemberSnapshotMapInGroup(groupId, memberIds);
+    // 멤버 ID가 모두 해당 그룹에 속하는지 검증 (반환값은 사용하지 않음)
+    groupDomainService.getGroupMembersByIdsInGroup(groupId, memberIds);
 
     return requests.stream()
-        .map(
-            m -> {
-              GroupMember snapshot = memberSnapshots.get(m.memberId());
-              return new BuncheolMemberParams(
-                  m.memberId(), snapshot.getName(), snapshot.getImage(), m.bidMinPrice());
-            })
+        .map(m -> new BuncheolMemberParams(m.memberId(), m.bidMinPrice()))
         .toList();
   }
 
@@ -286,12 +257,4 @@ public class BuncheolService {
 
     return memberIds;
   }
-
-  private Map<Long, GroupMember> loadMemberSnapshotMapInGroup(
-      final Long groupId, final List<Long> memberIds) {
-    return groupDomainService.getGroupMembersByIdsInGroup(groupId, memberIds).stream()
-        .collect(Collectors.toMap(GroupMember::getId, Function.identity()));
-  }
-
-  private record ResolvedGroup(Long groupId, String groupName, String groupImage) {}
 }

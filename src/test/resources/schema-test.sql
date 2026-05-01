@@ -88,8 +88,6 @@ CREATE TABLE buncheols
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     host_id                BIGINT       NOT NULL,
     group_id               BIGINT       NOT NULL,
-    group_name             VARCHAR(100) NOT NULL,
-    group_image            VARCHAR(500) NULL,
     title                  VARCHAR(200) NOT NULL,
     description            TEXT         NULL,
     store_name             VARCHAR(200) NOT NULL,
@@ -115,14 +113,12 @@ CREATE INDEX idx_buncheols_title ON buncheols (title);
 
 CREATE TABLE buncheol_members
 (
-    id            BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT       NOT NULL,
-    member_id     BIGINT       NOT NULL,
-    member_name   VARCHAR(100) NOT NULL,
-    member_image  VARCHAR(500) NULL,
-    bid_min_price BIGINT       NOT NULL,
-    created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id            BIGINT    NOT NULL AUTO_INCREMENT,
+    buncheol_id   BIGINT    NOT NULL,
+    member_id     BIGINT    NOT NULL,
+    bid_min_price BIGINT    NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,

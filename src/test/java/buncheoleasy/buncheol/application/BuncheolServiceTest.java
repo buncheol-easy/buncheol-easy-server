@@ -30,7 +30,6 @@ import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -59,8 +58,6 @@ class BuncheolServiceTest {
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
   private static final Long MEMBER_ID = 200L;
-  private static final String GROUP_NAME = "공식 그룹명";
-  private static final String GROUP_IMAGE = "https://cdn.example.com/groups/100.jpg";
   private static final String MEMBER_NAME = "멤버A";
   private static final String MEMBER_IMAGE = "https://cdn.example.com/members/200.jpg";
 
@@ -83,10 +80,6 @@ class BuncheolServiceTest {
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
 
   @Captor private ArgumentCaptor<List<BuncheolMemberParams>> buncheolMemberParamsCaptor;
-
-  private static Group group() {
-    return new Group(GROUP_ID, GROUP_NAME, GROUP_IMAGE, LocalDateTime.now(), LocalDateTime.now());
-  }
 
   private static GroupMember groupMember(Long memberId) {
     return new GroupMember(
@@ -131,9 +124,8 @@ class BuncheolServiceTest {
   class HoldBuncheolTest {
 
     @Test
-    void 분철_개최에_성공하고_DB_그룹_및_멤버_스냅샷이_적용된다() {
+    void 분철_개최에_성공하고_분철_및_분철_멤버가_저장된다() {
       // given
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(MEMBER_ID)));
 
@@ -149,7 +141,7 @@ class BuncheolServiceTest {
       buncheolService.holdBuncheol(HOST_ID, request, List.of());
 
       // then
-      then(groupDomainService).should().getGroup(GROUP_ID);
+      then(groupDomainService).should().validateGroupExists(GROUP_ID);
       then(buncheolDomainService)
           .should()
           .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
@@ -160,21 +152,16 @@ class BuncheolServiceTest {
 
       BuncheolParams buncheolParams = buncheolParamsCaptor.getValue();
       assertThat(buncheolParams.groupId()).isEqualTo(GROUP_ID);
-      assertThat(buncheolParams.groupName()).isEqualTo(GROUP_NAME);
-      assertThat(buncheolParams.groupImage()).isEqualTo(GROUP_IMAGE);
 
       List<BuncheolMemberParams> memberParams = buncheolMemberParamsCaptor.getValue();
       assertThat(memberParams).hasSize(1);
       assertThat(memberParams.getFirst().memberId()).isEqualTo(MEMBER_ID);
-      assertThat(memberParams.getFirst().memberName()).isEqualTo(MEMBER_NAME);
-      assertThat(memberParams.getFirst().memberImage()).isEqualTo(MEMBER_IMAGE);
       assertThat(memberParams.getFirst().bidMinPrice()).isEqualTo(50_000L);
     }
 
     @Test
     void 이미지가_있는_경우_이미지_업로드_이벤트가_발행된다() {
       // given
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(MEMBER_ID)));
 
@@ -221,8 +208,6 @@ class BuncheolServiceTest {
     @Test
     void 멤버_ID가_중복되면_예외가_발생한다() {
       // given
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
-
       HoldBuncheolRequest request =
           holdRequest(
               List.of(
@@ -241,8 +226,9 @@ class BuncheolServiceTest {
     @Test
     void 존재하지_않는_그룹ID이면_예외가_발생한다() {
       // given
-      given(groupDomainService.getGroup(GROUP_ID))
-          .willThrow(new BusinessException(ErrorCode.GROUP_NOT_FOUND));
+      willThrow(new BusinessException(ErrorCode.GROUP_NOT_FOUND))
+          .given(groupDomainService)
+          .validateGroupExists(GROUP_ID);
 
       HoldBuncheolRequest request =
           holdRequest(List.of(new BuncheolMemberRequest(null, 1L, 50_000L)));
@@ -262,7 +248,7 @@ class BuncheolServiceTest {
   class ModifyBuncheolWithoutParticipantsTest {
 
     @Test
-    void 분철_수정에_성공하고_DB_그룹_및_멤버_스냅샷이_적용된다() {
+    void 분철_수정에_성공하고_분철_및_분철_멤버가_갱신된다() {
       // given
       BuncheolModifyRequest request =
           modifyRequest(List.of(new BuncheolMemberRequest(null, MEMBER_ID, 70_000L)));
@@ -270,7 +256,6 @@ class BuncheolServiceTest {
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(false);
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(MEMBER_ID)));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
@@ -279,7 +264,7 @@ class BuncheolServiceTest {
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
 
       // then
-      then(groupDomainService).should().getGroup(GROUP_ID);
+      then(groupDomainService).should().validateGroupExists(GROUP_ID);
       then(groupDomainService).should().getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList());
       then(buncheolDomainService)
           .should()
@@ -290,14 +275,10 @@ class BuncheolServiceTest {
 
       BuncheolParams buncheolParams = buncheolParamsCaptor.getValue();
       assertThat(buncheolParams.groupId()).isEqualTo(GROUP_ID);
-      assertThat(buncheolParams.groupName()).isEqualTo(GROUP_NAME);
-      assertThat(buncheolParams.groupImage()).isEqualTo(GROUP_IMAGE);
 
       List<BuncheolMemberParams> memberParams = buncheolMemberParamsCaptor.getValue();
       assertThat(memberParams).hasSize(1);
       assertThat(memberParams.getFirst().memberId()).isEqualTo(MEMBER_ID);
-      assertThat(memberParams.getFirst().memberName()).isEqualTo(MEMBER_NAME);
-      assertThat(memberParams.getFirst().memberImage()).isEqualTo(MEMBER_IMAGE);
     }
 
     @Test
@@ -310,7 +291,6 @@ class BuncheolServiceTest {
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(false);
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(MEMBER_ID)));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
@@ -422,7 +402,6 @@ class BuncheolServiceTest {
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(false);
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -454,8 +433,9 @@ class BuncheolServiceTest {
               List.of(new BuncheolMemberRequest(null, MEMBER_ID, 60_000L)));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(groupDomainService.getGroup(invalidGroupId))
-          .willThrow(new BusinessException(ErrorCode.GROUP_NOT_FOUND));
+      willThrow(new BusinessException(ErrorCode.GROUP_NOT_FOUND))
+          .given(groupDomainService)
+          .validateGroupExists(invalidGroupId);
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -476,7 +456,6 @@ class BuncheolServiceTest {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheol.getGroupId()).willReturn(GROUP_ID);
-      given(buncheol.getGroupName()).willReturn(GROUP_NAME);
       given(buncheol.getStoreName()).willReturn("원래 스토어");
       given(buncheol.getShippingDeadlineDays()).willReturn(7);
       given(buncheol.getShippingFeePolicy()).willReturn(ShippingFeePolicy.of(3000, null));
@@ -524,7 +503,6 @@ class BuncheolServiceTest {
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -553,7 +531,6 @@ class BuncheolServiceTest {
           .willReturn(List.of());
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when
@@ -579,7 +556,6 @@ class BuncheolServiceTest {
       given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
       given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
           .willReturn(Set.of(ShippingMethod.GS25_HALF));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -609,7 +585,6 @@ class BuncheolServiceTest {
           .willReturn(List.of());
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when
@@ -638,7 +613,6 @@ class BuncheolServiceTest {
           .willReturn(List.of(new MemberParticipationPresence(1L, true)));
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -669,7 +643,6 @@ class BuncheolServiceTest {
           .willReturn(List.of()); // 참여 없음
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(newMemberId)));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
@@ -699,7 +672,6 @@ class BuncheolServiceTest {
           .willReturn(List.of(new MemberParticipationPresence(1L, true)));
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(mockMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
@@ -726,7 +698,6 @@ class BuncheolServiceTest {
           .willReturn(List.of(new MemberParticipationPresence(1L, true)));
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(mockMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       assertThatThrownBy(
@@ -754,7 +725,6 @@ class BuncheolServiceTest {
       given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then
@@ -789,7 +759,6 @@ class BuncheolServiceTest {
           .willReturn(List.of()); // 참여 없음
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(newMemberId)));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
@@ -804,7 +773,6 @@ class BuncheolServiceTest {
       List<BuncheolMemberParams> newParams = buncheolMemberParamsCaptor.getValue();
       assertThat(newParams).hasSize(1);
       assertThat(newParams.getFirst().memberId()).isEqualTo(newMemberId);
-      assertThat(newParams.getFirst().memberName()).isEqualTo(MEMBER_NAME);
     }
 
     @Test
@@ -826,7 +794,6 @@ class BuncheolServiceTest {
           .willReturn(List.of());
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroup(GROUP_ID)).willReturn(group());
       willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
 
       // when & then

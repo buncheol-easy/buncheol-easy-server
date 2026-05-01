@@ -25,8 +25,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Buncheol {
 
-  private static final int GROUP_NAME_MAX_LENGTH = 100;
-  private static final int GROUP_IMAGE_MAX_LENGTH = 500;
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
   private static final int STORE_NAME_MAX_LENGTH = 200;
@@ -41,14 +39,6 @@ public class Buncheol {
   // 대상 K-pop 그룹 FK.
   @Column(name = "group_id", nullable = false)
   private Long groupId;
-
-  // 화면 표시용 그룹명 스냅샷. 마스터 그룹명이 바뀌어도 분철 시점 이름이 유지된다.
-  @Column(name = "group_name", nullable = false, length = 100)
-  private String groupName;
-
-  // 화면 표시용 그룹 이미지 스냅샷.
-  @Column(name = "group_image", length = 500)
-  private String groupImage;
 
   @Column(nullable = false, length = 200)
   private String title;
@@ -92,8 +82,6 @@ public class Buncheol {
     validate(hostId, params);
     this.hostId = hostId;
     this.groupId = params.groupId();
-    this.groupName = params.groupName();
-    this.groupImage = params.groupImage();
     this.title = params.title();
     this.description = params.description();
     this.storeName = params.storeName();
@@ -109,8 +97,6 @@ public class Buncheol {
   public void update(final BuncheolParams params) {
     validate(this.hostId, params);
     this.groupId = params.groupId();
-    this.groupName = params.groupName();
-    this.groupImage = params.groupImage();
     this.title = params.title();
     this.description = params.description();
     this.storeName = params.storeName();
@@ -169,8 +155,6 @@ public class Buncheol {
   private void validate(final Long hostId, final BuncheolParams params) {
     validateHostAndParams(hostId, params);
     validateGroupId(params.groupId());
-    validateGroupName(params.groupName());
-    validateGroupImage(params.groupImage());
     validateTitle(params.title());
     validateDescription(params.description());
     validateStoreName(params.storeName());
@@ -187,21 +171,6 @@ public class Buncheol {
   private void validateGroupId(final Long value) {
     if (value == null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-  }
-
-  private void validateGroupName(final String value) {
-    if (value == null || value.isBlank()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-    if (value.length() > GROUP_NAME_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  private void validateGroupImage(final String value) {
-    if (value != null && value.length() > GROUP_IMAGE_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
     }
   }
 

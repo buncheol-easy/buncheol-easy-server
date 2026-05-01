@@ -21,9 +21,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BuncheolMember {
 
-  private static final int MEMBER_NAME_MAX_LENGTH = 100;
-  private static final int MEMBER_IMAGE_MAX_LENGTH = 500;
-
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
@@ -34,14 +31,6 @@ public class BuncheolMember {
   // group_members FK.
   @Column(name = "member_id", nullable = false, updatable = false)
   private Long memberId;
-
-  // 화면 표시용 멤버명 스냅샷. 마스터 명칭이 변경되어도 분철 시점 이름이 유지된다.
-  @Column(name = "member_name", nullable = false, length = 100, updatable = false)
-  private String memberName;
-
-  // 화면 표시용 멤버 이미지 스냅샷.
-  @Column(name = "member_image", length = 500, updatable = false)
-  private String memberImage;
 
   // 호스트가 설정한 제시 최소 금액. 모든 참여는 BID 이며 이 금액 이상으로 제시해야 한다. 상한은 없다.
   @Column(name = "bid_min_price", nullable = false)
@@ -54,25 +43,14 @@ public class BuncheolMember {
   private LocalDateTime updatedAt;
 
   public static BuncheolMember create(
-      final Long buncheolId,
-      final Long memberId,
-      final String memberName,
-      final String memberImage,
-      final long bidMinPrice) {
-    return new BuncheolMember(buncheolId, memberId, memberName, memberImage, bidMinPrice);
+      final Long buncheolId, final Long memberId, final long bidMinPrice) {
+    return new BuncheolMember(buncheolId, memberId, bidMinPrice);
   }
 
-  private BuncheolMember(
-      final Long buncheolId,
-      final Long memberId,
-      final String memberName,
-      final String memberImage,
-      final long bidMinPrice) {
-    validate(buncheolId, memberId, memberName, memberImage, bidMinPrice);
+  private BuncheolMember(final Long buncheolId, final Long memberId, final long bidMinPrice) {
+    validate(buncheolId, memberId, bidMinPrice);
     this.buncheolId = buncheolId;
     this.memberId = memberId;
-    this.memberName = memberName;
-    this.memberImage = memberImage;
     this.bidMinPrice = bidMinPrice;
   }
 
@@ -87,16 +65,9 @@ public class BuncheolMember {
     }
   }
 
-  private void validate(
-      final Long buncheolId,
-      final Long memberId,
-      final String memberName,
-      final String memberImage,
-      final long bidMinPrice) {
+  private void validate(final Long buncheolId, final Long memberId, final long bidMinPrice) {
     validateBuncheolId(buncheolId);
     validateMemberId(memberId);
-    validateMemberName(memberName);
-    validateMemberImage(memberImage);
     validateBidMinPrice(bidMinPrice);
   }
 
@@ -109,21 +80,6 @@ public class BuncheolMember {
   private void validateMemberId(final Long memberId) {
     if (memberId == null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-  }
-
-  private void validateMemberName(final String memberName) {
-    if (memberName == null || memberName.isBlank()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-    if (memberName.length() > MEMBER_NAME_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_NAME_LENGTH_INVALID);
-    }
-  }
-
-  private void validateMemberImage(final String memberImage) {
-    if (memberImage != null && memberImage.length() > MEMBER_IMAGE_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
     }
   }
 

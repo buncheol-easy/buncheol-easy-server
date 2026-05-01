@@ -91,8 +91,6 @@ CREATE TABLE IF NOT EXISTS buncheols
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     host_id                BIGINT       NOT NULL COMMENT '개최자',
     group_id               BIGINT       NOT NULL COMMENT '대상 그룹',
-    group_name             VARCHAR(100) NOT NULL COMMENT '그룹명 스냅샷 (반정규화)',
-    group_image            VARCHAR(500) NULL COMMENT '그룹 이미지 URL 스냅샷 (반정규화)',
     title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
     description            TEXT         NULL COMMENT '분철 설명',
     store_name             VARCHAR(200) NOT NULL COMMENT '구매처',
@@ -125,14 +123,12 @@ CREATE TABLE IF NOT EXISTS buncheols
 
 CREATE TABLE IF NOT EXISTS buncheol_members
 (
-    id            BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT       NOT NULL,
-    member_id     BIGINT       NOT NULL COMMENT '대상 멤버',
-    member_name   VARCHAR(100) NOT NULL COMMENT '멤버명 스냅샷 (반정규화)',
-    member_image  VARCHAR(500) NULL COMMENT '멤버 이미지 URL 스냅샷 (반정규화)',
-    bid_min_price BIGINT       NOT NULL COMMENT '제시 최소 금액',
-    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id            BIGINT   NOT NULL AUTO_INCREMENT,
+    buncheol_id   BIGINT   NOT NULL,
+    member_id     BIGINT   NOT NULL COMMENT '대상 멤버',
+    bid_min_price BIGINT   NOT NULL COMMENT '제시 최소 금액',
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 

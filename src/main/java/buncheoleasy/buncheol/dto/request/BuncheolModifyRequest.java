@@ -26,12 +26,9 @@ public record BuncheolModifyRequest(
     @NotNull List<Long> keepImageIds,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
-  public BuncheolParams toParams(
-      final Long resolvedGroupId, final String resolvedGroupName, final String resolvedGroupImage) {
+  public BuncheolParams toParams() {
     return new BuncheolParams(
-        resolvedGroupId,
-        resolvedGroupName,
-        resolvedGroupImage,
+        groupId,
         title,
         description,
         storeName,

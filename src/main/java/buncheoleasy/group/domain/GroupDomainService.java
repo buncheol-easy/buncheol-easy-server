@@ -21,12 +21,6 @@ public class GroupDomainService {
     }
   }
 
-  public Group getGroup(final Long id) {
-    return groupRepository
-        .findById(id)
-        .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
-  }
-
   public List<GroupMember> getGroupMembersByIdsInGroup(
       final Long groupId, final List<Long> memberIds) {
     List<GroupMember> members = groupMemberRepository.findAllByGroupIdAndIds(groupId, memberIds);

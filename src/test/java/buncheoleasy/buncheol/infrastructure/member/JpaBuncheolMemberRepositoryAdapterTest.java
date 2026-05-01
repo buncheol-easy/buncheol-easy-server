@@ -52,8 +52,6 @@ class JpaBuncheolMemberRepositoryAdapterTest {
             hostId,
             new BuncheolParams(
                 groupId,
-                "테스트 그룹",
-                null,
                 "제목",
                 null,
                 "스토어명",
@@ -75,16 +73,8 @@ class JpaBuncheolMemberRepositoryAdapterTest {
   class SaveAllTest {
 
     @Test
-    void 입찰_불가_멤버를_저장할_수_있다() {
-      BuncheolMember member = BuncheolMember.create(buncheolId, memberId, "멤버A", null, 50_000L);
-
-      assertThatCode(() -> buncheolMemberRepository.saveAll(List.of(member)))
-          .doesNotThrowAnyException();
-    }
-
-    @Test
-    void 입찰_가능_멤버를_저장할_수_있다() {
-      BuncheolMember member = BuncheolMember.create(buncheolId, memberId, "멤버B", null, 10_000L);
+    void 단일_멤버를_저장할_수_있다() {
+      BuncheolMember member = BuncheolMember.create(buncheolId, memberId, 50_000L);
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(List.of(member)))
           .doesNotThrowAnyException();
@@ -94,9 +84,9 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     void 여러_멤버를_한번에_저장할_수_있다() {
       List<BuncheolMember> members =
           List.of(
-              BuncheolMember.create(buncheolId, memberId, "멤버A", null, 50_000L),
-              BuncheolMember.create(buncheolId, memberId, "멤버B", null, 5_000L),
-              BuncheolMember.create(buncheolId, memberId, "멤버C", null, 20_000L));
+              BuncheolMember.create(buncheolId, memberId, 50_000L),
+              BuncheolMember.create(buncheolId, memberId, 5_000L),
+              BuncheolMember.create(buncheolId, memberId, 20_000L));
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(members)).doesNotThrowAnyException();
     }
@@ -110,8 +100,8 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     void 특정_분철의_멤버를_전체_삭제할_수_있다() {
       List<BuncheolMember> members =
           List.of(
-              BuncheolMember.create(buncheolId, memberId, "멤버A", null, 50_000L),
-              BuncheolMember.create(buncheolId, memberId, "멤버B", null, 30_000L));
+              BuncheolMember.create(buncheolId, memberId, 50_000L),
+              BuncheolMember.create(buncheolId, memberId, 30_000L));
       buncheolMemberRepository.saveAll(members);
       em.flush();
       assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);

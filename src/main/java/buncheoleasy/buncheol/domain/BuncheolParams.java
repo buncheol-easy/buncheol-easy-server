@@ -4,8 +4,6 @@ import java.time.LocalDateTime;
 
 public record BuncheolParams(
     Long groupId,
-    String groupName,
-    String groupImage,
     String title,
     String description,
     String storeName,

@@ -43,9 +43,7 @@ public class BuncheolModificationPolicy {
   }
 
   private void validateLockedFields(final Buncheol buncheol, final BuncheolParams params) {
-    boolean groupChanged =
-        !Objects.equals(buncheol.getGroupId(), params.groupId())
-            || !Objects.equals(buncheol.getGroupName(), params.groupName());
+    boolean groupChanged = !Objects.equals(buncheol.getGroupId(), params.groupId());
     boolean storeChanged = !Objects.equals(buncheol.getStoreName(), params.storeName());
     boolean shippingDeadlineChanged =
         buncheol.getShippingDeadlineDays() != params.shippingDeadlineDays();

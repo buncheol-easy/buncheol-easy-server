@@ -220,6 +220,64 @@ class JpaUserRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("정산 계좌 영속성 테스트")
+  class BankAccountPersistenceTest {
+
+    @Test
+    void 계좌_미등록_상태로_저장하면_null로_조회된다() {
+      // given
+      User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
+
+      // when
+      User found = userRepository.findById(saved.getId()).orElseThrow();
+
+      // then: 모든 settlement_* 컬럼이 NULL → embedded 객체 자체가 null
+      assertThat(found.getBankAccount()).isNull();
+    }
+
+    @Test
+    void 계좌를_등록하고_조회하면_값이_그대로_매핑된다() {
+      // given
+      User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
+
+      // when
+      User managed = userRepository.findById(saved.getId()).orElseThrow();
+      managed.updateBankAccount("국민은행", "123-456-789012", "홍길동");
+      em.flush();
+      em.clear();
+
+      // then
+      User found = userRepository.findById(saved.getId()).orElseThrow();
+      assertThat(found.getBankAccount()).isNotNull();
+      assertThat(found.getBankAccount().bank()).isEqualTo("국민은행");
+      assertThat(found.getBankAccount().account()).isEqualTo("123-456-789012");
+      assertThat(found.getBankAccount().holder()).isEqualTo("홍길동");
+    }
+
+    @Test
+    void 계좌_갱신_후_재조회하면_새_값이_반영된다() {
+      // given
+      User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
+      User initial = userRepository.findById(saved.getId()).orElseThrow();
+      initial.updateBankAccount("국민은행", "111", "홍길동");
+      em.flush();
+      em.clear();
+
+      // when
+      User managed = userRepository.findById(saved.getId()).orElseThrow();
+      managed.updateBankAccount("신한은행", "222", "김철수");
+      em.flush();
+      em.clear();
+
+      // then
+      User found = userRepository.findById(saved.getId()).orElseThrow();
+      assertThat(found.getBankAccount().bank()).isEqualTo("신한은행");
+      assertThat(found.getBankAccount().account()).isEqualTo("222");
+      assertThat(found.getBankAccount().holder()).isEqualTo("김철수");
+    }
+  }
+
+  @Nested
   @DisplayName("회원 탈퇴 테스트")
   class WithdrawTest {
 

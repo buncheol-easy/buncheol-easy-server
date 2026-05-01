@@ -49,10 +49,7 @@ class JpaBuncheolRepositoryAdapterTest {
         LocalDateTime.now().plusDays(7),
         7,
         3000,
-        null,
-        "국민은행",
-        "123-456-789012",
-        "홍길동");
+        null);
   }
 
   private Buncheol persistAndDetach(Buncheol buncheol) {
@@ -91,17 +88,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void gs25_배송비만_설정하여_저장할_수_있다() {
       BuncheolParams params =
           new BuncheolParams(
-              groupId,
-              "제목",
-              null,
-              "스토어명",
-              LocalDateTime.now().plusDays(7),
-              5,
-              2500,
-              null,
-              "우리은행",
-              "1002-123-456789",
-              "홍길동");
+              groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 5, 2500, null);
       Buncheol buncheol = Buncheol.create(hostId, params);
 
       buncheolRepository.save(buncheol);
@@ -114,17 +101,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void cu_배송비만_설정하여_저장할_수_있다() {
       BuncheolParams params =
           new BuncheolParams(
-              groupId,
-              "제목",
-              null,
-              "스토어명",
-              LocalDateTime.now().plusDays(7),
-              5,
-              null,
-              2000,
-              "하나은행",
-              "1002-123-456789",
-              "홍길동");
+              groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 5, null, 2000);
       Buncheol buncheol = Buncheol.create(hostId, params);
 
       buncheolRepository.save(buncheol);
@@ -157,17 +134,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
       BuncheolParams updatedParams =
           new BuncheolParams(
-              groupId,
-              "수정 제목",
-              "수정 설명",
-              "수정 스토어",
-              LocalDateTime.now().plusDays(3),
-              3,
-              null,
-              1800,
-              "신한은행",
-              "999-888-777",
-              "수정예금주");
+              groupId, "수정 제목", "수정 설명", "수정 스토어", LocalDateTime.now().plusDays(3), 3, null, 1800);
 
       // managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
       Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
@@ -182,9 +149,6 @@ class JpaBuncheolRepositoryAdapterTest {
       assertThat(found.getShippingDeadlineDays()).isEqualTo(3);
       assertThat(found.getShippingFeePolicy().gs25ShippingFee()).isNull();
       assertThat(found.getShippingFeePolicy().cuShippingFee()).isEqualTo(1800);
-      assertThat(found.getSettlementInfo().bank()).isEqualTo("신한은행");
-      assertThat(found.getSettlementInfo().account()).isEqualTo("999-888-777");
-      assertThat(found.getSettlementInfo().holder()).isEqualTo("수정예금주");
     }
 
     @Test

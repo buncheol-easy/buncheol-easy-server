@@ -74,9 +74,6 @@ class BuncheolControllerTest {
                   "deadline": "%s",
                   "shippingDeadlineDays": 7,
                   "gs25ShippingFee": 3000,
-                  "settlementBank": "국민은행",
-                  "settlementAccount": "123-456-789012",
-                  "settlementHolder": "홍길동",
                   "buncheolMembers": [
                     {
                       "memberId": 200,
@@ -98,9 +95,6 @@ class BuncheolControllerTest {
                   "deadline": "%s",
                   "shippingDeadlineDays": 5,
                   "gs25ShippingFee": 3500,
-                  "settlementBank": "국민은행",
-                  "settlementAccount": "333-222-111",
-                  "settlementHolder": "홍길동",
                   "keepImageIds": [1, 2],
                   "buncheolMembers": [
                     {
@@ -169,9 +163,6 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
@@ -202,9 +193,6 @@ class BuncheolControllerTest {
                       "storeName": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
@@ -240,9 +228,6 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
@@ -274,9 +259,6 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
@@ -362,9 +344,6 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "333-222-111",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 60000}
                       ]
@@ -395,9 +374,6 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "333-222-111",
-                      "settlementHolder": "홍길동",
                       "keepImageIds": [],
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 60000}

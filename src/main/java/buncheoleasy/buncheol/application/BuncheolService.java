@@ -17,6 +17,7 @@ import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
+import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -40,12 +41,16 @@ public class BuncheolService {
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationRepository participationRepository;
   private final GroupDomainService groupDomainService;
+  private final UserDomainService userDomainService;
   private final ApplicationEventPublisher eventPublisher;
 
   @Transactional
   public void holdBuncheol(
       final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
     buncheolImageDomainService.validateImageCount(images.size());
+
+    // 정산 계좌가 등록된 호스트만 분철을 개최할 수 있다.
+    userDomainService.requireBankAccountRegistered(hostId);
 
     groupDomainService.validateGroupExists(request.groupId());
 

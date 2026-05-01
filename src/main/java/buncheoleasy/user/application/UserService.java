@@ -3,8 +3,10 @@ package buncheoleasy.user.application;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
+import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,12 @@ public class UserService {
     userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
   }
 
+  @Transactional
+  public void updateBankAccount(final Long userId, final BankAccountRequest request) {
+    userDomainService.updateBankAccount(
+        userId, request.bank(), request.account(), request.holder());
+  }
+
   public UserProfileResponse getUserProfile(final Long userId) {
     User user = userDomainService.getUser(userId);
 
@@ -46,6 +54,15 @@ public class UserService {
         user.getSocialInfo().provider().name(),
         user.getEmail().value(),
         user.getNickname().value(),
-        user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null);
+        user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null,
+        toBankAccountInfo(user.getBankAccount()));
+  }
+
+  private UserProfileResponse.BankAccountInfo toBankAccountInfo(final BankAccount bankAccount) {
+    if (bankAccount == null) {
+      return null;
+    }
+    return new UserProfileResponse.BankAccountInfo(
+        bankAccount.bank(), bankAccount.account(), bankAccount.holder());
   }
 }

@@ -45,6 +45,17 @@ public class UserDomainService {
     user.updatePhoneNumber(phoneNumber);
   }
 
+  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
+  public void updateBankAccount(
+      final Long id, final String bank, final String account, final String holder) {
+    User user = getUser(id);
+    user.updateBankAccount(bank, account, holder);
+  }
+
+  public void requireBankAccountRegistered(final Long id) {
+    getUser(id).requireBankAccount();
+  }
+
   private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
     User newUser = User.create(socialInfo.provider().name(), socialInfo.providerId(), email);
     return userRepository.save(newUser);

@@ -305,4 +305,58 @@ class UserTest {
       assertThat(user.getDeletedAt()).isNotNull();
     }
   }
+
+  @Nested
+  @DisplayName("정산 계좌 등록/검증 테스트")
+  class BankAccountTest {
+
+    @Test
+    void 신규_유저는_계좌가_없다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      assertThat(user.getBankAccount()).isNull();
+    }
+
+    @Test
+    void 계좌를_등록하면_조회된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      user.updateBankAccount("국민은행", "123-456-789012", "홍길동");
+
+      assertThat(user.getBankAccount()).isNotNull();
+      assertThat(user.getBankAccount().bank()).isEqualTo("국민은행");
+      assertThat(user.getBankAccount().account()).isEqualTo("123-456-789012");
+      assertThat(user.getBankAccount().holder()).isEqualTo("홍길동");
+    }
+
+    @Test
+    void 계좌를_갱신하면_새_값으로_덮어쓴다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateBankAccount("국민은행", "111", "홍길동");
+
+      user.updateBankAccount("신한은행", "222", "김철수");
+
+      assertThat(user.getBankAccount().bank()).isEqualTo("신한은행");
+      assertThat(user.getBankAccount().account()).isEqualTo("222");
+      assertThat(user.getBankAccount().holder()).isEqualTo("김철수");
+    }
+
+    @Test
+    void 계좌_미등록_상태에서_requireBankAccount_호출_시_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      assertThatThrownBy(user::requireBankAccount)
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+
+    @Test
+    void 계좌_등록_상태에서_requireBankAccount는_통과한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateBankAccount("국민은행", "111", "홍길동");
+
+      assertThatCode(user::requireBankAccount).doesNotThrowAnyException();
+    }
+  }
 }

@@ -42,6 +42,11 @@ public enum ErrorCode {
   SHIPPING_ADDRESS_DUPLICATE("USR-021", "이미 등록된 배송지입니다.", HttpStatus.CONFLICT),
   SHIPPING_ADDRESS_FORBIDDEN("USR-022", "본인의 배송지만 수정/삭제할 수 있습니다.", HttpStatus.FORBIDDEN),
 
+  USER_BANK_ACCOUNT_REQUIRED("USR-023", "정산 계좌 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
+  USER_BANK_ACCOUNT_LENGTH_INVALID(
+      "USR-024", "정산 계좌 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
+  USER_BANK_ACCOUNT_NOT_REGISTERED("USR-025", "정산 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
+
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
   AUTH_SOCIAL_PROVIDER_UNSUPPORTED("AUTH-002", "지원하지 않는 소셜 로그인 제공자입니다.", HttpStatus.UNAUTHORIZED),
@@ -63,8 +68,6 @@ public enum ErrorCode {
       "BCH-004", "발송 마감일수는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_REQUIRED("BCH-006", "배송비는 최소 1개 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_SETTLEMENT_INFO_LENGTH_INVALID(
-      "BCH-008", "정산 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),

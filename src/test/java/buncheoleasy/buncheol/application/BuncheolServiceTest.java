@@ -32,6 +32,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -75,6 +76,8 @@ class BuncheolServiceTest {
 
   @Mock private GroupDomainService groupDomainService;
 
+  @Mock private UserDomainService userDomainService;
+
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
@@ -96,9 +99,6 @@ class BuncheolServiceTest {
         7,
         3000,
         null,
-        "국민은행",
-        "123-456-789012",
-        "홍길동",
         members);
   }
 
@@ -112,9 +112,6 @@ class BuncheolServiceTest {
         10,
         3500,
         null,
-        "국민은행",
-        "333-222-111",
-        "수정홍길동",
         List.of(),
         members);
   }
@@ -240,6 +237,25 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.GROUP_NOT_FOUND);
+    }
+
+    @Test
+    void 호스트가_정산_계좌를_등록하지_않았으면_예외가_발생한다() {
+      // given
+      willThrow(new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED))
+          .given(userDomainService)
+          .requireBankAccountRegistered(HOST_ID);
+
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(null, MEMBER_ID, 50_000L)));
+
+      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
     }
   }
 
@@ -426,9 +442,6 @@ class BuncheolServiceTest {
               10,
               3500,
               null,
-              "국민은행",
-              "333-222-111",
-              "수정홍길동",
               List.of(),
               List.of(new BuncheolMemberRequest(null, MEMBER_ID, 60_000L)));
       Buncheol buncheol = mock(Buncheol.class);
@@ -473,9 +486,6 @@ class BuncheolServiceTest {
           7,
           gs25Fee,
           null,
-          "국민은행",
-          "123",
-          "홍길동",
           List.of(),
           members);
     }
@@ -495,9 +505,6 @@ class BuncheolServiceTest {
               7,
               3000,
               null,
-              "국민은행",
-              "123",
-              "홍길동",
               List.of(),
               List.of(new BuncheolMemberRequest(1L, MEMBER_ID, 50_000L)));
 

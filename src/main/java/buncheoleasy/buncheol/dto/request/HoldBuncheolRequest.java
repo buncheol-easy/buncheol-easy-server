@@ -20,9 +20,6 @@ public record HoldBuncheolRequest(
     @Positive int shippingDeadlineDays,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
-    @NotBlank @Size(max = 50) String settlementBank,
-    @NotBlank @Size(max = 50) String settlementAccount,
-    @NotBlank @Size(max = 50) String settlementHolder,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
   public BuncheolParams toParams() {
@@ -34,9 +31,6 @@ public record HoldBuncheolRequest(
         deadline,
         shippingDeadlineDays,
         gs25ShippingFee,
-        cuShippingFee,
-        settlementBank,
-        settlementAccount,
-        settlementHolder);
+        cuShippingFee);
   }
 }

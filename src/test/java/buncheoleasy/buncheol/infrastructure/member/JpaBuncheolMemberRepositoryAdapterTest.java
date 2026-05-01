@@ -51,17 +51,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
         Buncheol.create(
             hostId,
             new BuncheolParams(
-                groupId,
-                "제목",
-                null,
-                "스토어명",
-                LocalDateTime.now().plusDays(7),
-                7,
-                3000,
-                null,
-                "국민은행",
-                "123-456",
-                "홍길동"));
+                groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 7, 3000, null));
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();

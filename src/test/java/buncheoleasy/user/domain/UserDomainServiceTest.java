@@ -201,4 +201,58 @@ class UserDomainServiceTest {
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
     }
   }
+
+  @Nested
+  @DisplayName("정산 계좌 업데이트 테스트")
+  class UpdateBankAccountTest {
+
+    @Test
+    void 기존_유저의_계좌를_갱신한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      // when
+      userDomainService.updateBankAccount(1L, "국민은행", "123-456", "홍길동");
+
+      // then
+      assertThat(user.getBankAccount()).isNotNull();
+      assertThat(user.getBankAccount().bank()).isEqualTo("국민은행");
+    }
+
+    @Test
+    void 존재하지_않는_유저의_계좌를_갱신하면_예외가_발생한다() {
+      given(userRepository.findById(999L)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> userDomainService.updateBankAccount(999L, "국민은행", "111", "홍길동"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+  }
+
+  @Nested
+  @DisplayName("정산 계좌 등록 검증 테스트")
+  class RequireBankAccountRegisteredTest {
+
+    @Test
+    void 계좌가_등록되어_있으면_통과한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateBankAccount("국민은행", "111", "홍길동");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      userDomainService.requireBankAccountRegistered(1L);
+    }
+
+    @Test
+    void 계좌가_등록되어_있지_않으면_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireBankAccountRegistered(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
 }

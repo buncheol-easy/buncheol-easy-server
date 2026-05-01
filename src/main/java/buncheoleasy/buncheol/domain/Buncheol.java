@@ -58,8 +58,6 @@ public class Buncheol {
 
   @Embedded private ShippingFeePolicy shippingFeePolicy;
 
-  @Embedded private SettlementInfo settlementInfo;
-
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private BuncheolStatus status;
@@ -88,9 +86,6 @@ public class Buncheol {
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
-    this.settlementInfo =
-        SettlementInfo.of(
-            params.settlementBank(), params.settlementAccount(), params.settlementHolder());
     this.status = BuncheolStatus.RECRUITING;
   }
 
@@ -103,9 +98,6 @@ public class Buncheol {
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
-    this.settlementInfo =
-        SettlementInfo.of(
-            params.settlementBank(), params.settlementAccount(), params.settlementHolder());
   }
 
   public void validateOwner(final Long userId) {

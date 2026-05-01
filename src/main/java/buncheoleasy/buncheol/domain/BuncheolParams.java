@@ -10,7 +10,4 @@ public record BuncheolParams(
     LocalDateTime deadline,
     int shippingDeadlineDays,
     Integer gs25ShippingFee,
-    Integer cuShippingFee,
-    String settlementBank,
-    String settlementAccount,
-    String settlementHolder) {}
+    Integer cuShippingFee) {}

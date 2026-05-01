@@ -1,6 +1,8 @@
 package buncheoleasy.user.presentation;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -15,6 +17,7 @@ import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.application.UserService;
+import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
@@ -63,7 +66,8 @@ class UserControllerTest {
   @Test
   void 내_프로필_조회가_성공하면_200과_응답본문을_반환한다() throws Exception {
     given(userService.getUserProfile(USER_ID))
-        .willReturn(UserProfileResponse.of("KAKAO", "test@example.com", "테스트닉", "01012345678"));
+        .willReturn(
+            UserProfileResponse.of("KAKAO", "test@example.com", "테스트닉", "01012345678", null));
 
     mockMvc
         .perform(get("/v1/users/me").with(mockAuth()))
@@ -101,5 +105,30 @@ class UserControllerTest {
     mockMvc.perform(delete("/v1/users/me").with(mockAuth())).andExpect(status().isNoContent());
 
     then(userService).should().withdraw(USER_ID);
+  }
+
+  @Test
+  void 정산_계좌_등록이_성공하면_204를_반환한다() throws Exception {
+    mockMvc
+        .perform(
+            put("/v1/users/me/bank-account")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"bank\":\"국민은행\",\"account\":\"123-456-789012\",\"holder\":\"홍길동\"}"))
+        .andExpect(status().isNoContent());
+
+    then(userService).should().updateBankAccount(eq(USER_ID), any(BankAccountRequest.class));
+  }
+
+  @Test
+  void 정산_계좌_등록_요청에_빈_값이_포함되면_400을_반환한다() throws Exception {
+    mockMvc
+        .perform(
+            put("/v1/users/me/bank-account")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"bank\":\"\",\"account\":\"123\",\"holder\":\"홍길동\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 }

@@ -20,9 +20,6 @@ public record BuncheolModifyRequest(
     @Positive int shippingDeadlineDays,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
-    @NotBlank @Size(max = 50) String settlementBank,
-    @NotBlank @Size(max = 50) String settlementAccount,
-    @NotBlank @Size(max = 50) String settlementHolder,
     @NotNull List<Long> keepImageIds,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
@@ -35,9 +32,6 @@ public record BuncheolModifyRequest(
         deadline,
         shippingDeadlineDays,
         gs25ShippingFee,
-        cuShippingFee,
-        settlementBank,
-        settlementAccount,
-        settlementHolder);
+        cuShippingFee);
   }
 }

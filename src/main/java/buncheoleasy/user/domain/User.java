@@ -1,5 +1,7 @@
 package buncheoleasy.user.domain;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Embedded;
@@ -44,6 +46,9 @@ public class User {
   @Convert(converter = PhoneNumberConverter.class)
   @Column(name = "phone_number", length = 15)
   private PhoneNumber phoneNumber;
+
+  // 분철 개최 시 정산받을 계좌. 분철을 개최할 때만 필수이며, 마이페이지에서 별도로 등록·수정한다.
+  @Embedded private BankAccount bankAccount;
 
   // 프로필 설정 완료 여부. 첫 phoneNumber 등록 시 true 로 전이. 소셜 가입 직후엔 false (전화번호 미입력 상태).
   @Column(name = "profile_completed", nullable = false)
@@ -93,6 +98,16 @@ public class User {
 
   public void updateNickname(final String newValue) {
     this.nickname = Nickname.of(newValue);
+  }
+
+  public void updateBankAccount(final String bank, final String account, final String holder) {
+    this.bankAccount = BankAccount.of(bank, account, holder);
+  }
+
+  public void requireBankAccount() {
+    if (this.bankAccount == null) {
+      throw new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
   }
 
   public void withdraw() {

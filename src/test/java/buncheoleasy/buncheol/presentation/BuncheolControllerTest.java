@@ -70,7 +70,7 @@ class BuncheolControllerTest {
                 {
                   "groupId": 100,
                   "title": "테스트 분철 제목",
-                  "storeName": "공식 스토어",
+                  "purchaseSite": "공식 스토어",
                   "deadline": "%s",
                   "shippingDeadlineDays": 7,
                   "gs25ShippingFee": 3000,
@@ -91,7 +91,7 @@ class BuncheolControllerTest {
                 {
                   "groupId": 100,
                   "title": "수정 분철 제목",
-                  "storeName": "수정 스토어",
+                  "purchaseSite": "수정 스토어",
                   "deadline": "%s",
                   "shippingDeadlineDays": 5,
                   "gs25ShippingFee": 3500,
@@ -159,7 +159,7 @@ class BuncheolControllerTest {
           """
                     {
                       "groupId": 100,
-                      "storeName": "공식 스토어",
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
@@ -190,7 +190,7 @@ class BuncheolControllerTest {
                     {
                       "groupId": 100,
                       "title": "제목",
-                      "storeName": "공식 스토어",
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "buncheolMembers": [
@@ -224,7 +224,7 @@ class BuncheolControllerTest {
           """
                     {
                       "title": "제목",
-                      "storeName": "공식 스토어",
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
@@ -255,7 +255,7 @@ class BuncheolControllerTest {
                     {
                       "groupId": 100,
                       "title": "제목",
-                      "storeName": "공식 스토어",
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
@@ -340,7 +340,7 @@ class BuncheolControllerTest {
                     {
                       "groupId": 100,
                       "title": "수정 분철 제목",
-                      "storeName": "수정 스토어",
+                      "purchaseSite": "수정 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,
@@ -370,7 +370,7 @@ class BuncheolControllerTest {
           """
                     {
                       "title": "수정 분철 제목",
-                      "storeName": "수정 스토어",
+                      "purchaseSite": "수정 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,

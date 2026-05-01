@@ -6,7 +6,7 @@ public record BuncheolParams(
     Long groupId,
     String title,
     String description,
-    String storeName,
+    String purchaseSite,
     LocalDateTime deadline,
     int shippingDeadlineDays,
     Integer gs25ShippingFee,

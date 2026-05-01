@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS buncheols
     group_id               BIGINT       NOT NULL COMMENT '대상 그룹',
     title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
     description            TEXT         NULL COMMENT '분철 설명',
-    store_name             VARCHAR(200) NOT NULL COMMENT '구매처',
+    purchase_site          VARCHAR(200) NOT NULL COMMENT '구매처',
     deadline               DATETIME     NOT NULL COMMENT '분철 마감일',
     shipping_deadline_days INT          NOT NULL COMMENT '발송 마감 일수(수령 후 n일)',
     gs25_shipping_fee      INT          NULL COMMENT 'GS25반값택배 배송비',

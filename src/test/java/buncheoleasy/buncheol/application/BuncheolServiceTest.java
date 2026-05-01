@@ -469,7 +469,7 @@ class BuncheolServiceTest {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheol.getGroupId()).willReturn(GROUP_ID);
-      given(buncheol.getStoreName()).willReturn("원래 스토어");
+      given(buncheol.getPurchaseSite()).willReturn("원래 스토어");
       given(buncheol.getShippingDeadlineDays()).willReturn(7);
       given(buncheol.getShippingFeePolicy()).willReturn(ShippingFeePolicy.of(3000, null));
       return buncheol;
@@ -494,7 +494,7 @@ class BuncheolServiceTest {
     void 잠긴_필드_변경_시_BCH080_에러가_발생한다() {
       // given
       Buncheol buncheol = stubBuncheol();
-      // storeName 변경
+      // purchaseSite 변경
       BuncheolModifyRequest request =
           new BuncheolModifyRequest(
               GROUP_ID,

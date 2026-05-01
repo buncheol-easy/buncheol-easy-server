@@ -145,7 +145,7 @@ class JpaBuncheolRepositoryAdapterTest {
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
       assertThat(found.getTitle()).isEqualTo("수정 제목");
       assertThat(found.getDescription()).isEqualTo("수정 설명");
-      assertThat(found.getStoreName()).isEqualTo("수정 스토어");
+      assertThat(found.getPurchaseSite()).isEqualTo("수정 스토어");
       assertThat(found.getShippingDeadlineDays()).isEqualTo(3);
       assertThat(found.getShippingFeePolicy().gs25ShippingFee()).isNull();
       assertThat(found.getShippingFeePolicy().cuShippingFee()).isEqualTo(1800);

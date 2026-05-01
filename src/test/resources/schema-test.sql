@@ -93,7 +93,7 @@ CREATE TABLE buncheols
     group_id               BIGINT       NOT NULL,
     title                  VARCHAR(200) NOT NULL,
     description            TEXT         NULL,
-    store_name             VARCHAR(200) NOT NULL,
+    purchase_site          VARCHAR(200) NOT NULL,
     deadline               TIMESTAMP    NOT NULL,
     shipping_deadline_days INT          NOT NULL,
     gs25_shipping_fee      INT          NULL,

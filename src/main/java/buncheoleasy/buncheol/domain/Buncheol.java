@@ -27,7 +27,7 @@ public class Buncheol {
 
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
-  private static final int STORE_NAME_MAX_LENGTH = 200;
+  private static final int PURCHASE_SITE_MAX_LENGTH = 200;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,8 +45,8 @@ public class Buncheol {
 
   @Column private String description;
 
-  @Column(name = "store_name", nullable = false, length = 200)
-  private String storeName;
+  @Column(name = "purchase_site", nullable = false, length = 200)
+  private String purchaseSite;
 
   // 참여(제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
   @Column(nullable = false)
@@ -82,7 +82,7 @@ public class Buncheol {
     this.groupId = params.groupId();
     this.title = params.title();
     this.description = params.description();
-    this.storeName = params.storeName();
+    this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
@@ -94,7 +94,7 @@ public class Buncheol {
     this.groupId = params.groupId();
     this.title = params.title();
     this.description = params.description();
-    this.storeName = params.storeName();
+    this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
@@ -149,7 +149,7 @@ public class Buncheol {
     validateGroupId(params.groupId());
     validateTitle(params.title());
     validateDescription(params.description());
-    validateStoreName(params.storeName());
+    validatePurchaseSite(params.purchaseSite());
     validateShippingDeadlineDays(params.shippingDeadlineDays());
     validateDeadline(params.deadline());
   }
@@ -181,11 +181,11 @@ public class Buncheol {
     }
   }
 
-  private void validateStoreName(final String value) {
+  private void validatePurchaseSite(final String value) {
     if (value == null || value.isBlank()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
-    if (value.length() > STORE_NAME_MAX_LENGTH) {
+    if (value.length() > PURCHASE_SITE_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
     }
   }

@@ -29,9 +29,9 @@ class BuncheolImageDomainServiceTest {
   class ValidateImageCountTest {
 
     @Test
-    void 이미지_개수가_3개_이하면_예외가_발생하지_않는다() {
+    void 이미지_개수가_5개_이하면_예외가_발생하지_않는다() {
       // when & then
-      assertThatCode(() -> buncheolImageDomainService.validateImageCount(3))
+      assertThatCode(() -> buncheolImageDomainService.validateImageCount(5))
           .doesNotThrowAnyException();
     }
 
@@ -43,9 +43,9 @@ class BuncheolImageDomainServiceTest {
     }
 
     @Test
-    void 이미지_개수가_4개_이상이면_예외가_발생한다() {
+    void 이미지_개수가_6개_이상이면_예외가_발생한다() {
       // when & then
-      assertThatThrownBy(() -> buncheolImageDomainService.validateImageCount(4))
+      assertThatThrownBy(() -> buncheolImageDomainService.validateImageCount(6))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED);

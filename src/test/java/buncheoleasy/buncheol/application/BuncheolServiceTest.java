@@ -188,11 +188,13 @@ class BuncheolServiceTest {
               new ImageFile("image1.jpg", "image/jpeg", new byte[] {1}),
               new ImageFile("image2.jpg", "image/jpeg", new byte[] {2}),
               new ImageFile("image3.jpg", "image/jpeg", new byte[] {3}),
-              new ImageFile("image4.jpg", "image/jpeg", new byte[] {4}));
+              new ImageFile("image4.jpg", "image/jpeg", new byte[] {4}),
+              new ImageFile("image5.jpg", "image/jpeg", new byte[] {5}),
+              new ImageFile("image6.jpg", "image/jpeg", new byte[] {6}));
 
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED))
           .given(buncheolImageDomainService)
-          .validateImageCount(4);
+          .validateImageCount(6);
 
       // when & then
       assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, images))
@@ -326,13 +328,16 @@ class BuncheolServiceTest {
           List.of(
               new ImageFile("1.jpg", "image/jpeg", new byte[] {1}),
               new ImageFile("2.jpg", "image/jpeg", new byte[] {2}),
-              new ImageFile("3.jpg", "image/jpeg", new byte[] {3}));
+              new ImageFile("3.jpg", "image/jpeg", new byte[] {3}),
+              new ImageFile("4.jpg", "image/jpeg", new byte[] {4}),
+              new ImageFile("5.jpg", "image/jpeg", new byte[] {5}),
+              new ImageFile("6.jpg", "image/jpeg", new byte[] {6}));
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED))
           .given(buncheolImageDomainService)
-          .validateImageCount(3);
+          .validateImageCount(6);
 
       // when & then
       assertThatThrownBy(

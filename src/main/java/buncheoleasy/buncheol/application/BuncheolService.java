@@ -119,7 +119,7 @@ public class BuncheolService {
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
-    // TODO: 추후 참여자 존재 시 패널티 부과 및 환불 처리 분기 추가
+    // TODO: 추후 참여자 존재 시 패널티 부과
     final BuncheolStatus previousStatus = buncheol.getStatus();
     buncheolDomainService.cancelBuncheol(buncheol, previousStatus);
   }
@@ -181,7 +181,6 @@ public class BuncheolService {
       }
       buncheolModificationPolicy.validateMemberPricingChange(
           existing, presenceLookup.of(existing), req.bidMinPrice());
-      // managed 엔티티이므로 도메인 메서드 호출만으로 트랜잭션 커밋 시 dirty UPDATE 가 자동 발행된다.
       existing.updateBidMinPrice(req.bidMinPrice());
     }
 

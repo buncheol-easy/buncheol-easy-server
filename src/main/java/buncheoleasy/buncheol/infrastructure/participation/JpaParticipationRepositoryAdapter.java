@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
+import static java.util.stream.Collectors.toSet;
+
 import buncheoleasy.buncheol.domain.participation.MemberParticipationPresence;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
@@ -134,7 +136,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
         .findActiveShippingMethodNamesByBuncheolId(buncheolId, ACTIVE_STATUS_NAMES)
         .stream()
         .map(ShippingMethod::valueOf)
-        .collect(java.util.stream.Collectors.toSet());
+        .collect(toSet());
   }
 
   @Override

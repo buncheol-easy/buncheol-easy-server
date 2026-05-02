@@ -4,7 +4,6 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.domain.Payment;
 import buncheoleasy.payment.domain.PaymentDomainService;
-import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.payment.infrastructure.TossPaymentClient;
 import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmRejectedException;
 import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmResponse;
@@ -36,18 +35,14 @@ public class PaymentService {
 
   @Transactional
   public PaymentOrderInfo createPaymentOrder(
-      final Long participationId,
-      final PaymentPhase paymentPhase,
-      final long amount,
-      final String paymentOrderName) {
-    Payment existingPaymentOrder = getReusablePayment(participationId, paymentPhase, amount);
+      final Long participationId, final long amount, final String paymentOrderName) {
+    Payment existingPaymentOrder = getReusablePayment(participationId, amount);
 
     if (existingPaymentOrder != null) {
       return toPaymentOrderInfo(existingPaymentOrder, paymentOrderName);
     }
 
-    Payment paymentOrder =
-        Payment.createPayment(participationId, paymentPhase, generatePaymentOrderId(), amount);
+    Payment paymentOrder = Payment.createPayment(participationId, generatePaymentOrderId(), amount);
     paymentDomainService.create(paymentOrder);
     return toPaymentOrderInfo(paymentOrder, paymentOrderName);
   }
@@ -127,17 +122,13 @@ public class PaymentService {
     String failReason = buildFailReason(code, message);
     payment.fail(failReason);
     paymentDomainService.updatePendingPayment(payment);
-    paymentCompletionHandler.onPaymentFailed(
-        payment.getParticipationId(), payment.getPaymentPhase(), failReason);
+    paymentCompletionHandler.onPaymentFailed(payment.getParticipationId(), failReason);
     log.info("결제 취소 처리: paymentOrderId={}, reason={}", paymentOrderId, failReason);
   }
 
-  private Payment getReusablePayment(
-      final Long participationId, final PaymentPhase paymentPhase, final long expectedAmount) {
+  private Payment getReusablePayment(final Long participationId, final long expectedAmount) {
     Payment payment =
-        paymentDomainService
-            .findLatestPaymentByParticipationIdAndPaymentPhase(participationId, paymentPhase)
-            .orElse(null);
+        paymentDomainService.findLatestByParticipationId(participationId).orElse(null);
 
     if (payment == null) {
       return null;
@@ -228,8 +219,7 @@ public class PaymentService {
 
     payment.completeConfirm();
     paymentDomainService.updateConfirmingPayment(payment);
-    paymentCompletionHandler.onPaymentCompleted(
-        payment.getParticipationId(), payment.getPaymentPhase());
+    paymentCompletionHandler.onPaymentCompleted(payment.getParticipationId());
   }
 
   private void failConfirmingPayment(
@@ -255,8 +245,7 @@ public class PaymentService {
 
     payment.failConfirm(failReason);
     paymentDomainService.updateConfirmingPayment(payment);
-    paymentCompletionHandler.onPaymentFailed(
-        payment.getParticipationId(), payment.getPaymentPhase(), failReason);
+    paymentCompletionHandler.onPaymentFailed(payment.getParticipationId(), failReason);
   }
 
   /**

@@ -3,7 +3,6 @@ package buncheoleasy.buncheol.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -15,7 +14,6 @@ import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.payment.domain.PaymentPhase;
 import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.PhoneNumber;
 import buncheoleasy.user.domain.User;
@@ -57,19 +55,11 @@ class ParticipationPaymentHandlerTest {
   private static final Long BUNCHEOL_MEMBER_ID = 10L;
   private static final Long SHIPPING_ADDRESS_ID = 200L;
 
-  private Participation createInstantParticipation() {
+  private Participation newAwaitingBalanceParticipation() {
     Participation participation =
-        Participation.createInstant(
-            1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, 50_000L);
+        Participation.create(1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, 30_000L);
     setId(participation, PARTICIPATION_ID);
-    return participation;
-  }
-
-  private Participation createBidParticipation() {
-    Participation participation =
-        Participation.createBid(
-            1L, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, 30_000L);
-    setId(participation, PARTICIPATION_ID);
+    setStatus(participation, ParticipationStatus.AWAITING_PAYMENT);
     return participation;
   }
 
@@ -100,23 +90,19 @@ class ParticipationPaymentHandlerTest {
 
     @Test
     void 소유자이면_예외가_발생하지_않는다() {
-      // given
-      Participation participation = createInstantParticipation();
+      Participation participation = newAwaitingBalanceParticipation();
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      // when & then (예외 없이 완료)
       participationPaymentHandler.validateOwnership(PARTICIPATION_ID, PARTICIPANT_ID);
     }
 
     @Test
     void 소유자가_아니면_예외가_발생한다() {
-      // given
-      Participation participation = createInstantParticipation();
+      Participation participation = newAwaitingBalanceParticipation();
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      // when & then
       assertThatThrownBy(
               () -> participationPaymentHandler.validateOwnership(PARTICIPATION_ID, 999L))
           .isInstanceOf(BusinessException.class)
@@ -130,100 +116,20 @@ class ParticipationPaymentHandlerTest {
   class OnPaymentCompletedTest {
 
     @Test
-    void 즉시_구매_결제_완료시_참여가_확정되고_제시가_일괄_실패_처리된다() {
-      // given
-      Participation participation = createInstantParticipation();
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when
-      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.INSTANT);
-
-      // then
-      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
-      assertThat(participation.getFinalizedAt()).isNotNull();
-      then(participationDomainService)
-          .should()
-          .updateParticipationStatus(participation, ParticipationStatus.PAYMENT_PENDING);
-      then(participationDomainService)
-          .should()
-          .failAllOpenBids(eq(BUNCHEOL_MEMBER_ID), any(String.class));
-      then(deliveryDomainService).should(never()).createDelivery(any());
-    }
-
-    @Test
-    void 예치금_결제_완료시_제시가_활성화된다() {
-      // given
-      Participation participation = createBidParticipation();
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when
-      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.DEPOSIT);
-
-      // then
-      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.ACTIVE_BID);
-      then(participationDomainService)
-          .should()
-          .updateParticipationStatus(participation, ParticipationStatus.PAYMENT_PENDING);
-      then(participationDomainService).should(never()).failAllOpenBids(any(), any());
-      then(deliveryDomainService).should(never()).createDelivery(any());
-    }
-
-    @Test
-    void 잔금_결제_완료시_참여가_확정된다() {
-      // given
-      Participation participation = createBidParticipation();
-      setStatus(participation, ParticipationStatus.AWAITING_BALANCE_PAYMENT);
+    void 낙찰자_결제_완료시_참여가_확정되고_배송_스냅샷이_생성된다() {
+      Participation participation = newAwaitingBalanceParticipation();
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
       stubDeliverySnapshot();
 
-      // when
-      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.BALANCE);
+      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID);
 
-      // then
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
       assertThat(participation.getFinalizedAt()).isNotNull();
       then(participationDomainService)
           .should()
-          .updateParticipationStatus(participation, ParticipationStatus.AWAITING_BALANCE_PAYMENT);
-      then(participationDomainService).should(never()).failAllOpenBids(any(), any());
-    }
-  }
+          .updateParticipationStatus(participation, ParticipationStatus.AWAITING_PAYMENT);
 
-  @Nested
-  @DisplayName("배송 스냅샷 생성 테스트")
-  class DeliverySnapshotTest {
-
-    @Test
-    void 즉시_구매_결제_완료시_배송_스냅샷이_생성되지_않는다() {
-      // INSTANT 확정 참여의 배송 스냅샷은 분철 마감 시점에 일괄 생성
-      // given
-      Participation participation = createInstantParticipation();
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when
-      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.INSTANT);
-
-      // then
-      then(deliveryDomainService).should(never()).createDelivery(any());
-    }
-
-    @Test
-    void 잔금_결제_완료시_배송_스냅샷이_생성된다() {
-      // given
-      Participation participation = createBidParticipation();
-      setStatus(participation, ParticipationStatus.AWAITING_BALANCE_PAYMENT);
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-      stubDeliverySnapshot();
-
-      // when
-      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.BALANCE);
-
-      // then
       ArgumentCaptor<Delivery> deliveryCaptor = ArgumentCaptor.forClass(Delivery.class);
       then(deliveryDomainService).should().createDelivery(deliveryCaptor.capture());
 
@@ -234,22 +140,6 @@ class ParticipationPaymentHandlerTest {
       assertThat(delivery.getReceiverNickname()).isEqualTo("TestUser");
       assertThat(delivery.getReceiverPhoneNumber()).isEqualTo("01012345678");
     }
-
-    @Test
-    void 예치금_결제_완료시_배송_스냅샷이_생성되지_않는다() {
-      // given
-      Participation participation = createBidParticipation();
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when
-      participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID, PaymentPhase.DEPOSIT);
-
-      // then
-      then(deliveryDomainService).should(never()).createDelivery(any());
-      then(shippingAddressDomainService).should(never()).getShippingAddress(any());
-      then(userDomainService).should(never()).getUser(any());
-    }
   }
 
   @Nested
@@ -257,50 +147,9 @@ class ParticipationPaymentHandlerTest {
   class OnPaymentFailedTest {
 
     @Test
-    void 즉시_구매_결제_실패시_참여가_실패_처리된다() {
-      // given
-      Participation participation = createInstantParticipation();
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
+    void 낙찰자_결제_실패시_참여_상태를_변경하지_않는다() {
+      participationPaymentHandler.onPaymentFailed(PARTICIPATION_ID, "결제 실패");
 
-      // when
-      participationPaymentHandler.onPaymentFailed(PARTICIPATION_ID, PaymentPhase.INSTANT, "결제 실패");
-
-      // then
-      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.FAILED);
-      assertThat(participation.getFailReason()).isEqualTo("결제 실패");
-      assertThat(participation.getFinalizedAt()).isNotNull();
-      then(participationDomainService)
-          .should()
-          .updateParticipationStatus(participation, ParticipationStatus.PAYMENT_PENDING);
-    }
-
-    @Test
-    void 예치금_결제_실패시_참여가_실패_처리된다() {
-      // given
-      Participation participation = createBidParticipation();
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when
-      participationPaymentHandler.onPaymentFailed(PARTICIPATION_ID, PaymentPhase.DEPOSIT, "결제 실패");
-
-      // then
-      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.FAILED);
-      assertThat(participation.getFailReason()).isEqualTo("결제 실패");
-      assertThat(participation.getFinalizedAt()).isNotNull();
-      then(participationDomainService)
-          .should()
-          .updateParticipationStatus(participation, ParticipationStatus.PAYMENT_PENDING);
-    }
-
-    @Test
-    void 잔금_결제_실패시_참여_상태를_변경하지_않는다() {
-      // when
-      participationPaymentHandler.onPaymentFailed(
-          PARTICIPATION_ID, PaymentPhase.BALANCE, "잔금 결제 실패");
-
-      // then
       then(participationDomainService).should(never()).getParticipation(any());
       then(participationDomainService).should(never()).updateParticipationStatus(any(), any());
     }

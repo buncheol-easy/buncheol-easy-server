@@ -19,12 +19,12 @@ public class ParticipationController {
 
   private final BuncheolCheckoutService buncheolCheckoutService;
 
-  /** 분철 제시 잔금 결제 API */
-  @PostMapping("/{participationId}/balance-payment/checkout")
-  public ResponseEntity<CreatePaymentOrderResponse> startBalancePaymentCheckout(
+  /** 분철 낙찰자 결제 주문 생성 API */
+  @PostMapping("/{participationId}/payment/checkout")
+  public ResponseEntity<CreatePaymentOrderResponse> startPaymentCheckout(
       @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
     final PaymentOrderInfo paymentOrderInfo =
-        buncheolCheckoutService.startBalancePaymentCheckout(participantId, participationId);
+        buncheolCheckoutService.startPaymentCheckout(participantId, participationId);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(CreatePaymentOrderResponse.from(paymentOrderInfo));
   }

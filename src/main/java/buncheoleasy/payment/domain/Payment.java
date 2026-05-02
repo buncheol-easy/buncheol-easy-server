@@ -35,11 +35,6 @@ public class Payment {
   @Column(name = "tx_type", nullable = false, length = 20, updatable = false)
   private PaymentTxType txType;
 
-  // INSTANT(즉시구매 전액) | DEPOSIT(BID 신청 시 보증금) | BALANCE(BID 확정 후 잔금).
-  @Enumerated(EnumType.STRING)
-  @Column(name = "payment_phase", nullable = false, length = 20, updatable = false)
-  private PaymentPhase paymentPhase;
-
   // 우리 시스템에서 발급해 Toss 로 전달하는 결제 주문 ID (멱등성 키 역할).
   @Column(name = "order_id", nullable = false, length = 100, updatable = false)
   private String orderId;
@@ -80,15 +75,11 @@ public class Payment {
   private LocalDateTime updatedAt;
 
   public static Payment createPayment(
-      final Long participationId,
-      final PaymentPhase paymentPhase,
-      final String orderId,
-      final long amount) {
-    validateCreation(participationId, paymentPhase, orderId, amount);
+      final Long participationId, final String orderId, final long amount) {
+    validateCreation(participationId, orderId, amount);
     return new Payment(
         participationId,
         PaymentTxType.PAYMENT,
-        paymentPhase,
         orderId,
         null,
         null,
@@ -100,14 +91,8 @@ public class Payment {
   }
 
   private static void validateCreation(
-      final Long participationId,
-      final PaymentPhase paymentPhase,
-      final String orderId,
-      final long amount) {
+      final Long participationId, final String orderId, final long amount) {
     if (participationId == null) {
-      throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
-    }
-    if (paymentPhase == null) {
       throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
     }
     if (orderId == null || orderId.isBlank()) {
@@ -121,7 +106,6 @@ public class Payment {
   private Payment(
       final Long participationId,
       final PaymentTxType txType,
-      final PaymentPhase paymentPhase,
       final String orderId,
       final String paymentKey,
       final Long parentPaymentId,
@@ -132,7 +116,6 @@ public class Payment {
       final LocalDateTime approvedAt) {
     this.participationId = participationId;
     this.txType = txType;
-    this.paymentPhase = paymentPhase;
     this.orderId = orderId;
     this.paymentKey = paymentKey;
     this.parentPaymentId = parentPaymentId;

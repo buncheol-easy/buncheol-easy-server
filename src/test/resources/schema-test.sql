@@ -19,6 +19,9 @@ CREATE TABLE users
     email               VARCHAR(320) NOT NULL,
     nickname            VARCHAR(20)  NOT NULL,
     phone_number        VARCHAR(15)  NULL,
+    settlement_bank     VARCHAR(50)  NULL,
+    settlement_account  VARCHAR(50)  NULL,
+    settlement_holder   VARCHAR(50)  NULL,
     profile_completed   BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -87,20 +90,14 @@ CREATE TABLE buncheols
 (
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     host_id                BIGINT       NOT NULL,
-    group_id               BIGINT       NULL,
-    group_name             VARCHAR(100) NOT NULL,
+    group_id               BIGINT       NOT NULL,
     title                  VARCHAR(200) NOT NULL,
     description            TEXT         NULL,
-    goods_name             VARCHAR(200) NOT NULL,
-    store_name             VARCHAR(200) NOT NULL,
-    original_price         BIGINT       NOT NULL,
+    purchase_site          VARCHAR(200) NOT NULL,
     deadline               TIMESTAMP    NOT NULL,
     shipping_deadline_days INT          NOT NULL,
     gs25_shipping_fee      INT          NULL,
     cu_shipping_fee        INT          NULL,
-    settlement_bank        VARCHAR(50)  NOT NULL,
-    settlement_account     VARCHAR(50)  NOT NULL,
-    settlement_holder      VARCHAR(50)  NOT NULL,
     status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING',
     closed_at              TIMESTAMP    NULL,
     created_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -108,31 +105,28 @@ CREATE TABLE buncheols
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheols_host FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_buncheols_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE SET NULL
+    CONSTRAINT fk_buncheols_group FOREIGN KEY (group_id) REFERENCES `groups` (id)
 );
 
 CREATE INDEX idx_buncheols_group_id ON buncheols (group_id);
-CREATE INDEX idx_buncheols_goods_name ON buncheols (goods_name);
 CREATE INDEX idx_buncheols_title ON buncheols (title);
 
 CREATE TABLE buncheol_members
 (
-    id            BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT       NOT NULL,
-    member_id     BIGINT       NULL,
-    member_name   VARCHAR(100) NOT NULL,
-    instant_price BIGINT       NOT NULL,
-    bid_allowed   BOOLEAN      NOT NULL DEFAULT FALSE,
-    bid_min_price BIGINT       NULL,
-    created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id            BIGINT    NOT NULL AUTO_INCREMENT,
+    buncheol_id   BIGINT    NOT NULL,
+    member_id     BIGINT    NOT NULL,
+    bid_min_price BIGINT    NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
-    CONSTRAINT fk_buncheol_members_member FOREIGN KEY (member_id) REFERENCES group_members (id) ON DELETE SET NULL
+    CONSTRAINT fk_buncheol_members_member FOREIGN KEY (member_id) REFERENCES group_members (id)
 );
 
 CREATE INDEX idx_buncheol_members_buncheol_id ON buncheol_members (buncheol_id);
+CREATE UNIQUE INDEX uq_buncheol_members_buncheol_member ON buncheol_members (buncheol_id, member_id);
 
 CREATE TABLE buncheol_images
 (
@@ -149,26 +143,22 @@ CREATE INDEX idx_buncheol_images_buncheol_id ON buncheol_images (buncheol_id);
 
 CREATE TABLE participations
 (
-    id                       BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id              BIGINT       NOT NULL,
-    buncheol_member_id       BIGINT       NOT NULL,
-    participant_id           BIGINT       NOT NULL,
-    shipping_address_id      BIGINT       NOT NULL,
-    type                     VARCHAR(20)  NOT NULL,
-    instant_price_snapshot   BIGINT       NULL,
-    bid_amount               BIGINT       NULL,
-    balance_due_amount       BIGINT       NULL,
-    balance_due_at           TIMESTAMP    NULL,
-    closed_rank              INT          NULL,
-    fail_reason              VARCHAR(100) NULL,
-    finalized_at             TIMESTAMP    NULL,
-    status                   VARCHAR(30)  NOT NULL,
+    id                    BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id           BIGINT       NOT NULL,
+    buncheol_member_id    BIGINT       NOT NULL,
+    participant_id        BIGINT       NOT NULL,
+    shipping_address_id   BIGINT       NOT NULL,
+    bid_amount            BIGINT       NOT NULL,
+    due_at                TIMESTAMP    NULL,
+    closed_rank           INT          NULL,
+    fail_reason           VARCHAR(100) NULL,
+    finalized_at          TIMESTAMP    NULL,
+    status                VARCHAR(30)  NOT NULL,
     -- H2 generated column 안정성 이슈로 테스트 스키마에서는 일반 컬럼으로 유지
-    confirmed_member_id      BIGINT       NULL,
-    active_instant_member_id BIGINT       NULL,
-    active_participant_id    BIGINT       NULL,
-    created_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    confirmed_member_id   BIGINT       NULL,
+    active_participant_id BIGINT       NULL,
+    created_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -179,16 +169,14 @@ CREATE TABLE participations
 
 CREATE INDEX idx_participations_buncheol_id ON participations (buncheol_id);
 CREATE UNIQUE INDEX uq_participations_confirmed_member ON participations (confirmed_member_id);
-CREATE UNIQUE INDEX uq_participations_active_instant_member ON participations (active_instant_member_id);
 CREATE UNIQUE INDEX uq_participations_active_member_participant ON participations (buncheol_member_id, active_participant_id);
-CREATE INDEX idx_participations_member_type_status ON participations (buncheol_member_id, type, status);
+CREATE INDEX idx_participations_member_status ON participations (buncheol_member_id, status);
 
 CREATE TABLE payments
 (
     id                BIGINT       NOT NULL AUTO_INCREMENT,
     participation_id  BIGINT       NOT NULL,
     tx_type           VARCHAR(20)  NOT NULL,
-    payment_phase     VARCHAR(20)  NOT NULL,
     order_id          VARCHAR(100) NOT NULL,
     payment_key       VARCHAR(200) NULL,
     parent_payment_id BIGINT       NULL,

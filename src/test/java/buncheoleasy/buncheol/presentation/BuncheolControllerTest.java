@@ -68,22 +68,16 @@ class BuncheolControllerTest {
     LocalDateTime future = LocalDateTime.now().plusDays(7);
     return """
                 {
-                  "groupName": "테스트 그룹",
+                  "groupId": 100,
                   "title": "테스트 분철 제목",
-                  "goodsName": "공식 앨범",
-                  "storeName": "공식 스토어",
-                  "originalPrice": 50000,
+                  "purchaseSite": "공식 스토어",
                   "deadline": "%s",
                   "shippingDeadlineDays": 7,
                   "gs25ShippingFee": 3000,
-                  "settlementBank": "국민은행",
-                  "settlementAccount": "123-456-789012",
-                  "settlementHolder": "홍길동",
                   "buncheolMembers": [
                     {
-                      "memberName": "멤버A",
-                      "instantPrice": 50000,
-                      "bidAllowed": false
+                      "memberId": 200,
+                      "bidMinPrice": 50000
                     }
                   ]
                 }
@@ -95,23 +89,16 @@ class BuncheolControllerTest {
     LocalDateTime future = LocalDateTime.now().plusDays(10);
     return """
                 {
-                  "groupName": "수정 그룹",
                   "title": "수정 분철 제목",
-                  "goodsName": "수정 굿즈",
-                  "storeName": "수정 스토어",
-                  "originalPrice": 60000,
+                  "purchaseSite": "수정 스토어",
                   "deadline": "%s",
                   "shippingDeadlineDays": 5,
                   "gs25ShippingFee": 3500,
-                  "settlementBank": "국민은행",
-                  "settlementAccount": "333-222-111",
-                  "settlementHolder": "홍길동",
                   "keepImageIds": [1, 2],
                   "buncheolMembers": [
                     {
-                      "memberName": "수정멤버A",
-                      "instantPrice": 60000,
-                      "bidAllowed": false
+                      "memberId": 200,
+                      "bidMinPrice": 60000
                     }
                   ]
                 }
@@ -170,18 +157,13 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "테스트 그룹",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
+                      "groupId": 100,
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -205,18 +187,13 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "테스트 그룹",
+                      "groupId": 100,
                       "title": "제목",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -239,24 +216,19 @@ class BuncheolControllerTest {
     }
 
     @Test
-    void 그룹ID_없이_그룹명도_없으면_400을_반환한다() throws Exception {
+    void groupId가_없으면_400을_반환한다() throws Exception {
       // given
       LocalDateTime future = LocalDateTime.now().plusDays(7);
       String invalidJson =
           """
                     {
                       "title": "제목",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -280,19 +252,14 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "테스트 그룹",
+                      "groupId": 100,
                       "title": "제목",
-                      "goodsName": "공식 앨범",
-                      "storeName": "공식 스토어",
-                      "originalPrice": 50000,
+                      "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "123-456-789012",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "멤버A", "instantPrice": 50000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
@@ -370,55 +337,13 @@ class BuncheolControllerTest {
       String invalidJson =
           """
                     {
-                      "groupName": "수정 그룹",
                       "title": "수정 분철 제목",
-                      "goodsName": "수정 굿즈",
-                      "storeName": "수정 스토어",
-                      "originalPrice": 60000,
+                      "purchaseSite": "수정 스토어",
                       "deadline": "%s",
                       "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "333-222-111",
-                      "settlementHolder": "홍길동",
                       "buncheolMembers": [
-                        {"memberName": "수정멤버A", "instantPrice": 60000, "bidAllowed": false}
-                      ]
-                    }
-                    """
-              .formatted(future);
-
-      MockMultipartFile requestPart =
-          new MockMultipartFile(
-              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
-
-      // when & then
-      mockMvc
-          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
-          .andExpect(status().isBadRequest())
-          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
-    }
-
-    @Test
-    void groupId와_groupName이_모두_없으면_400을_반환한다() throws Exception {
-      // given
-      LocalDateTime future = LocalDateTime.now().plusDays(10);
-      String invalidJson =
-          """
-                    {
-                      "title": "수정 분철 제목",
-                      "goodsName": "수정 굿즈",
-                      "storeName": "수정 스토어",
-                      "originalPrice": 60000,
-                      "deadline": "%s",
-                      "shippingDeadlineDays": 5,
-                      "gs25ShippingFee": 3500,
-                      "settlementBank": "국민은행",
-                      "settlementAccount": "333-222-111",
-                      "settlementHolder": "홍길동",
-                      "keepImageIds": [],
-                      "buncheolMembers": [
-                        {"memberName": "수정멤버A", "instantPrice": 60000, "bidAllowed": false}
+                        {"memberId": 200, "bidMinPrice": 60000}
                       ]
                     }
                     """

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class BuncheolImageDomainService {
 
-  private static final int MAX_IMAGE_COUNT = 3;
+  private static final int MAX_IMAGE_COUNT = 5;
 
   private final BuncheolImageRepository buncheolImageRepository;
 

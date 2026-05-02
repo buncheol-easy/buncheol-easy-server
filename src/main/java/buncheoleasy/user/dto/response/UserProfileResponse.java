@@ -1,9 +1,20 @@
 package buncheoleasy.user.dto.response;
 
 public record UserProfileResponse(
-    String provider, String email, String nickname, String phoneNumber) {
+    String provider,
+    String email,
+    String nickname,
+    String phoneNumber,
+    BankAccountInfo bankAccount) {
+
   public static UserProfileResponse of(
-      final String provider, final String email, final String nickname, final String phoneNumber) {
-    return new UserProfileResponse(provider, email, nickname, phoneNumber);
+      final String provider,
+      final String email,
+      final String nickname,
+      final String phoneNumber,
+      final BankAccountInfo bankAccount) {
+    return new UserProfileResponse(provider, email, nickname, phoneNumber, bankAccount);
   }
+
+  public record BankAccountInfo(String bank, String account, String holder) {}
 }

@@ -1,27 +1,13 @@
 package buncheoleasy.buncheol.dto.response;
 
-import buncheoleasy.buncheol.application.ParticipationCheckoutInfo;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 
 public record ParticipationCheckoutResponse(
-    Long participationId,
-    ParticipationStatus participationStatus,
-    String clientKey,
-    String paymentOrderId,
-    String paymentOrderName,
-    long amount,
-    String successUrl,
-    String failUrl) {
+    Long participationId, ParticipationStatus participationStatus, long bidAmount) {
 
-  public static ParticipationCheckoutResponse from(final ParticipationCheckoutInfo checkoutInfo) {
+  public static ParticipationCheckoutResponse from(final Participation participation) {
     return new ParticipationCheckoutResponse(
-        checkoutInfo.participation().getId(),
-        checkoutInfo.participation().getStatus(),
-        checkoutInfo.paymentOrder().clientKey(),
-        checkoutInfo.paymentOrder().paymentOrderId(),
-        checkoutInfo.paymentOrder().paymentOrderName(),
-        checkoutInfo.paymentOrder().amount(),
-        checkoutInfo.paymentOrder().successUrl(),
-        checkoutInfo.paymentOrder().failUrl());
+        participation.getId(), participation.getStatus(), participation.getBidAmount());
   }
 }

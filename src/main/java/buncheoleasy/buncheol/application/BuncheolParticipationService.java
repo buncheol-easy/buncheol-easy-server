@@ -6,7 +6,6 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.ParticipationType;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -37,22 +36,22 @@ public class BuncheolParticipationService {
     // 유저가 이미 같은 분철 멤버에 대해 참여중인지 확인
     validateNoActiveParticipation(buncheolMember.getId(), participantId);
 
-    // 즉시구매로 이미 품절된 멤버 슬롯인지 확인
-    if (participationDomainService.isInstantSlotTaken(buncheolMember.getId())) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_ALREADY_TAKEN);
-    }
+    // 제시 금액이 멤버의 최소 금액 이상인지 확인
+    buncheolMember.validateBidAmount(request.bidAmount());
 
-    // 참여 타입에 따른 참여 객체 생성
-    if (request.type() == ParticipationType.INSTANT) {
-      return handleInstantParticipation(
-          buncheolId,
-          buncheolMember.getId(),
-          participantId,
-          shippingAddress.getId(),
-          buncheolMember.getInstantPrice());
+    Participation participation =
+        Participation.create(
+            buncheolId,
+            buncheolMember.getId(),
+            participantId,
+            shippingAddress.getId(),
+            request.bidAmount());
+    // 저장 시점에도 분철이 모집중인지 검사하여 원자적으로 INSERT
+    boolean created = participationDomainService.createParticipationIfRecruiting(participation);
+    if (!created) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
-    return handleBidParticipation(
-        buncheolId, buncheolMember, participantId, shippingAddress.getId(), request.bidAmount());
+    return participation;
   }
 
   private Buncheol validateRecruitingBuncheol(final Long buncheolId, final Long participantId) {
@@ -73,50 +72,6 @@ public class BuncheolParticipationService {
     }
     buncheol.validateShippingMethodSupported(shippingAddress.getShippingMethod());
     return shippingAddress;
-  }
-
-  private Participation handleInstantParticipation(
-      final Long buncheolId,
-      final Long buncheolMemberId,
-      final Long participantId,
-      final Long shippingAddressId,
-      final long instantPriceSnapshot) {
-    Participation participation =
-        Participation.createInstant(
-            buncheolId, buncheolMemberId, participantId, shippingAddressId, instantPriceSnapshot);
-    // 즉시구매 참여 객체를 저장하는 시점에도 해당 분철&멤버에 참여할 수 있는 상황인지 검사하여 저장함.
-    boolean created =
-        participationDomainService.createInstantParticipationIfRecruiting(participation);
-    if (!created) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-    }
-    return participation;
-  }
-
-  private Participation handleBidParticipation(
-      final Long buncheolId,
-      final BuncheolMember buncheolMember,
-      final Long participantId,
-      final Long shippingAddressId,
-      final long bidAmount) {
-    // 제시 가능한지 확인
-    buncheolMember.validateBidAllowed();
-    buncheolMember.validateBidAmount(bidAmount);
-
-    Participation participation =
-        Participation.createBid(
-            buncheolId, buncheolMember.getId(), participantId, shippingAddressId, bidAmount);
-    // 제시 참여 객체를 저장하는 시점에도 모집중이고 활성 즉시구매가 없는지 검사하여 저장함.
-    boolean created =
-        participationDomainService.createBidParticipationIfNoActiveInstant(participation);
-    if (!created) {
-      // 활성 즉시구매가 존재하면 품절, 아니면 모집 종료
-      if (participationDomainService.isInstantSlotTaken(buncheolMember.getId())) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_ALREADY_TAKEN);
-      }
-      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-    }
-    return participation;
   }
 
   private void validateNoActiveParticipation(

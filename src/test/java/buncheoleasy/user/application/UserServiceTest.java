@@ -11,6 +11,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
+import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -80,6 +81,24 @@ class UserServiceTest {
   }
 
   @Nested
+  @DisplayName("정산 계좌 업데이트 테스트")
+  class UpdateBankAccountTest {
+
+    @Test
+    void 계좌를_정상적으로_업데이트한다() {
+      // given
+      Long userId = 1L;
+      BankAccountRequest request = new BankAccountRequest("국민은행", "123456789012", "홍길동");
+
+      // when
+      userService.updateBankAccount(userId, request);
+
+      // then
+      then(userDomainService).should().updateBankAccount(userId, "국민은행", "123456789012", "홍길동");
+    }
+  }
+
+  @Nested
   @DisplayName("User 프로필 조회 테스트")
   class GetUserProfileTest {
 
@@ -100,6 +119,26 @@ class UserServiceTest {
       assertThat(response.email()).isEqualTo("test@example.com");
       assertThat(response.nickname()).isEqualTo("테스트닉");
       assertThat(response.phoneNumber()).isEqualTo("01012345678");
+      assertThat(response.bankAccount()).isNull();
+    }
+
+    @Test
+    void 계좌_등록된_유저는_계좌_정보도_함께_반환한다() {
+      // given
+      Long userId = 1L;
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      user.updateBankAccount("국민은행", "123456789012", "홍길동");
+      given(userDomainService.getUser(userId)).willReturn(user);
+
+      // when
+      UserProfileResponse response = userService.getUserProfile(userId);
+
+      // then
+      assertThat(response.bankAccount()).isNotNull();
+      assertThat(response.bankAccount().bank()).isEqualTo("국민은행");
+      assertThat(response.bankAccount().account()).isEqualTo("123456789012");
+      assertThat(response.bankAccount().holder()).isEqualTo("홍길동");
     }
 
     @Test

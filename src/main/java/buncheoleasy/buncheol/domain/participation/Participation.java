@@ -44,32 +44,20 @@ public class Participation {
   @Column(name = "shipping_address_id", nullable = false)
   private Long shippingAddressId;
 
-  // INSTANT(즉시구매) | BID(제시).
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20, updatable = false)
-  private ParticipationType type;
-
-  // INSTANT 참여 시점의 instant_price 스냅샷 (이후 호스트가 가격을 바꿔도 이 값은 불변). BID 면 NULL.
-  @Column(name = "instant_price_snapshot", updatable = false)
-  private Long instantPriceSnapshot;
-
-  // BID 참여자가 제시한 금액. INSTANT 면 NULL.
-  @Column(name = "bid_amount")
+  // 참여자가 제시한 금액. 멤버의 bid_min_price 이상이어야 한다.
+  @Column(name = "bid_amount", nullable = false, updatable = false)
   private Long bidAmount;
 
-  // BID 가 마감 시점에 확정된 후, 인기 멤버 가격 보정으로 추가 결제해야 하는 차액. 잔금 결제(BALANCE phase)의 금액.
-  @Column(name = "balance_due_amount")
-  private Long balanceDueAmount;
+  // 낙찰자 결제 마감 시각 (KST). 이 시각까지 미결제 시 FAILED 처리 후 차순위로 권한 이양.
+  // 차순위로 이양될 때마다 갱신되므로 buncheol.deadline 으로부터 도출하지 않고 행마다 보관한다.
+  @Column(name = "due_at")
+  private LocalDateTime dueAt;
 
-  // 잔금 결제 마감 시각 (KST). 이 시각까지 미결제 시 FAILED 처리 대상.
-  @Column(name = "balance_due_at")
-  private LocalDateTime balanceDueAt;
-
-  // 분철 마감 시점 BID 참여의 제시가 순위. 1위부터 멤버 슬롯 수만큼 CONFIRMED 로 확정.
+  // 분철 마감 시점 제시가 순위. 1위부터 멤버 슬롯 수만큼 CONFIRMED 후보로 선정.
   @Column(name = "closed_rank")
   private Integer closedRank;
 
-  // FAILED 사유. 예: "결제 실패", "즉시 구매 확정으로 인한 자동 실패 처리", 잔금 미결제 등. CONFIRMED/ACTIVE 상태에선 NULL.
+  // FAILED 사유. 예: 낙찰 실패, 결제 미진행 등. CONFIRMED/ACTIVE 상태에선 NULL.
   @Column(name = "fail_reason", length = 100)
   private String failReason;
 
@@ -77,7 +65,7 @@ public class Participation {
   @Column(name = "finalized_at")
   private LocalDateTime finalizedAt;
 
-  // PAYMENT_PENDING | ACTIVE_BID | AWAITING_BALANCE_PAYMENT | CONFIRMED | CANCELLED | FAILED.
+  // ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED.
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
@@ -88,24 +76,7 @@ public class Participation {
   @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
-  public static Participation createInstant(
-      final Long buncheolId,
-      final Long buncheolMemberId,
-      final Long participantId,
-      final Long shippingAddressId,
-      final long instantPriceSnapshot) {
-    return new Participation(
-        buncheolId,
-        buncheolMemberId,
-        participantId,
-        shippingAddressId,
-        ParticipationType.INSTANT,
-        instantPriceSnapshot,
-        null,
-        ParticipationStatus.PAYMENT_PENDING);
-  }
-
-  public static Participation createBid(
+  public static Participation create(
       final Long buncheolId,
       final Long buncheolMemberId,
       final Long participantId,
@@ -116,10 +87,8 @@ public class Participation {
         buncheolMemberId,
         participantId,
         shippingAddressId,
-        ParticipationType.BID,
-        null,
         bidAmount,
-        ParticipationStatus.PAYMENT_PENDING);
+        ParticipationStatus.ACTIVE_BID);
   }
 
   private Participation(
@@ -127,53 +96,26 @@ public class Participation {
       final Long buncheolMemberId,
       final Long participantId,
       final Long shippingAddressId,
-      final ParticipationType type,
-      final Long instantPriceSnapshot,
-      final Long bidAmount,
+      final long bidAmount,
       final ParticipationStatus status) {
-    validate(type, instantPriceSnapshot, bidAmount);
+    validate(bidAmount);
     this.buncheolId = buncheolId;
     this.buncheolMemberId = buncheolMemberId;
     this.participantId = participantId;
     this.shippingAddressId = shippingAddressId;
-    this.type = type;
-    this.instantPriceSnapshot = instantPriceSnapshot;
     this.bidAmount = bidAmount;
     this.status = status;
   }
 
-  private void validate(
-      final ParticipationType type, final Long instantPriceSnapshot, final Long bidAmount) {
-    if (type == ParticipationType.INSTANT) {
-      if (instantPriceSnapshot == null || instantPriceSnapshot <= 0 || bidAmount != null) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-      }
-      return;
-    }
-
-    if (type == ParticipationType.BID) {
-      if (instantPriceSnapshot != null || bidAmount == null || bidAmount <= 0) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-      }
-      return;
-    }
-
-    throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-  }
-
-  // PAYMENT_PENDING → ACTIVE_BID: 예치금 결제 완료 후 제시 활성화 (BID 전용)
-  public void activateBidAfterDepositPayment() {
-    if (type != ParticipationType.BID || status != ParticipationStatus.PAYMENT_PENDING) {
+  private void validate(final long bidAmount) {
+    if (bidAmount <= 0) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
-    this.status = ParticipationStatus.ACTIVE_BID;
-    this.failReason = null;
-    this.finalizedAt = null;
   }
 
-  // PAYMENT_PENDING → CONFIRMED: 즉시 구매 결제 완료 (INSTANT 전용)
-  public void confirmInstantParticipation(final LocalDateTime now) {
-    if (type != ParticipationType.INSTANT || status != ParticipationStatus.PAYMENT_PENDING) {
+  // AWAITING_PAYMENT → CONFIRMED: 낙찰자 결제 완료
+  public void completePayment(final LocalDateTime now) {
+    if (status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
     this.status = ParticipationStatus.CONFIRMED;
@@ -181,21 +123,10 @@ public class Participation {
     this.failReason = null;
   }
 
-  // AWAITING_BALANCE_PAYMENT → CONFIRMED: 잔금 결제 완료
-  public void confirmBalancePayment(final LocalDateTime now) {
-    if (status != ParticipationStatus.AWAITING_BALANCE_PAYMENT) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-    }
-    this.status = ParticipationStatus.CONFIRMED;
-    this.finalizedAt = now;
-    this.failReason = null;
-  }
-
-  // PAYMENT_PENDING/ACTIVE_BID/AWAITING_BALANCE_PAYMENT → FAILED: 결제 실패 또는 외부 요인
+  // ACTIVE_BID/AWAITING_PAYMENT → FAILED: 낙찰 실패 또는 결제 미진행
   public void fail(final String reason, final LocalDateTime now) {
     if (status != ParticipationStatus.ACTIVE_BID
-        && status != ParticipationStatus.PAYMENT_PENDING
-        && status != ParticipationStatus.AWAITING_BALANCE_PAYMENT) {
+        && status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
     this.status = ParticipationStatus.FAILED;

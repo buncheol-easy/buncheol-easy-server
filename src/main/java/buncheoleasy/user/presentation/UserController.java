@@ -1,6 +1,7 @@
 package buncheoleasy.user.presentation;
 
 import buncheoleasy.user.application.UserService;
+import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import jakarta.validation.Valid;
@@ -39,6 +40,14 @@ public class UserController {
       @AuthenticationPrincipal final Long userId,
       @Valid @RequestBody final UpdateUserProfileRequest request) {
     userService.updateProfile(userId, request);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PutMapping("/me/bank-account")
+  public ResponseEntity<Void> updateBankAccount(
+      @AuthenticationPrincipal final Long userId,
+      @Valid @RequestBody final BankAccountRequest request) {
+    userService.updateBankAccount(userId, request);
     return ResponseEntity.noContent().build();
   }
 }

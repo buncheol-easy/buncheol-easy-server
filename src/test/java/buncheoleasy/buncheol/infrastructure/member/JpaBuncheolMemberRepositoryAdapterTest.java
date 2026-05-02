@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -38,29 +39,23 @@ class JpaBuncheolMemberRepositoryAdapterTest {
   @PersistenceContext private EntityManager em;
 
   private Long buncheolId;
+  private Long memberId;
+  private Long memberId2;
+  private Long memberId3;
 
   @BeforeEach
   void setUp() {
     Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
+    Long groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹");
+    memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버1");
+    memberId2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버2");
+    memberId3 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버3");
 
     Buncheol buncheol =
         Buncheol.create(
             hostId,
             new BuncheolParams(
-                null,
-                "테스트 그룹",
-                "제목",
-                null,
-                "앨범명",
-                "스토어명",
-                50_000L,
-                LocalDateTime.now().plusDays(7),
-                7,
-                3000,
-                null,
-                "국민은행",
-                "123-456",
-                "홍길동"));
+                groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 7, 3000, null));
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();
@@ -72,17 +67,8 @@ class JpaBuncheolMemberRepositoryAdapterTest {
   class SaveAllTest {
 
     @Test
-    void 입찰_불가_멤버를_저장할_수_있다() {
-      BuncheolMember member = BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null);
-
-      assertThatCode(() -> buncheolMemberRepository.saveAll(List.of(member)))
-          .doesNotThrowAnyException();
-    }
-
-    @Test
-    void 입찰_가능_멤버를_저장할_수_있다() {
-      BuncheolMember member =
-          BuncheolMember.create(buncheolId, null, "멤버B", 50_000L, true, 10_000L);
+    void 단일_멤버를_저장할_수_있다() {
+      BuncheolMember member = BuncheolMember.create(buncheolId, memberId, 50_000L);
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(List.of(member)))
           .doesNotThrowAnyException();
@@ -92,9 +78,9 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     void 여러_멤버를_한번에_저장할_수_있다() {
       List<BuncheolMember> members =
           List.of(
-              BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
-              BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, true, 5_000L),
-              BuncheolMember.create(buncheolId, null, "멤버C", 20_000L, false, null));
+              BuncheolMember.create(buncheolId, memberId, 50_000L),
+              BuncheolMember.create(buncheolId, memberId2, 5_000L),
+              BuncheolMember.create(buncheolId, memberId3, 20_000L));
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(members)).doesNotThrowAnyException();
     }
@@ -108,8 +94,8 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     void 특정_분철의_멤버를_전체_삭제할_수_있다() {
       List<BuncheolMember> members =
           List.of(
-              BuncheolMember.create(buncheolId, null, "멤버A", 50_000L, false, null),
-              BuncheolMember.create(buncheolId, null, "멤버B", 30_000L, false, null));
+              BuncheolMember.create(buncheolId, memberId, 50_000L),
+              BuncheolMember.create(buncheolId, memberId2, 30_000L));
       buncheolMemberRepository.saveAll(members);
       em.flush();
       assertThat(countMembersByBuncheolId(buncheolId)).isEqualTo(2);

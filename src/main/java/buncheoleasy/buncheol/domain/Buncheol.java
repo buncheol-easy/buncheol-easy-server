@@ -25,11 +25,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Buncheol {
 
-  private static final int GROUP_NAME_MAX_LENGTH = 100;
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
-  private static final int GOODS_NAME_MAX_LENGTH = 200;
-  private static final int STORE_NAME_MAX_LENGTH = 200;
+  private static final int PURCHASE_SITE_MAX_LENGTH = 200;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,30 +36,19 @@ public class Buncheol {
   @Column(name = "host_id", nullable = false, updatable = false)
   private Long hostId;
 
-  // 대상 K-pop 그룹 FK. 그룹 마스터에 없는 커스텀 그룹이면 NULL.
-  @Column(name = "group_id")
+  // 대상 K-pop 그룹 FK.
+  @Column(name = "group_id", nullable = false)
   private Long groupId;
-
-  // 화면 표시용 그룹명 스냅샷. groupId 가 NULL(커스텀 그룹)이거나 마스터 그룹명이 바뀌어도 분철 시점 이름이 유지된다.
-  @Column(name = "group_name", nullable = false, length = 100)
-  private String groupName;
 
   @Column(nullable = false, length = 200)
   private String title;
 
   @Column private String description;
 
-  @Column(name = "goods_name", nullable = false, length = 200)
-  private String goodsName;
+  @Column(name = "purchase_site", nullable = false, length = 200)
+  private String purchaseSite;
 
-  @Column(name = "store_name", nullable = false, length = 200)
-  private String storeName;
-
-  // 굿즈 1세트(전 멤버 분량) 정가. 분철 정산 기준 금액.
-  @Column(name = "original_price", nullable = false)
-  private long originalPrice;
-
-  // 참여(즉시구매·제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
+  // 참여(제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
   @Column(nullable = false)
   private LocalDateTime deadline;
 
@@ -70,8 +57,6 @@ public class Buncheol {
   private int shippingDeadlineDays;
 
   @Embedded private ShippingFeePolicy shippingFeePolicy;
-
-  @Embedded private SettlementInfo settlementInfo;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
@@ -95,36 +80,23 @@ public class Buncheol {
     validate(hostId, params);
     this.hostId = hostId;
     this.groupId = params.groupId();
-    this.groupName = params.groupName();
     this.title = params.title();
     this.description = params.description();
-    this.goodsName = params.goodsName();
-    this.storeName = params.storeName();
-    this.originalPrice = params.originalPrice();
+    this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
-    this.settlementInfo =
-        SettlementInfo.of(
-            params.settlementBank(), params.settlementAccount(), params.settlementHolder());
     this.status = BuncheolStatus.RECRUITING;
   }
 
   public void update(final BuncheolParams params) {
     validate(this.hostId, params);
-    this.groupId = params.groupId();
-    this.groupName = params.groupName();
     this.title = params.title();
     this.description = params.description();
-    this.goodsName = params.goodsName();
-    this.storeName = params.storeName();
-    this.originalPrice = params.originalPrice();
+    this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
     this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
-    this.settlementInfo =
-        SettlementInfo.of(
-            params.settlementBank(), params.settlementAccount(), params.settlementHolder());
   }
 
   public void validateOwner(final Long userId) {
@@ -173,12 +145,10 @@ public class Buncheol {
 
   private void validate(final Long hostId, final BuncheolParams params) {
     validateHostAndParams(hostId, params);
-    validateGroupName(params.groupName());
+    validateGroupId(params.groupId());
     validateTitle(params.title());
     validateDescription(params.description());
-    validateGoodsName(params.goodsName());
-    validateStoreName(params.storeName());
-    validateOriginalPrice(params.originalPrice());
+    validatePurchaseSite(params.purchaseSite());
     validateShippingDeadlineDays(params.shippingDeadlineDays());
     validateDeadline(params.deadline());
   }
@@ -189,12 +159,9 @@ public class Buncheol {
     }
   }
 
-  private void validateGroupName(final String value) {
-    if (value == null || value.isBlank()) {
+  private void validateGroupId(final Long value) {
+    if (value == null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-    if (value.length() > GROUP_NAME_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
     }
   }
 
@@ -213,27 +180,12 @@ public class Buncheol {
     }
   }
 
-  private void validateGoodsName(final String value) {
+  private void validatePurchaseSite(final String value) {
     if (value == null || value.isBlank()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }
-    if (value.length() > GOODS_NAME_MAX_LENGTH) {
+    if (value.length() > PURCHASE_SITE_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  private void validateStoreName(final String value) {
-    if (value == null || value.isBlank()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
-    }
-    if (value.length() > STORE_NAME_MAX_LENGTH) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  private void validateOriginalPrice(final long value) {
-    if (value <= 0) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_PRICE_INVALID);
     }
   }
 

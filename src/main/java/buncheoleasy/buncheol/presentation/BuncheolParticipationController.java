@@ -1,7 +1,7 @@
 package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
-import buncheoleasy.buncheol.application.ParticipationCheckoutInfo;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.buncheol.dto.response.ParticipationCheckoutResponse;
 import jakarta.validation.Valid;
@@ -22,15 +22,15 @@ public class BuncheolParticipationController {
 
   private final BuncheolCheckoutService buncheolCheckoutService;
 
-  /** 분철 참여 API */
-  @PostMapping("/checkout")
-  public ResponseEntity<ParticipationCheckoutResponse> startCheckout(
+  /** 분철 참여 신청 API. 참여 즉시 ACTIVE_BID 상태로 등록되며, 결제는 마감 후 낙찰자에 한해 진행한다. */
+  @PostMapping
+  public ResponseEntity<ParticipationCheckoutResponse> participate(
       @AuthenticationPrincipal final Long participantId,
       @PathVariable final Long buncheolId,
       @Valid @RequestBody final ParticipateRequest request) {
-    final ParticipationCheckoutInfo checkoutInfo =
-        buncheolCheckoutService.startCheckout(buncheolId, participantId, request);
+    final Participation participation =
+        buncheolCheckoutService.participate(buncheolId, participantId, request);
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(ParticipationCheckoutResponse.from(checkoutInfo));
+        .body(ParticipationCheckoutResponse.from(participation));
   }
 }

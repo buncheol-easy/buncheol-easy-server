@@ -32,28 +32,24 @@ class JpaBuncheolRepositoryAdapterTest {
   @PersistenceContext private EntityManager em;
 
   private Long hostId;
+  private Long groupId;
 
   @BeforeEach
   void setUp() {
     hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
+    groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹 마스터");
   }
 
-  private BuncheolParams validParams(String groupName) {
+  private BuncheolParams validParams() {
     return new BuncheolParams(
-        null,
-        groupName,
+        groupId,
         "테스트 분철 제목",
         "분철 설명입니다.",
-        "공식 앨범",
         "공식 스토어",
-        50_000L,
         LocalDateTime.now().plusDays(7),
         7,
         3000,
-        null,
-        "국민은행",
-        "123-456-789012",
-        "홍길동");
+        null);
   }
 
   private Buncheol persistAndDetach(Buncheol buncheol) {
@@ -69,7 +65,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 분철을_저장하면_ID가_할당된다() {
-      Buncheol buncheol = Buncheol.create(hostId, validParams("테스트 그룹"));
+      Buncheol buncheol = Buncheol.create(hostId, validParams());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -80,7 +76,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 저장된_분철의_초기_상태는_RECRUITING이다() {
-      Buncheol buncheol = Buncheol.create(hostId, validParams("테스트 그룹"));
+      Buncheol buncheol = Buncheol.create(hostId, validParams());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -92,20 +88,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void gs25_배송비만_설정하여_저장할_수_있다() {
       BuncheolParams params =
           new BuncheolParams(
-              null,
-              "그룹명",
-              "제목",
-              null,
-              "앨범명",
-              "스토어명",
-              30_000L,
-              LocalDateTime.now().plusDays(7),
-              5,
-              2500,
-              null,
-              "우리은행",
-              "1002-123-456789",
-              "홍길동");
+              groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 5, 2500, null);
       Buncheol buncheol = Buncheol.create(hostId, params);
 
       buncheolRepository.save(buncheol);
@@ -118,20 +101,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void cu_배송비만_설정하여_저장할_수_있다() {
       BuncheolParams params =
           new BuncheolParams(
-              null,
-              "그룹명",
-              "제목",
-              null,
-              "앨범명",
-              "스토어명",
-              30_000L,
-              LocalDateTime.now().plusDays(7),
-              5,
-              null,
-              2000,
-              "하나은행",
-              "1002-123-456789",
-              "홍길동");
+              groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 5, null, 2000);
       Buncheol buncheol = Buncheol.create(hostId, params);
 
       buncheolRepository.save(buncheol);
@@ -147,37 +117,24 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void ID로_분철을_조회할_수_있다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("조회 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
 
       assertThat(found.getId()).isEqualTo(buncheol.getId());
       assertThat(found.getHostId()).isEqualTo(hostId);
-      assertThat(found.getGroupName()).isEqualTo("조회 그룹");
+      assertThat(found.getGroupId()).isEqualTo(groupId);
       assertThat(found.getTitle()).isEqualTo("테스트 분철 제목");
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
 
     @Test
     void 도메인_update_호출_시_더티체킹으로_DB가_갱신된다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("원본 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
 
       BuncheolParams updatedParams =
           new BuncheolParams(
-              null,
-              "수정 그룹",
-              "수정 제목",
-              "수정 설명",
-              "수정 굿즈",
-              "수정 스토어",
-              77_000L,
-              LocalDateTime.now().plusDays(3),
-              3,
-              null,
-              1800,
-              "신한은행",
-              "999-888-777",
-              "수정예금주");
+              groupId, "수정 제목", "수정 설명", "수정 스토어", LocalDateTime.now().plusDays(3), 3, null, 1800);
 
       // managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
       Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
@@ -186,23 +143,17 @@ class JpaBuncheolRepositoryAdapterTest {
       em.clear();
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      assertThat(found.getGroupName()).isEqualTo("수정 그룹");
       assertThat(found.getTitle()).isEqualTo("수정 제목");
       assertThat(found.getDescription()).isEqualTo("수정 설명");
-      assertThat(found.getGoodsName()).isEqualTo("수정 굿즈");
-      assertThat(found.getStoreName()).isEqualTo("수정 스토어");
-      assertThat(found.getOriginalPrice()).isEqualTo(77_000L);
+      assertThat(found.getPurchaseSite()).isEqualTo("수정 스토어");
       assertThat(found.getShippingDeadlineDays()).isEqualTo(3);
       assertThat(found.getShippingFeePolicy().gs25ShippingFee()).isNull();
       assertThat(found.getShippingFeePolicy().cuShippingFee()).isEqualTo(1800);
-      assertThat(found.getSettlementInfo().bank()).isEqualTo("신한은행");
-      assertThat(found.getSettlementInfo().account()).isEqualTo("999-888-777");
-      assertThat(found.getSettlementInfo().holder()).isEqualTo("수정예금주");
     }
 
     @Test
     void 분철_상태를_수정할_수_있다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("상태 그룹")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
       BuncheolStatus expectedStatus = buncheol.getStatus();
       buncheol.cancel();
 
@@ -215,7 +166,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 예상_상태가_다르면_업데이트되지_않는다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams("낙관적 잠금")));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
       buncheol.cancel();
 
       // expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)

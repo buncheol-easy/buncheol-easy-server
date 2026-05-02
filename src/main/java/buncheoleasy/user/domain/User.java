@@ -1,5 +1,7 @@
 package buncheoleasy.user.domain;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Embedded;
@@ -44,6 +46,9 @@ public class User {
   @Convert(converter = PhoneNumberConverter.class)
   @Column(name = "phone_number", length = 15)
   private PhoneNumber phoneNumber;
+
+  // 분철 개최 시 정산받을 계좌. 분철을 개최할 때만 필수이며, 마이페이지에서 별도로 등록·수정한다.
+  @Embedded private BankAccount bankAccount;
 
   // 프로필 설정 완료 여부. 첫 phoneNumber 등록 시 true 로 전이. 소셜 가입 직후엔 false (전화번호 미입력 상태).
   @Column(name = "profile_completed", nullable = false)
@@ -95,6 +100,20 @@ public class User {
     this.nickname = Nickname.of(newValue);
   }
 
+  public void updateBankAccount(final String bank, final String account, final String holder) {
+    this.bankAccount = BankAccount.of(bank, account, holder);
+  }
+
+  public void requireBankAccount() {
+    if (this.bankAccount == null) {
+      throw new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
+
+  // TODO: 탈퇴 정책 보강 필요.
+  //  1) 활성 분철(RECRUITING~SETTLING)·미정산 결제가 있으면 탈퇴 거부 (애플리케이션 레이어에서 검증).
+  //  2) 모든 거래가 종료된 뒤 PII(phoneNumber·bankAccount·email) 를 NULL/해시로 익명화.
+  //  PIPA 상 탈퇴 시 즉시 파기가 원칙이나, 결제 기록(전자상거래법 5년)은 분리 보관해야 한다.
   public void withdraw() {
     this.deletedAt = LocalDateTime.now();
   }

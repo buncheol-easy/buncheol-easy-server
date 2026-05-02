@@ -12,12 +12,8 @@ public class ParticipationDomainService {
 
   private final ParticipationRepository participationRepository;
 
-  public boolean createInstantParticipationIfRecruiting(final Participation participation) {
-    return participationRepository.saveInstantIfRecruiting(participation);
-  }
-
-  public boolean createBidParticipationIfNoActiveInstant(final Participation participation) {
-    return participationRepository.saveBidIfNoActiveInstant(participation);
+  public boolean createParticipationIfRecruiting(final Participation participation) {
+    return participationRepository.saveIfRecruiting(participation);
   }
 
   public Participation getParticipation(final Long id) {
@@ -30,14 +26,6 @@ public class ParticipationDomainService {
       final Long buncheolMemberId, final Long participantId) {
     return participationRepository.findActiveByBuncheolMemberIdAndParticipantId(
         buncheolMemberId, participantId);
-  }
-
-  public boolean isInstantSlotTaken(final Long buncheolMemberId) {
-    return participationRepository.existsActiveInstantByBuncheolMemberId(buncheolMemberId);
-  }
-
-  public void failAllOpenBids(final Long buncheolMemberId, final String failReason) {
-    participationRepository.failAllOpenBidsByBuncheolMemberId(buncheolMemberId, failReason);
   }
 
   public void updateParticipationStatus(

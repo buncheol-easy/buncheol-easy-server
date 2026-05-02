@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users
     email               VARCHAR(320) NOT NULL COMMENT '소셜 계정 이메일',
     nickname            VARCHAR(20)  NOT NULL COMMENT '닉네임',
     phone_number        VARCHAR(15)  NULL COMMENT '연락처',
+    settlement_bank     VARCHAR(50)  NULL COMMENT '정산 은행',
+    settlement_account  VARCHAR(50)  NULL COMMENT '정산 계좌번호',
+    settlement_holder   VARCHAR(50)  NULL COMMENT '정산 예금주',
     profile_completed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '프로필 설정 완료 여부',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -90,20 +93,14 @@ CREATE TABLE IF NOT EXISTS buncheols
 (
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     host_id                BIGINT       NOT NULL COMMENT '개최자',
-    group_id               BIGINT       NULL COMMENT '대상 그룹 (NULL이면 커스텀 그룹)',
-    group_name             VARCHAR(100) NOT NULL COMMENT '그룹명 (반정규화/커스텀)',
+    group_id               BIGINT       NOT NULL COMMENT '대상 그룹',
     title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
     description            TEXT         NULL COMMENT '분철 설명',
-    goods_name             VARCHAR(200) NOT NULL COMMENT '굿즈명',
-    store_name             VARCHAR(200) NOT NULL COMMENT '구매처',
-    original_price         BIGINT       NOT NULL COMMENT '원가(굿즈 1개당)',
+    purchase_site          VARCHAR(200) NOT NULL COMMENT '구매처',
     deadline               DATETIME     NOT NULL COMMENT '분철 마감일',
     shipping_deadline_days INT          NOT NULL COMMENT '발송 마감 일수(수령 후 n일)',
     gs25_shipping_fee      INT          NULL COMMENT 'GS25반값택배 배송비',
     cu_shipping_fee        INT          NULL COMMENT 'CU반값택배 배송비',
-    settlement_bank        VARCHAR(50)  NOT NULL COMMENT '정산 은행',
-    settlement_account     VARCHAR(50)  NOT NULL COMMENT '정산 계좌번호',
-    settlement_holder      VARCHAR(50)  NOT NULL COMMENT '정산 예금주',
     status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED | CANCELLED',
     closed_at              DATETIME     NULL COMMENT '마감 일시',
     created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -112,7 +109,6 @@ CREATE TABLE IF NOT EXISTS buncheols
     PRIMARY KEY (id),
 
     INDEX idx_buncheols_group_id (group_id),
-    INDEX idx_buncheols_goods_name (goods_name),
     INDEX idx_buncheols_title (title),
 
     CONSTRAINT fk_buncheols_host
@@ -120,33 +116,31 @@ CREATE TABLE IF NOT EXISTS buncheols
             REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_buncheols_group
         FOREIGN KEY (group_id)
-            REFERENCES `groups` (id) ON DELETE SET NULL
+            REFERENCES `groups` (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS buncheol_members
 (
-    id            BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT       NOT NULL,
-    member_id     BIGINT       NULL COMMENT '대상 멤버 (NULL이면 커스텀 멤버)',
-    member_name   VARCHAR(100) NOT NULL COMMENT '멤버명 (반정규화/커스텀)',
-    instant_price BIGINT       NOT NULL COMMENT '즉시 구매 가격',
-    bid_allowed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '제시 가능 여부',
-    bid_min_price BIGINT       NULL COMMENT '제시 최소 금액',
-    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id            BIGINT   NOT NULL AUTO_INCREMENT,
+    buncheol_id   BIGINT   NOT NULL,
+    member_id     BIGINT   NOT NULL COMMENT '대상 멤버',
+    bid_min_price BIGINT   NOT NULL COMMENT '제시 최소 금액',
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
     INDEX idx_buncheol_members_buncheol_id (buncheol_id),
+    UNIQUE INDEX uq_buncheol_members_buncheol_member (buncheol_id, member_id),
 
     CONSTRAINT fk_buncheol_members_buncheol
         FOREIGN KEY (buncheol_id)
             REFERENCES buncheols (id) ON DELETE CASCADE,
     CONSTRAINT fk_buncheol_members_member
         FOREIGN KEY (member_id)
-            REFERENCES group_members (id) ON DELETE SET NULL
+            REFERENCES group_members (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -171,44 +165,34 @@ CREATE TABLE IF NOT EXISTS buncheol_images
 
 CREATE TABLE IF NOT EXISTS participations
 (
-    id                       BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id              BIGINT       NOT NULL,
-    buncheol_member_id       BIGINT       NOT NULL COMMENT '참여 대상 멤버 슬롯',
-    participant_id           BIGINT       NOT NULL COMMENT '참여자',
-    shipping_address_id      BIGINT       NOT NULL COMMENT '신청 시 선택한 배송지',
-    type                     VARCHAR(20)  NOT NULL COMMENT 'INSTANT | BID',
-    instant_price_snapshot   BIGINT       NULL COMMENT '즉시 구매 참여 시점 가격 스냅샷',
-    bid_amount               BIGINT       NULL COMMENT '제시 금액 (type이 INSTANT이면 NULL)',
-    balance_due_amount       BIGINT       NULL COMMENT '차액 결제 요청 금액',
-    balance_due_at           DATETIME     NULL COMMENT '차액 결제 만료 시각 (KST)',
-    closed_rank              INT          NULL COMMENT '마감 시점 제시 순위',
-    fail_reason              VARCHAR(100) NULL COMMENT 'FAILED 사유',
-    finalized_at             DATETIME     NULL COMMENT '참여 확정/실패 최종 확정 시각',
-    status                   VARCHAR(30)  NOT NULL COMMENT 'PAYMENT_PENDING | ACTIVE_BID | AWAITING_BALANCE_PAYMENT | CONFIRMED | CANCELLED | FAILED',
-    confirmed_member_id      BIGINT GENERATED ALWAYS AS (
-                                 IF(status = 'CONFIRMED', buncheol_member_id, NULL)
-                                 ) STORED COMMENT 'CONFIRMED일 때만 buncheol_member_id 값',
-    active_instant_member_id BIGINT GENERATED ALWAYS AS (
-                                 IF(type = 'INSTANT' AND status IN ('PAYMENT_PENDING', 'CONFIRMED'),
-                                    buncheol_member_id, NULL)
-                                 ) STORED COMMENT '진행 중이거나 확정된 즉시 구매일 때만 buncheol_member_id 값',
-    created_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                    BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id           BIGINT       NOT NULL,
+    buncheol_member_id    BIGINT       NOT NULL COMMENT '참여 대상 멤버 슬롯',
+    participant_id        BIGINT       NOT NULL COMMENT '참여자',
+    shipping_address_id   BIGINT       NOT NULL COMMENT '신청 시 선택한 배송지',
+    bid_amount            BIGINT       NOT NULL COMMENT '제시 금액',
+    due_at                DATETIME     NULL COMMENT '낙찰자 결제 만료 시각 (KST). 차순위 이양 시 갱신',
+    closed_rank           INT          NULL COMMENT '마감 시점 제시 순위',
+    fail_reason           VARCHAR(100) NULL COMMENT 'FAILED 사유',
+    finalized_at          DATETIME     NULL COMMENT '참여 확정/실패 최종 확정 시각',
+    status                VARCHAR(30)  NOT NULL COMMENT 'ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED',
+    confirmed_member_id   BIGINT GENERATED ALWAYS AS (
+                              IF(status = 'CONFIRMED', buncheol_member_id, NULL)
+                              ) STORED COMMENT 'CONFIRMED일 때만 buncheol_member_id 값',
+    created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
     INDEX idx_participations_buncheol_id (buncheol_id),
-    active_participant_id    BIGINT GENERATED ALWAYS AS (
-                                 IF(status IN
-                                    ('PAYMENT_PENDING', 'ACTIVE_BID', 'AWAITING_BALANCE_PAYMENT',
-                                     'CONFIRMED'),
-                                    participant_id, NULL)
-                                 ) STORED COMMENT '활성 상태일 때만 participant_id 값',
+    active_participant_id BIGINT GENERATED ALWAYS AS (
+                              IF(status IN ('ACTIVE_BID', 'AWAITING_PAYMENT', 'CONFIRMED'),
+                                 participant_id, NULL)
+                              ) STORED COMMENT '활성 상태일 때만 participant_id 값',
 
     UNIQUE INDEX uq_participations_active_member_participant (buncheol_member_id, active_participant_id),
     UNIQUE INDEX uq_participations_confirmed_member (confirmed_member_id),
-    UNIQUE INDEX uq_participations_active_instant_member (active_instant_member_id),
-    INDEX idx_participations_member_type_status (buncheol_member_id, type, status),
+    INDEX idx_participations_member_status (buncheol_member_id, status),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)
@@ -224,7 +208,7 @@ CREATE TABLE IF NOT EXISTS participations
 
     CONSTRAINT fk_participations_shipping_address
         FOREIGN KEY (shipping_address_id)
-            REFERENCES shipping_addresses (id) ON DELETE CASCADE
+            REFERENCES shipping_addresses (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -234,7 +218,6 @@ CREATE TABLE IF NOT EXISTS payments
     id                BIGINT       NOT NULL AUTO_INCREMENT,
     participation_id  BIGINT       NOT NULL COMMENT '참여 ID',
     tx_type           VARCHAR(20)  NOT NULL COMMENT 'PAYMENT | REFUND',
-    payment_phase     VARCHAR(20)  NOT NULL COMMENT 'INSTANT | DEPOSIT | BALANCE',
     order_id          VARCHAR(100) NOT NULL COMMENT '결제 주문 ID',
     payment_key       VARCHAR(200) NULL COMMENT '토스 결제 키',
     parent_payment_id BIGINT       NULL COMMENT 'REFUND(환불)가 참조하는 원 결제 레코드 ID',

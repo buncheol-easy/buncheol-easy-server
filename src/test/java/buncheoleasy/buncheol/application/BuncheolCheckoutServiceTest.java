@@ -5,19 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.ParticipationPolicy;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
-import buncheoleasy.buncheol.domain.participation.ParticipationType;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.application.PaymentService;
-import buncheoleasy.payment.domain.PaymentPhase;
 import java.lang.reflect.Field;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,192 +36,85 @@ class BuncheolCheckoutServiceTest {
   private static final Long BUNCHEOL_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long PARTICIPATION_ID = 50L;
+  private static final long BID_AMOUNT = 30_000L;
 
-  private PaymentOrderInfo dummyPaymentOrderInfo() {
-    return new PaymentOrderInfo(
-        "clientKey", "order_123", "결제 이름", 50_000L, "http://success", "http://fail");
+  private static Participation newParticipation() {
+    return Participation.create(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, BID_AMOUNT);
   }
 
   @Nested
-  @DisplayName("참여 신청 및 결제 주문 생성 테스트")
-  class StartCheckoutTest {
+  @DisplayName("참여 신청 테스트")
+  class ParticipateTest {
 
     @Test
-    void 즉시_구매_참여_신청_및_결제_주문_생성에_성공한다() {
-      // given
-      ParticipateRequest request =
-          new ParticipateRequest(10L, 200L, ParticipationType.INSTANT, null);
+    void 참여_신청에_성공하면_결제_주문은_생성하지_않고_참여_객체만_반환한다() {
+      ParticipateRequest request = new ParticipateRequest(10L, 200L, BID_AMOUNT);
 
-      Participation participation =
-          Participation.createInstant(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 50_000L);
+      Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
 
       given(buncheolParticipationService.createParticipation(BUNCHEOL_ID, PARTICIPANT_ID, request))
           .willReturn(participation);
 
-      PaymentOrderInfo paymentOrderInfo = dummyPaymentOrderInfo();
-      given(
-              paymentService.createPaymentOrder(
-                  eq(PARTICIPATION_ID), eq(PaymentPhase.INSTANT), eq(50_000L), anyString()))
-          .willReturn(paymentOrderInfo);
+      Participation result =
+          buncheolCheckoutService.participate(BUNCHEOL_ID, PARTICIPANT_ID, request);
 
-      // when
-      ParticipationCheckoutInfo result =
-          buncheolCheckoutService.startCheckout(BUNCHEOL_ID, PARTICIPANT_ID, request);
-
-      // then
-      assertThat(result.participation()).isSameAs(participation);
-      assertThat(result.paymentOrder()).isSameAs(paymentOrderInfo);
-      then(paymentService)
-          .should()
-          .createPaymentOrder(
-              eq(PARTICIPATION_ID), eq(PaymentPhase.INSTANT), eq(50_000L), anyString());
-    }
-
-    @Test
-    void 제시_참여_신청시_예치금으로_결제_주문을_생성한다() {
-      // given
-      ParticipateRequest request =
-          new ParticipateRequest(10L, 200L, ParticipationType.BID, 30_000L);
-
-      Participation participation =
-          Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
-      setId(participation, PARTICIPATION_ID);
-
-      given(buncheolParticipationService.createParticipation(BUNCHEOL_ID, PARTICIPANT_ID, request))
-          .willReturn(participation);
-
-      long expectedDeposit = ParticipationPolicy.resolveBidDepositAmount(30_000L);
-      PaymentOrderInfo paymentOrderInfo = dummyPaymentOrderInfo();
-      given(
-              paymentService.createPaymentOrder(
-                  eq(PARTICIPATION_ID), eq(PaymentPhase.DEPOSIT), eq(expectedDeposit), anyString()))
-          .willReturn(paymentOrderInfo);
-
-      // when
-      ParticipationCheckoutInfo result =
-          buncheolCheckoutService.startCheckout(BUNCHEOL_ID, PARTICIPANT_ID, request);
-
-      // then
-      assertThat(result.participation()).isSameAs(participation);
-      then(paymentService)
-          .should()
-          .createPaymentOrder(
-              eq(PARTICIPATION_ID), eq(PaymentPhase.DEPOSIT), eq(expectedDeposit), anyString());
+      assertThat(result).isSameAs(participation);
     }
   }
 
   @Nested
-  @DisplayName("잔금 결제 주문 생성 테스트")
-  class StartBalancePaymentCheckoutTest {
+  @DisplayName("낙찰자 결제 주문 생성 테스트")
+  class StartPaymentCheckoutTest {
 
     @Test
-    void 잔금_결제_주문_생성에_성공한다() {
-      // given
-      Participation participation =
-          Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
+    void 결제_주문은_제시_금액으로_생성된다() {
+      Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
-      setFieldValue(participation, "status", ParticipationStatus.AWAITING_BALANCE_PAYMENT);
-      setFieldValue(participation, "balanceDueAmount", 25_000L);
+      setFieldValue(participation, "status", ParticipationStatus.AWAITING_PAYMENT);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      PaymentOrderInfo paymentOrderInfo = dummyPaymentOrderInfo();
-      given(
-              paymentService.createPaymentOrder(
-                  eq(PARTICIPATION_ID), eq(PaymentPhase.BALANCE), eq(25_000L), anyString()))
+      PaymentOrderInfo paymentOrderInfo =
+          new PaymentOrderInfo(
+              "clientKey", "order_123", "분철 낙찰자 결제", BID_AMOUNT, "http://success", "http://fail");
+      given(paymentService.createPaymentOrder(eq(PARTICIPATION_ID), eq(BID_AMOUNT), anyString()))
           .willReturn(paymentOrderInfo);
 
-      // when
       PaymentOrderInfo result =
-          buncheolCheckoutService.startBalancePaymentCheckout(PARTICIPANT_ID, PARTICIPATION_ID);
+          buncheolCheckoutService.startPaymentCheckout(PARTICIPANT_ID, PARTICIPATION_ID);
 
-      // then
       assertThat(result).isSameAs(paymentOrderInfo);
     }
 
     @Test
     void 참여자가_다르면_예외가_발생한다() {
-      // given
       Long wrongUserId = 999L;
-      Participation participation =
-          Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
+      Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      // when & then
       assertThatThrownBy(
-              () ->
-                  buncheolCheckoutService.startBalancePaymentCheckout(
-                      wrongUserId, PARTICIPATION_ID))
+              () -> buncheolCheckoutService.startPaymentCheckout(wrongUserId, PARTICIPATION_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
     }
 
     @Test
-    void AWAITING_BALANCE_PAYMENT_상태가_아니면_예외가_발생한다() {
-      // given
-      Participation participation =
-          Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
+    void AWAITING_PAYMENT_상태가_아니면_예외가_발생한다() {
+      Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
-      // PAYMENT_PENDING 상태 (기본)
+      // ACTIVE_BID 상태 (기본)
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      // when & then
       assertThatThrownBy(
-              () ->
-                  buncheolCheckoutService.startBalancePaymentCheckout(
-                      PARTICIPANT_ID, PARTICIPATION_ID))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED);
-    }
-
-    @Test
-    void 잔금이_null이면_예외가_발생한다() {
-      // given
-      Participation participation =
-          Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
-      setId(participation, PARTICIPATION_ID);
-      setFieldValue(participation, "status", ParticipationStatus.AWAITING_BALANCE_PAYMENT);
-      // balanceDueAmount is null by default
-
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when & then
-      assertThatThrownBy(
-              () ->
-                  buncheolCheckoutService.startBalancePaymentCheckout(
-                      PARTICIPANT_ID, PARTICIPATION_ID))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED);
-    }
-
-    @Test
-    void 잔금이_0_이하이면_예외가_발생한다() {
-      // given
-      Participation participation =
-          Participation.createBid(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
-      setId(participation, PARTICIPATION_ID);
-      setFieldValue(participation, "status", ParticipationStatus.AWAITING_BALANCE_PAYMENT);
-      setFieldValue(participation, "balanceDueAmount", 0L);
-
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      // when & then
-      assertThatThrownBy(
-              () ->
-                  buncheolCheckoutService.startBalancePaymentCheckout(
-                      PARTICIPANT_ID, PARTICIPATION_ID))
+              () -> buncheolCheckoutService.startPaymentCheckout(PARTICIPANT_ID, PARTICIPATION_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED);

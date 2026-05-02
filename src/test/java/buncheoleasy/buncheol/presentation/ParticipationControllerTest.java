@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
-import buncheoleasy.buncheol.application.ParticipationCheckoutInfo;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -67,75 +66,53 @@ class ParticipationControllerTest {
     };
   }
 
+  private static final String VALID_REQUEST_BODY =
+      """
+      {
+        "buncheolMemberId": 10,
+        "shippingAddressId": 200,
+        "bidAmount": 30000
+      }
+      """;
+
   @Nested
-  @DisplayName("분철 참여 신청 및 결제 주문 생성 API 테스트")
-  class StartCheckoutTest {
+  @DisplayName("분철 참여 신청 API 테스트")
+  class ParticipateTest {
 
     @Test
-    void 즉시_구매_참여_신청에_성공하면_201을_반환한다() throws Exception {
-      // given
+    void 참여_신청에_성공하면_201을_반환한다() throws Exception {
       Participation participation =
-          Participation.createInstant(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 50_000L);
+          Participation.create(BUNCHEOL_ID, 10L, PARTICIPANT_ID, 200L, 30_000L);
       setFieldValue(participation, "id", PARTICIPATION_ID);
 
-      PaymentOrderInfo paymentOrderInfo =
-          new PaymentOrderInfo(
-              "clientKey", "order_123", "분철 즉시 구매 결제", 50_000L, "http://success", "http://fail");
-
-      ParticipationCheckoutInfo checkoutInfo =
-          new ParticipationCheckoutInfo(participation, paymentOrderInfo);
-
       given(
-              buncheolCheckoutService.startCheckout(
+              buncheolCheckoutService.participate(
                   eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class)))
-          .willReturn(checkoutInfo);
+          .willReturn(participation);
 
-      String requestBody =
-          """
-          {
-            "buncheolMemberId": 10,
-            "shippingAddressId": 200,
-            "type": "INSTANT"
-          }
-          """;
-
-      // when & then
       mockMvc
           .perform(
-              post("/v1/buncheols/{buncheolId}/participations/checkout", BUNCHEOL_ID)
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
                   .contentType(MediaType.APPLICATION_JSON)
-                  .content(requestBody)
+                  .content(VALID_REQUEST_BODY)
                   .with(mockAuth()))
           .andExpect(status().isCreated())
           .andExpect(jsonPath("$.participationId").value(PARTICIPATION_ID))
-          .andExpect(jsonPath("$.participationStatus").value("PAYMENT_PENDING"))
-          .andExpect(jsonPath("$.clientKey").value("clientKey"))
-          .andExpect(jsonPath("$.paymentOrderId").value("order_123"))
-          .andExpect(jsonPath("$.amount").value(50_000));
+          .andExpect(jsonPath("$.participationStatus").value("ACTIVE_BID"))
+          .andExpect(jsonPath("$.bidAmount").value(30_000));
     }
 
     @Test
     void 모집중이_아닌_분철이면_409를_반환한다() throws Exception {
-      // given
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
           .given(buncheolCheckoutService)
-          .startCheckout(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
+          .participate(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
 
-      String requestBody =
-          """
-          {
-            "buncheolMemberId": 10,
-            "shippingAddressId": 200,
-            "type": "INSTANT"
-          }
-          """;
-
-      // when & then
       mockMvc
           .perform(
-              post("/v1/buncheols/{buncheolId}/participations/checkout", BUNCHEOL_ID)
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
                   .contentType(MediaType.APPLICATION_JSON)
-                  .content(requestBody)
+                  .content(VALID_REQUEST_BODY)
                   .with(mockAuth()))
           .andExpect(status().isConflict())
           .andExpect(
@@ -145,26 +122,15 @@ class ParticipationControllerTest {
 
     @Test
     void 호스트가_참여하면_403을_반환한다() throws Exception {
-      // given
       willThrow(new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE))
           .given(buncheolCheckoutService)
-          .startCheckout(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
+          .participate(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
 
-      String requestBody =
-          """
-          {
-            "buncheolMemberId": 10,
-            "shippingAddressId": 200,
-            "type": "INSTANT"
-          }
-          """;
-
-      // when & then
       mockMvc
           .perform(
-              post("/v1/buncheols/{buncheolId}/participations/checkout", BUNCHEOL_ID)
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
                   .contentType(MediaType.APPLICATION_JSON)
-                  .content(requestBody)
+                  .content(VALID_REQUEST_BODY)
                   .with(mockAuth()))
           .andExpect(status().isForbidden())
           .andExpect(
@@ -176,26 +142,15 @@ class ParticipationControllerTest {
 
     @Test
     void 이미_활성_참여가_있으면_409를_반환한다() throws Exception {
-      // given
       willThrow(new BusinessException(ErrorCode.PARTICIPATION_ALREADY_EXISTS))
           .given(buncheolCheckoutService)
-          .startCheckout(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
+          .participate(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
 
-      String requestBody =
-          """
-          {
-            "buncheolMemberId": 10,
-            "shippingAddressId": 200,
-            "type": "INSTANT"
-          }
-          """;
-
-      // when & then
       mockMvc
           .perform(
-              post("/v1/buncheols/{buncheolId}/participations/checkout", BUNCHEOL_ID)
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
                   .contentType(MediaType.APPLICATION_JSON)
-                  .content(requestBody)
+                  .content(VALID_REQUEST_BODY)
                   .with(mockAuth()))
           .andExpect(status().isConflict())
           .andExpect(
@@ -206,47 +161,39 @@ class ParticipationControllerTest {
 
     @Test
     void 필수_필드가_누락되면_400을_반환한다() throws Exception {
-      // given
-      String requestBody =
+      String invalidJson =
           """
           {
             "buncheolMemberId": 10
           }
           """;
 
-      // when & then
       mockMvc
           .perform(
-              post("/v1/buncheols/{buncheolId}/participations/checkout", BUNCHEOL_ID)
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
                   .contentType(MediaType.APPLICATION_JSON)
-                  .content(requestBody)
+                  .content(invalidJson)
                   .with(mockAuth()))
           .andExpect(status().isBadRequest());
     }
   }
 
   @Nested
-  @DisplayName("잔금 결제 주문 생성 API 테스트")
-  class StartBalancePaymentCheckoutTest {
+  @DisplayName("낙찰자 결제 주문 생성 API 테스트")
+  class StartPaymentCheckoutTest {
 
     @Test
-    void 잔금_결제_주문_생성에_성공하면_201을_반환한다() throws Exception {
-      // given
+    void 결제_주문_생성에_성공하면_201을_반환한다() throws Exception {
       PaymentOrderInfo paymentOrderInfo =
           new PaymentOrderInfo(
-              "clientKey", "order_123", "분철 잔금 결제", 25_000L, "http://success", "http://fail");
+              "clientKey", "order_123", "분철 낙찰자 결제", 25_000L, "http://success", "http://fail");
 
-      given(
-              buncheolCheckoutService.startBalancePaymentCheckout(
-                  eq(PARTICIPANT_ID), eq(PARTICIPATION_ID)))
+      given(buncheolCheckoutService.startPaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID)))
           .willReturn(paymentOrderInfo);
 
-      // when & then
       mockMvc
           .perform(
-              post(
-                      "/v1/participations/{participationId}/balance-payment/checkout",
-                      PARTICIPATION_ID)
+              post("/v1/participations/{participationId}/payment/checkout", PARTICIPATION_ID)
                   .with(mockAuth()))
           .andExpect(status().isCreated())
           .andExpect(jsonPath("$.clientKey").value("clientKey"))
@@ -256,17 +203,13 @@ class ParticipationControllerTest {
 
     @Test
     void 참여가_존재하지_않으면_404를_반환한다() throws Exception {
-      // given
       willThrow(new BusinessException(ErrorCode.PARTICIPATION_NOT_FOUND))
           .given(buncheolCheckoutService)
-          .startBalancePaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+          .startPaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
 
-      // when & then
       mockMvc
           .perform(
-              post(
-                      "/v1/participations/{participationId}/balance-payment/checkout",
-                      PARTICIPATION_ID)
+              post("/v1/participations/{participationId}/payment/checkout", PARTICIPATION_ID)
                   .with(mockAuth()))
           .andExpect(status().isNotFound())
           .andExpect(
@@ -276,17 +219,13 @@ class ParticipationControllerTest {
 
     @Test
     void 참여자가_아니면_403을_반환한다() throws Exception {
-      // given
       willThrow(new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION))
           .given(buncheolCheckoutService)
-          .startBalancePaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+          .startPaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
 
-      // when & then
       mockMvc
           .perform(
-              post(
-                      "/v1/participations/{participationId}/balance-payment/checkout",
-                      PARTICIPATION_ID)
+              post("/v1/participations/{participationId}/payment/checkout", PARTICIPATION_ID)
                   .with(mockAuth()))
           .andExpect(status().isForbidden())
           .andExpect(
@@ -296,18 +235,14 @@ class ParticipationControllerTest {
     }
 
     @Test
-    void 잔금_결제가_허용되지_않는_상태이면_409를_반환한다() throws Exception {
-      // given
+    void 결제가_허용되지_않는_상태이면_409를_반환한다() throws Exception {
       willThrow(new BusinessException(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED))
           .given(buncheolCheckoutService)
-          .startBalancePaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+          .startPaymentCheckout(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
 
-      // when & then
       mockMvc
           .perform(
-              post(
-                      "/v1/participations/{participationId}/balance-payment/checkout",
-                      PARTICIPATION_ID)
+              post("/v1/participations/{participationId}/payment/checkout", PARTICIPATION_ID)
                   .with(mockAuth()))
           .andExpect(status().isConflict())
           .andExpect(

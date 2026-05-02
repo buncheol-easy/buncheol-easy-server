@@ -321,11 +321,11 @@ class UserTest {
     void 계좌를_등록하면_조회된다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
 
-      user.updateBankAccount("국민은행", "123-456-789012", "홍길동");
+      user.updateBankAccount("국민은행", "123456789012", "홍길동");
 
       assertThat(user.getBankAccount()).isNotNull();
       assertThat(user.getBankAccount().bank()).isEqualTo("국민은행");
-      assertThat(user.getBankAccount().account()).isEqualTo("123-456-789012");
+      assertThat(user.getBankAccount().account()).isEqualTo("123456789012");
       assertThat(user.getBankAccount().holder()).isEqualTo("홍길동");
     }
 

@@ -88,13 +88,13 @@ class UserServiceTest {
     void 계좌를_정상적으로_업데이트한다() {
       // given
       Long userId = 1L;
-      BankAccountRequest request = new BankAccountRequest("국민은행", "123-456-789012", "홍길동");
+      BankAccountRequest request = new BankAccountRequest("국민은행", "123456789012", "홍길동");
 
       // when
       userService.updateBankAccount(userId, request);
 
       // then
-      then(userDomainService).should().updateBankAccount(userId, "국민은행", "123-456-789012", "홍길동");
+      then(userDomainService).should().updateBankAccount(userId, "국민은행", "123456789012", "홍길동");
     }
   }
 
@@ -128,7 +128,7 @@ class UserServiceTest {
       Long userId = 1L;
       User user = User.create("KAKAO", "123456", "test@example.com");
       user.updatePhoneNumber("01012345678");
-      user.updateBankAccount("국민은행", "123-456-789012", "홍길동");
+      user.updateBankAccount("국민은행", "123456789012", "홍길동");
       given(userDomainService.getUser(userId)).willReturn(user);
 
       // when
@@ -137,7 +137,7 @@ class UserServiceTest {
       // then
       assertThat(response.bankAccount()).isNotNull();
       assertThat(response.bankAccount().bank()).isEqualTo("국민은행");
-      assertThat(response.bankAccount().account()).isEqualTo("123-456-789012");
+      assertThat(response.bankAccount().account()).isEqualTo("123456789012");
       assertThat(response.bankAccount().holder()).isEqualTo("홍길동");
     }
 

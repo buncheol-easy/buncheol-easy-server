@@ -213,7 +213,7 @@ class UserDomainServiceTest {
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       // when
-      userDomainService.updateBankAccount(1L, "국민은행", "123-456", "홍길동");
+      userDomainService.updateBankAccount(1L, "국민은행", "123456", "홍길동");
 
       // then
       assertThat(user.getBankAccount()).isNotNull();

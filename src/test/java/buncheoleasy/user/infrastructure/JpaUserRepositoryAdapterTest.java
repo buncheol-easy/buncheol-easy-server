@@ -242,7 +242,7 @@ class JpaUserRepositoryAdapterTest {
 
       // when
       User managed = userRepository.findById(saved.getId()).orElseThrow();
-      managed.updateBankAccount("국민은행", "123-456-789012", "홍길동");
+      managed.updateBankAccount("국민은행", "123456789012", "홍길동");
       em.flush();
       em.clear();
 
@@ -250,7 +250,7 @@ class JpaUserRepositoryAdapterTest {
       User found = userRepository.findById(saved.getId()).orElseThrow();
       assertThat(found.getBankAccount()).isNotNull();
       assertThat(found.getBankAccount().bank()).isEqualTo("국민은행");
-      assertThat(found.getBankAccount().account()).isEqualTo("123-456-789012");
+      assertThat(found.getBankAccount().account()).isEqualTo("123456789012");
       assertThat(found.getBankAccount().holder()).isEqualTo("홍길동");
     }
 

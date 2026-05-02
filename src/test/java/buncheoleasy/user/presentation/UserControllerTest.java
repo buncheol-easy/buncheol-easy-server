@@ -114,7 +114,7 @@ class UserControllerTest {
             put("/v1/users/me/bank-account")
                 .with(mockAuth())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"bank\":\"국민은행\",\"account\":\"123-456-789012\",\"holder\":\"홍길동\"}"))
+                .content("{\"bank\":\"국민은행\",\"account\":\"123456789012\",\"holder\":\"홍길동\"}"))
         .andExpect(status().isNoContent());
 
     then(userService).should().updateBankAccount(eq(USER_ID), any(BankAccountRequest.class));
@@ -128,6 +128,18 @@ class UserControllerTest {
                 .with(mockAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"bank\":\"\",\"account\":\"123\",\"holder\":\"홍길동\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+  }
+
+  @Test
+  void 정산_계좌번호에_숫자_외_문자가_포함되면_400을_반환한다() throws Exception {
+    mockMvc
+        .perform(
+            put("/v1/users/me/bank-account")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"bank\":\"국민은행\",\"account\":\"123-456-789012\",\"holder\":\"홍길동\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }

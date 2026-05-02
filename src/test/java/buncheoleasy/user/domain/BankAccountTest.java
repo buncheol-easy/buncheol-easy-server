@@ -22,18 +22,19 @@ class BankAccountTest {
 
     @Test
     void 유효한_값으로_생성된다() {
-      BankAccount account = BankAccount.of("국민은행", "123-456-789012", "홍길동");
+      BankAccount account = BankAccount.of("국민은행", "123456789012", "홍길동");
 
       assertThat(account.bank()).isEqualTo("국민은행");
-      assertThat(account.account()).isEqualTo("123-456-789012");
+      assertThat(account.account()).isEqualTo("123456789012");
       assertThat(account.holder()).isEqualTo("홍길동");
     }
 
     @Test
     void 최대_길이_경계값까지_허용된다() {
-      String maxLength = "가".repeat(50);
+      String maxLengthText = "가".repeat(50);
+      String maxLengthDigits = "1".repeat(50);
 
-      assertThatCode(() -> BankAccount.of(maxLength, maxLength, maxLength))
+      assertThatCode(() -> BankAccount.of(maxLengthText, maxLengthDigits, maxLengthText))
           .doesNotThrowAnyException();
     }
   }
@@ -95,6 +96,20 @@ class BankAccountTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_LENGTH_INVALID);
+    }
+  }
+
+  @Nested
+  @DisplayName("계좌번호 형식 검증")
+  class AccountFormatTest {
+
+    @ParameterizedTest
+    @ValueSource(strings = {"123-456", "123 456", "123.456", "abc", "12a34", "１２３"})
+    void 계좌번호에_숫자_외_문자가_포함되면_예외가_발생한다(String invalidAccount) {
+      assertThatThrownBy(() -> BankAccount.of("국민은행", invalidAccount, "홍길동"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_FORMAT_INVALID);
     }
 
     @Test

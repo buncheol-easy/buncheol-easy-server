@@ -5,14 +5,14 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root1234
-      MYSQL_DATABASE: buncheoleasy_db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-buncheoleasy_db}
       TZ: Asia/Seoul
     volumes:
       - mysql-data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot1234"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\""]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -45,11 +45,11 @@ services:
     env_file:
       - .env
     environment:
-      DB_URL: jdbc:mysql://mysql:3306/buncheoleasy_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-      DB_USERNAME: root
-      DB_PASSWORD: root1234
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-buncheoleasy_db}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_PORT: ${REDIS_PORT:-6379}
 
 volumes:
   mysql-data:

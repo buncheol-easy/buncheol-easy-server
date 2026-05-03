@@ -5,7 +5,7 @@ WORKDIR /app
 COPY gradlew settings.gradle build.gradle ./
 COPY gradle ./gradle
 
-RUN chmod +x gradlew
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
 COPY src ./src
 
@@ -19,4 +19,4 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]

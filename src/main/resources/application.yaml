@@ -7,9 +7,9 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/buncheoleasy_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: root
-    password: root1234
+    url: ${DB_URL:jdbc:mysql://localhost:3306/buncheoleasy_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
 
   sql:
     init:
@@ -45,8 +45,8 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 logging:
   level:
@@ -80,8 +80,8 @@ app:
 delivery:
   tracker:
     api-url: https://apis.tracker.delivery/graphql
-    client-id: ${DELIVERY_TRACKER_CLIENT_ID:AA51v5vLZjyCdwZYhCmguSbp}
-    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET:kEZaK7wH3XbZkN9vPr4jauO1qMCCNYUz8juRuBAN4EJ}
+    client-id: ${DELIVERY_TRACKER_CLIENT_ID}
+    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET}
     callback-url: ${DELIVERY_TRACKER_CALLBACK_URL:http://localhost:8080/v1/deliveries/webhook/callback}
     connect-timeout: 3s
     read-timeout: 5s
@@ -93,3 +93,12 @@ toss:
     confirm-url: "https://api.tosspayments.com/v1/payments/confirm"
     connect-timeout: 3s
     read-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

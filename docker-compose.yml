@@ -5,18 +5,51 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root1234
-      MYSQL_DATABASE: buncheoleasy_db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-buncheoleasy_db}
       TZ: Asia/Seoul
     volumes:
       - mysql-data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   redis:
     image: redis:7-alpine
     container_name: buncheoleasy-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    profiles:
+      - backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: buncheoleasy-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-buncheoleasy_db}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
 
 volumes:
   mysql-data:

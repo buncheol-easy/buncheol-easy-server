@@ -23,6 +23,7 @@ public class SecurityConfig {
     "/index.html",
     "/favicon.ico",
     "/error",
+    "/actuator/health",
     "/v1/auth/reissue-token",
     "/v1/payments/success",
     "/v1/payments/fail",

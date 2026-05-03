@@ -6,6 +6,10 @@ on:
       - dev
   workflow_dispatch:
 
+concurrency:
+  group: backend-dev-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -29,6 +33,7 @@ jobs:
             --exclude "build" \
             --exclude ".idea" \
             --exclude ".env" \
+            --exclude "*.log" \
             -e "ssh -i ~/.ssh/ec2_key" \
             ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
@@ -37,27 +42,29 @@ jobs:
           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
             set -e
 
-            cd /home/ubuntu/buncheol-easy-server
+            cd "${{ secrets.DEPLOY_PATH }}"
 
             docker compose --profile backend up -d --build
 
             echo "Waiting for backend health check..."
 
-            for i in {1..30}; do
-              if curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; then
-                echo "Backend health check passed"
-                break
-              fi
+            MAX_RETRY=30
+            count=0
 
-              echo "Backend is not ready yet... retry $i"
-              sleep 5
+            until curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; do
+              count=$((count + 1))
 
-              if [ "$i" -eq 30 ]; then
-                echo "Backend health check failed"
+              if [ "$count" -ge "$MAX_RETRY" ]; then
+                echo "Backend health check failed after ${MAX_RETRY} retries"
                 docker logs buncheoleasy-backend --tail=100
                 exit 1
               fi
+
+              echo "Backend is not ready yet... retry $count"
+              sleep 5
             done
+
+            echo "Backend health check passed"
 
             docker image prune -f
           EOF

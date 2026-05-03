@@ -1,0 +1,63 @@
+name: Deploy Backend Dev
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync source to EC2
+        run: |
+          rsync -avz --delete \
+            --exclude ".git" \
+            --exclude ".gradle" \
+            --exclude "build" \
+            --exclude ".idea" \
+            --exclude ".env" \
+            -e "ssh -i ~/.ssh/ec2_key" \
+            ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.DEPLOY_PATH }}/
+
+      - name: Build and run backend container
+        run: |
+          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+
+            cd /home/ubuntu/buncheol-easy-server
+
+            docker compose --profile backend up -d --build
+
+            echo "Waiting for backend health check..."
+
+            for i in {1..30}; do
+              if curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; then
+                echo "Backend health check passed"
+                break
+              fi
+
+              echo "Backend is not ready yet... retry $i"
+              sleep 5
+
+              if [ "$i" -eq 30 ]; then
+                echo "Backend health check failed"
+                docker logs buncheoleasy-backend --tail=100
+                exit 1
+              fi
+            done
+
+            docker image prune -f
+          EOF

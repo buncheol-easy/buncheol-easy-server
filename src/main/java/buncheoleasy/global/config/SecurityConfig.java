@@ -32,6 +32,9 @@ public class SecurityConfig {
 
   private static final String[] OAUTH_PATHS = {"/oauth2/**", "/login/oauth2/**"};
 
+  /** 사용자 컨텍스트가 필요 없는 공개 조회 API (GET 한정). */
+  private static final String[] PUBLIC_GET_PATHS = {"/v1/groups/**"};
+
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -50,9 +53,11 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(PUBLIC_PATHS)
-                    .permitAll() // 정적 리소스
+                    .permitAll() // 메서드 무관 공개 (정적 리소스, 외부 콜백 등)
                     .requestMatchers(OAUTH_PATHS)
                     .permitAll() // OAuth2 로그인 진입/콜백 경로
+                    .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS)
+                    .permitAll() // GET 한정 공개 조회 API (비로그인 둘러보기)
                     .requestMatchers(HttpMethod.OPTIONS, "/**")
                     .permitAll() // OPTIONS 프리플라이트 요청
                     .anyRequest()

@@ -52,9 +52,9 @@ public class Buncheol {
   @Column(nullable = false)
   private LocalDateTime deadline;
 
-  // 호스트가 굿즈를 수령한 후 참여자에게 발송해야 하는 마감 기한(일수).
-  @Column(name = "shipping_deadline_days", nullable = false)
-  private int shippingDeadlineDays;
+  // 호스트가 참여자에게 굿즈를 발송하기로 약속한 일시. 미정 가능.
+  @Column(name = "shipping_deadline_days")
+  private LocalDateTime shippingDeadlineDays;
 
   @Embedded private ShippingFeePolicy shippingFeePolicy;
 
@@ -149,8 +149,8 @@ public class Buncheol {
     validateTitle(params.title());
     validateDescription(params.description());
     validatePurchaseSite(params.purchaseSite());
-    validateShippingDeadlineDays(params.shippingDeadlineDays());
     validateDeadline(params.deadline());
+    validateShippingDeadlineDays(params.shippingDeadlineDays(), params.deadline());
   }
 
   private void validateHostAndParams(final Long hostId, final BuncheolParams params) {
@@ -189,8 +189,12 @@ public class Buncheol {
     }
   }
 
-  private void validateShippingDeadlineDays(final int value) {
-    if (value <= 0) {
+  private void validateShippingDeadlineDays(
+      final LocalDateTime value, final LocalDateTime deadline) {
+    if (value == null) {
+      return;
+    }
+    if (deadline == null || !value.isAfter(deadline)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID);
     }
   }

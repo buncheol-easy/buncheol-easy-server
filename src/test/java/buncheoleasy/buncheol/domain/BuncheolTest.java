@@ -21,10 +21,18 @@ class BuncheolTest {
 
   private static final Long HOST_ID = 1L;
   private static final LocalDateTime FUTURE_DEADLINE = LocalDateTime.now().plusDays(7);
+  private static final LocalDateTime FUTURE_SHIPPING_DEADLINE = FUTURE_DEADLINE.plusDays(7);
 
   private BuncheolParams validParams() {
     return new BuncheolParams(
-        1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, 7, 3000, null);
+        1L,
+        "테스트 분철 제목",
+        "분철 설명입니다.",
+        "공식 스토어",
+        FUTURE_DEADLINE,
+        FUTURE_SHIPPING_DEADLINE,
+        3000,
+        null);
   }
 
   @Nested
@@ -65,7 +73,8 @@ class BuncheolTest {
     void groupId가_null이면_예외가_발생한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(null, "제목", null, "스토어명", FUTURE_DEADLINE, 7, 3000, null);
+          new BuncheolParams(
+              null, "제목", null, "스토어명", FUTURE_DEADLINE, FUTURE_SHIPPING_DEADLINE, 3000, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -85,7 +94,8 @@ class BuncheolTest {
     void 제목이_null이거나_빈_값이면_예외가_발생한다(String title) {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, title, null, "스토어명", FUTURE_DEADLINE, 7, 3000, null);
+          new BuncheolParams(
+              1L, title, null, "스토어명", FUTURE_DEADLINE, FUTURE_SHIPPING_DEADLINE, 3000, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -99,7 +109,8 @@ class BuncheolTest {
       // given
       String longTitle = "가".repeat(201);
       BuncheolParams params =
-          new BuncheolParams(1L, longTitle, null, "스토어명", FUTURE_DEADLINE, 7, 3000, null);
+          new BuncheolParams(
+              1L, longTitle, null, "스토어명", FUTURE_DEADLINE, FUTURE_SHIPPING_DEADLINE, 3000, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -117,7 +128,8 @@ class BuncheolTest {
     void 설명이_null이어도_생성에_성공한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 7, 3000, null);
+          new BuncheolParams(
+              1L, "제목", null, "스토어명", FUTURE_DEADLINE, FUTURE_SHIPPING_DEADLINE, 3000, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
@@ -128,7 +140,15 @@ class BuncheolTest {
       // given
       String longDescription = "가".repeat(301);
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, 7, 3000, null);
+          new BuncheolParams(
+              1L,
+              "제목",
+              longDescription,
+              "스토어명",
+              FUTURE_DEADLINE,
+              FUTURE_SHIPPING_DEADLINE,
+              3000,
+              null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -139,15 +159,49 @@ class BuncheolTest {
   }
 
   @Nested
-  @DisplayName("발송 마감 일수 검증 테스트")
+  @DisplayName("발송 마감일 검증 테스트")
   class ValidateShippingDeadlineDaysTest {
 
-    @ParameterizedTest
-    @ValueSource(ints = {0, -1, -7})
-    void 발송_마감_일수가_0_이하면_예외가_발생한다(int days) {
+    @Test
+    void 발송_마감일이_null이면_생성에_성공한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, days, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, null, 3000, null);
+
+      // when & then
+      assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 발송_마감일이_분철_마감일_이후면_생성에_성공한다() {
+      // given
+      BuncheolParams params =
+          new BuncheolParams(
+              1L, "제목", null, "스토어명", FUTURE_DEADLINE, FUTURE_DEADLINE.plusDays(1), 3000, null);
+
+      // when & then
+      assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 발송_마감일이_분철_마감일과_같으면_예외가_발생한다() {
+      // given
+      BuncheolParams params =
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, FUTURE_DEADLINE, 3000, null);
+
+      // when & then
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID);
+    }
+
+    @Test
+    void 발송_마감일이_분철_마감일_이전이면_예외가_발생한다() {
+      // given
+      BuncheolParams params =
+          new BuncheolParams(
+              1L, "제목", null, "스토어명", FUTURE_DEADLINE, FUTURE_DEADLINE.minusDays(1), 3000, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -164,7 +218,8 @@ class BuncheolTest {
     @Test
     void 마감일이_null이면_예외가_발생한다() {
       // given
-      BuncheolParams params = new BuncheolParams(1L, "제목", null, "스토어명", null, 7, 3000, null);
+      BuncheolParams params =
+          new BuncheolParams(1L, "제목", null, "스토어명", null, FUTURE_SHIPPING_DEADLINE, 3000, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -178,7 +233,8 @@ class BuncheolTest {
       // given
       LocalDateTime pastDeadline = LocalDateTime.now().minusDays(1);
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, 7, 3000, null);
+          new BuncheolParams(
+              1L, "제목", null, "스토어명", pastDeadline, FUTURE_SHIPPING_DEADLINE, 3000, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
@@ -190,9 +246,17 @@ class BuncheolTest {
     @Test
     void 마감일이_현재보다_미래면_유효하다() {
       // given
+      LocalDateTime nearFutureDeadline = LocalDateTime.now().plusSeconds(1);
       BuncheolParams params =
           new BuncheolParams(
-              1L, "제목", null, "스토어명", LocalDateTime.now().plusSeconds(1), 7, 3000, null);
+              1L,
+              "제목",
+              null,
+              "스토어명",
+              nearFutureDeadline,
+              nearFutureDeadline.plusDays(1),
+              3000,
+              null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();

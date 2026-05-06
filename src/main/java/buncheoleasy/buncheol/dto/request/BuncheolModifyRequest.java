@@ -16,7 +16,7 @@ public record BuncheolModifyRequest(
     @Size(max = 300) String description,
     @NotBlank @Size(max = 200) String purchaseSite,
     @NotNull @Future LocalDateTime deadline,
-    @Positive int shippingDeadlineDays,
+    @Future LocalDateTime shippingDeadlineDays,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
     @NotNull List<Long> keepImageIds,

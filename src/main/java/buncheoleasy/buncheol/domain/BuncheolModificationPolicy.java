@@ -46,7 +46,7 @@ public class BuncheolModificationPolicy {
     boolean purchaseSiteChanged =
         !Objects.equals(buncheol.getPurchaseSite(), params.purchaseSite());
     boolean shippingDeadlineChanged =
-        buncheol.getShippingDeadlineDays() != params.shippingDeadlineDays();
+        !Objects.equals(buncheol.getShippingDeadlineDays(), params.shippingDeadlineDays());
 
     if (purchaseSiteChanged || shippingDeadlineChanged) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MODIFY_FIELD_LOCKED);

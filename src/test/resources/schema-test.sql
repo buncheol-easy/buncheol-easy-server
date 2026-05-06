@@ -95,7 +95,7 @@ CREATE TABLE buncheols
     description            TEXT         NULL,
     purchase_site          VARCHAR(200) NOT NULL,
     deadline               TIMESTAMP    NOT NULL,
-    shipping_deadline_days INT          NOT NULL,
+    shipping_deadline_days TIMESTAMP    NULL,
     gs25_shipping_fee      INT          NULL,
     cu_shipping_fee        INT          NULL,
     status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING',

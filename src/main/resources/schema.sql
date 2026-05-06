@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS buncheols
     description            TEXT         NULL COMMENT '분철 설명',
     purchase_site          VARCHAR(200) NOT NULL COMMENT '구매처',
     deadline               DATETIME     NOT NULL COMMENT '분철 마감일',
-    shipping_deadline_days INT          NOT NULL COMMENT '발송 마감 일수(수령 후 n일)',
+    shipping_deadline_days DATETIME     NULL COMMENT '발송 마감 일시(미정 가능)',
     gs25_shipping_fee      INT          NULL COMMENT 'GS25반값택배 배송비',
     cu_shipping_fee        INT          NULL COMMENT 'CU반값택배 배송비',
     status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED | CANCELLED',

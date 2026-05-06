@@ -51,11 +51,12 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     memberId2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버2");
     memberId3 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버3");
 
+    LocalDateTime deadline = LocalDateTime.now().plusDays(7);
     Buncheol buncheol =
         Buncheol.create(
             hostId,
             new BuncheolParams(
-                groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 7, 3000, null));
+                groupId, "제목", null, "스토어명", deadline, deadline.plusDays(7), 3000, null));
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();

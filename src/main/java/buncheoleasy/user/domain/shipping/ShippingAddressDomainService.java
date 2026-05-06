@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ShippingAddressDomainService {
 
-  private static final int MAX_SHIPPING_ADDRESS_COUNT = 10;
+  private static final int MAX_SHIPPING_ADDRESS_COUNT = 5;
 
   private final ShippingAddressRepository shippingAddressRepository;
 

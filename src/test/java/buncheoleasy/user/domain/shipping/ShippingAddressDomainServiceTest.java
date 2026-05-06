@@ -99,10 +99,10 @@ class ShippingAddressDomainServiceTest {
     }
 
     @Test
-    void 배송지가_10개이면_예외가_발생한다() {
+    void 배송지가_5개이면_예외가_발생한다() {
       // given
       Long userId = 1L;
-      given(shippingAddressRepository.countByUserId(userId)).willReturn(10);
+      given(shippingAddressRepository.countByUserId(userId)).willReturn(5);
 
       // when & then
       assertThatThrownBy(

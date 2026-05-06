@@ -3,6 +3,8 @@ package buncheoleasy.user.domain.shipping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -28,9 +30,17 @@ class ShippingAddressDomainServiceTest {
 
   @Mock private ShippingAddressRepository shippingAddressRepository;
 
-  private ShippingAddress savedAddress(Long id, Long userId, String method, String storeName) {
+  private ShippingAddress savedAddress(
+      Long id, Long userId, String method, String storeName, String alias, boolean isDefault) {
     return new ShippingAddress(
-        id, userId, ShippingMethod.of(method), storeName, LocalDateTime.now(), LocalDateTime.now());
+        id,
+        userId,
+        ShippingMethod.of(method),
+        storeName,
+        alias,
+        isDefault,
+        LocalDateTime.now(),
+        LocalDateTime.now());
   }
 
   @Nested
@@ -51,11 +61,40 @@ class ShippingAddressDomainServiceTest {
 
       // when
       ShippingAddress result =
-          shippingAddressDomainService.createShippingAddress(userId, "GS25_HALF", "GS25 강남역점");
+          shippingAddressDomainService.createShippingAddress(
+              userId, "GS25_HALF", "GS25 강남역점", "회사", false);
 
       // then
       assertThat(result.getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
       assertThat(result.getStoreName()).isEqualTo("GS25 강남역점");
+      assertThat(result.getAlias()).isEqualTo("회사");
+      assertThat(result.isDefault()).isFalse();
+      then(shippingAddressRepository).should().save(any(ShippingAddress.class));
+      then(shippingAddressRepository)
+          .should(never())
+          .clearDefaultByUserAndMethod(any(), any(), any());
+    }
+
+    @Test
+    void 기본_배송지로_생성하면_같은_method의_기존_default를_해제한다() {
+      // given
+      Long userId = 1L;
+      given(shippingAddressRepository.countByUserId(userId)).willReturn(2);
+      given(
+              shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(
+                  userId, "GS25_HALF", "GS25 강남역점"))
+          .willReturn(false);
+      given(shippingAddressRepository.save(any(ShippingAddress.class)))
+          .willAnswer(inv -> inv.getArgument(0));
+
+      // when
+      shippingAddressDomainService.createShippingAddress(
+          userId, "GS25_HALF", "GS25 강남역점", null, true);
+
+      // then
+      then(shippingAddressRepository)
+          .should()
+          .clearDefaultByUserAndMethod(eq(userId), eq("GS25_HALF"), isNull());
       then(shippingAddressRepository).should().save(any(ShippingAddress.class));
     }
 
@@ -69,7 +108,7 @@ class ShippingAddressDomainServiceTest {
       assertThatThrownBy(
               () ->
                   shippingAddressDomainService.createShippingAddress(
-                      userId, "GS25_HALF", "GS25 강남역점"))
+                      userId, "GS25_HALF", "GS25 강남역점", null, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_LIMIT_EXCEEDED);
@@ -91,7 +130,7 @@ class ShippingAddressDomainServiceTest {
       assertThatThrownBy(
               () ->
                   shippingAddressDomainService.createShippingAddress(
-                      userId, "GS25_HALF", "GS25 강남역점"))
+                      userId, "GS25_HALF", "GS25 강남역점", null, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
@@ -109,7 +148,8 @@ class ShippingAddressDomainServiceTest {
       // given: 더티체킹에 위임하므로 repository 의 명시적 update 호출은 없음
       Long userId = 1L;
       Long addressId = 10L;
-      ShippingAddress address = savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address =
+          savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점", null, false);
       given(shippingAddressRepository.findById(addressId)).willReturn(Optional.of(address));
       given(
               shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(
@@ -117,11 +157,37 @@ class ShippingAddressDomainServiceTest {
           .willReturn(false);
 
       // when
-      shippingAddressDomainService.updateShippingAddress(userId, addressId, "CU_HALF", "CU 홍대입구점");
+      shippingAddressDomainService.updateShippingAddress(
+          userId, addressId, "CU_HALF", "CU 홍대입구점", "단골", false);
 
       // then
       assertThat(address.getShippingMethod()).isEqualTo(ShippingMethod.CU_HALF);
       assertThat(address.getStoreName()).isEqualTo("CU 홍대입구점");
+      assertThat(address.getAlias()).isEqualTo("단골");
+      assertThat(address.isDefault()).isFalse();
+      then(shippingAddressRepository)
+          .should(never())
+          .clearDefaultByUserAndMethod(any(), any(), any());
+    }
+
+    @Test
+    void 기본_배송지로_변경하면_자기_자신을_제외한_같은_method의_default를_해제한다() {
+      // given
+      Long userId = 1L;
+      Long addressId = 10L;
+      ShippingAddress address =
+          savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점", null, false);
+      given(shippingAddressRepository.findById(addressId)).willReturn(Optional.of(address));
+
+      // when
+      shippingAddressDomainService.updateShippingAddress(
+          userId, addressId, "GS25_HALF", "GS25 강남역점", null, true);
+
+      // then
+      then(shippingAddressRepository)
+          .should()
+          .clearDefaultByUserAndMethod(userId, "GS25_HALF", addressId);
+      assertThat(address.isDefault()).isTrue();
     }
 
     @Test
@@ -133,7 +199,7 @@ class ShippingAddressDomainServiceTest {
       assertThatThrownBy(
               () ->
                   shippingAddressDomainService.updateShippingAddress(
-                      1L, 999L, "CU_HALF", "CU 홍대입구점"))
+                      1L, 999L, "CU_HALF", "CU 홍대입구점", null, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
@@ -143,14 +209,14 @@ class ShippingAddressDomainServiceTest {
     void 다른_유저의_배송지를_수정하면_예외가_발생하고_엔티티는_변경되지_않는다() {
       // given
       Long addressId = 10L;
-      ShippingAddress address = savedAddress(addressId, 2L, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address = savedAddress(addressId, 2L, "GS25_HALF", "GS25 강남역점", null, false);
       given(shippingAddressRepository.findById(addressId)).willReturn(Optional.of(address));
 
       // when & then: userId=1L이지만 배송지 소유자는 2L
       assertThatThrownBy(
               () ->
                   shippingAddressDomainService.updateShippingAddress(
-                      1L, addressId, "CU_HALF", "CU 홍대입구점"))
+                      1L, addressId, "CU_HALF", "CU 홍대입구점", null, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
@@ -164,7 +230,8 @@ class ShippingAddressDomainServiceTest {
       // given
       Long userId = 1L;
       Long addressId = 10L;
-      ShippingAddress address = savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address =
+          savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점", null, false);
       given(shippingAddressRepository.findById(addressId)).willReturn(Optional.of(address));
       given(
               shippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(
@@ -175,7 +242,7 @@ class ShippingAddressDomainServiceTest {
       assertThatThrownBy(
               () ->
                   shippingAddressDomainService.updateShippingAddress(
-                      userId, addressId, "CU_HALF", "CU 홍대입구점"))
+                      userId, addressId, "CU_HALF", "CU 홍대입구점", null, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
@@ -194,7 +261,8 @@ class ShippingAddressDomainServiceTest {
       // given
       Long userId = 1L;
       Long addressId = 10L;
-      ShippingAddress address = savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address =
+          savedAddress(addressId, userId, "GS25_HALF", "GS25 강남역점", null, false);
       given(shippingAddressRepository.findById(addressId)).willReturn(Optional.of(address));
 
       // when
@@ -222,7 +290,7 @@ class ShippingAddressDomainServiceTest {
     void 다른_유저의_배송지를_삭제하면_예외가_발생한다() {
       // given
       Long addressId = 10L;
-      ShippingAddress address = savedAddress(addressId, 2L, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address = savedAddress(addressId, 2L, "GS25_HALF", "GS25 강남역점", null, false);
       given(shippingAddressRepository.findById(addressId)).willReturn(Optional.of(address));
 
       // when & then
@@ -245,8 +313,8 @@ class ShippingAddressDomainServiceTest {
       Long userId = 1L;
       List<ShippingAddress> expected =
           List.of(
-              savedAddress(1L, userId, "GS25_HALF", "GS25 강남역점"),
-              savedAddress(2L, userId, "CU_HALF", "CU 홍대입구점"));
+              savedAddress(1L, userId, "GS25_HALF", "GS25 강남역점", null, true),
+              savedAddress(2L, userId, "CU_HALF", "CU 홍대입구점", null, false));
       given(shippingAddressRepository.getUserShippingAddresses(userId)).willReturn(expected);
 
       // when

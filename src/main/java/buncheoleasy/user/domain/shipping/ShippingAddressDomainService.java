@@ -5,6 +5,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -15,7 +16,11 @@ public class ShippingAddressDomainService {
   private final ShippingAddressRepository shippingAddressRepository;
 
   public ShippingAddress createShippingAddress(
-      final Long userId, final String shippingMethod, final String storeName) {
+      final Long userId,
+      final String shippingMethod,
+      final String storeName,
+      final String alias,
+      final boolean isDefault) {
     // 개수 제한 체크
     int currentCount = shippingAddressRepository.countByUserId(userId);
     if (currentCount >= MAX_SHIPPING_ADDRESS_COUNT) {
@@ -28,13 +33,22 @@ public class ShippingAddressDomainService {
       throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
     }
 
-    ShippingAddress shippingAddress = ShippingAddress.create(userId, shippingMethod, storeName);
-    return shippingAddressRepository.save(shippingAddress);
+    if (isDefault) {
+      shippingAddressRepository.clearDefaultByUserAndMethod(userId, shippingMethod, null);
+    }
+
+    return shippingAddressRepository.save(
+        ShippingAddress.create(userId, shippingMethod, storeName, alias, isDefault));
   }
 
-  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
+  @Transactional
   public void updateShippingAddress(
-      final Long userId, final Long id, final String shippingMethod, final String storeName) {
+      final Long userId,
+      final Long id,
+      final String shippingMethod,
+      final String storeName,
+      final String alias,
+      final boolean isDefault) {
     ShippingAddress shippingAddress = getShippingAddress(id);
 
     if (!shippingAddress.isOwnedBy(userId)) {
@@ -48,7 +62,11 @@ public class ShippingAddressDomainService {
       throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_DUPLICATE);
     }
 
-    shippingAddress.update(shippingMethod, storeName);
+    if (isDefault) {
+      shippingAddressRepository.clearDefaultByUserAndMethod(userId, shippingMethod, id);
+    }
+
+    shippingAddress.update(shippingMethod, storeName, alias, isDefault);
   }
 
   public void deleteShippingAddress(final Long userId, final Long id) {

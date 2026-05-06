@@ -70,6 +70,8 @@ class ParticipationPaymentHandlerTest {
             PARTICIPANT_ID,
             ShippingMethod.GS25_HALF,
             "GS25 강남점",
+            null,
+            false,
             LocalDateTime.now(),
             LocalDateTime.now());
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))

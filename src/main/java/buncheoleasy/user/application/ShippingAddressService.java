@@ -23,15 +23,23 @@ public class ShippingAddressService {
   public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
     validateUser(userId);
     shippingAddressDomainService.createShippingAddress(
-        userId, request.shippingMethod(), request.storeName());
+        userId,
+        request.shippingMethod(),
+        request.storeName(),
+        request.alias(),
+        request.isDefault());
   }
 
-  @Transactional
   public void modifyShippingAddress(
       final Long userId, final Long addressId, final ShippingAddressRequest request) {
     validateUser(userId);
     shippingAddressDomainService.updateShippingAddress(
-        userId, addressId, request.shippingMethod(), request.storeName());
+        userId,
+        addressId,
+        request.shippingMethod(),
+        request.storeName(),
+        request.alias(),
+        request.isDefault());
   }
 
   public void removeShippingAddress(final Long userId, final Long addressId) {
@@ -56,6 +64,8 @@ public class ShippingAddressService {
     return ShippingAddressResponse.of(
         shippingAddress.getId(),
         shippingAddress.getShippingMethod().name(),
-        shippingAddress.getStoreName());
+        shippingAddress.getStoreName(),
+        shippingAddress.getAlias(),
+        shippingAddress.isDefault());
   }
 }

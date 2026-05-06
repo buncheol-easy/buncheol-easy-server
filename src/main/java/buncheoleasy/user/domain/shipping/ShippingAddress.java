@@ -1,5 +1,7 @@
 package buncheoleasy.user.domain.shipping;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -21,6 +23,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ShippingAddress {
 
+  private static final int ALIAS_MAX_LENGTH = 10;
+
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
@@ -35,6 +39,12 @@ public class ShippingAddress {
   @Column(name = "store_name", nullable = false, length = 100)
   private String storeName;
 
+  @Column(name = "alias", length = 10)
+  private String alias;
+
+  @Column(name = "is_default", nullable = false)
+  private boolean isDefault;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
 
@@ -46,31 +56,57 @@ public class ShippingAddress {
       final Long userId,
       final ShippingMethod shippingMethod,
       final String storeName,
+      final String alias,
+      final boolean isDefault,
       final LocalDateTime createdAt,
       final LocalDateTime updatedAt) {
     this.id = id;
     this.userId = userId;
     this.shippingMethod = shippingMethod;
     this.storeName = storeName;
+    this.alias = alias;
+    this.isDefault = isDefault;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
 
   private ShippingAddress(
-      final Long userId, final ShippingMethod shippingMethod, final String storeName) {
+      final Long userId,
+      final ShippingMethod shippingMethod,
+      final String storeName,
+      final String alias,
+      final boolean isDefault) {
     this.userId = userId;
     this.shippingMethod = shippingMethod;
     this.storeName = storeName;
+    this.alias = alias;
+    this.isDefault = isDefault;
   }
 
   public static ShippingAddress create(
-      final Long userId, final String shippingMethodName, final String storeName) {
-    return new ShippingAddress(userId, ShippingMethod.of(shippingMethodName), storeName);
+      final Long userId,
+      final String shippingMethodName,
+      final String storeName,
+      final String alias,
+      final boolean isDefault) {
+    String normalizedAlias = normalizeAlias(alias);
+    return new ShippingAddress(
+        userId, ShippingMethod.of(shippingMethodName), storeName, normalizedAlias, isDefault);
   }
 
-  public void update(final String shippingMethodName, final String storeName) {
+  public void update(
+      final String shippingMethodName,
+      final String storeName,
+      final String alias,
+      final boolean isDefault) {
     this.shippingMethod = ShippingMethod.of(shippingMethodName);
     this.storeName = storeName;
+    this.alias = normalizeAlias(alias);
+    this.isDefault = isDefault;
+  }
+
+  public void unsetDefault() {
+    this.isDefault = false;
   }
 
   public boolean isSameAddress(final String shippingMethodName, final String storeName) {
@@ -80,6 +116,20 @@ public class ShippingAddress {
 
   public boolean isOwnedBy(final Long userId) {
     return this.userId.equals(userId);
+  }
+
+  private static String normalizeAlias(final String alias) {
+    if (alias == null) {
+      return null;
+    }
+    String trimmed = alias.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    if (trimmed.length() > ALIAS_MAX_LENGTH) {
+      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_ALIAS_TOO_LONG);
+    }
+    return trimmed;
   }
 
   @PrePersist

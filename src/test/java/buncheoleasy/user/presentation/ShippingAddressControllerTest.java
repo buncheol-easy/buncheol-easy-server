@@ -70,12 +70,49 @@ class ShippingAddressControllerTest {
             post("/v1/users/me/shipping-addresses")
                 .with(mockAuth())
                 .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 강남역점\","
+                        + "\"alias\":\"회사 근처\",\"isDefault\":true}"))
+        .andExpect(status().isCreated());
+
+    then(shippingAddressService)
+        .should()
+        .registerShippingAddress(
+            USER_ID, new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", "회사 근처", true));
+  }
+
+  @Test
+  void 별칭과_기본값을_생략해도_등록이_성공한다() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/users/me/shipping-addresses")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 강남역점\"}"))
         .andExpect(status().isCreated());
 
     then(shippingAddressService)
         .should()
-        .registerShippingAddress(USER_ID, new ShippingAddressRequest("GS25_HALF", "GS25 강남역점"));
+        .registerShippingAddress(
+            USER_ID, new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", null, false));
+  }
+
+  @Test
+  void 별칭이_10자를_초과하면_400을_반환한다() throws Exception {
+    String tooLong = "가".repeat(11);
+
+    mockMvc
+        .perform(
+            post("/v1/users/me/shipping-addresses")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 강남역점\","
+                        + "\"alias\":\""
+                        + tooLong
+                        + "\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }
 
   @Test
@@ -94,7 +131,8 @@ class ShippingAddressControllerTest {
   void 배송지_수정_중_BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
     willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN))
         .given(shippingAddressService)
-        .modifyShippingAddress(USER_ID, 10L, new ShippingAddressRequest("CU_HALF", "CU 홍대입구점"));
+        .modifyShippingAddress(
+            USER_ID, 10L, new ShippingAddressRequest("CU_HALF", "CU 홍대입구점", null, false));
 
     mockMvc
         .perform(
@@ -125,15 +163,19 @@ class ShippingAddressControllerTest {
     given(shippingAddressService.getUserShippingAddresses(USER_ID))
         .willReturn(
             List.of(
-                ShippingAddressResponse.of(1L, "GS25_HALF", "GS25 강남역점"),
-                ShippingAddressResponse.of(2L, "CU_HALF", "CU 홍대입구점")));
+                ShippingAddressResponse.of(1L, "GS25_HALF", "GS25 강남역점", "회사", true),
+                ShippingAddressResponse.of(2L, "CU_HALF", "CU 홍대입구점", null, false)));
 
     mockMvc
         .perform(get("/v1/users/me/shipping-addresses").with(mockAuth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].id").value(1L))
         .andExpect(jsonPath("$[0].shippingMethod").value("GS25_HALF"))
+        .andExpect(jsonPath("$[0].alias").value("회사"))
+        .andExpect(jsonPath("$[0].isDefault").value(true))
         .andExpect(jsonPath("$[1].id").value(2L))
-        .andExpect(jsonPath("$[1].shippingMethod").value("CU_HALF"));
+        .andExpect(jsonPath("$[1].shippingMethod").value("CU_HALF"))
+        .andExpect(jsonPath("$[1].alias").doesNotExist())
+        .andExpect(jsonPath("$[1].isDefault").value(false));
   }
 }

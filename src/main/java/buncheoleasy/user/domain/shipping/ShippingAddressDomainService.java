@@ -15,6 +15,7 @@ public class ShippingAddressDomainService {
 
   private final ShippingAddressRepository shippingAddressRepository;
 
+  @Transactional
   public ShippingAddress createShippingAddress(
       final Long userId,
       final String shippingMethod,

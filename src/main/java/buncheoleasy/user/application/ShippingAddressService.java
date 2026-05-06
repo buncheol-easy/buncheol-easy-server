@@ -10,7 +10,6 @@ import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -19,7 +18,6 @@ public class ShippingAddressService {
   private final ShippingAddressDomainService shippingAddressDomainService;
   private final UserDomainService userDomainService;
 
-  @Transactional
   public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
     validateUser(userId);
     shippingAddressDomainService.createShippingAddress(

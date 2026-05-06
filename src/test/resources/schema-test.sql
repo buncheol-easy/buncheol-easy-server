@@ -5,7 +5,9 @@ DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS participations;
 DROP TABLE IF EXISTS buncheol_images;
 DROP TABLE IF EXISTS buncheol_members;
+DROP TABLE IF EXISTS buncheol_bookmarks;
 DROP TABLE IF EXISTS buncheols;
+DROP TABLE IF EXISTS user_favorite_groups;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS `groups`;
 DROP TABLE IF EXISTS shipping_addresses;
@@ -221,3 +223,33 @@ CREATE TABLE deliveries
 
 CREATE UNIQUE INDEX uq_deliveries_participation_id ON deliveries (participation_id);
 CREATE INDEX idx_deliveries_status ON deliveries (status);
+
+CREATE TABLE buncheol_bookmarks
+(
+    id          BIGINT    NOT NULL AUTO_INCREMENT,
+    user_id     BIGINT    NOT NULL,
+    buncheol_id BIGINT    NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_buncheol_bookmarks_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_buncheol_bookmarks_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_buncheol_bookmarks_user_id ON buncheol_bookmarks (user_id);
+CREATE UNIQUE INDEX uq_buncheol_bookmarks_user_buncheol ON buncheol_bookmarks (user_id, buncheol_id);
+
+CREATE TABLE user_favorite_groups
+(
+    id         BIGINT    NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT    NOT NULL,
+    group_id   BIGINT    NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_user_favorite_groups_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_favorite_groups_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_user_favorite_groups_user_id ON user_favorite_groups (user_id);
+CREATE UNIQUE INDEX uq_user_favorite_groups_user_group ON user_favorite_groups (user_id, group_id);

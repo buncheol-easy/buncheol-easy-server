@@ -299,3 +299,49 @@ CREATE TABLE IF NOT EXISTS settlements
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- buncheol_bookmarks 테이블 생성 (찜한 분철)
+CREATE TABLE IF NOT EXISTS buncheol_bookmarks
+(
+    id          BIGINT   NOT NULL AUTO_INCREMENT,
+    user_id     BIGINT   NOT NULL COMMENT '찜한 유저',
+    buncheol_id BIGINT   NOT NULL COMMENT '찜한 분철',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_buncheol_bookmarks_user_id (user_id),
+    UNIQUE INDEX uq_buncheol_bookmarks_user_buncheol (user_id, buncheol_id),
+
+    CONSTRAINT fk_buncheol_bookmarks_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_buncheol_bookmarks_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- user_favorite_groups 테이블 생성 (유저 최애 그룹)
+CREATE TABLE IF NOT EXISTS user_favorite_groups
+(
+    id         BIGINT   NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT   NOT NULL COMMENT '유저',
+    group_id   BIGINT   NOT NULL COMMENT '최애 그룹',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_user_favorite_groups_user_id (user_id),
+    UNIQUE INDEX uq_user_favorite_groups_user_group (user_id, group_id),
+
+    CONSTRAINT fk_user_favorite_groups_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_favorite_groups_group
+        FOREIGN KEY (group_id)
+            REFERENCES `groups` (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

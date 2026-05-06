@@ -17,20 +17,12 @@ public record HoldBuncheolRequest(
     @Size(max = 300) String description,
     @NotBlank @Size(max = 200) String purchaseSite,
     @NotNull @Future LocalDateTime deadline,
-    @Future LocalDateTime shippingDeadlineDays,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
   public BuncheolParams toParams() {
     return new BuncheolParams(
-        groupId,
-        title,
-        description,
-        purchaseSite,
-        deadline,
-        shippingDeadlineDays,
-        gs25ShippingFee,
-        cuShippingFee);
+        groupId, title, description, purchaseSite, deadline, gs25ShippingFee, cuShippingFee);
   }
 }

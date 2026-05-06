@@ -16,7 +16,6 @@ public record BuncheolModifyRequest(
     @Size(max = 300) String description,
     @NotBlank @Size(max = 200) String purchaseSite,
     @NotNull @Future LocalDateTime deadline,
-    @Future LocalDateTime shippingDeadlineDays,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
     @NotNull List<Long> keepImageIds,
@@ -24,13 +23,6 @@ public record BuncheolModifyRequest(
 
   public BuncheolParams toParams(final Long currentGroupId) {
     return new BuncheolParams(
-        currentGroupId,
-        title,
-        description,
-        purchaseSite,
-        deadline,
-        shippingDeadlineDays,
-        gs25ShippingFee,
-        cuShippingFee);
+        currentGroupId, title, description, purchaseSite, deadline, gs25ShippingFee, cuShippingFee);
   }
 }

@@ -93,20 +93,19 @@ CREATE TABLE IF NOT EXISTS group_members
 -- buncheols 테이블 생성
 CREATE TABLE IF NOT EXISTS buncheols
 (
-    id                     BIGINT       NOT NULL AUTO_INCREMENT,
-    host_id                BIGINT       NOT NULL COMMENT '개최자',
-    group_id               BIGINT       NOT NULL COMMENT '대상 그룹',
-    title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
-    description            TEXT         NULL COMMENT '분철 설명',
-    purchase_site          VARCHAR(200) NOT NULL COMMENT '구매처',
-    deadline               DATETIME     NOT NULL COMMENT '분철 마감일',
-    shipping_deadline_days DATETIME     NULL COMMENT '발송 마감 일시(미정 가능)',
-    gs25_shipping_fee      INT          NULL COMMENT 'GS25반값택배 배송비',
-    cu_shipping_fee        INT          NULL COMMENT 'CU반값택배 배송비',
-    status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED | CANCELLED',
-    closed_at              DATETIME     NULL COMMENT '마감 일시',
-    created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                BIGINT       NOT NULL AUTO_INCREMENT,
+    host_id           BIGINT       NOT NULL COMMENT '개최자',
+    group_id          BIGINT       NOT NULL COMMENT '대상 그룹',
+    title             VARCHAR(200) NOT NULL COMMENT '분철 제목',
+    description       TEXT         NULL COMMENT '분철 설명',
+    purchase_site     VARCHAR(200) NOT NULL COMMENT '구매처',
+    deadline          DATETIME     NOT NULL COMMENT '분철 마감일',
+    gs25_shipping_fee INT          NULL COMMENT 'GS25반값택배 배송비',
+    cu_shipping_fee   INT          NULL COMMENT 'CU반값택배 배송비',
+    status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED | CANCELLED',
+    closed_at         DATETIME     NULL COMMENT '마감 일시',
+    created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 

@@ -52,10 +52,6 @@ public class Buncheol {
   @Column(nullable = false)
   private LocalDateTime deadline;
 
-  // 호스트가 참여자에게 굿즈를 발송하기로 약속한 일시. 미정 가능.
-  @Column(name = "shipping_deadline_days")
-  private LocalDateTime shippingDeadlineDays;
-
   @Embedded private ShippingFeePolicy shippingFeePolicy;
 
   @Enumerated(EnumType.STRING)
@@ -84,7 +80,6 @@ public class Buncheol {
     this.description = params.description();
     this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
-    this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
     this.status = BuncheolStatus.RECRUITING;
   }
@@ -95,7 +90,6 @@ public class Buncheol {
     this.description = params.description();
     this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
-    this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
   }
 
@@ -150,7 +144,6 @@ public class Buncheol {
     validateDescription(params.description());
     validatePurchaseSite(params.purchaseSite());
     validateDeadline(params.deadline());
-    validateShippingDeadlineDays(params.shippingDeadlineDays(), params.deadline());
   }
 
   private void validateHostAndParams(final Long hostId, final BuncheolParams params) {
@@ -186,16 +179,6 @@ public class Buncheol {
     }
     if (value.length() > PURCHASE_SITE_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  private void validateShippingDeadlineDays(
-      final LocalDateTime value, final LocalDateTime deadline) {
-    if (value == null) {
-      return;
-    }
-    if (deadline == null || !value.isAfter(deadline)) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID);
     }
   }
 

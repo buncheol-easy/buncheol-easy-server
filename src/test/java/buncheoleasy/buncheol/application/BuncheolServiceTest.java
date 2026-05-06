@@ -61,7 +61,6 @@ class BuncheolServiceTest {
   private static final Long MEMBER_ID = 200L;
   private static final String MEMBER_NAME = "멤버A";
   private static final String MEMBER_IMAGE = "https://cdn.example.com/members/200.jpg";
-  private static final LocalDateTime SHIPPING_DEADLINE = LocalDateTime.now().plusDays(14);
 
   @InjectMocks private BuncheolService buncheolService;
 
@@ -97,7 +96,6 @@ class BuncheolServiceTest {
         "분철 설명입니다.",
         "공식 스토어",
         LocalDateTime.now().plusDays(7),
-        SHIPPING_DEADLINE,
         3000,
         null,
         members);
@@ -106,15 +104,7 @@ class BuncheolServiceTest {
   private BuncheolModifyRequest modifyRequest(List<BuncheolMemberRequest> members) {
     LocalDateTime deadline = LocalDateTime.now().plusDays(10);
     return new BuncheolModifyRequest(
-        "수정 분철 제목",
-        "수정 설명",
-        "수정 스토어",
-        deadline,
-        deadline.plusDays(7),
-        3500,
-        null,
-        List.of(),
-        members);
+        "수정 분철 제목", "수정 설명", "수정 스토어", deadline, 3500, null, List.of(), members);
   }
 
   @Nested
@@ -444,7 +434,6 @@ class BuncheolServiceTest {
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheol.getGroupId()).willReturn(GROUP_ID);
       given(buncheol.getPurchaseSite()).willReturn("원래 스토어");
-      given(buncheol.getShippingDeadlineDays()).willReturn(SHIPPING_DEADLINE);
       given(buncheol.getShippingFeePolicy()).willReturn(ShippingFeePolicy.of(3000, null));
       return buncheol;
     }
@@ -456,7 +445,6 @@ class BuncheolServiceTest {
           null,
           "원래 스토어",
           LocalDateTime.now().plusDays(7),
-          SHIPPING_DEADLINE,
           gs25Fee,
           null,
           List.of(),
@@ -474,7 +462,6 @@ class BuncheolServiceTest {
               null,
               "변경된 스토어",
               LocalDateTime.now().plusDays(7),
-              SHIPPING_DEADLINE,
               3000,
               null,
               List.of(),

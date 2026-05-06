@@ -48,9 +48,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
     LocalDateTime deadline = LocalDateTime.now().plusDays(7);
     Buncheol buncheol =
         Buncheol.create(
-            hostId,
-            new BuncheolParams(
-                groupId, "제목", null, "스토어명", deadline, deadline.plusDays(7), 3000, null));
+            hostId, new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null));
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();

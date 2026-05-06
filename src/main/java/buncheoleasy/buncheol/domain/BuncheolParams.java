@@ -8,6 +8,5 @@ public record BuncheolParams(
     String description,
     String purchaseSite,
     LocalDateTime deadline,
-    LocalDateTime shippingDeadlineDays,
     Integer gs25ShippingFee,
     Integer cuShippingFee) {}

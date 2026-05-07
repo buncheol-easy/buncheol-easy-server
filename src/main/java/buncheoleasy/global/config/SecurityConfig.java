@@ -33,7 +33,7 @@ public class SecurityConfig {
   private static final String[] OAUTH_PATHS = {"/oauth2/**", "/login/oauth2/**"};
 
   /** 사용자 컨텍스트가 필요 없는 공개 조회 API (GET 한정). */
-  private static final String[] PUBLIC_GET_PATHS = {"/v1/groups/**"};
+  private static final String[] PUBLIC_GET_PATHS = {"/v1/groups", "/v1/groups/*/members"};
 
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;

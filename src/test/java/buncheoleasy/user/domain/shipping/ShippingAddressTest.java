@@ -122,24 +122,6 @@ class ShippingAddressTest {
   }
 
   @Nested
-  @DisplayName("unsetDefault 테스트")
-  class UnsetDefaultTest {
-
-    @Test
-    void 기본_배송지_플래그를_해제할_수_있다() {
-      // given
-      ShippingAddress address = ShippingAddress.create(1L, "GS25_HALF", "GS25 강남역점", null, true);
-      assertThat(address.isDefault()).isTrue();
-
-      // when
-      address.unsetDefault();
-
-      // then
-      assertThat(address.isDefault()).isFalse();
-    }
-  }
-
-  @Nested
   @DisplayName("isSameAddress 테스트")
   class IsSameAddressTest {
 

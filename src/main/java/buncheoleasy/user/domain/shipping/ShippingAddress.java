@@ -105,10 +105,6 @@ public class ShippingAddress {
     this.isDefault = isDefault;
   }
 
-  public void unsetDefault() {
-    this.isDefault = false;
-  }
-
   public boolean isSameAddress(final String shippingMethodName, final String storeName) {
     return this.shippingMethod.name().equals(shippingMethodName)
         && this.storeName.equals(storeName);

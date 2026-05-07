@@ -38,7 +38,7 @@ public enum ErrorCode {
   USER_PROFILE_IS_NOT_COMPLETE("USR-018", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.FORBIDDEN),
 
   SHIPPING_ADDRESS_NOT_FOUND("USR-019", "배송지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
-  SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-020", "배송지는 최대 10개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
+  SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-020", "배송지는 최대 5개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
   SHIPPING_ADDRESS_DUPLICATE("USR-021", "이미 등록된 배송지입니다.", HttpStatus.CONFLICT),
   SHIPPING_ADDRESS_FORBIDDEN("USR-022", "본인의 배송지만 수정/삭제할 수 있습니다.", HttpStatus.FORBIDDEN),
 
@@ -47,6 +47,8 @@ public enum ErrorCode {
       "USR-024", "정산 계좌 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   USER_BANK_ACCOUNT_NOT_REGISTERED("USR-025", "정산 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
   USER_BANK_ACCOUNT_FORMAT_INVALID("USR-026", "정산 계좌번호는 숫자만 입력 가능합니다.", HttpStatus.BAD_REQUEST),
+
+  SHIPPING_ADDRESS_ALIAS_TOO_LONG("USR-027", "배송지 별칭은 10자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
@@ -65,8 +67,6 @@ public enum ErrorCode {
   BUNCHEOL_REQUIRED_FIELD_MISSING("BCH-001", "분철 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_TEXT_LENGTH_INVALID("BCH-002", "분철 텍스트 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_DEADLINE_INVALID("BCH-003", "분철 마감일은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID(
-      "BCH-004", "발송 마감일수는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_REQUIRED("BCH-006", "배송비는 최소 1개 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
 

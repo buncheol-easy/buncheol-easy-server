@@ -57,7 +57,8 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void 배송지를_저장하면_ID가_할당된다() {
       // given
-      ShippingAddress address = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
+      ShippingAddress address =
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false);
 
       // when
       shippingAddressRepository.save(address);
@@ -71,8 +72,9 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void 동일한_유저의_다른_배송지를_여러_개_저장할_수_있다() {
       // given
-      ShippingAddress address1 = ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점");
-      ShippingAddress address2 = ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점");
+      ShippingAddress address1 =
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false);
+      ShippingAddress address2 = ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점", null, false);
 
       // when
       shippingAddressRepository.save(address1);
@@ -92,7 +94,7 @@ class JpaShippingAddressRepositoryAdapterTest {
     void ID로_배송지를_조회할_수_있다() {
       // given
       ShippingAddress address =
-          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
 
       // when
       Optional<ShippingAddress> found = shippingAddressRepository.findById(address.getId());
@@ -122,8 +124,10 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void userId로_배송지_목록을_조회할_수_있다() {
       // given
-      shippingAddressRepository.save(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-      shippingAddressRepository.save(ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점"));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점", null, false));
       em.flush();
       em.clear();
 
@@ -141,9 +145,10 @@ class JpaShippingAddressRepositoryAdapterTest {
       User otherUser = User.create("KAKAO", "other_user", "other@example.com");
       userRepository.save(otherUser);
 
-      shippingAddressRepository.save(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
       shippingAddressRepository.save(
-          ShippingAddress.create(otherUser.getId(), "CU_HALF", "CU 홍대입구점"));
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
+      shippingAddressRepository.save(
+          ShippingAddress.create(otherUser.getId(), "CU_HALF", "CU 홍대입구점", null, false));
       em.flush();
       em.clear();
 
@@ -173,11 +178,11 @@ class JpaShippingAddressRepositoryAdapterTest {
     void managed_엔티티의_도메인_메서드_호출_시_더티체크로_DB가_갱신된다() {
       // given
       ShippingAddress saved =
-          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
 
       // when: managed 엔티티에 도메인 메서드만 호출 → flush 시 dirty UPDATE
       ShippingAddress managed = shippingAddressRepository.findById(saved.getId()).orElseThrow();
-      managed.update("CU_HALF", "CU 홍대입구점");
+      managed.update("CU_HALF", "CU 홍대입구점", "단골", true);
       em.flush();
       em.clear();
 
@@ -185,6 +190,55 @@ class JpaShippingAddressRepositoryAdapterTest {
       ShippingAddress updated = shippingAddressRepository.findById(saved.getId()).orElseThrow();
       assertThat(updated.getShippingMethod()).isEqualTo(ShippingMethod.CU_HALF);
       assertThat(updated.getStoreName()).isEqualTo("CU 홍대입구점");
+      assertThat(updated.getAlias()).isEqualTo("단골");
+      assertThat(updated.isDefault()).isTrue();
+    }
+  }
+
+  @Nested
+  @DisplayName("기본 배송지 해제 테스트")
+  class ClearDefaultTest {
+
+    @Test
+    void 같은_method의_다른_default를_일괄_해제한다() {
+      // given: 같은 method 의 default=true 두 개 + 다른 method 의 default=true 한 개
+      ShippingAddress gs1 =
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, true));
+      ShippingAddress gs2 =
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 신촌역점", null, true));
+      ShippingAddress cu =
+          saveAndDetach(ShippingAddress.create(userId, "CU_HALF", "CU 홍대점", null, true));
+
+      // when: GS25_HALF 의 default 모두 해제 (excludeId=null)
+      shippingAddressRepository.clearDefaultByUserAndMethod(userId, "GS25_HALF", null);
+      em.clear();
+
+      // then
+      assertThat(shippingAddressRepository.findById(gs1.getId()).orElseThrow().isDefault())
+          .isFalse();
+      assertThat(shippingAddressRepository.findById(gs2.getId()).orElseThrow().isDefault())
+          .isFalse();
+      // 다른 method 는 영향 없음
+      assertThat(shippingAddressRepository.findById(cu.getId()).orElseThrow().isDefault()).isTrue();
+    }
+
+    @Test
+    void excludeId가_있으면_해당_id는_default를_유지한다() {
+      // given
+      ShippingAddress keep =
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, true));
+      ShippingAddress other =
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 신촌역점", null, true));
+
+      // when
+      shippingAddressRepository.clearDefaultByUserAndMethod(userId, "GS25_HALF", keep.getId());
+      em.clear();
+
+      // then
+      assertThat(shippingAddressRepository.findById(keep.getId()).orElseThrow().isDefault())
+          .isTrue();
+      assertThat(shippingAddressRepository.findById(other.getId()).orElseThrow().isDefault())
+          .isFalse();
     }
   }
 
@@ -196,7 +250,7 @@ class JpaShippingAddressRepositoryAdapterTest {
     void 배송지를_삭제할_수_있다() {
       // given
       ShippingAddress address =
-          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+          saveAndDetach(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
       Long addressId = address.getId();
 
       // when
@@ -216,8 +270,10 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void userId로_배송지_개수를_조회할_수_있다() {
       // given
-      shippingAddressRepository.save(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
-      shippingAddressRepository.save(ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점"));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "CU_HALF", "CU 홍대입구점", null, false));
       em.flush();
 
       // when
@@ -233,7 +289,7 @@ class JpaShippingAddressRepositoryAdapterTest {
       User otherUser = User.create("KAKAO", "other_user", "other@example.com");
       userRepository.save(otherUser);
       shippingAddressRepository.save(
-          ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점"));
+          ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점", null, false));
       em.flush();
 
       // when: userId 기준으로 카운트
@@ -251,7 +307,8 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void 동일한_배송지가_존재하면_true를_반환한다() {
       // given
-      shippingAddressRepository.save(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
       em.flush();
 
       // when
@@ -277,7 +334,8 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void 배송방법이_다르면_false를_반환한다() {
       // given
-      shippingAddressRepository.save(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
       em.flush();
 
       // when
@@ -292,7 +350,8 @@ class JpaShippingAddressRepositoryAdapterTest {
     @Test
     void 지점명이_다르면_false를_반환한다() {
       // given
-      shippingAddressRepository.save(ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점"));
+      shippingAddressRepository.save(
+          ShippingAddress.create(userId, "GS25_HALF", "GS25 강남역점", null, false));
       em.flush();
 
       // when
@@ -310,7 +369,7 @@ class JpaShippingAddressRepositoryAdapterTest {
       User otherUser = User.create("KAKAO", "other_user", "other@example.com");
       userRepository.save(otherUser);
       shippingAddressRepository.save(
-          ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점"));
+          ShippingAddress.create(otherUser.getId(), "GS25_HALF", "GS25 강남역점", null, false));
       em.flush();
 
       // when: userId 기준으로 조회

@@ -45,11 +45,10 @@ class JpaBuncheolImageRepositoryAdapterTest {
     Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
     Long groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹");
 
+    LocalDateTime deadline = LocalDateTime.now().plusDays(7);
     Buncheol buncheol =
         Buncheol.create(
-            hostId,
-            new BuncheolParams(
-                groupId, "제목", null, "스토어명", LocalDateTime.now().plusDays(7), 7, 3000, null));
+            hostId, new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null));
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();

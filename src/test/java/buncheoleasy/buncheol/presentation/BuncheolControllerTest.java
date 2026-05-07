@@ -65,14 +65,13 @@ class BuncheolControllerTest {
   }
 
   private String validRequestJson() {
-    LocalDateTime future = LocalDateTime.now().plusDays(7);
+    LocalDateTime deadline = LocalDateTime.now().plusDays(7);
     return """
                 {
                   "groupId": 100,
                   "title": "테스트 분철 제목",
                   "purchaseSite": "공식 스토어",
                   "deadline": "%s",
-                  "shippingDeadlineDays": 7,
                   "gs25ShippingFee": 3000,
                   "buncheolMembers": [
                     {
@@ -82,17 +81,16 @@ class BuncheolControllerTest {
                   ]
                 }
                 """
-        .formatted(future);
+        .formatted(deadline);
   }
 
   private String validModifyRequestJson() {
-    LocalDateTime future = LocalDateTime.now().plusDays(10);
+    LocalDateTime deadline = LocalDateTime.now().plusDays(10);
     return """
                 {
                   "title": "수정 분철 제목",
                   "purchaseSite": "수정 스토어",
                   "deadline": "%s",
-                  "shippingDeadlineDays": 5,
                   "gs25ShippingFee": 3500,
                   "keepImageIds": [1, 2],
                   "buncheolMembers": [
@@ -103,7 +101,7 @@ class BuncheolControllerTest {
                   ]
                 }
                 """
-        .formatted(future);
+        .formatted(deadline);
   }
 
   private MockMultipartHttpServletRequestBuilder modifyMultipartRequest(final Long buncheolId) {
@@ -153,21 +151,20 @@ class BuncheolControllerTest {
     @Test
     void 제목이_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime future = LocalDateTime.now().plusDays(7);
+      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
       String invalidJson =
           """
                     {
                       "groupId": 100,
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
-                      "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
-              .formatted(future);
+              .formatted(deadline);
 
       MockMultipartFile requestPart =
           new MockMultipartFile(
@@ -183,7 +180,7 @@ class BuncheolControllerTest {
     @Test
     void 배송비가_두_경우_모두_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime future = LocalDateTime.now().plusDays(7);
+      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
       String invalidJson =
           """
                     {
@@ -191,13 +188,12 @@ class BuncheolControllerTest {
                       "title": "제목",
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
-                      "shippingDeadlineDays": 7,
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
-              .formatted(future);
+              .formatted(deadline);
 
       MockMultipartFile requestPart =
           new MockMultipartFile(
@@ -218,21 +214,20 @@ class BuncheolControllerTest {
     @Test
     void groupId가_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime future = LocalDateTime.now().plusDays(7);
+      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
       String invalidJson =
           """
                     {
                       "title": "제목",
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
-                      "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
                       ]
                     }
                     """
-              .formatted(future);
+              .formatted(deadline);
 
       MockMultipartFile requestPart =
           new MockMultipartFile(
@@ -256,7 +251,6 @@ class BuncheolControllerTest {
                       "title": "제목",
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
-                      "shippingDeadlineDays": 7,
                       "gs25ShippingFee": 3000,
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 50000}
@@ -333,21 +327,20 @@ class BuncheolControllerTest {
     @Test
     void keepImageIds가_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime future = LocalDateTime.now().plusDays(10);
+      LocalDateTime deadline = LocalDateTime.now().plusDays(10);
       String invalidJson =
           """
                     {
                       "title": "수정 분철 제목",
                       "purchaseSite": "수정 스토어",
                       "deadline": "%s",
-                      "shippingDeadlineDays": 5,
                       "gs25ShippingFee": 3500,
                       "buncheolMembers": [
                         {"memberId": 200, "bidMinPrice": 60000}
                       ]
                     }
                     """
-              .formatted(future);
+              .formatted(deadline);
 
       MockMultipartFile requestPart =
           new MockMultipartFile(

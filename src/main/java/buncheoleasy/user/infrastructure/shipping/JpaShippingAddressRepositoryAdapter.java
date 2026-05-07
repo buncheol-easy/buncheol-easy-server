@@ -45,4 +45,10 @@ public class JpaShippingAddressRepositoryAdapter implements ShippingAddressRepos
     return jpaShippingAddressRepository.existsByUserIdAndShippingMethodAndStoreName(
         userId, ShippingMethod.of(shippingMethod), storeName);
   }
+
+  @Override
+  public void clearDefaultByUserAndMethod(Long userId, String shippingMethod, Long excludeId) {
+    jpaShippingAddressRepository.clearDefaultByUserAndMethod(
+        userId, ShippingMethod.of(shippingMethod), excludeId);
+  }
 }

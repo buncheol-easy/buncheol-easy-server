@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
     user_id         BIGINT       NOT NULL,
     shipping_method VARCHAR(20)  NOT NULL COMMENT 'GS25_HALF | CU_HALF',
     store_name      VARCHAR(100) NOT NULL COMMENT '편의점 지점명',
+    alias           VARCHAR(10)  NULL COMMENT '사용자 지정 별칭',
+    is_default      BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '배송방법별 기본 배송지 여부',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -91,20 +93,19 @@ CREATE TABLE IF NOT EXISTS group_members
 -- buncheols 테이블 생성
 CREATE TABLE IF NOT EXISTS buncheols
 (
-    id                     BIGINT       NOT NULL AUTO_INCREMENT,
-    host_id                BIGINT       NOT NULL COMMENT '개최자',
-    group_id               BIGINT       NOT NULL COMMENT '대상 그룹',
-    title                  VARCHAR(200) NOT NULL COMMENT '분철 제목',
-    description            TEXT         NULL COMMENT '분철 설명',
-    purchase_site          VARCHAR(200) NOT NULL COMMENT '구매처',
-    deadline               DATETIME     NOT NULL COMMENT '분철 마감일',
-    shipping_deadline_days INT          NOT NULL COMMENT '발송 마감 일수(수령 후 n일)',
-    gs25_shipping_fee      INT          NULL COMMENT 'GS25반값택배 배송비',
-    cu_shipping_fee        INT          NULL COMMENT 'CU반값택배 배송비',
-    status                 VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED | CANCELLED',
-    closed_at              DATETIME     NULL COMMENT '마감 일시',
-    created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                BIGINT       NOT NULL AUTO_INCREMENT,
+    host_id           BIGINT       NOT NULL COMMENT '개최자',
+    group_id          BIGINT       NOT NULL COMMENT '대상 그룹',
+    title             VARCHAR(200) NOT NULL COMMENT '분철 제목',
+    description       TEXT         NULL COMMENT '분철 설명',
+    purchase_site     VARCHAR(200) NOT NULL COMMENT '구매처',
+    deadline          DATETIME     NOT NULL COMMENT '분철 마감일',
+    gs25_shipping_fee INT          NULL COMMENT 'GS25반값택배 배송비',
+    cu_shipping_fee   INT          NULL COMMENT 'CU반값택배 배송비',
+    status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CLOSED | GOODS_ORDERED | SELLER_SHIPPING | HOST_SHIPPING | ALL_RECEIVED | SETTLING | SETTLED | FINISHED | CANCELLED',
+    closed_at         DATETIME     NULL COMMENT '마감 일시',
+    created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -295,6 +296,52 @@ CREATE TABLE IF NOT EXISTS settlements
     CONSTRAINT fk_settlements_buncheol
         FOREIGN KEY (buncheol_id)
             REFERENCES buncheols (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- buncheol_bookmarks 테이블 생성 (찜한 분철)
+CREATE TABLE IF NOT EXISTS buncheol_bookmarks
+(
+    id          BIGINT   NOT NULL AUTO_INCREMENT,
+    user_id     BIGINT   NOT NULL COMMENT '찜한 유저',
+    buncheol_id BIGINT   NOT NULL COMMENT '찜한 분철',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_buncheol_bookmarks_user_id (user_id),
+    UNIQUE INDEX uq_buncheol_bookmarks_user_buncheol (user_id, buncheol_id),
+
+    CONSTRAINT fk_buncheol_bookmarks_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_buncheol_bookmarks_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- user_favorite_groups 테이블 생성 (유저 최애 그룹)
+CREATE TABLE IF NOT EXISTS user_favorite_groups
+(
+    id         BIGINT   NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT   NOT NULL COMMENT '유저',
+    group_id   BIGINT   NOT NULL COMMENT '최애 그룹',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_user_favorite_groups_user_id (user_id),
+    UNIQUE INDEX uq_user_favorite_groups_user_group (user_id, group_id),
+
+    CONSTRAINT fk_user_favorite_groups_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_favorite_groups_group
+        FOREIGN KEY (group_id)
+            REFERENCES `groups` (id) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

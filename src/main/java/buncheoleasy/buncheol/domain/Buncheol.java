@@ -52,10 +52,6 @@ public class Buncheol {
   @Column(nullable = false)
   private LocalDateTime deadline;
 
-  // 호스트가 굿즈를 수령한 후 참여자에게 발송해야 하는 마감 기한(일수).
-  @Column(name = "shipping_deadline_days", nullable = false)
-  private int shippingDeadlineDays;
-
   @Embedded private ShippingFeePolicy shippingFeePolicy;
 
   @Enumerated(EnumType.STRING)
@@ -84,7 +80,6 @@ public class Buncheol {
     this.description = params.description();
     this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
-    this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
     this.status = BuncheolStatus.RECRUITING;
   }
@@ -95,7 +90,6 @@ public class Buncheol {
     this.description = params.description();
     this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
-    this.shippingDeadlineDays = params.shippingDeadlineDays();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
   }
 
@@ -149,7 +143,6 @@ public class Buncheol {
     validateTitle(params.title());
     validateDescription(params.description());
     validatePurchaseSite(params.purchaseSite());
-    validateShippingDeadlineDays(params.shippingDeadlineDays());
     validateDeadline(params.deadline());
   }
 
@@ -186,12 +179,6 @@ public class Buncheol {
     }
     if (value.length() > PURCHASE_SITE_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
-    }
-  }
-
-  private void validateShippingDeadlineDays(final int value) {
-    if (value <= 0) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_DEADLINE_DAYS_INVALID);
     }
   }
 

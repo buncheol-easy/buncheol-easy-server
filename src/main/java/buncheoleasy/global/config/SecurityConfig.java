@@ -27,7 +27,8 @@ public class SecurityConfig {
     "/v1/auth/reissue-token",
     "/v1/payments/success",
     "/v1/payments/fail",
-    "/payment/**"
+    "/payment/**",
+    "/v1/api-docs/**"
   };
 
   private static final String[] OAUTH_PATHS = {"/oauth2/**", "/login/oauth2/**"};

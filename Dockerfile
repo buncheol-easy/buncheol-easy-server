@@ -9,7 +9,9 @@ RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
 COPY src ./src
 
-RUN ./gradlew clean bootJar -x test --no-daemon
+# API 문서 생성을 위해 Docs 테스트는 실행 (H2 + Mock 사용, 외부 의존성 없음)
+# 그 외 테스트는 CI/PR 단계에서 실행되므로 빌드 시간 절약 위해 스킵
+RUN ./gradlew clean test --tests "*DocsTest" bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre
 

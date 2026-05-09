@@ -12,6 +12,13 @@ spring:
       mode: always
       schema-locations: classpath:schema-test.sql
 
+# application.yaml 의 placeholder 중 아래에서 직접 override 하지 않는 것들만 테스트용 값으로 채움
+# (운영 환경변수 없이도 컨텍스트가 뜰 수 있도록 — Docker 빌드, CI 등)
+KAKAO_CLIENT_ID: test-kakao-client-id
+KAKAO_CLIENT_SECRET: test-kakao-client-secret
+AWS_ACCESS_KEY: test-aws-access-key
+AWS_SECRET_KEY: test-aws-secret-key
+
 logging:
   level:
     buncheoleasy: TRACE

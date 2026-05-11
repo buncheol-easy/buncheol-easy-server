@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS buncheols
 
     INDEX idx_buncheols_group_id (group_id),
     INDEX idx_buncheols_title (title),
+    INDEX idx_buncheols_host_created (host_id, created_at DESC),
 
     CONSTRAINT fk_buncheols_host
         FOREIGN KEY (host_id)

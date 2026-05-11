@@ -47,6 +47,11 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
+  public List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId) {
+    return jpaBuncheolRepository.findAllByHostIdOrderByCreatedAtDesc(hostId);
+  }
+
+  @Override
   public boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus) {
     int updated =
         jpaBuncheolRepository.updateStatusIfMatches(

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import static java.util.stream.Collectors.toSet;
 
+import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.MemberParticipationPresence;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
@@ -127,6 +128,15 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public boolean existsActiveByParticipantId(final Long participantId) {
     return jpaParticipationRepository.existsActiveByParticipantId(participantId, ACTIVE_STATUSES);
+  }
+
+  @Override
+  public List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(
+      final List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaParticipationRepository.countActiveByBuncheolIds(buncheolIds, ACTIVE_STATUSES);
   }
 
   @Override

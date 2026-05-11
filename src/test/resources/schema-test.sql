@@ -113,6 +113,7 @@ CREATE TABLE buncheols
 
 CREATE INDEX idx_buncheols_group_id ON buncheols (group_id);
 CREATE INDEX idx_buncheols_title ON buncheols (title);
+CREATE INDEX idx_buncheols_host_created ON buncheols (host_id, created_at DESC);
 
 CREATE TABLE buncheol_members
 (

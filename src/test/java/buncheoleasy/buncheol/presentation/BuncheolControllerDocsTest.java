@@ -3,20 +3,26 @@ package buncheoleasy.buncheol.presentation;
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolService;
+import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,6 +60,8 @@ class BuncheolControllerDocsTest {
   @Autowired private WebApplicationContext context;
 
   @MockitoBean private BuncheolService buncheolService;
+
+  @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -250,6 +258,46 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("status")
                                 .description(
                                     "전이할 상태. 호스트가 수동 전이 가능한 값: GOODS_ORDERED (CLOSED → GOODS_ORDERED), SELLER_SHIPPING (GOODS_ORDERED → SELLER_SHIPPING)"))
+                        .build())));
+  }
+
+  @Test
+  void 내_개최_분철_목록_조회() throws Exception {
+    LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
+    LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);
+    MyHostedBuncheolResponse response =
+        new MyHostedBuncheolResponse(
+            10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);
+    given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
+
+    mockMvc
+        .perform(
+            get("/v1/buncheols/me")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "buncheols-list-my-hosted",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("내가 개최한 분철 목록 조회")
+                        .description("마이페이지에서 호스트 본인이 개최한 분철 목록을 최신 개최 순으로 조회한다.")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .responseSchema(Schema.schema("MyHostedBuncheolListResponse"))
+                        .responseFields(
+                            fieldWithPath("[].buncheolId").description("분철 ID"),
+                            fieldWithPath("[].title").description("분철 제목"),
+                            fieldWithPath("[].groupName").description("대상 K-pop 그룹명"),
+                            fieldWithPath("[].status")
+                                .description("분철 진행 상태 (RECRUITING | CLOSED | ...)"),
+                            fieldWithPath("[].deadline").description("분철 모집 마감일"),
+                            fieldWithPath("[].memberSlotCount").description("분철에 포함된 멤버 슬롯 수"),
+                            fieldWithPath("[].activeParticipationCount")
+                                .description("활성 참여자 수 (ACTIVE_BID/AWAITING_PAYMENT/CONFIRMED)"),
+                            fieldWithPath("[].createdAt").description("분철 개최 일시"))
                         .build())));
   }
 

@@ -11,6 +11,8 @@ public interface BuncheolRepository {
 
   List<Buncheol> findAllByIds(List<Long> ids);
 
+  List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId);
+
   boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus);
 
   boolean existsActiveByHostId(Long hostId);

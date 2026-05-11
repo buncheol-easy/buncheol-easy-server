@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
+
+  List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId);
 
   /** status 가 expectedStatus 인 경우에만 status 를 갱신한다 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

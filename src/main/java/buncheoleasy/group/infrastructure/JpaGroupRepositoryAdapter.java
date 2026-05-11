@@ -24,6 +24,14 @@ public class JpaGroupRepositoryAdapter implements GroupRepository {
   }
 
   @Override
+  public List<Group> findAllByIds(List<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return jpaGroupRepository.findAllById(ids);
+  }
+
+  @Override
   public List<Group> findByKeyword(String keyword) {
     return jpaGroupRepository.findByKeyword(keyword);
   }

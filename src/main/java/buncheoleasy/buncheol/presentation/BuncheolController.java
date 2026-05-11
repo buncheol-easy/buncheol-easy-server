@@ -2,9 +2,11 @@ package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.ImageFile;
+import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolStatusRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.validation.Valid;
@@ -16,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,6 +35,14 @@ import org.springframework.web.multipart.MultipartFile;
 public class BuncheolController {
 
   private final BuncheolService buncheolService;
+  private final MyHostedBuncheolQueryService myHostedBuncheolQueryService;
+
+  /** 마이페이지 - 내가 개최한 분철 목록 조회 API. 최신 개최순으로 정렬한다. */
+  @GetMapping("/me")
+  public ResponseEntity<List<MyHostedBuncheolResponse>> getMyHostedBuncheols(
+      @AuthenticationPrincipal final Long hostId) {
+    return ResponseEntity.ok(myHostedBuncheolQueryService.getMyHostedBuncheols(hostId));
+  }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<Void> holdBuncheol(

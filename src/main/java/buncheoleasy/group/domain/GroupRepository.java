@@ -9,5 +9,7 @@ public interface GroupRepository {
 
   Optional<Group> findById(Long id);
 
+  List<Group> findAllByIds(List<Long> ids);
+
   List<Group> findByKeyword(String keyword);
 }

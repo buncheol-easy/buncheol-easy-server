@@ -1,3 +1,8 @@
+server:
+  # nginx 등 reverse proxy 뒤에서 X-Forwarded-* 헤더로 원본 host/scheme/port 를 인식.
+  # Spring Security OAuth2 의 {baseUrl} 자동치환, sendRedirect 등에 영향.
+  forward-headers-strategy: framework
+
 spring:
   config:
     import: optional:file:.env[.properties]
@@ -75,7 +80,11 @@ cloud:
       origin: https://buncheol-easy.s3.ap-northeast-2.amazonaws.com
 
 app:
-  base-url: http://localhost:8080
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  frontend:
+    login-callback-url: ${FRONTEND_LOGIN_CALLBACK_URL:http://localhost:3000/login/callback}
+  cors:
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
 
 delivery:
   tracker:

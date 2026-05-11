@@ -1,5 +1,6 @@
 package buncheoleasy.global.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
@@ -12,11 +13,14 @@ public class WebConfig implements WebMvcConfigurer {
     "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
   };
 
+  @Value("${app.cors.allowed-origin-patterns}")
+  private String[] allowedOriginPatterns;
+
   @Override
   public void addCorsMappings(final CorsRegistry registry) {
     registry
         .addMapping("/**")
-        .allowedOriginPatterns("http://localhost:*")
+        .allowedOriginPatterns(allowedOriginPatterns)
         .allowedMethods(ALLOWED_METHODS)
         .allowCredentials(true)
         .allowedHeaders("*");

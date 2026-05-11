@@ -2,29 +2,41 @@ package buncheoleasy.auth.infrastructure.oauth;
 
 import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.application.SocialLoginService;
-import buncheoleasy.auth.infrastructure.response.TokenResponseWriter;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
   private final List<OAuth2UserProfileExtractor> profileExtractors;
   private final SocialLoginService socialLoginService;
-  private final TokenResponseWriter tokenResponseWriter;
+  private final RefreshTokenCookieFactory refreshTokenCookieFactory;
+  private final String loginCallbackUrl;
+
+  public OAuth2LoginSuccessHandler(
+      final List<OAuth2UserProfileExtractor> profileExtractors,
+      final SocialLoginService socialLoginService,
+      final RefreshTokenCookieFactory refreshTokenCookieFactory,
+      @Value("${app.frontend.login-callback-url}") final String loginCallbackUrl) {
+    this.profileExtractors = profileExtractors;
+    this.socialLoginService = socialLoginService;
+    this.refreshTokenCookieFactory = refreshTokenCookieFactory;
+    this.loginCallbackUrl = loginCallbackUrl;
+  }
 
   @Override
   public void onAuthenticationSuccess(
@@ -38,7 +50,16 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         socialLoginService.login(profile.provider().name(), profile.providerId(), profile.email());
     log.debug(
         "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
-    tokenResponseWriter.write(response, token);
+
+    response.addHeader(
+        HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
+
+    String redirectUrl =
+        UriComponentsBuilder.fromUriString(loginCallbackUrl)
+            .queryParam("accessToken", token.accessToken())
+            .build()
+            .toUriString();
+    response.sendRedirect(redirectUrl);
   }
 
   private OAuth2UserProfile getUserProfile(final OAuth2AuthenticationToken oauthToken) {

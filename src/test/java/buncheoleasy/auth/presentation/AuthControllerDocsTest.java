@@ -14,6 +14,7 @@ import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
+import jakarta.servlet.http.Cookie;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.restdocs.RestDocumentationContextProvider;
 import org.springframework.restdocs.RestDocumentationExtension;
@@ -85,8 +85,7 @@ class AuthControllerDocsTest {
     mockMvc
         .perform(
             post("/v1/auth/reissue-token")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"refreshToken\":\"refresh-token-sample\"}"))
+                .cookie(new Cookie("refreshToken", "refresh-token-sample")))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -95,13 +94,11 @@ class AuthControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Auth")
                         .summary("토큰 재발급")
-                        .description("Refresh Token을 사용하여 Access/Refresh Token Pair를 재발급한다.")
-                        .requestSchema(Schema.schema("RefreshTokenRequest"))
-                        .requestFields(fieldWithPath("refreshToken").description("Refresh Token"))
-                        .responseSchema(Schema.schema("TokenPair"))
-                        .responseFields(
-                            fieldWithPath("accessToken").description("새 Access Token"),
-                            fieldWithPath("refreshToken").description("새 Refresh Token"))
+                        .description(
+                            "요청 시 `refreshToken` 쿠키(HttpOnly)를 전달하면 새 Access Token을 발급한다. "
+                                + "새 Refresh Token은 응답의 Set-Cookie 헤더로 갱신된다.")
+                        .responseSchema(Schema.schema("AccessTokenResponse"))
+                        .responseFields(fieldWithPath("accessToken").description("새 Access Token"))
                         .build())));
   }
 
@@ -121,7 +118,7 @@ class AuthControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Auth")
                         .summary("로그아웃")
-                        .description("현재 사용자의 Refresh Token을 무효화한다.")
+                        .description("현재 사용자의 Refresh Token을 무효화하고 Refresh 쿠키를 만료시킨다.")
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));

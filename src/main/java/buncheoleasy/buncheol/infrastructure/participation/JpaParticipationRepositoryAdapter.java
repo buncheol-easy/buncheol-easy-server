@@ -115,6 +115,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(final Long participantId) {
+    return jpaParticipationRepository.findAllByParticipantIdOrderByCreatedAtDesc(participantId);
+  }
+
+  @Override
   public boolean existsActiveByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.existsActiveByBuncheolId(buncheolId, ACTIVE_STATUSES);
   }

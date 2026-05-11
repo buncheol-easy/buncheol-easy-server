@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,13 +12,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
+import buncheoleasy.buncheol.application.MyParticipationQueryService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
+import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import java.lang.reflect.Field;
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +55,8 @@ class ParticipationControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private BuncheolCheckoutService buncheolCheckoutService;
+
+  @MockitoBean private MyParticipationQueryService myParticipationQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -250,6 +259,56 @@ class ParticipationControllerTest {
                   .string(
                       Matchers.containsString(
                           ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("내 참여 목록 조회 API 테스트")
+  class GetMyParticipationsTest {
+
+    @Test
+    void 참여_목록을_200으로_반환한다() throws Exception {
+      LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
+      LocalDateTime dueAt = LocalDateTime.of(2026, 6, 2, 12, 0);
+      MyParticipationResponse response =
+          new MyParticipationResponse(
+              500L,
+              10L,
+              "뉴진스 1집 분철",
+              5,
+              "민지",
+              50_000L,
+              ParticipationStatus.AWAITING_PAYMENT,
+              BuncheolStatus.CLOSED,
+              deadline,
+              dueAt,
+              1);
+
+      given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
+          .willReturn(List.of(response));
+
+      mockMvc
+          .perform(get("/v1/participations/me").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$[0].participationId").value(500))
+          .andExpect(jsonPath("$[0].buncheolId").value(10))
+          .andExpect(jsonPath("$[0].buncheolTitle").value("뉴진스 1집 분철"))
+          .andExpect(jsonPath("$[0].buncheolMemberCount").value(5))
+          .andExpect(jsonPath("$[0].memberName").value("민지"))
+          .andExpect(jsonPath("$[0].bidAmount").value(50_000))
+          .andExpect(jsonPath("$[0].participationStatus").value("AWAITING_PAYMENT"))
+          .andExpect(jsonPath("$[0].buncheolStatus").value("CLOSED"))
+          .andExpect(jsonPath("$[0].closedRank").value(1));
+    }
+
+    @Test
+    void 참여_내역이_없으면_빈_배열을_반환한다() throws Exception {
+      given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID)).willReturn(List.of());
+
+      mockMvc
+          .perform(get("/v1/participations/me").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(content().string("[]"));
     }
   }
 

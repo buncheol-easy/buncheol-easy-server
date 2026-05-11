@@ -28,6 +28,8 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
 
+  List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
+
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
           + "WHERE p.buncheolId = :buncheolId AND p.status IN :activeStatuses")

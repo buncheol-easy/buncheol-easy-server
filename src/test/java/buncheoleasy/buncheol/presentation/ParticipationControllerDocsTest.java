@@ -9,17 +9,23 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
+import buncheoleasy.buncheol.application.MyParticipationQueryService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +62,8 @@ class ParticipationControllerDocsTest {
   @Autowired private WebApplicationContext context;
 
   @MockitoBean private BuncheolCheckoutService buncheolCheckoutService;
+
+  @MockitoBean private MyParticipationQueryService myParticipationQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -123,6 +131,65 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("participationStatus")
                                 .description("참여 상태 (ACTIVE_BID 등)"),
                             fieldWithPath("bidAmount").description("입찰 금액"))
+                        .build())));
+  }
+
+  @Test
+  void 내_참여_목록_조회() throws Exception {
+    LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
+    LocalDateTime dueAt = LocalDateTime.of(2026, 6, 2, 12, 0);
+    MyParticipationResponse response =
+        new MyParticipationResponse(
+            500L,
+            10L,
+            "뉴진스 1집 분철",
+            5,
+            "민지",
+            50_000L,
+            ParticipationStatus.AWAITING_PAYMENT,
+            BuncheolStatus.CLOSED,
+            deadline,
+            dueAt,
+            1);
+    given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
+        .willReturn(List.of(response));
+
+    mockMvc
+        .perform(
+            get("/v1/participations/me")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "participations-list-my",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("내가 참여한 분철 목록 조회")
+                        .description("마이페이지에서 사용자가 참여한 분철 목록을 최신 참여 순으로 조회한다.")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .responseSchema(Schema.schema("MyParticipationListResponse"))
+                        .responseFields(
+                            fieldWithPath("[].participationId").description("참여 ID"),
+                            fieldWithPath("[].buncheolId").description("분철 ID"),
+                            fieldWithPath("[].buncheolTitle").description("분철 제목"),
+                            fieldWithPath("[].buncheolMemberCount").description("분철에 포함된 멤버 슬롯 수"),
+                            fieldWithPath("[].memberName").description("내가 참여한 멤버 이름"),
+                            fieldWithPath("[].bidAmount").description("입찰 금액"),
+                            fieldWithPath("[].participationStatus")
+                                .description(
+                                    "내 참여 상태 (ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED)"),
+                            fieldWithPath("[].buncheolStatus")
+                                .description("분철 진행 상태 (RECRUITING | CLOSED | ...)"),
+                            fieldWithPath("[].buncheolDeadline").description("분철 모집 마감일"),
+                            fieldWithPath("[].paymentDueAt")
+                                .description("낙찰자 결제 마감 시각. AWAITING_PAYMENT 가 아니면 null")
+                                .optional(),
+                            fieldWithPath("[].closedRank")
+                                .description("마감 후 입찰 순위 (1위부터). 마감 전이면 null")
+                                .optional())
                         .build())));
   }
 

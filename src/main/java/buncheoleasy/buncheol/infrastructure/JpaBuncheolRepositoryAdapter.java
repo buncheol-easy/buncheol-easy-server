@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,14 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   @Override
   public Optional<Buncheol> findById(Long id) {
     return jpaBuncheolRepository.findById(id);
+  }
+
+  @Override
+  public List<Buncheol> findAllByIds(List<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return jpaBuncheolRepository.findAllById(ids);
   }
 
   @Override

@@ -14,6 +14,9 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
 
   List<BuncheolMember> findAllByBuncheolId(Long buncheolId);
 
+  @Query("SELECT m FROM BuncheolMember m WHERE m.buncheolId IN :buncheolIds")
+  List<BuncheolMember> findAllByBuncheolIds(@Param("buncheolIds") List<Long> buncheolIds);
+
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM BuncheolMember m WHERE m.buncheolId = :buncheolId")
   void deleteAllByBuncheolId(@Param("buncheolId") Long buncheolId);

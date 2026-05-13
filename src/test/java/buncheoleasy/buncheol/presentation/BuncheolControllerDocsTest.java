@@ -217,35 +217,6 @@ class BuncheolControllerDocsTest {
   }
 
   @Test
-  void 분철_상태_진행() throws Exception {
-    mockMvc
-        .perform(
-            patch("/v1/buncheols/{id}/status", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"GOODS_ORDERED\"}"))
-        .andExpect(status().isNoContent())
-        .andDo(
-            document(
-                "buncheols-advance-status",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Buncheol")
-                        .summary("분철 상태 진행")
-                        .description("호스트가 분철 상태를 다음 단계로 전이시킨다.")
-                        .pathParameters(parameterWithName("id").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
-                        .requestSchema(Schema.schema("BuncheolStatusRequest"))
-                        .requestFields(
-                            fieldWithPath("status")
-                                .description(
-                                    "전이할 상태. 호스트가 수동 전이 가능한 값: GOODS_ORDERED (CLOSED → GOODS_ORDERED), SELLER_SHIPPING (GOODS_ORDERED → SELLER_SHIPPING)"))
-                        .build())));
-  }
-
-  @Test
   void 내_개최_분철_목록_조회() throws Exception {
     LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
     LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);

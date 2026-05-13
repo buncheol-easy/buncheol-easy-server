@@ -28,21 +28,9 @@ public class BuncheolDomainService {
 
   public void cancelBuncheol(final Buncheol buncheol, final BuncheolStatus expectedStatus) {
     buncheol.cancel();
-    updateBuncheolStatus(buncheol, expectedStatus);
-  }
-
-  public void advanceBuncheolStatus(
-      final Buncheol buncheol,
-      final BuncheolStatus nextStatus,
-      final BuncheolStatus expectedStatus) {
-    buncheol.advanceStatus(nextStatus);
-    updateBuncheolStatus(buncheol, expectedStatus);
-  }
-
-  private void updateBuncheolStatus(final Buncheol buncheol, final BuncheolStatus expectedStatus) {
     boolean updated = buncheolRepository.updateStatus(buncheol, expectedStatus);
     if (!updated) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED);
+      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
     }
   }
 

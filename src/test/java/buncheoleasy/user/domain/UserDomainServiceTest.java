@@ -247,6 +247,25 @@ class UserDomainServiceTest {
   }
 
   @Nested
+  @DisplayName("닉네임 중복 조회 테스트")
+  class IsNicknameDuplicateTest {
+
+    @Test
+    void 다른_유저가_사용중이면_true를_반환한다() {
+      given(userRepository.existsByNicknameExcludingId("중복닉", 1L)).willReturn(true);
+
+      assertThat(userDomainService.isNicknameDuplicate("중복닉", 1L)).isTrue();
+    }
+
+    @Test
+    void 사용중인_유저가_없으면_false를_반환한다() {
+      given(userRepository.existsByNicknameExcludingId("새닉", 1L)).willReturn(false);
+
+      assertThat(userDomainService.isNicknameDuplicate("새닉", 1L)).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("정산 계좌 등록 검증 테스트")
   class RequireBankAccountRegisteredTest {
 

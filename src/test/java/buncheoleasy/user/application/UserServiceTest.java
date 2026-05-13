@@ -15,6 +15,7 @@ import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
+import buncheoleasy.user.dto.response.NicknameDuplicateResponse;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -135,6 +136,45 @@ class UserServiceTest {
 
       // then
       then(userDomainService).should().updateBankAccount(userId, "국민은행", "123456789012", "홍길동");
+    }
+  }
+
+  @Nested
+  @DisplayName("닉네임 중복 조회 테스트")
+  class CheckNicknameDuplicateTest {
+
+    @Test
+    void 중복이_아니면_duplicated_false를_반환한다() {
+      // given
+      Long userId = 1L;
+      given(userDomainService.isNicknameDuplicate("새닉", userId)).willReturn(false);
+
+      // when
+      NicknameDuplicateResponse response = userService.checkNicknameDuplicate(userId, "새닉");
+
+      // then
+      assertThat(response.duplicated()).isFalse();
+    }
+
+    @Test
+    void 이미_사용중이면_duplicated_true를_반환한다() {
+      // given
+      Long userId = 1L;
+      given(userDomainService.isNicknameDuplicate("중복닉", userId)).willReturn(true);
+
+      // when
+      NicknameDuplicateResponse response = userService.checkNicknameDuplicate(userId, "중복닉");
+
+      // then
+      assertThat(response.duplicated()).isTrue();
+    }
+
+    @Test
+    void 형식이_유효하지_않으면_예외가_발생한다() {
+      assertThatThrownBy(() -> userService.checkNicknameDuplicate(1L, "잘못된@닉"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NICKNAME_FORMAT_INVALID);
     }
   }
 

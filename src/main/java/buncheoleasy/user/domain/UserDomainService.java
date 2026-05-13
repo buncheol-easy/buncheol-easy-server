@@ -57,6 +57,10 @@ public class UserDomainService {
     getUser(id).requireBankAccount();
   }
 
+  public boolean isNicknameDuplicate(final String nickname, final Long excludeId) {
+    return userRepository.existsByNicknameExcludingId(nickname, excludeId);
+  }
+
   private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
     User newUser = User.create(socialInfo.provider().name(), socialInfo.providerId(), email);
     return userRepository.save(newUser);

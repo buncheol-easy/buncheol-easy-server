@@ -18,6 +18,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.application.UserService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
+import buncheoleasy.user.dto.response.NicknameDuplicateResponse;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import java.util.Collections;
@@ -141,6 +142,37 @@ class UserControllerTest {
         .perform(get("/v1/users/me/profile/status").with(mockAuth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.profileCompleted").value(true));
+  }
+
+  @Test
+  void 닉네임_중복_조회가_성공하면_200과_duplicated를_반환한다() throws Exception {
+    given(userService.checkNicknameDuplicate(USER_ID, "새닉"))
+        .willReturn(NicknameDuplicateResponse.of(false));
+
+    mockMvc
+        .perform(get("/v1/users/nickname/duplicate").param("nickname", "새닉").with(mockAuth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.duplicated").value(false));
+  }
+
+  @Test
+  void 닉네임_중복_조회_시_형식_위반이면_400을_반환한다() throws Exception {
+    willThrow(new BusinessException(ErrorCode.USER_NICKNAME_FORMAT_INVALID))
+        .given(userService)
+        .checkNicknameDuplicate(USER_ID, "잘못된@닉");
+
+    mockMvc
+        .perform(get("/v1/users/nickname/duplicate").param("nickname", "잘못된@닉").with(mockAuth()))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            content().string(containsString(ErrorCode.USER_NICKNAME_FORMAT_INVALID.getCode())));
+  }
+
+  @Test
+  void 닉네임_중복_조회_시_nickname_파라미터_누락이면_400을_반환한다() throws Exception {
+    mockMvc
+        .perform(get("/v1/users/nickname/duplicate").with(mockAuth()))
+        .andExpect(status().isBadRequest());
   }
 
   @Test

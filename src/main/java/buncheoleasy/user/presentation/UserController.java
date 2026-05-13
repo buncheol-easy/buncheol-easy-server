@@ -3,6 +3,7 @@ package buncheoleasy.user.presentation;
 import buncheoleasy.user.application.UserService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
+import buncheoleasy.user.dto.response.NicknameDuplicateResponse;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import jakarta.validation.Valid;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -48,6 +50,13 @@ public class UserController {
   public ResponseEntity<ProfileStatusResponse> getProfileStatus(
       @AuthenticationPrincipal final Long userId) {
     return ResponseEntity.status(HttpStatus.OK).body(userService.getProfileStatus(userId));
+  }
+
+  @GetMapping("/nickname/duplicate")
+  public ResponseEntity<NicknameDuplicateResponse> checkNicknameDuplicate(
+      @AuthenticationPrincipal final Long userId, @RequestParam("nickname") final String nickname) {
+    return ResponseEntity.status(HttpStatus.OK)
+        .body(userService.checkNicknameDuplicate(userId, nickname));
   }
 
   @PutMapping("/me/bank-account")

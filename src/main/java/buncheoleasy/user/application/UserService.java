@@ -6,10 +6,12 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
+import buncheoleasy.user.dto.response.NicknameDuplicateResponse;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +52,13 @@ public class UserService {
   public ProfileStatusResponse getProfileStatus(final Long userId) {
     User user = userDomainService.getUser(userId);
     return ProfileStatusResponse.of(user.isProfileCompleted());
+  }
+
+  public NicknameDuplicateResponse checkNicknameDuplicate(
+      final Long userId, final String nickname) {
+    Nickname value = Nickname.of(nickname); // 형식·길이 검증을 VO 에 위임
+    return NicknameDuplicateResponse.of(
+        userDomainService.isNicknameDuplicate(value.value(), userId));
   }
 
   public void updateBankAccount(final Long userId, final BankAccountRequest request) {

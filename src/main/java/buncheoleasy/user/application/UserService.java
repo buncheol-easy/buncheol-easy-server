@@ -1,6 +1,8 @@
 package buncheoleasy.user.application;
 
 import buncheoleasy.auth.domain.RefreshTokenStore;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
@@ -21,9 +23,19 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
   private final UserDomainService userDomainService;
+  private final BuncheolDomainService buncheolDomainService;
+  private final ParticipationDomainService participationDomainService;
   private final RefreshTokenStore refreshTokenStore;
 
+  /** 활성 분철(개최)·활성 참여가 남아 있으면 탈퇴를 거부한다. */
   public void withdraw(final Long userId) {
+    if (buncheolDomainService.hasActiveBuncheolHostedBy(userId)) {
+      throw new BusinessException(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL);
+    }
+    if (participationDomainService.hasActiveParticipationBy(userId)) {
+      throw new BusinessException(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION);
+    }
+
     userDomainService.withdraw(userId);
     try {
       refreshTokenStore.delete(userId);

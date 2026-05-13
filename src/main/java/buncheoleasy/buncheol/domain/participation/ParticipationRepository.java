@@ -16,6 +16,8 @@ public interface ParticipationRepository {
 
   boolean existsActiveByBuncheolId(Long buncheolId);
 
+  boolean existsActiveByParticipantId(Long participantId);
+
   List<MemberParticipationPresence> findActiveParticipationPresencesByBuncheolId(Long buncheolId);
 
   Set<ShippingMethod> findActiveShippingMethodsByBuncheolId(Long buncheolId);

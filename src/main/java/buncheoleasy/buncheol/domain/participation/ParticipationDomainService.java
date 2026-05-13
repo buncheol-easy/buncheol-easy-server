@@ -35,4 +35,8 @@ public class ParticipationDomainService {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
   }
+
+  public boolean hasActiveParticipationBy(final Long participantId) {
+    return participationRepository.existsActiveByParticipantId(participantId);
+  }
 }

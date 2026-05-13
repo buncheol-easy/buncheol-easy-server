@@ -7,6 +7,8 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.doThrow;
 
 import buncheoleasy.auth.domain.RefreshTokenStore;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.User;
@@ -31,6 +33,10 @@ class UserServiceTest {
   @InjectMocks private UserService userService;
 
   @Mock private UserDomainService userDomainService;
+
+  @Mock private BuncheolDomainService buncheolDomainService;
+
+  @Mock private ParticipationDomainService participationDomainService;
 
   @Mock private RefreshTokenStore refreshTokenStore;
 
@@ -61,6 +67,39 @@ class UserServiceTest {
       userService.withdraw(userId);
 
       then(userDomainService).should().withdraw(userId);
+    }
+
+    @Test
+    void 활성_분철을_개최중이면_탈퇴가_거부된다() {
+      // given
+      Long userId = 1L;
+      given(buncheolDomainService.hasActiveBuncheolHostedBy(userId)).willReturn(true);
+
+      // when & then
+      assertThatThrownBy(() -> userService.withdraw(userId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL);
+
+      then(userDomainService).shouldHaveNoInteractions();
+      then(refreshTokenStore).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 활성_참여가_남아있으면_탈퇴가_거부된다() {
+      // given
+      Long userId = 1L;
+      given(buncheolDomainService.hasActiveBuncheolHostedBy(userId)).willReturn(false);
+      given(participationDomainService.hasActiveParticipationBy(userId)).willReturn(true);
+
+      // when & then
+      assertThatThrownBy(() -> userService.withdraw(userId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION);
+
+      then(userDomainService).shouldHaveNoInteractions();
+      then(refreshTokenStore).shouldHaveNoInteractions();
     }
   }
 

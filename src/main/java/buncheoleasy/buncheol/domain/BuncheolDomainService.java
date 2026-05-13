@@ -44,4 +44,8 @@ public class BuncheolDomainService {
       throw new BusinessException(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED);
     }
   }
+
+  public boolean hasActiveBuncheolHostedBy(final Long hostId) {
+    return buncheolRepository.existsActiveByHostId(hostId);
+  }
 }

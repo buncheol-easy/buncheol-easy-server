@@ -11,12 +11,16 @@ public interface ParticipationRepository {
 
   Optional<Participation> findById(Long id);
 
+  List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
+
   Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       Long buncheolMemberId, Long participantId);
 
   boolean existsActiveByBuncheolId(Long buncheolId);
 
   boolean existsActiveByParticipantId(Long participantId);
+
+  List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(List<Long> buncheolIds);
 
   List<MemberParticipationPresence> findActiveParticipationPresencesByBuncheolId(Long buncheolId);
 

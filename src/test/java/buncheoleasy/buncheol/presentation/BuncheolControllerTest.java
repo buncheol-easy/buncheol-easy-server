@@ -3,21 +3,27 @@ package buncheoleasy.buncheol.presentation;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolService;
+import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -47,6 +53,8 @@ class BuncheolControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private BuncheolService buncheolService;
+
+  @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -476,6 +484,42 @@ class BuncheolControllerTest {
           .andExpect(
               content()
                   .string(containsString(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("내 개최 분철 목록 조회 API 테스트")
+  class GetMyHostedBuncheolsTest {
+
+    @Test
+    void 개최한_분철_목록을_200으로_반환한다() throws Exception {
+      LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
+      LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);
+      MyHostedBuncheolResponse response =
+          new MyHostedBuncheolResponse(
+              10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);
+      given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
+          .willReturn(List.of(response));
+
+      mockMvc
+          .perform(get("/v1/buncheols/me").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$[0].buncheolId").value(10))
+          .andExpect(jsonPath("$[0].title").value("뉴진스 1집 분철"))
+          .andExpect(jsonPath("$[0].groupName").value("뉴진스"))
+          .andExpect(jsonPath("$[0].status").value("RECRUITING"))
+          .andExpect(jsonPath("$[0].memberSlotCount").value(5))
+          .andExpect(jsonPath("$[0].activeParticipationCount").value(7));
+    }
+
+    @Test
+    void 개최한_분철이_없으면_빈_배열을_반환한다() throws Exception {
+      given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of());
+
+      mockMvc
+          .perform(get("/v1/buncheols/me").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(content().string("[]"));
     }
   }
 }

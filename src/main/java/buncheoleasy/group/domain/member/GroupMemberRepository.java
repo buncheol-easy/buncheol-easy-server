@@ -7,4 +7,6 @@ public interface GroupMemberRepository {
   List<GroupMember> findAllByGroupIdAndIds(Long groupId, List<Long> memberIds);
 
   List<GroupMember> findAllByGroupId(Long groupId);
+
+  List<GroupMember> findAllByIds(List<Long> memberIds);
 }

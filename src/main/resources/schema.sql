@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS buncheols
 
     INDEX idx_buncheols_group_id (group_id),
     INDEX idx_buncheols_title (title),
+    INDEX idx_buncheols_host_created (host_id, created_at DESC),
 
     CONSTRAINT fk_buncheols_host
         FOREIGN KEY (host_id)
@@ -194,6 +195,7 @@ CREATE TABLE IF NOT EXISTS participations
     UNIQUE INDEX uq_participations_active_member_participant (buncheol_member_id, active_participant_id),
     UNIQUE INDEX uq_participations_confirmed_member (confirmed_member_id),
     INDEX idx_participations_member_status (buncheol_member_id, status),
+    INDEX idx_participations_participant_created (participant_id, created_at DESC),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)

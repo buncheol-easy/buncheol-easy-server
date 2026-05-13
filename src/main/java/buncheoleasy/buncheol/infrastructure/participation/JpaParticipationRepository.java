@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
+import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.LocalDateTime;
@@ -28,6 +29,8 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
       @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
 
+  List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
+
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
           + "WHERE p.buncheolId = :buncheolId AND p.status IN :activeStatuses")
@@ -40,6 +43,16 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.participantId = :participantId AND p.status IN :activeStatuses")
   boolean existsActiveByParticipantId(
       @Param("participantId") Long participantId,
+      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+
+  @Query(
+      "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount("
+          + "p.buncheolId, COUNT(p)) "
+          + "FROM Participation p "
+          + "WHERE p.buncheolId IN :buncheolIds AND p.status IN :activeStatuses "
+          + "GROUP BY p.buncheolId")
+  List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(
+      @Param("buncheolIds") List<Long> buncheolIds,
       @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
 
   /**

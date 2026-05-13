@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import java.time.LocalDateTime;
+import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -22,4 +23,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("newStatus") BuncheolStatus newStatus,
       @Param("now") LocalDateTime now,
       @Param("expectedStatus") BuncheolStatus expectedStatus);
+
+  @Query(
+      "SELECT COUNT(b) > 0 FROM Buncheol b "
+          + "WHERE b.hostId = :hostId AND b.status IN :activeStatuses")
+  boolean existsByHostIdAndStatusIn(
+      @Param("hostId") Long hostId, @Param("activeStatuses") Set<BuncheolStatus> activeStatuses);
 }

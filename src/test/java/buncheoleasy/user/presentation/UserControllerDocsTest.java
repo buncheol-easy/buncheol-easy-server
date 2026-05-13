@@ -1,6 +1,7 @@
 package buncheoleasy.user.presentation;
 
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
+import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
@@ -13,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.user.application.UserService;
+import buncheoleasy.user.dto.response.NicknameDuplicateResponse;
+import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse.BankAccountInfo;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -119,6 +122,66 @@ class UserControllerDocsTest {
   }
 
   @Test
+  void 프로필_완료_여부_조회() throws Exception {
+    // given
+    given(userService.getProfileStatus(USER_ID)).willReturn(ProfileStatusResponse.of(true));
+
+    // when & then
+    mockMvc
+        .perform(
+            get("/v1/users/me/profile/status")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "users-get-profile-status",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("User")
+                        .summary("프로필 완료 여부 조회")
+                        .description("로그인 직후 클라이언트가 프로필 설정 완료 여부를 확인한다.")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .responseSchema(Schema.schema("ProfileStatusResponse"))
+                        .responseFields(
+                            fieldWithPath("profileCompleted").description("프로필 설정 완료 여부"))
+                        .build())));
+  }
+
+  @Test
+  void 닉네임_중복_조회() throws Exception {
+    // given
+    given(userService.checkNicknameDuplicate(USER_ID, "새닉네임"))
+        .willReturn(NicknameDuplicateResponse.of(false));
+
+    // when & then
+    mockMvc
+        .perform(
+            get("/v1/users/nickname/duplicate")
+                .param("nickname", "새닉네임")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "users-check-nickname-duplicate",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("User")
+                        .summary("닉네임 중복 조회")
+                        .description("입력한 닉네임을 다른 유저가 이미 쓰고 있는지 확인한다. 본인 현재 닉네임은 중복으로 보지 않는다.")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .queryParameters(
+                            parameterWithName("nickname").description("확인할 닉네임 (1~20자, 한글/영문/숫자)"))
+                        .responseSchema(Schema.schema("NicknameDuplicateResponse"))
+                        .responseFields(
+                            fieldWithPath("duplicated").description("중복 여부 (true=이미 사용 중)"))
+                        .build())));
+  }
+
+  @Test
   void 회원_프로필_수정() throws Exception {
     // when & then
     mockMvc
@@ -135,8 +198,8 @@ class UserControllerDocsTest {
                 resource(
                     ResourceSnippetParameters.builder()
                         .tag("User")
-                        .summary("회원 프로필 수정")
-                        .description("닉네임/휴대폰 번호를 수정한다.")
+                        .summary("회원 프로필 등록/수정")
+                        .description("닉네임/휴대폰 번호를 등록 또는 수정한다. 미완료 유저가 호출하면 자동으로 프로필 완료 상태로 전이된다.")
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .requestSchema(Schema.schema("UpdateUserProfileRequest"))

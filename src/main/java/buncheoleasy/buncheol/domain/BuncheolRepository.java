@@ -9,4 +9,6 @@ public interface BuncheolRepository {
   Optional<Buncheol> findById(Long id);
 
   boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus);
+
+  boolean existsActiveByHostId(Long hostId);
 }

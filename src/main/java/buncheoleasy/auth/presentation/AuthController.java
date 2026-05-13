@@ -26,7 +26,9 @@ public class AuthController {
       @CookieValue(RefreshTokenCookieFactory.COOKIE_NAME) final String refreshToken) {
     TokenPair token = socialLoginService.reissueTokens(refreshToken);
     return ResponseEntity.ok()
-        .header(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString())
+        .header(
+            HttpHeaders.SET_COOKIE,
+            refreshTokenCookieFactory.create(token.refreshToken()).toString())
         .body(new AccessTokenResponse(token.accessToken()));
   }
 

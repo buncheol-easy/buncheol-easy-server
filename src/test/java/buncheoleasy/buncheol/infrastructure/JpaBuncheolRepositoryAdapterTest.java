@@ -167,4 +167,45 @@ class JpaBuncheolRepositoryAdapterTest {
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
   }
+
+  @Nested
+  @DisplayName("호스트의 활성 분철 존재 여부 테스트")
+  class ExistsActiveByHostIdTest {
+
+    private void forceStatus(Long buncheolId, BuncheolStatus status) {
+      jdbcTemplate.update(
+          "UPDATE buncheols SET status = ? WHERE id = ?", status.name(), buncheolId);
+      em.clear();
+    }
+
+    @Test
+    void 호스트의_분철이_없으면_false를_반환한다() {
+      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void 호스트의_RECRUITING_분철이_있으면_true를_반환한다() {
+      persistAndDetach(Buncheol.create(hostId, validParams()));
+
+      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isTrue();
+    }
+
+    @Test
+    void 호스트의_분철이_모두_FINISHED_또는_CANCELLED면_false를_반환한다() {
+      Buncheol finished = persistAndDetach(Buncheol.create(hostId, validParams()));
+      Buncheol cancelled = persistAndDetach(Buncheol.create(hostId, validParams()));
+      forceStatus(finished.getId(), BuncheolStatus.FINISHED);
+      forceStatus(cancelled.getId(), BuncheolStatus.CANCELLED);
+
+      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void 다른_호스트의_활성_분철은_영향을_주지_않는다() {
+      Long otherHostId = TestUserFixture.insertUser(jdbcTemplate, "other_host");
+      persistAndDetach(Buncheol.create(otherHostId, validParams()));
+
+      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+    }
+  }
 }

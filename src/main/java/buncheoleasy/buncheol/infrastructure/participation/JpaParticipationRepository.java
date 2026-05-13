@@ -35,6 +35,13 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("buncheolId") Long buncheolId,
       @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
 
+  @Query(
+      "SELECT COUNT(p) > 0 FROM Participation p "
+          + "WHERE p.participantId = :participantId AND p.status IN :activeStatuses")
+  boolean existsActiveByParticipantId(
+      @Param("participantId") Long participantId,
+      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+
   /**
    * (buncheol_member_id, has_active_bid) 형태로 멤버별 활성 참여 존재 여부를 집계한다. native 결과를 Object[] 로 반환받아
    * 어댑터에서 record 로 변환.

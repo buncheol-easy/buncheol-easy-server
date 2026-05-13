@@ -172,6 +172,21 @@ class UserDomainServiceTest {
     }
 
     @Test
+    void 미완료_유저가_호출하면_프로필이_완료_상태로_전이된다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      assertThat(user.isProfileCompleted()).isFalse();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678");
+
+      // then
+      assertThat(user.isProfileCompleted()).isTrue();
+    }
+
+    @Test
     void 닉네임이_중복되면_예외가_발생하고_엔티티는_변경되지_않는다() {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");
@@ -228,6 +243,25 @@ class UserDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+  }
+
+  @Nested
+  @DisplayName("닉네임 중복 조회 테스트")
+  class IsNicknameDuplicateTest {
+
+    @Test
+    void 다른_유저가_사용중이면_true를_반환한다() {
+      given(userRepository.existsByNicknameExcludingId("중복닉", 1L)).willReturn(true);
+
+      assertThat(userDomainService.isNicknameDuplicate("중복닉", 1L)).isTrue();
+    }
+
+    @Test
+    void 사용중인_유저가_없으면_false를_반환한다() {
+      given(userRepository.existsByNicknameExcludingId("새닉", 1L)).willReturn(false);
+
+      assertThat(userDomainService.isNicknameDuplicate("새닉", 1L)).isFalse();
     }
   }
 

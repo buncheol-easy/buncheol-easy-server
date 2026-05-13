@@ -120,6 +120,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public boolean existsActiveByParticipantId(final Long participantId) {
+    return jpaParticipationRepository.existsActiveByParticipantId(participantId, ACTIVE_STATUSES);
+  }
+
+  @Override
   public List<MemberParticipationPresence> findActiveParticipationPresencesByBuncheolId(
       final Long buncheolId) {
     return jpaParticipationRepository.findActiveParticipationPresenceRows(buncheolId).stream()

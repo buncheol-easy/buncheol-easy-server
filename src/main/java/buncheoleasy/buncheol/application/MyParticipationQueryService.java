@@ -11,6 +11,7 @@ import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -48,10 +49,18 @@ public class MyParticipationQueryService {
         buncheolMembers.stream()
             .collect(Collectors.groupingBy(BuncheolMember::getBuncheolId, Collectors.counting()));
 
-    List<Long> groupMemberIds =
-        buncheolMembers.stream().map(BuncheolMember::getMemberId).distinct().toList();
+    // 응답에는 사용자가 실제로 참여한 슬롯의 멤버 이름만 노출되므로,
+    // 분철 전체 슬롯이 아닌 참여한 슬롯의 memberId 만 조회한다.
+    Set<Long> participatedBuncheolMemberIds =
+        participations.stream().map(Participation::getBuncheolMemberId).collect(Collectors.toSet());
+    List<Long> participatedGroupMemberIds =
+        buncheolMembers.stream()
+            .filter(bm -> participatedBuncheolMemberIds.contains(bm.getId()))
+            .map(BuncheolMember::getMemberId)
+            .distinct()
+            .toList();
     Map<Long, String> groupMemberNameById =
-        groupMemberRepository.findAllByIds(groupMemberIds).stream()
+        groupMemberRepository.findAllByIds(participatedGroupMemberIds).stream()
             .collect(Collectors.toMap(GroupMember::getId, GroupMember::getName));
 
     return participations.stream()
@@ -73,21 +82,44 @@ public class MyParticipationQueryService {
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, String> groupMemberNameById) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
+    if (buncheol == null) {
+      throw new IllegalStateException(
+          "participationId="
+              + participation.getId()
+              + " 의 buncheolId="
+              + participation.getBuncheolId()
+              + " 에 해당하는 분철을 찾을 수 없습니다");
+    }
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
-    String memberName =
-        buncheolMember == null ? null : groupMemberNameById.get(buncheolMember.getMemberId());
+    if (buncheolMember == null) {
+      throw new IllegalStateException(
+          "participationId="
+              + participation.getId()
+              + " 의 buncheolMemberId="
+              + participation.getBuncheolMemberId()
+              + " 에 해당하는 슬롯을 찾을 수 없습니다");
+    }
+    String memberName = groupMemberNameById.get(buncheolMember.getMemberId());
+    if (memberName == null) {
+      throw new IllegalStateException(
+          "buncheolMemberId="
+              + buncheolMember.getId()
+              + " 의 memberId="
+              + buncheolMember.getMemberId()
+              + " 에 해당하는 그룹 멤버를 찾을 수 없습니다");
+    }
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
-        buncheol == null ? null : buncheol.getTitle(),
+        buncheol.getTitle(),
         slotCount,
         memberName,
         participation.getBidAmount(),
         participation.getStatus(),
-        buncheol == null ? null : buncheol.getStatus(),
-        buncheol == null ? null : buncheol.getDeadline(),
+        buncheol.getStatus(),
+        buncheol.getDeadline(),
         participation.getDueAt(),
         participation.getClosedRank());
   }

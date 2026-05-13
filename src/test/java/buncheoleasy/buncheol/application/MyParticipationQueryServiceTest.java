@@ -24,11 +24,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("MyParticipationQueryService 단위 테스트")
 class MyParticipationQueryServiceTest {
 
@@ -76,14 +73,9 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(participation));
       given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L))).willReturn(slots);
-      given(groupMemberRepository.findAllByIds(List.of(1001L, 1002L, 1003L, 1004L, 1005L)))
-          .willReturn(
-              List.of(
-                  groupMember(1001L, "혜인"),
-                  groupMember(1002L, "민지"),
-                  groupMember(1003L, "하니"),
-                  groupMember(1004L, "다니엘"),
-                  groupMember(1005L, "해린")));
+      // 참여한 슬롯(102) 의 멤버(1002) 만 조회된다.
+      given(groupMemberRepository.findAllByIds(List.of(1002L)))
+          .willReturn(List.of(groupMember(1002L, "민지")));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -132,15 +124,9 @@ class MyParticipationQueryServiceTest {
       given(buncheolRepository.findAllByIds(List.of(10L, 20L)))
           .willReturn(List.of(buncheolA, buncheolB));
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L, 20L))).willReturn(slots);
-      given(groupMemberRepository.findAllByIds(List.of(2001L, 2002L, 3001L, 3002L, 3003L, 3004L)))
-          .willReturn(
-              List.of(
-                  groupMember(2001L, "지수"),
-                  groupMember(2002L, "로제"),
-                  groupMember(3001L, "제니"),
-                  groupMember(3002L, "리사"),
-                  groupMember(3003L, "지수B"),
-                  groupMember(3004L, "로제B")));
+      // 참여한 슬롯(201, 301) 의 멤버(2001, 3001) 만 조회된다.
+      given(groupMemberRepository.findAllByIds(List.of(2001L, 3001L)))
+          .willReturn(List.of(groupMember(2001L, "지수"), groupMember(3001L, "제니")));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);

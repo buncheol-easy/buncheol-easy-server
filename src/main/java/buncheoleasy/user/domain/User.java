@@ -84,6 +84,16 @@ public class User {
     return NICKNAME_PREFIX + uniqueSuffix;
   }
 
+  // 최초 프로필 설정. 이미 완료된 유저가 호출하면 거부한다. 닉네임 수정은 일반 update 경로 사용.
+  public void completeProfile(final String nickname, final String phoneNumber) {
+    if (this.profileCompleted) {
+      throw new BusinessException(ErrorCode.USER_PROFILE_ALREADY_COMPLETED);
+    }
+    this.nickname = Nickname.of(nickname);
+    this.phoneNumber = PhoneNumber.of(phoneNumber);
+    this.profileCompleted = true;
+  }
+
   public void updatePhoneNumber(final String newValue) {
     PhoneNumber newPhoneNumber = PhoneNumber.of(newValue);
 

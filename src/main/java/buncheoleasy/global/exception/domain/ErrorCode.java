@@ -36,6 +36,7 @@ public enum ErrorCode {
 
   SHIPPING_METHOD_FORMAT_INVALID("USR-017", "올바른 배송방법 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
   USER_PROFILE_IS_NOT_COMPLETE("USR-018", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.FORBIDDEN),
+  USER_PROFILE_ALREADY_COMPLETED("USR-028", "이미 프로필 설정이 완료된 사용자입니다.", HttpStatus.CONFLICT),
 
   SHIPPING_ADDRESS_NOT_FOUND("USR-019", "배송지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-020", "배송지는 최대 5개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),

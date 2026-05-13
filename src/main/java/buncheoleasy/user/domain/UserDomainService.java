@@ -4,6 +4,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,13 +28,27 @@ public class UserDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
   }
 
-  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
+  @Transactional
   public void withdraw(final Long id) {
     User user = getUser(id);
     user.withdraw();
   }
 
-  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
+  @Transactional
+  public void completeProfile(final Long id, final String nickname, final String phoneNumber) {
+    User user = getUser(id);
+
+    if (user.isProfileCompleted()) {
+      throw new BusinessException(ErrorCode.USER_PROFILE_ALREADY_COMPLETED);
+    }
+    if (userRepository.existsByNicknameExcludingId(nickname, id)) {
+      throw new BusinessException(ErrorCode.USER_NICKNAME_DUPLICATE);
+    }
+
+    user.completeProfile(nickname, phoneNumber);
+  }
+
+  @Transactional
   public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
     User user = getUser(id);
 
@@ -45,7 +60,7 @@ public class UserDomainService {
     user.updatePhoneNumber(phoneNumber);
   }
 
-  /** 호출처가 @Transactional 인 상태에서 managed 엔티티에 도메인 메서드를 호출 → 트랜잭션 커밋 시 dirty UPDATE 자동 발행. */
+  @Transactional
   public void updateBankAccount(
       final Long id, final String bank, final String account, final String holder) {
     User user = getUser(id);

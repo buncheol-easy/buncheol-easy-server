@@ -153,6 +153,72 @@ class UserDomainServiceTest {
   }
 
   @Nested
+  @DisplayName("프로필 최초 설정 테스트")
+  class CompleteProfileTest {
+
+    @Test
+    void 미완료_유저는_닉네임과_전화번호로_프로필을_완료할_수_있다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.completeProfile(1L, "새닉네임", "01012345678");
+
+      // then
+      assertThat(user.getNickname().value()).isEqualTo("새닉네임");
+      assertThat(user.getPhoneNumber().value()).isEqualTo("01012345678");
+      assertThat(user.isProfileCompleted()).isTrue();
+    }
+
+    @Test
+    void 이미_완료된_유저가_호출하면_예외가_발생한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.completeProfile("닉네임", "01012345678");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      // when & then
+      assertThatThrownBy(() -> userDomainService.completeProfile(1L, "다른닉", "01098765432"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_ALREADY_COMPLETED);
+    }
+
+    @Test
+    void 닉네임이_중복되면_예외가_발생하고_엔티티는_변경되지_않는다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      String originalNickname = user.getNickname().value();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("중복닉", 1L)).willReturn(true);
+
+      // when & then
+      assertThatThrownBy(() -> userDomainService.completeProfile(1L, "중복닉", "01012345678"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NICKNAME_DUPLICATE);
+
+      assertThat(user.getNickname().value()).isEqualTo(originalNickname);
+      assertThat(user.getPhoneNumber()).isNull();
+      assertThat(user.isProfileCompleted()).isFalse();
+    }
+
+    @Test
+    void 존재하지_않는_유저가_호출하면_예외가_발생한다() {
+      // given
+      given(userRepository.findById(999L)).willReturn(Optional.empty());
+
+      // when & then
+      assertThatThrownBy(() -> userDomainService.completeProfile(999L, "새닉네임", "01012345678"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+  }
+
+  @Nested
   @DisplayName("User 프로필 업데이트 테스트")
   class UpdateProfileTest {
 

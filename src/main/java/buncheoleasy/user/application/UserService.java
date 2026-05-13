@@ -7,12 +7,13 @@ import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
+import buncheoleasy.user.dto.request.CompleteUserProfileRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
+import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -22,7 +23,6 @@ public class UserService {
   private final UserDomainService userDomainService;
   private final RefreshTokenStore refreshTokenStore;
 
-  @Transactional
   public void withdraw(final Long userId) {
     userDomainService.withdraw(userId);
     try {
@@ -32,12 +32,19 @@ public class UserService {
     }
   }
 
-  @Transactional
+  public void completeProfile(final Long userId, final CompleteUserProfileRequest request) {
+    userDomainService.completeProfile(userId, request.nickname(), request.phoneNumber());
+  }
+
   public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
     userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
   }
 
-  @Transactional
+  public ProfileStatusResponse getProfileStatus(final Long userId) {
+    User user = userDomainService.getUser(userId);
+    return ProfileStatusResponse.of(user.isProfileCompleted());
+  }
+
   public void updateBankAccount(final Long userId, final BankAccountRequest request) {
     userDomainService.updateBankAccount(
         userId, request.bank(), request.account(), request.holder());

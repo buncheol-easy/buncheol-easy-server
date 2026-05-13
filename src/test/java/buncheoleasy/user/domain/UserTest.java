@@ -232,6 +232,39 @@ class UserTest {
   }
 
   @Nested
+  @DisplayName("프로필 최초 설정 테스트")
+  class CompleteProfileTest {
+
+    @Test
+    void 미완료_상태에서_닉네임과_전화번호가_설정되고_profileCompleted가_true가_된다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      assertThat(user.isProfileCompleted()).isFalse();
+
+      // when
+      user.completeProfile("새닉네임", "01012345678");
+
+      // then
+      assertThat(user.getNickname().value()).isEqualTo("새닉네임");
+      assertThat(user.getPhoneNumber().value()).isEqualTo("01012345678");
+      assertThat(user.isProfileCompleted()).isTrue();
+    }
+
+    @Test
+    void 이미_완료된_유저가_재호출하면_예외가_발생한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.completeProfile("닉네임", "01012345678");
+
+      // when & then
+      assertThatThrownBy(() -> user.completeProfile("다른닉", "01098765432"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_ALREADY_COMPLETED);
+    }
+  }
+
+  @Nested
   @DisplayName("Nickname 업데이트 테스트")
   class UpdateNicknameTest {
 

@@ -8,11 +8,13 @@ import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.docu
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.user.application.UserService;
+import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse.BankAccountInfo;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -115,6 +117,63 @@ class UserControllerDocsTest {
                             fieldWithPath("bankAccount.bank").description("은행명").optional(),
                             fieldWithPath("bankAccount.account").description("계좌번호").optional(),
                             fieldWithPath("bankAccount.holder").description("예금주").optional())
+                        .build())));
+  }
+
+  @Test
+  void 프로필_최초_설정() throws Exception {
+    // when & then
+    mockMvc
+        .perform(
+            post("/v1/users/me/profile")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01012345678\"}"))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "users-complete-profile",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("User")
+                        .summary("프로필 최초 설정")
+                        .description("소셜 로그인 직후 닉네임/휴대폰 번호를 최초 등록한다. 이미 완료된 경우 409.")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestSchema(Schema.schema("CompleteUserProfileRequest"))
+                        .requestFields(
+                            fieldWithPath("nickname").description("닉네임 (1~20자, 한글/영문/숫자)"),
+                            fieldWithPath("phoneNumber")
+                                .description("휴대폰 번호 (01x로 시작하는 10~11자리 숫자)"))
+                        .build())));
+  }
+
+  @Test
+  void 프로필_완료_여부_조회() throws Exception {
+    // given
+    given(userService.getProfileStatus(USER_ID)).willReturn(ProfileStatusResponse.of(true));
+
+    // when & then
+    mockMvc
+        .perform(
+            get("/v1/users/me/profile/status")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "users-get-profile-status",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("User")
+                        .summary("프로필 완료 여부 조회")
+                        .description("로그인 직후 클라이언트가 프로필 설정 완료 여부를 확인한다.")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .responseSchema(Schema.schema("ProfileStatusResponse"))
+                        .responseFields(
+                            fieldWithPath("profileCompleted").description("프로필 설정 완료 여부"))
                         .build())));
   }
 

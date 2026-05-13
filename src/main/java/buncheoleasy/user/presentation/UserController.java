@@ -8,7 +8,6 @@ import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,7 +34,7 @@ public class UserController {
   @GetMapping("/me")
   public ResponseEntity<UserProfileResponse> getUserProfile(
       @AuthenticationPrincipal final Long userId) {
-    return ResponseEntity.status(HttpStatus.OK).body(userService.getUserProfile(userId));
+    return ResponseEntity.ok(userService.getUserProfile(userId));
   }
 
   @PutMapping("/me")
@@ -49,14 +48,13 @@ public class UserController {
   @GetMapping("/me/profile/status")
   public ResponseEntity<ProfileStatusResponse> getProfileStatus(
       @AuthenticationPrincipal final Long userId) {
-    return ResponseEntity.status(HttpStatus.OK).body(userService.getProfileStatus(userId));
+    return ResponseEntity.ok(userService.getProfileStatus(userId));
   }
 
   @GetMapping("/nickname/duplicate")
   public ResponseEntity<NicknameDuplicateResponse> checkNicknameDuplicate(
       @AuthenticationPrincipal final Long userId, @RequestParam("nickname") final String nickname) {
-    return ResponseEntity.status(HttpStatus.OK)
-        .body(userService.checkNicknameDuplicate(userId, nickname));
+    return ResponseEntity.ok(userService.checkNicknameDuplicate(userId, nickname));
   }
 
   @PutMapping("/me/bank-account")

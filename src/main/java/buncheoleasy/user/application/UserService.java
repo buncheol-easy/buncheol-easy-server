@@ -17,6 +17,7 @@ import buncheoleasy.user.dto.response.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -29,6 +30,7 @@ public class UserService {
   private final RefreshTokenStore refreshTokenStore;
 
   /** 활성 분철(개최)·활성 참여가 남아 있으면 탈퇴를 거부한다. */
+  @Transactional
   public void withdraw(final Long userId) {
     if (buncheolDomainService.hasActiveBuncheolHostedBy(userId)) {
       throw new BusinessException(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL);

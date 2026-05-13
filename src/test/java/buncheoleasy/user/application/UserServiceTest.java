@@ -14,7 +14,6 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
-import buncheoleasy.user.dto.request.CompleteUserProfileRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
@@ -140,24 +139,6 @@ class UserServiceTest {
   }
 
   @Nested
-  @DisplayName("프로필 최초 설정 테스트")
-  class CompleteProfileTest {
-
-    @Test
-    void 도메인_서비스에_위임한다() {
-      // given
-      Long userId = 1L;
-      CompleteUserProfileRequest request = new CompleteUserProfileRequest("새닉네임", "01012345678");
-
-      // when
-      userService.completeProfile(userId, request);
-
-      // then
-      then(userDomainService).should().completeProfile(userId, "새닉네임", "01012345678");
-    }
-  }
-
-  @Nested
   @DisplayName("프로필 완료 여부 조회 테스트")
   class GetProfileStatusTest {
 
@@ -166,7 +147,7 @@ class UserServiceTest {
       // given
       Long userId = 1L;
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.completeProfile("닉네임", "01012345678");
+      user.updatePhoneNumber("01012345678");
       given(userDomainService.getUser(userId)).willReturn(user);
 
       // when

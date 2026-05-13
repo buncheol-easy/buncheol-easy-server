@@ -8,7 +8,6 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -19,7 +18,6 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.application.UserService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
-import buncheoleasy.user.dto.request.CompleteUserProfileRequest;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
 import java.util.Collections;
@@ -133,48 +131,6 @@ class UserControllerTest {
                 .content("{\"bank\":\"\",\"account\":\"123\",\"holder\":\"홍길동\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
-  }
-
-  @Test
-  void 프로필_최초_설정이_성공하면_204를_반환한다() throws Exception {
-    mockMvc
-        .perform(
-            post("/v1/users/me/profile")
-                .with(mockAuth())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01012345678\"}"))
-        .andExpect(status().isNoContent());
-
-    then(userService).should().completeProfile(eq(USER_ID), any(CompleteUserProfileRequest.class));
-  }
-
-  @Test
-  void 프로필_최초_설정_요청_검증에_실패하면_400을_반환한다() throws Exception {
-    mockMvc
-        .perform(
-            post("/v1/users/me/profile")
-                .with(mockAuth())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nickname\":\"\",\"phoneNumber\":\"01012345678\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
-  }
-
-  @Test
-  void 프로필_최초_설정_중_이미_완료된_유저는_409를_반환한다() throws Exception {
-    willThrow(new BusinessException(ErrorCode.USER_PROFILE_ALREADY_COMPLETED))
-        .given(userService)
-        .completeProfile(eq(USER_ID), any(CompleteUserProfileRequest.class));
-
-    mockMvc
-        .perform(
-            post("/v1/users/me/profile")
-                .with(mockAuth())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01012345678\"}"))
-        .andExpect(status().isConflict())
-        .andExpect(
-            content().string(containsString(ErrorCode.USER_PROFILE_ALREADY_COMPLETED.getCode())));
   }
 
   @Test

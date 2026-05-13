@@ -35,20 +35,6 @@ public class UserDomainService {
   }
 
   @Transactional
-  public void completeProfile(final Long id, final String nickname, final String phoneNumber) {
-    User user = getUser(id);
-
-    if (user.isProfileCompleted()) {
-      throw new BusinessException(ErrorCode.USER_PROFILE_ALREADY_COMPLETED);
-    }
-    if (userRepository.existsByNicknameExcludingId(nickname, id)) {
-      throw new BusinessException(ErrorCode.USER_NICKNAME_DUPLICATE);
-    }
-
-    user.completeProfile(nickname, phoneNumber);
-  }
-
-  @Transactional
   public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
     User user = getUser(id);
 

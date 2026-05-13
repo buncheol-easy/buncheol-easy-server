@@ -36,7 +36,6 @@ public enum ErrorCode {
 
   SHIPPING_METHOD_FORMAT_INVALID("USR-017", "올바른 배송방법 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
   USER_PROFILE_IS_NOT_COMPLETE("USR-018", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.FORBIDDEN),
-  USER_PROFILE_ALREADY_COMPLETED("USR-028", "이미 프로필 설정이 완료된 사용자입니다.", HttpStatus.CONFLICT),
 
   USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL(
       "USR-029", "진행 중인 분철이 있어 탈퇴할 수 없습니다.", HttpStatus.CONFLICT),

@@ -9,7 +9,6 @@ import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
-import buncheoleasy.user.dto.request.CompleteUserProfileRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
@@ -42,10 +41,6 @@ public class UserService {
     } catch (Exception e) {
       log.warn("회원 탈퇴 후 리프레시 토큰 삭제 실패. userId: {}", userId, e);
     }
-  }
-
-  public void completeProfile(final Long userId, final CompleteUserProfileRequest request) {
-    userDomainService.completeProfile(userId, request.nickname(), request.phoneNumber());
   }
 
   public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {

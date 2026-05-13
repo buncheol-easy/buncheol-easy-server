@@ -2,7 +2,6 @@ package buncheoleasy.user.presentation;
 
 import buncheoleasy.user.application.UserService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
-import buncheoleasy.user.dto.request.CompleteUserProfileRequest;
 import buncheoleasy.user.dto.request.UpdateUserProfileRequest;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse;
@@ -13,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,14 +41,6 @@ public class UserController {
       @AuthenticationPrincipal final Long userId,
       @Valid @RequestBody final UpdateUserProfileRequest request) {
     userService.updateProfile(userId, request);
-    return ResponseEntity.noContent().build();
-  }
-
-  @PostMapping("/me/profile")
-  public ResponseEntity<Void> completeProfile(
-      @AuthenticationPrincipal final Long userId,
-      @Valid @RequestBody final CompleteUserProfileRequest request) {
-    userService.completeProfile(userId, request);
     return ResponseEntity.noContent().build();
   }
 

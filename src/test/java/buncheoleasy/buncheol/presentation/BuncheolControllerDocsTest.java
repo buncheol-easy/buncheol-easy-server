@@ -110,17 +110,9 @@ class BuncheolControllerDocsTest {
         {
           "title": "뉴진스 1집 분철 (수정)",
           "description": "공식 스토어 단독 구성",
-          "purchaseSite": "공식 스토어",
-          "deadline": "%s",
-          "gs25ShippingFee": 3500,
-          "cuShippingFee": null,
-          "keepImageIds": [1, 2],
-          "buncheolMembers": [
-            {"memberId": 200, "bidMinPrice": 60000}
-          ]
+          "keepImageIds": [1, 2]
         }
-        """
-        .formatted(LocalDateTime.now().plusDays(10));
+        """;
   }
 
   @Test
@@ -206,22 +198,14 @@ class BuncheolControllerDocsTest {
                             """
                             multipart/form-data PUT.
 
+                            모집중(RECRUITING)이고 마감 전인 분철만 수정 가능하며, 제목·설명·이미지만 변경할 수 있다.
+
                             **request 파트** (application/json, 필수)
                             ```json
                             {
                               "title": String,                // 1~200자
                               "description": String?,         // 선택, 300자 이하
-                              "purchaseSite": String,         // 1~200자
-                              "deadline": LocalDateTime,      // 미래 시점
-                              "gs25ShippingFee": Integer?,    // 양수
-                              "cuShippingFee": Integer?,      // 양수
-                              "keepImageIds": [Long],         // 유지할 기존 이미지 ID (비어있으면 모두 제거)
-                              "buncheolMembers": [
-                                {
-                                  "memberId": Long,
-                                  "bidMinPrice": Long         // 양수
-                                }
-                              ]
+                              "keepImageIds": [Long]          // 유지할 기존 이미지 ID (비어있으면 모두 제거)
                             }
                             ```
 

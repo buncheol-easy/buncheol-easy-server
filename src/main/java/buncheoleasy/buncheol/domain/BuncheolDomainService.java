@@ -21,8 +21,9 @@ public class BuncheolDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
   }
 
-  public void updateBuncheol(final Buncheol buncheol, final BuncheolParams params) {
-    buncheol.update(params);
+  public void updateBuncheolContent(
+      final Buncheol buncheol, final String title, final String description) {
+    buncheol.updateContent(title, description);
   }
 
   public void cancelBuncheol(final Buncheol buncheol, final BuncheolStatus expectedStatus) {

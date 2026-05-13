@@ -101,13 +101,6 @@ public enum ErrorCode {
   PARTICIPATION_NO_PERMISSION("BCH-069", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   PARTICIPATION_ALREADY_EXISTS("BCH-070", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
 
-  BUNCHEOL_MODIFY_FIELD_LOCKED("BCH-080", "참여자가 존재하여 해당 항목을 수정할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_MODIFY_MEMBER_DELETE_LOCKED("BCH-081", "활성 참여가 있는 멤버는 삭제할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_MODIFY_BID_MIN_INCREASE_LOCKED(
-      "BCH-084", "제시 참여자가 있는 경우 제시 최소 금액을 올릴 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_MODIFY_SHIPPING_FEE_LOCKED(
-      "BCH-085", "참여자가 사용 중인 배송 방법의 배송비는 수정할 수 없습니다.", HttpStatus.CONFLICT),
-
   /** PAY - 결제 관련 에러 */
   PAYMENT_NOT_FOUND("PAY-001", "존재하지 않는 결제입니다.", HttpStatus.NOT_FOUND),
   PAYMENT_STATE_TRANSITION_INVALID(

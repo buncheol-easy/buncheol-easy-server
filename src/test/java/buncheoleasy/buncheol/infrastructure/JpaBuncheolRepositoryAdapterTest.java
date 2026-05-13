@@ -120,25 +120,18 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void 도메인_update_호출_시_더티체킹으로_DB가_갱신된다() {
+    void 도메인_updateContent_호출_시_더티체킹으로_DB가_갱신된다() {
       Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
-
-      LocalDateTime newDeadline = LocalDateTime.now().plusDays(3).withNano(0);
-      BuncheolParams updatedParams =
-          new BuncheolParams(groupId, "수정 제목", "수정 설명", "수정 스토어", newDeadline, null, 1800);
 
       // managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
       Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      managed.update(updatedParams);
+      managed.updateContent("수정 제목", "수정 설명");
       em.flush();
       em.clear();
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
       assertThat(found.getTitle()).isEqualTo("수정 제목");
       assertThat(found.getDescription()).isEqualTo("수정 설명");
-      assertThat(found.getPurchaseSite()).isEqualTo("수정 스토어");
-      assertThat(found.getShippingFeePolicy().gs25ShippingFee()).isNull();
-      assertThat(found.getShippingFeePolicy().cuShippingFee()).isEqualTo(1800);
     }
 
     @Test

@@ -69,7 +69,8 @@ class AuthControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.accessToken").value("new-access"))
         .andExpect(jsonPath("$.refreshToken").doesNotExist())
-        .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=new-refresh")))
+        .andExpect(
+            header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=new-refresh")))
         .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
         .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Path=/v1/auth")))
         .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")));

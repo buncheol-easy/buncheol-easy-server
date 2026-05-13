@@ -15,16 +15,11 @@ import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
-import buncheoleasy.buncheol.domain.BuncheolModificationPolicy;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
-import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
-import buncheoleasy.buncheol.domain.participation.MemberParticipationPresence;
-import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -33,10 +28,8 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.UserDomainService;
-import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -45,10 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
@@ -66,13 +56,9 @@ class BuncheolServiceTest {
 
   @Mock private BuncheolDomainService buncheolDomainService;
 
-  @Spy private BuncheolModificationPolicy buncheolModificationPolicy;
-
   @Mock private BuncheolImageDomainService buncheolImageDomainService;
 
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
-
-  @Mock private ParticipationRepository participationRepository;
 
   @Mock private GroupDomainService groupDomainService;
 
@@ -83,6 +69,8 @@ class BuncheolServiceTest {
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
 
   @Captor private ArgumentCaptor<List<BuncheolMemberParams>> buncheolMemberParamsCaptor;
+
+  @Captor private ArgumentCaptor<List<Long>> keepImageIdsCaptor;
 
   private static GroupMember groupMember(Long memberId) {
     return new GroupMember(
@@ -101,10 +89,8 @@ class BuncheolServiceTest {
         members);
   }
 
-  private BuncheolModifyRequest modifyRequest(List<BuncheolMemberRequest> members) {
-    LocalDateTime deadline = LocalDateTime.now().plusDays(10);
-    return new BuncheolModifyRequest(
-        "수정 분철 제목", "수정 설명", "수정 스토어", deadline, 3500, null, List.of(), members);
+  private BuncheolModifyRequest modifyRequest() {
+    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of());
   }
 
   @Nested
@@ -252,56 +238,43 @@ class BuncheolServiceTest {
   }
 
   @Nested
-  @DisplayName("분철 수정 테스트 - 참여자 없음")
-  class ModifyBuncheolWithoutParticipantsTest {
+  @DisplayName("분철 수정 테스트")
+  class ModifyBuncheolTest {
 
     @Test
-    void 분철_수정에_성공하고_분철_및_분철_멤버가_갱신된다() {
+    void 제목과_설명만_갱신되고_이미지는_keepImageIds_기준으로_정리된다() {
       // given
       BuncheolModifyRequest request =
-          modifyRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 70_000L)));
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L));
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.getGroupId()).willReturn(GROUP_ID);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(false);
-      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
-          .willReturn(List.of(groupMember(MEMBER_ID)));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
+      willDoNothing().given(buncheolImageDomainService).validateImageCount(2);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
 
       // then
-      then(groupDomainService).should().getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList());
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(buncheol).should().validateRecruiting();
       then(buncheolDomainService)
           .should()
-          .updateBuncheol(eq(buncheol), buncheolParamsCaptor.capture());
-      then(buncheolMemberDomainService)
+          .updateBuncheolContent(buncheol, "수정 제목", "수정 설명");
+      then(buncheolImageDomainService)
           .should()
-          .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
-
-      BuncheolParams buncheolParams = buncheolParamsCaptor.getValue();
-      assertThat(buncheolParams.groupId()).isEqualTo(GROUP_ID);
-
-      List<BuncheolMemberParams> memberParams = buncheolMemberParamsCaptor.getValue();
-      assertThat(memberParams).hasSize(1);
-      assertThat(memberParams.getFirst().memberId()).isEqualTo(MEMBER_ID);
+          .deleteImagesExcluding(eq(BUNCHEOL_ID), keepImageIdsCaptor.capture());
+      assertThat(keepImageIdsCaptor.getValue()).containsExactly(1L, 2L);
+      then(eventPublisher).should(never()).publishEvent(any());
     }
 
     @Test
     void 수정시_새_이미지가_있으면_업로드_이벤트를_발행한다() {
       // given
-      BuncheolModifyRequest request =
-          modifyRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 60_000L)));
+      BuncheolModifyRequest request = modifyRequest();
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.getGroupId()).willReturn(GROUP_ID);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(false);
-      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
-          .willReturn(List.of(groupMember(MEMBER_ID)));
       willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
 
       // when
@@ -314,8 +287,7 @@ class BuncheolServiceTest {
     @Test
     void 수정시_이미지_개수_초과면_예외가_발생한다() {
       // given
-      BuncheolModifyRequest request =
-          modifyRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 60_000L)));
+      BuncheolModifyRequest request = modifyRequest();
       List<ImageFile> images =
           List.of(
               new ImageFile("1.jpg", "image/jpeg", new byte[] {1}),
@@ -337,14 +309,15 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED);
+
+      then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
     }
 
     @Test
     void 분철이_없으면_수정에_실패한다() {
       // given
       Long buncheolId = 999L;
-      BuncheolModifyRequest request =
-          modifyRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 60_000L)));
+      BuncheolModifyRequest request = modifyRequest();
       given(buncheolDomainService.getBuncheol(buncheolId))
           .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
 
@@ -359,8 +332,7 @@ class BuncheolServiceTest {
     @Test
     void 소유자가_아니면_수정에_실패하고_업데이트를_진행하지_않는다() {
       // given
-      BuncheolModifyRequest request =
-          modifyRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 60_000L)));
+      BuncheolModifyRequest request = modifyRequest();
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -375,16 +347,14 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
 
-      then(buncheolDomainService).should(never()).updateBuncheol(any(), any());
-      then(buncheolMemberDomainService).should(never()).deleteAllByBuncheolId(anyLong());
+      then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
       then(buncheolImageDomainService).should(never()).deleteImagesExcluding(anyLong(), anyList());
     }
 
     @Test
     void 모집중이_아닌_분철은_수정에_실패한다() {
       // given
-      BuncheolModifyRequest request =
-          modifyRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 60_000L)));
+      BuncheolModifyRequest request = modifyRequest();
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -399,348 +369,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
-      then(buncheolDomainService).should(never()).updateBuncheol(any(), any());
-    }
-
-    @Test
-    void 멤버_ID가_중복되면_예외가_발생한다() {
-      // given
-      BuncheolModifyRequest request =
-          modifyRequest(
-              List.of(
-                  new BuncheolMemberRequest(MEMBER_ID, 70_000L),
-                  new BuncheolMemberRequest(MEMBER_ID, 60_000L)));
-      Buncheol buncheol = mock(Buncheol.class);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when & then
-      assertThatThrownBy(
-              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_DUPLICATED);
-    }
-  }
-
-  @Nested
-  @DisplayName("분철 수정 테스트 - 참여자 존재")
-  @MockitoSettings(strictness = Strictness.LENIENT)
-  class ModifyBuncheolWithParticipantsTest {
-
-    private Buncheol stubBuncheol() {
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
-      given(buncheol.getGroupId()).willReturn(GROUP_ID);
-      given(buncheol.getPurchaseSite()).willReturn("원래 스토어");
-      given(buncheol.getShippingFeePolicy()).willReturn(ShippingFeePolicy.of(3000, null));
-      return buncheol;
-    }
-
-    private BuncheolModifyRequest preserveRequest(
-        Integer gs25Fee, List<BuncheolMemberRequest> members) {
-      return new BuncheolModifyRequest(
-          "수정 제목",
-          null,
-          "원래 스토어",
-          LocalDateTime.now().plusDays(7),
-          gs25Fee,
-          null,
-          List.of(),
-          members);
-    }
-
-    @Test
-    void 잠긴_필드_변경_시_BCH080_에러가_발생한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      // purchaseSite 변경
-      BuncheolModifyRequest request =
-          new BuncheolModifyRequest(
-              "수정 제목",
-              null,
-              "변경된 스토어",
-              LocalDateTime.now().plusDays(7),
-              3000,
-              null,
-              List.of(),
-              List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when & then
-      assertThatThrownBy(
-              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MODIFY_FIELD_LOCKED);
-    }
-
-    @Test
-    void 허용_필드만_변경하면_업데이트에_성공한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      BuncheolModifyRequest request =
-          preserveRequest(3000, List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
-
-      BuncheolMember existingMember = mock(BuncheolMember.class);
-      given(existingMember.getId()).willReturn(1L);
-      given(existingMember.getMemberId()).willReturn(MEMBER_ID);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of());
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(existingMember));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when
-      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
-
-      // then
-      then(buncheolDomainService)
-          .should()
-          .updateBuncheol(eq(buncheol), buncheolParamsCaptor.capture());
-      BuncheolParams params = buncheolParamsCaptor.getValue();
-      assertThat(params.title()).isEqualTo("수정 제목");
-    }
-
-    @Test
-    void 사용_중인_배송비_변경_시_BCH085_에러가_발생한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      // gs25ShippingFee 변경 (3000 → 4000)
-      BuncheolModifyRequest request =
-          preserveRequest(4000, List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of(ShippingMethod.GS25_HALF));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when & then
-      assertThatThrownBy(
-              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MODIFY_SHIPPING_FEE_LOCKED);
-    }
-
-    @Test
-    void 미사용_배송비_변경은_성공한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      // gs25 배송비 변경이지만 사용 중인 배송 방법에 GS25_HALF 없음
-      BuncheolModifyRequest request =
-          preserveRequest(4000, List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
-
-      BuncheolMember existingMember = mock(BuncheolMember.class);
-      given(existingMember.getId()).willReturn(1L);
-      given(existingMember.getMemberId()).willReturn(MEMBER_ID);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of());
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(existingMember));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when
-      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
-
-      // then
-      then(buncheolDomainService).should().updateBuncheol(eq(buncheol), any());
-    }
-
-    @Test
-    void 활성_참여_멤버_삭제_시_BCH081_에러가_발생한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      // 요청에 멤버 1을 포함하지 않음 → 삭제 대상
-      BuncheolModifyRequest request =
-          preserveRequest(3000, List.of(new BuncheolMemberRequest(MEMBER_ID + 1, 30_000L)));
-
-      BuncheolMember existingMember = mock(BuncheolMember.class);
-      given(existingMember.getId()).willReturn(1L);
-      given(existingMember.getMemberId()).willReturn(MEMBER_ID);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(new MemberParticipationPresence(1L, true)));
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(existingMember));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when & then
-      assertThatThrownBy(
-              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MODIFY_MEMBER_DELETE_LOCKED);
-    }
-
-    @Test
-    void 참여_없는_멤버_삭제는_성공한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      Long newMemberId = MEMBER_ID + 1;
-      // 요청에 멤버 1을 포함하지 않음 → 삭제 대상, 참여 없음
-      BuncheolModifyRequest request =
-          preserveRequest(3000, List.of(new BuncheolMemberRequest(newMemberId, 30_000L)));
-
-      BuncheolMember existingMember = mock(BuncheolMember.class);
-      given(existingMember.getId()).willReturn(1L);
-      given(existingMember.getMemberId()).willReturn(MEMBER_ID);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of()); // 참여 없음
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
-          .willReturn(List.of(groupMember(newMemberId)));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when
-      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
-
-      // then
-      then(buncheolMemberDomainService).should().deleteById(1L);
-    }
-
-    @Test
-    void 활성_제시_있는_멤버의_bidMinPrice_내리기는_성공한다() {
-      Buncheol buncheol = stubBuncheol();
-      BuncheolModifyRequest request =
-          preserveRequest(3000, List.of(new BuncheolMemberRequest(MEMBER_ID, 20_000L)));
-
-      BuncheolMember mockMember = mock(BuncheolMember.class);
-      given(mockMember.getId()).willReturn(1L);
-      given(mockMember.getMemberId()).willReturn(MEMBER_ID);
-      given(mockMember.getBidMinPrice()).willReturn(25_000L);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(new MemberParticipationPresence(1L, true)));
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(mockMember));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
-
-      then(mockMember).should().updateBidMinPrice(20_000L);
-    }
-
-    @Test
-    void 활성_제시_있는_멤버의_bidMinPrice_올리기_시_BCH084_에러가_발생한다() {
-      Buncheol buncheol = stubBuncheol();
-      // bidMinPrice: 20_000 → 30_000 (올리기)
-      BuncheolModifyRequest request =
-          preserveRequest(3000, List.of(new BuncheolMemberRequest(MEMBER_ID, 30_000L)));
-
-      BuncheolMember mockMember = mock(BuncheolMember.class);
-      given(mockMember.getId()).willReturn(1L);
-      given(mockMember.getMemberId()).willReturn(MEMBER_ID);
-      given(mockMember.getBidMinPrice()).willReturn(20_000L);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(new MemberParticipationPresence(1L, true)));
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(mockMember));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      assertThatThrownBy(
-              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MODIFY_BID_MIN_INCREASE_LOCKED);
-    }
-
-    @Test
-    void 수정_요청에_중복된_memberId가_있으면_BCH021_에러가_발생한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      BuncheolModifyRequest request =
-          preserveRequest(
-              3000,
-              List.of(
-                  new BuncheolMemberRequest(MEMBER_ID, 50_000L),
-                  new BuncheolMemberRequest(MEMBER_ID, 40_000L)));
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when & then
-      assertThatThrownBy(
-              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_DUPLICATED);
-    }
-
-    @Test
-    void 신규_멤버_추가에_성공한다() {
-      // given
-      Buncheol buncheol = stubBuncheol();
-      Long newMemberId = MEMBER_ID + 1;
-      // 기존 멤버 유지 + 신규 멤버 추가
-      BuncheolModifyRequest request =
-          preserveRequest(
-              3000,
-              List.of(
-                  new BuncheolMemberRequest(MEMBER_ID, 50_000L),
-                  new BuncheolMemberRequest(newMemberId, 30_000L)));
-
-      BuncheolMember existingMember = mock(BuncheolMember.class);
-      given(existingMember.getId()).willReturn(1L);
-      given(existingMember.getMemberId()).willReturn(MEMBER_ID);
-
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(participationRepository.existsActiveByBuncheolId(BUNCHEOL_ID)).willReturn(true);
-      given(participationRepository.findActiveShippingMethodsByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Set.of());
-      given(participationRepository.findActiveParticipationPresencesByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of()); // 참여 없음
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(existingMember));
-      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
-          .willReturn(List.of(groupMember(newMemberId)));
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
-
-      // when
-      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
-
-      // then
-      then(buncheolMemberDomainService)
-          .should()
-          .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
-      List<BuncheolMemberParams> newParams = buncheolMemberParamsCaptor.getValue();
-      assertThat(newParams).hasSize(1);
-      assertThat(newParams.getFirst().memberId()).isEqualTo(newMemberId);
+      then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
     }
   }
 

@@ -93,23 +93,13 @@ class BuncheolControllerTest {
   }
 
   private String validModifyRequestJson() {
-    LocalDateTime deadline = LocalDateTime.now().plusDays(10);
     return """
                 {
                   "title": "수정 분철 제목",
-                  "purchaseSite": "수정 스토어",
-                  "deadline": "%s",
-                  "gs25ShippingFee": 3500,
-                  "keepImageIds": [1, 2],
-                  "buncheolMembers": [
-                    {
-                      "memberId": 200,
-                      "bidMinPrice": 60000
-                    }
-                  ]
+                  "description": "수정 설명",
+                  "keepImageIds": [1, 2]
                 }
-                """
-        .formatted(deadline);
+                """;
   }
 
   private MockMultipartHttpServletRequestBuilder modifyMultipartRequest(final Long buncheolId) {
@@ -335,20 +325,35 @@ class BuncheolControllerTest {
     @Test
     void keepImageIds가_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime deadline = LocalDateTime.now().plusDays(10);
       String invalidJson =
           """
                     {
                       "title": "수정 분철 제목",
-                      "purchaseSite": "수정 스토어",
-                      "deadline": "%s",
-                      "gs25ShippingFee": 3500,
-                      "buncheolMembers": [
-                        {"memberId": 200, "bidMinPrice": 60000}
-                      ]
+                      "description": "수정 설명"
                     }
-                    """
-              .formatted(deadline);
+                    """;
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
+
+      // when & then
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+    }
+
+    @Test
+    void title이_없으면_400을_반환한다() throws Exception {
+      // given
+      String invalidJson =
+          """
+                    {
+                      "description": "수정 설명",
+                      "keepImageIds": []
+                    }
+                    """;
 
       MockMultipartFile requestPart =
           new MockMultipartFile(

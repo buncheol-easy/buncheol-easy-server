@@ -1,22 +1,17 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
-import static java.util.stream.Collectors.toSet;
-
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
-import buncheoleasy.buncheol.domain.participation.MemberParticipationPresence;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,9 +39,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           ParticipationStatus.ACTIVE_BID,
           ParticipationStatus.AWAITING_PAYMENT,
           ParticipationStatus.CONFIRMED);
-
-  private static final List<String> ACTIVE_STATUS_NAMES =
-      ACTIVE_STATUSES.stream().map(ParticipationStatus::name).toList();
 
   private static final Field ID_FIELD;
 
@@ -121,11 +113,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public boolean existsActiveByBuncheolId(final Long buncheolId) {
-    return jpaParticipationRepository.existsActiveByBuncheolId(buncheolId, ACTIVE_STATUSES);
-  }
-
-  @Override
   public boolean existsActiveByParticipantId(final Long participantId) {
     return jpaParticipationRepository.existsActiveByParticipantId(participantId, ACTIVE_STATUSES);
   }
@@ -137,26 +124,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       return List.of();
     }
     return jpaParticipationRepository.countActiveByBuncheolIds(buncheolIds, ACTIVE_STATUSES);
-  }
-
-  @Override
-  public List<MemberParticipationPresence> findActiveParticipationPresencesByBuncheolId(
-      final Long buncheolId) {
-    return jpaParticipationRepository.findActiveParticipationPresenceRows(buncheolId).stream()
-        .map(
-            row ->
-                new MemberParticipationPresence(
-                    ((Number) row[0]).longValue(), ((Number) row[1]).intValue() > 0))
-        .toList();
-  }
-
-  @Override
-  public Set<ShippingMethod> findActiveShippingMethodsByBuncheolId(final Long buncheolId) {
-    return jpaParticipationRepository
-        .findActiveShippingMethodNamesByBuncheolId(buncheolId, ACTIVE_STATUS_NAMES)
-        .stream()
-        .map(ShippingMethod::valueOf)
-        .collect(toSet());
   }
 
   @Override

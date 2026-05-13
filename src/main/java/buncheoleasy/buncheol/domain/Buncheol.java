@@ -84,13 +84,11 @@ public class Buncheol {
     this.status = BuncheolStatus.RECRUITING;
   }
 
-  public void update(final BuncheolParams params) {
-    validate(this.hostId, params);
-    this.title = params.title();
-    this.description = params.description();
-    this.purchaseSite = params.purchaseSite();
-    this.deadline = params.deadline();
-    this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
+  public void updateContent(final String title, final String description) {
+    validateTitle(title);
+    validateDescription(description);
+    this.title = title;
+    this.description = description;
   }
 
   public void validateOwner(final Long userId) {

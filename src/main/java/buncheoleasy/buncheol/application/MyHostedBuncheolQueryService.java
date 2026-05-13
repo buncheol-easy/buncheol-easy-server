@@ -60,21 +60,12 @@ public class MyHostedBuncheolQueryService {
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, Long> activeCountByBuncheolId,
       final Map<Long, String> groupNameById) {
-    String groupName = groupNameById.get(buncheol.getGroupId());
-    if (groupName == null) {
-      throw new IllegalStateException(
-          "buncheolId="
-              + buncheol.getId()
-              + " 의 groupId="
-              + buncheol.getGroupId()
-              + " 에 해당하는 그룹을 찾을 수 없습니다");
-    }
     int slotCount = slotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue();
     long activeCount = activeCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
     return new MyHostedBuncheolResponse(
         buncheol.getId(),
         buncheol.getTitle(),
-        groupName,
+        groupNameById.get(buncheol.getGroupId()),
         buncheol.getStatus(),
         buncheol.getDeadline(),
         slotCount,

@@ -82,32 +82,7 @@ public class MyParticipationQueryService {
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, String> groupMemberNameById) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
-    if (buncheol == null) {
-      throw new IllegalStateException(
-          "participationId="
-              + participation.getId()
-              + " 의 buncheolId="
-              + participation.getBuncheolId()
-              + " 에 해당하는 분철을 찾을 수 없습니다");
-    }
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
-    if (buncheolMember == null) {
-      throw new IllegalStateException(
-          "participationId="
-              + participation.getId()
-              + " 의 buncheolMemberId="
-              + participation.getBuncheolMemberId()
-              + " 에 해당하는 슬롯을 찾을 수 없습니다");
-    }
-    String memberName = groupMemberNameById.get(buncheolMember.getMemberId());
-    if (memberName == null) {
-      throw new IllegalStateException(
-          "buncheolMemberId="
-              + buncheolMember.getId()
-              + " 의 memberId="
-              + buncheolMember.getMemberId()
-              + " 에 해당하는 그룹 멤버를 찾을 수 없습니다");
-    }
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
     return new MyParticipationResponse(
@@ -115,7 +90,7 @@ public class MyParticipationQueryService {
         participation.getBuncheolId(),
         buncheol.getTitle(),
         slotCount,
-        memberName,
+        groupMemberNameById.get(buncheolMember.getMemberId()),
         participation.getBidAmount(),
         participation.getStatus(),
         buncheol.getStatus(),

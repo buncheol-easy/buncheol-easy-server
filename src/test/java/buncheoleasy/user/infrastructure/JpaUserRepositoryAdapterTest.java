@@ -1,5 +1,6 @@
 package buncheoleasy.user.infrastructure;
 
+import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.user.domain.SocialInfo;
@@ -289,7 +290,7 @@ class JpaUserRepositoryAdapterTest {
 
       // when: managed 엔티티에 withdraw() 호출 → flush 시 dirty UPDATE 로 deletedAt 반영
       User managed = userRepository.findById(userId).orElseThrow();
-      managed.withdraw();
+      managed.withdraw(Instant.now());
       em.flush();
       em.clear();
 
@@ -305,7 +306,7 @@ class JpaUserRepositoryAdapterTest {
       Long userId = saved.getId();
 
       User managed = userRepository.findById(userId).orElseThrow();
-      managed.withdraw();
+      managed.withdraw(Instant.now());
       em.flush();
       em.clear();
 

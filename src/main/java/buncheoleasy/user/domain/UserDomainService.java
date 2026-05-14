@@ -2,6 +2,8 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Clock;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserDomainService {
 
   private final UserRepository userRepository;
+  private final Clock clock;
 
   public User getOrCreateBySocialLogin(final SocialInfo socialInfo, final String email) {
     return userRepository
@@ -31,7 +34,7 @@ public class UserDomainService {
   @Transactional
   public void withdraw(final Long id) {
     User user = getUser(id);
-    user.withdraw();
+    user.withdraw(Instant.now(clock));
   }
 
   @Transactional

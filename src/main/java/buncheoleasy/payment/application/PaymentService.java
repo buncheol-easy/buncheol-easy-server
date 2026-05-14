@@ -9,6 +9,8 @@ import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmRejected
 import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmResponse;
 import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmUnavailableException;
 import buncheoleasy.payment.infrastructure.TossPaymentsProperties;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class PaymentService {
   private final TossPaymentClient tossPaymentClient;
   private final TossPaymentsProperties tossPaymentsProperties;
   private final TransactionTemplate transactionTemplate;
+  private final Clock clock;
 
   @Value("${app.base-url}")
   private String baseUrl;
@@ -42,7 +45,9 @@ public class PaymentService {
       return toPaymentOrderInfo(existingPaymentOrder, paymentOrderName);
     }
 
-    Payment paymentOrder = Payment.createPayment(participationId, generatePaymentOrderId(), amount);
+    Payment paymentOrder =
+        Payment.createPayment(
+            participationId, generatePaymentOrderId(), amount, Instant.now(clock));
     paymentDomainService.create(paymentOrder);
     return toPaymentOrderInfo(paymentOrder, paymentOrderName);
   }
@@ -217,7 +222,7 @@ public class PaymentService {
     // 지금 처리 중인 결제와 같은 paymentKey 요청인가?
     validateSamePaymentKey(payment, paymentKey, ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
 
-    payment.completeConfirm();
+    payment.completeConfirm(Instant.now(clock));
     paymentDomainService.updateConfirmingPayment(payment);
     paymentCompletionHandler.onPaymentCompleted(payment.getParticipationId());
   }

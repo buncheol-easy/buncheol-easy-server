@@ -61,12 +61,12 @@ public class Buncheol extends TimestampedEntity {
   @Column(name = "closed_at")
   private Instant closedAt;
 
-  public static Buncheol create(final Long hostId, final BuncheolParams params) {
-    return new Buncheol(hostId, params);
+  public static Buncheol create(final Long hostId, final BuncheolParams params, final Instant now) {
+    return new Buncheol(hostId, params, now);
   }
 
-  private Buncheol(final Long hostId, final BuncheolParams params) {
-    validate(hostId, params);
+  private Buncheol(final Long hostId, final BuncheolParams params, final Instant now) {
+    validate(hostId, params, now);
     this.hostId = hostId;
     this.groupId = params.groupId();
     this.title = params.title();
@@ -90,11 +90,11 @@ public class Buncheol extends TimestampedEntity {
     }
   }
 
-  public void validateRecruiting() {
+  public void validateRecruiting(final Instant now) {
     if (status != BuncheolStatus.RECRUITING) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
-    if (!deadline.isAfter(Instant.now())) {
+    if (!deadline.isAfter(now)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
   }
@@ -121,13 +121,13 @@ public class Buncheol extends TimestampedEntity {
     status = BuncheolStatus.CANCELLED;
   }
 
-  private void validate(final Long hostId, final BuncheolParams params) {
+  private void validate(final Long hostId, final BuncheolParams params, final Instant now) {
     validateHostAndParams(hostId, params);
     validateGroupId(params.groupId());
     validateTitle(params.title());
     validateDescription(params.description());
     validatePurchaseSite(params.purchaseSite());
-    validateDeadline(params.deadline());
+    validateDeadline(params.deadline(), now);
   }
 
   private void validateHostAndParams(final Long hostId, final BuncheolParams params) {
@@ -166,8 +166,8 @@ public class Buncheol extends TimestampedEntity {
     }
   }
 
-  private void validateDeadline(final Instant deadline) {
-    if (deadline == null || !deadline.isAfter(Instant.now())) {
+  private void validateDeadline(final Instant deadline, final Instant now) {
+    if (deadline == null || !deadline.isAfter(now)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
     }
   }

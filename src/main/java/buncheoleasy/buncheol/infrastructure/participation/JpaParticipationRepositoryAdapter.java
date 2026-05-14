@@ -9,6 +9,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +54,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
+  private final Clock clock;
 
   /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
   private static final String INSERT_IF_RECRUITING_SQL =
@@ -137,7 +139,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
             participation.getFailReason(),
             participation.getFinalizedAt(),
             participation.getStatus(),
-            Instant.now(),
+            Instant.now(clock),
             expectedStatus);
     return updated > 0;
   }

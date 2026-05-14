@@ -13,6 +13,8 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.user.domain.UserDomainService;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -29,6 +31,7 @@ public class BuncheolService {
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
   private final ApplicationEventPublisher eventPublisher;
+  private final Clock clock;
 
   @Transactional
   public void holdBuncheol(
@@ -62,7 +65,7 @@ public class BuncheolService {
       final List<ImageFile> images) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
-    buncheol.validateRecruiting();
+    buncheol.validateRecruiting(Instant.now(clock));
 
     buncheolImageDomainService.validateImageCount(request.keepImageIds().size() + images.size());
 

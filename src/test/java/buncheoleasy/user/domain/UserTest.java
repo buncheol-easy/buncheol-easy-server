@@ -1,5 +1,6 @@
 package buncheoleasy.user.domain;
 
+import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -299,7 +300,7 @@ class UserTest {
       assertThat(user.getDeletedAt()).isNull();
 
       // when
-      user.withdraw();
+      user.withdraw(Instant.now());
 
       // then
       assertThat(user.getDeletedAt()).isNotNull();

@@ -4,6 +4,7 @@ import buncheoleasy.payment.domain.Payment;
 import buncheoleasy.payment.domain.PaymentRepository;
 import buncheoleasy.payment.domain.PaymentStatus;
 import buncheoleasy.payment.domain.PaymentTxType;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Repository;
 public class JpaPaymentRepositoryAdapter implements PaymentRepository {
 
   private final JpaPaymentRepository jpaPaymentRepository;
+  private final Clock clock;
 
   @Override
   public Payment save(final Payment payment) {
@@ -29,7 +31,7 @@ public class JpaPaymentRepositoryAdapter implements PaymentRepository {
             payment.getStatus(),
             payment.getReason(),
             payment.getApprovedAt(),
-            Instant.now(),
+            Instant.now(clock),
             expectedStatus);
     return updated > 0;
   }

@@ -1,13 +1,12 @@
 package buncheoleasy.buncheol.domain.bookmark;
 
+import buncheoleasy.global.domain.CreatedAtEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,7 +15,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "buncheol_bookmarks")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class BuncheolBookmark {
+public class BuncheolBookmark extends CreatedAtEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,9 +27,6 @@ public class BuncheolBookmark {
   @Column(name = "buncheol_id", nullable = false, updatable = false)
   private Long buncheolId;
 
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
-
   public static BuncheolBookmark create(final Long userId, final Long buncheolId) {
     return new BuncheolBookmark(userId, buncheolId);
   }
@@ -38,10 +34,5 @@ public class BuncheolBookmark {
   private BuncheolBookmark(final Long userId, final Long buncheolId) {
     this.userId = userId;
     this.buncheolId = buncheolId;
-  }
-
-  @PrePersist
-  void onCreate() {
-    this.createdAt = Instant.now();
   }
 }

@@ -179,7 +179,7 @@ class MyParticipationQueryServiceTest {
   }
 
   private GroupMember groupMember(Long id, String name) {
-    return new GroupMember(id, 1L, name, null, Instant.now(), Instant.now());
+    return new GroupMember(id, 1L, name, null);
   }
 
   private Participation participation(

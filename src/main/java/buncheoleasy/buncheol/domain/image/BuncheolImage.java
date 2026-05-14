@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.domain.image;
 
+import buncheoleasy.global.domain.CreatedAtEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
@@ -7,9 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,7 +17,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "buncheol_images")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class BuncheolImage {
+public class BuncheolImage extends CreatedAtEntity {
 
   private static final int MAX_IMAGE_URL_LENGTH = 500;
 
@@ -31,9 +30,6 @@ public class BuncheolImage {
 
   @Column(name = "image_url", nullable = false, length = 500, updatable = false)
   private String imageUrl;
-
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
 
   public static BuncheolImage create(final Long buncheolId, final String imageUrl) {
     return new BuncheolImage(buncheolId, imageUrl);
@@ -63,10 +59,5 @@ public class BuncheolImage {
     if (imageUrl.length() > MAX_IMAGE_URL_LENGTH) {
       throw new BusinessException(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
     }
-  }
-
-  @PrePersist
-  void onCreate() {
-    this.createdAt = Instant.now();
   }
 }

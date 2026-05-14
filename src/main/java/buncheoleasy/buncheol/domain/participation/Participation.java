@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.domain.participation;
 
+import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
@@ -9,8 +10,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.AccessLevel;
@@ -21,7 +20,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "participations")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Participation {
+public class Participation extends TimestampedEntity {
 
   // 일반 save 경로 외에 JpaParticipationRepositoryAdapter 의 conditional INSERT 흐름에서
   // ReflectionUtils 로 직접 주입되는 필드. 필드명·타입 변경 시 어댑터의 정적 ID_FIELD 초기화도 함께 갱신할 것.
@@ -69,12 +68,6 @@ public class Participation {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
-
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
 
   public static Participation create(
       final Long buncheolId,
@@ -132,17 +125,5 @@ public class Participation {
     this.status = ParticipationStatus.FAILED;
     this.failReason = reason;
     this.finalizedAt = now;
-  }
-
-  @PrePersist
-  void onCreate() {
-    Instant now = Instant.now();
-    this.createdAt = now;
-    this.updatedAt = now;
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    this.updatedAt = Instant.now();
   }
 }

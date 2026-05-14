@@ -13,7 +13,7 @@ import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,7 +42,7 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
     Participation participation = participationDomainService.getParticipation(participationId);
     final ParticipationStatus previousStatus = participation.getStatus();
 
-    LocalDateTime now = LocalDateTime.now(clock);
+    Instant now = Instant.now(clock);
     participation.completePayment(now);
 
     participationDomainService.updateParticipationStatus(participation, previousStatus);

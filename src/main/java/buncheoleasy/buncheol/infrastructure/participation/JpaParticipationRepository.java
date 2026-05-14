@@ -3,7 +3,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -61,11 +61,11 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.id = :id AND p.status = :expectedStatus")
   int updateStatusIfMatches(
       @Param("id") Long id,
-      @Param("dueAt") LocalDateTime dueAt,
+      @Param("dueAt") Instant dueAt,
       @Param("closedRank") Integer closedRank,
       @Param("failReason") String failReason,
-      @Param("finalizedAt") LocalDateTime finalizedAt,
+      @Param("finalizedAt") Instant finalizedAt,
       @Param("newStatus") ParticipationStatus newStatus,
-      @Param("now") LocalDateTime now,
+      @Param("now") Instant now,
       @Param("expectedStatus") ParticipationStatus expectedStatus);
 }

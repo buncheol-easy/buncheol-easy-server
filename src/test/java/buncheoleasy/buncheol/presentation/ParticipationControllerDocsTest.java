@@ -23,7 +23,7 @@ import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -136,8 +136,8 @@ class ParticipationControllerDocsTest {
 
   @Test
   void 내_참여_목록_조회() throws Exception {
-    LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
-    LocalDateTime dueAt = LocalDateTime.of(2026, 6, 2, 12, 0);
+    Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     MyParticipationResponse response =
         new MyParticipationResponse(
             500L,

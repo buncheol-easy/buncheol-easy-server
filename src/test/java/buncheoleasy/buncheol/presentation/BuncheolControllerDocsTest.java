@@ -20,7 +20,8 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -102,7 +103,7 @@ class BuncheolControllerDocsTest {
           ]
         }
         """
-        .formatted(LocalDateTime.now().plusDays(7));
+        .formatted(Instant.now().plus(7, ChronoUnit.DAYS));
   }
 
   private String modifyRequestJson() {
@@ -148,7 +149,7 @@ class BuncheolControllerDocsTest {
                               "title": String,                // 1~200자
                               "description": String?,         // 선택, 300자 이하
                               "purchaseSite": String,         // 1~200자
-                              "deadline": LocalDateTime,      // 미래 시점
+                              "deadline": Instant,            // 미래 시점 (UTC ISO-8601, 예: 2026-06-01T03:00:00Z)
                               "gs25ShippingFee": Integer?,    // 양수, gs25/cu 중 최소 1개 필수
                               "cuShippingFee": Integer?,      // 양수, gs25/cu 중 최소 1개 필수
                               "buncheolMembers": [
@@ -218,8 +219,8 @@ class BuncheolControllerDocsTest {
 
   @Test
   void 내_개최_분철_목록_조회() throws Exception {
-    LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
-    LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);
+    Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
     MyHostedBuncheolResponse response =
         new MyHostedBuncheolResponse(
             10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);

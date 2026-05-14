@@ -2,7 +2,7 @@ package buncheoleasy.delivery.infrastructure;
 
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -30,10 +30,10 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
   int updateStatusIfMatches(
       @Param("id") Long id,
       @Param("trackingNumber") String trackingNumber,
-      @Param("trackingRegisteredAt") LocalDateTime trackingRegisteredAt,
-      @Param("deliveredAt") LocalDateTime deliveredAt,
-      @Param("receivedAt") LocalDateTime receivedAt,
+      @Param("trackingRegisteredAt") Instant trackingRegisteredAt,
+      @Param("deliveredAt") Instant deliveredAt,
+      @Param("receivedAt") Instant receivedAt,
       @Param("newStatus") DeliveryStatus newStatus,
-      @Param("now") LocalDateTime now,
+      @Param("now") Instant now,
       @Param("expectedStatus") DeliveryStatus expectedStatus);
 }

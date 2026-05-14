@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS participations
     participant_id        BIGINT       NOT NULL COMMENT '참여자',
     shipping_address_id   BIGINT       NOT NULL COMMENT '신청 시 선택한 배송지',
     bid_amount            BIGINT       NOT NULL COMMENT '제시 금액',
-    due_at                DATETIME     NULL COMMENT '낙찰자 결제 만료 시각 (KST). 차순위 이양 시 갱신',
+    due_at                DATETIME     NULL COMMENT '낙찰자 결제 만료 시각 (UTC). 차순위 이양 시 갱신',
     closed_rank           INT          NULL COMMENT '마감 시점 제시 순위',
     fail_reason           VARCHAR(100) NULL COMMENT 'FAILED 사유',
     finalized_at          DATETIME     NULL COMMENT '참여 확정/실패 최종 확정 시각',

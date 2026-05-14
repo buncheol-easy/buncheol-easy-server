@@ -3,7 +3,7 @@ package buncheoleasy.payment.infrastructure;
 import buncheoleasy.payment.domain.Payment;
 import buncheoleasy.payment.domain.PaymentStatus;
 import buncheoleasy.payment.domain.PaymentTxType;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -32,7 +32,7 @@ interface JpaPaymentRepository extends JpaRepository<Payment, Long> {
       @Param("paymentKey") String paymentKey,
       @Param("newStatus") PaymentStatus newStatus,
       @Param("reason") String reason,
-      @Param("approvedAt") LocalDateTime approvedAt,
-      @Param("now") LocalDateTime now,
+      @Param("approvedAt") Instant approvedAt,
+      @Param("now") Instant now,
       @Param("expectedStatus") PaymentStatus expectedStatus);
 }

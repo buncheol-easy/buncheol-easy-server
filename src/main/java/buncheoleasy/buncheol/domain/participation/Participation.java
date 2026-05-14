@@ -12,7 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -48,10 +48,10 @@ public class Participation {
   @Column(name = "bid_amount", nullable = false, updatable = false)
   private Long bidAmount;
 
-  // 낙찰자 결제 마감 시각 (KST). 이 시각까지 미결제 시 FAILED 처리 후 차순위로 권한 이양.
+  // 낙찰자 결제 마감 시각 (UTC). 이 시각까지 미결제 시 FAILED 처리 후 차순위로 권한 이양.
   // 차순위로 이양될 때마다 갱신되므로 buncheol.deadline 으로부터 도출하지 않고 행마다 보관한다.
   @Column(name = "due_at")
-  private LocalDateTime dueAt;
+  private Instant dueAt;
 
   // 분철 마감 시점 제시가 순위. 1위부터 멤버 슬롯 수만큼 CONFIRMED 후보로 선정.
   @Column(name = "closed_rank")
@@ -63,7 +63,7 @@ public class Participation {
 
   // 참여가 CONFIRMED 또는 FAILED 로 최종 결정된 시각. 그 외 상태에선 NULL.
   @Column(name = "finalized_at")
-  private LocalDateTime finalizedAt;
+  private Instant finalizedAt;
 
   // ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED.
   @Enumerated(EnumType.STRING)
@@ -71,10 +71,10 @@ public class Participation {
   private ParticipationStatus status;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  private Instant updatedAt;
 
   public static Participation create(
       final Long buncheolId,
@@ -114,7 +114,7 @@ public class Participation {
   }
 
   // AWAITING_PAYMENT → CONFIRMED: 낙찰자 결제 완료
-  public void completePayment(final LocalDateTime now) {
+  public void completePayment(final Instant now) {
     if (status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
@@ -124,7 +124,7 @@ public class Participation {
   }
 
   // ACTIVE_BID/AWAITING_PAYMENT → FAILED: 낙찰 실패 또는 결제 미진행
-  public void fail(final String reason, final LocalDateTime now) {
+  public void fail(final String reason, final Instant now) {
     if (status != ParticipationStatus.ACTIVE_BID
         && status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
@@ -136,13 +136,13 @@ public class Participation {
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
   }
 
   @PreUpdate
   void onUpdate() {
-    this.updatedAt = LocalDateTime.now();
+    this.updatedAt = Instant.now();
   }
 }

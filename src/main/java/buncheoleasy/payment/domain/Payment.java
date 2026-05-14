@@ -12,7 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -62,17 +62,17 @@ public class Payment {
 
   // 결제 요청(PENDING 진입) 시각.
   @Column(name = "requested_at", nullable = false, updatable = false)
-  private LocalDateTime requestedAt;
+  private Instant requestedAt;
 
   // Toss 승인 완료(DONE 진입) 또는 환불 완료 시각. 미완료 상태에선 NULL.
   @Column(name = "approved_at")
-  private LocalDateTime approvedAt;
+  private Instant approvedAt;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  private Instant updatedAt;
 
   public static Payment createPayment(
       final Long participationId, final String orderId, final long amount) {
@@ -86,7 +86,7 @@ public class Payment {
         amount,
         PaymentStatus.PENDING,
         null,
-        LocalDateTime.now(),
+        Instant.now(),
         null);
   }
 
@@ -112,8 +112,8 @@ public class Payment {
       final long amount,
       final PaymentStatus status,
       final String reason,
-      final LocalDateTime requestedAt,
-      final LocalDateTime approvedAt) {
+      final Instant requestedAt,
+      final Instant approvedAt) {
     this.participationId = participationId;
     this.txType = txType;
     this.orderId = orderId;
@@ -139,7 +139,7 @@ public class Payment {
       throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
     }
     this.status = PaymentStatus.DONE;
-    this.approvedAt = LocalDateTime.now();
+    this.approvedAt = Instant.now();
   }
 
   public void fail(final String reason) {
@@ -176,13 +176,13 @@ public class Payment {
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
   }
 
   @PreUpdate
   void onUpdate() {
-    this.updatedAt = LocalDateTime.now();
+    this.updatedAt = Instant.now();
   }
 }

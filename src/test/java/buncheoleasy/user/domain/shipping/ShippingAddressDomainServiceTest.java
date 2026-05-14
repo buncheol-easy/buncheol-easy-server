@@ -11,7 +11,7 @@ import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -39,8 +39,8 @@ class ShippingAddressDomainServiceTest {
         storeName,
         alias,
         isDefault,
-        LocalDateTime.now(),
-        LocalDateTime.now());
+        Instant.now(),
+        Instant.now());
   }
 
   @Nested

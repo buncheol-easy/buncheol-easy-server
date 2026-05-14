@@ -14,7 +14,8 @@ import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,8 +54,8 @@ class MyHostedBuncheolQueryServiceTest {
 
     @Test
     void 분철_정보_그룹명_슬롯수_활성참여수를_조합해_반환한다() {
-      LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
-      LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
       Buncheol buncheol =
           buncheol(10L, 100L, "뉴진스 1집 분철", BuncheolStatus.RECRUITING, deadline, createdAt);
 
@@ -87,8 +88,8 @@ class MyHostedBuncheolQueryServiceTest {
 
     @Test
     void 활성_참여가_없는_분철은_count_0으로_반환한다() {
-      LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
-      LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
       Buncheol buncheol =
           buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, deadline, createdAt);
 
@@ -108,11 +109,23 @@ class MyHostedBuncheolQueryServiceTest {
 
     @Test
     void 여러_분철은_최신_개최순으로_매핑된다() {
-      LocalDateTime now = LocalDateTime.of(2026, 5, 1, 9, 0);
+      Instant now = Instant.parse("2026-05-01T09:00:00Z");
       Buncheol newer =
-          buncheol(20L, 200L, "분철 NEW", BuncheolStatus.RECRUITING, now.plusDays(7), now);
+          buncheol(
+              20L,
+              200L,
+              "분철 NEW",
+              BuncheolStatus.RECRUITING,
+              now.plus(7, ChronoUnit.DAYS),
+              now);
       Buncheol older =
-          buncheol(10L, 100L, "분철 OLD", BuncheolStatus.CLOSED, now.minusDays(1), now.minusDays(30));
+          buncheol(
+              10L,
+              100L,
+              "분철 OLD",
+              BuncheolStatus.CLOSED,
+              now.minus(1, ChronoUnit.DAYS),
+              now.minus(30, ChronoUnit.DAYS));
 
       given(buncheolRepository.findAllByHostIdOrderByCreatedAtDesc(HOST_ID))
           .willReturn(List.of(newer, older));
@@ -150,8 +163,8 @@ class MyHostedBuncheolQueryServiceTest {
       Long groupId,
       String title,
       BuncheolStatus status,
-      LocalDateTime deadline,
-      LocalDateTime createdAt) {
+      Instant deadline,
+      Instant createdAt) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
     setField(buncheol, "groupId", groupId);

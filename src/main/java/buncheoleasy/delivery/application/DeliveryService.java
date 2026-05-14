@@ -10,7 +10,7 @@ import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +34,7 @@ public class DeliveryService {
     buncheol.validateOwner(hostId);
 
     DeliveryStatus previousStatus = delivery.getStatus();
-    delivery.registerTracking(trackingNumber, LocalDateTime.now(clock));
+    delivery.registerTracking(trackingNumber, Instant.now(clock));
     deliveryDomainService.updateDeliveryStatus(delivery, previousStatus);
   }
 
@@ -49,7 +49,7 @@ public class DeliveryService {
     }
 
     DeliveryStatus previousStatus = delivery.getStatus();
-    delivery.confirmReceipt(LocalDateTime.now(clock));
+    delivery.confirmReceipt(Instant.now(clock));
     deliveryDomainService.updateDeliveryStatus(delivery, previousStatus);
   }
 }

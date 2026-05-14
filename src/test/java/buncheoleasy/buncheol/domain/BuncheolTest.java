@@ -8,7 +8,8 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class BuncheolTest {
 
   private static final Long HOST_ID = 1L;
-  private static final LocalDateTime FUTURE_DEADLINE = LocalDateTime.now().plusDays(7);
+  private static final Instant FUTURE_DEADLINE = Instant.now().plus(7, ChronoUnit.DAYS);
 
   private BuncheolParams validParams() {
     return new BuncheolParams(1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, 3000, null);
@@ -156,7 +157,7 @@ class BuncheolTest {
     @Test
     void 마감일이_현재보다_이전이면_예외가_발생한다() {
       // given
-      LocalDateTime pastDeadline = LocalDateTime.now().minusDays(1);
+      Instant pastDeadline = Instant.now().minus(1, ChronoUnit.DAYS);
       BuncheolParams params = new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, 3000, null);
 
       // when & then
@@ -171,7 +172,7 @@ class BuncheolTest {
       // given
       BuncheolParams params =
           new BuncheolParams(
-              1L, "제목", null, "스토어명", LocalDateTime.now().plusSeconds(1), 3000, null);
+              1L, "제목", null, "스토어명", Instant.now().plusSeconds(1), 3000, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
@@ -278,7 +279,7 @@ class BuncheolTest {
     void 마감일이_지났으면_RECRUITING이어도_예외가_발생한다() {
       // given
       Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
-      setDeadline(buncheol, LocalDateTime.now().minusSeconds(1));
+      setDeadline(buncheol, Instant.now().minusSeconds(1));
 
       // when & then
       assertThatThrownBy(buncheol::validateRecruiting)
@@ -325,7 +326,7 @@ class BuncheolTest {
     }
   }
 
-  private void setDeadline(final Buncheol buncheol, final LocalDateTime deadline) {
+  private void setDeadline(final Buncheol buncheol, final Instant deadline) {
     try {
       Field deadlineField = Buncheol.class.getDeclaredField("deadline");
       deadlineField.setAccessible(true);

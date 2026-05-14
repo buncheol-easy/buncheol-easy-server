@@ -28,7 +28,8 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.UserDomainService;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -74,7 +75,7 @@ class BuncheolServiceTest {
 
   private static GroupMember groupMember(Long memberId) {
     return new GroupMember(
-        memberId, GROUP_ID, MEMBER_NAME, MEMBER_IMAGE, LocalDateTime.now(), LocalDateTime.now());
+        memberId, GROUP_ID, MEMBER_NAME, MEMBER_IMAGE, Instant.now(), Instant.now());
   }
 
   private HoldBuncheolRequest holdRequest(List<BuncheolMemberRequest> members) {
@@ -83,7 +84,7 @@ class BuncheolServiceTest {
         "테스트 분철 제목",
         "분철 설명입니다.",
         "공식 스토어",
-        LocalDateTime.now().plusDays(7),
+        Instant.now().plus(7, ChronoUnit.DAYS),
         3000,
         null,
         members);

@@ -1,5 +1,6 @@
 package buncheoleasy.user.domain.shipping;
 
+import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
@@ -9,10 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,7 +19,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "shipping_addresses")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ShippingAddress {
+public class ShippingAddress extends TimestampedEntity {
 
   private static final int ALIAS_MAX_LENGTH = 10;
 
@@ -45,29 +43,19 @@ public class ShippingAddress {
   @Column(name = "is_default", nullable = false)
   private boolean isDefault;
 
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
   public ShippingAddress(
       final Long id,
       final Long userId,
       final ShippingMethod shippingMethod,
       final String storeName,
       final String alias,
-      final boolean isDefault,
-      final Instant createdAt,
-      final Instant updatedAt) {
+      final boolean isDefault) {
     this.id = id;
     this.userId = userId;
     this.shippingMethod = shippingMethod;
     this.storeName = storeName;
     this.alias = alias;
     this.isDefault = isDefault;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
   }
 
   private ShippingAddress(
@@ -126,17 +114,5 @@ public class ShippingAddress {
       throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_ALIAS_TOO_LONG);
     }
     return trimmed;
-  }
-
-  @PrePersist
-  void onCreate() {
-    Instant now = Instant.now();
-    this.createdAt = now;
-    this.updatedAt = now;
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    this.updatedAt = Instant.now();
   }
 }

@@ -1,5 +1,6 @@
 package buncheoleasy.user.domain;
 
+import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
@@ -9,8 +10,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
@@ -24,7 +23,7 @@ import org.hibernate.annotations.SQLRestriction;
 @SQLRestriction("deleted_at IS NULL")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User {
+public class User extends TimestampedEntity {
 
   private static final String NICKNAME_PREFIX = "Guest";
   private static final int RANDOM_SUFFIX_LENGTH = 10;
@@ -53,12 +52,6 @@ public class User {
   // 프로필 설정 완료 여부. 첫 phoneNumber 등록 시 true 로 전이. 소셜 가입 직후엔 false (전화번호 미입력 상태).
   @Column(name = "profile_completed", nullable = false)
   private boolean profileCompleted;
-
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
 
   // 회원 탈퇴 soft delete 시각. NULL 이면 활성 유저. @SQLRestriction 으로 모든 조회에서 자동 제외.
   @Column(name = "deleted_at")
@@ -116,17 +109,5 @@ public class User {
   //  PIPA 상 탈퇴 시 즉시 파기가 원칙이나, 결제 기록(전자상거래법 5년)은 분리 보관해야 한다.
   public void withdraw() {
     this.deletedAt = Instant.now();
-  }
-
-  @PrePersist
-  void onCreate() {
-    Instant now = Instant.now();
-    this.createdAt = now;
-    this.updatedAt = now;
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    this.updatedAt = Instant.now();
   }
 }

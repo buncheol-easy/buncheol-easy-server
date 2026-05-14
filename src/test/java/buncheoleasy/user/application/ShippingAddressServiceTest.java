@@ -13,7 +13,6 @@ import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import buncheoleasy.user.dto.request.ShippingAddressRequest;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,14 +35,7 @@ class ShippingAddressServiceTest {
   private ShippingAddress savedAddress(
       Long id, Long userId, String method, String storeName, String alias, boolean isDefault) {
     return new ShippingAddress(
-        id,
-        userId,
-        ShippingMethod.of(method),
-        storeName,
-        alias,
-        isDefault,
-        Instant.now(),
-        Instant.now());
+        id, userId, ShippingMethod.of(method), storeName, alias, isDefault);
   }
 
   @Nested

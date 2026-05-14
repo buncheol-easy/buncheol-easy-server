@@ -1,13 +1,12 @@
 package buncheoleasy.user.domain.favorite;
 
+import buncheoleasy.global.domain.CreatedAtEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,7 +15,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "user_favorite_groups")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class UserFavoriteGroup {
+public class UserFavoriteGroup extends CreatedAtEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,9 +27,6 @@ public class UserFavoriteGroup {
   @Column(name = "group_id", nullable = false, updatable = false)
   private Long groupId;
 
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
-
   public static UserFavoriteGroup create(final Long userId, final Long groupId) {
     return new UserFavoriteGroup(userId, groupId);
   }
@@ -38,10 +34,5 @@ public class UserFavoriteGroup {
   private UserFavoriteGroup(final Long userId, final Long groupId) {
     this.userId = userId;
     this.groupId = groupId;
-  }
-
-  @PrePersist
-  void onCreate() {
-    this.createdAt = Instant.now();
   }
 }

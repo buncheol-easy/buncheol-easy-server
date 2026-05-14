@@ -74,8 +74,7 @@ class BuncheolServiceTest {
   @Captor private ArgumentCaptor<List<Long>> keepImageIdsCaptor;
 
   private static GroupMember groupMember(Long memberId) {
-    return new GroupMember(
-        memberId, GROUP_ID, MEMBER_NAME, MEMBER_IMAGE, Instant.now(), Instant.now());
+    return new GroupMember(memberId, GROUP_ID, MEMBER_NAME, MEMBER_IMAGE);
   }
 
   private HoldBuncheolRequest holdRequest(List<BuncheolMemberRequest> members) {

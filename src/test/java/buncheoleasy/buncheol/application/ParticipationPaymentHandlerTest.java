@@ -70,9 +70,7 @@ class ParticipationPaymentHandlerTest {
             ShippingMethod.GS25_HALF,
             "GS25 강남점",
             null,
-            false,
-            Instant.now(),
-            Instant.now());
+            false);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(shippingAddress);
 

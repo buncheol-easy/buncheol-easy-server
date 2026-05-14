@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.domain;
 
+import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -11,8 +12,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.AccessLevel;
@@ -23,7 +22,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "buncheols")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Buncheol {
+public class Buncheol extends TimestampedEntity {
 
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
@@ -61,12 +60,6 @@ public class Buncheol {
   // 분철이 RECRUITING → CLOSED 로 실제 마감된 시각 (deadline 도달 또는 호스트 수동 마감).
   @Column(name = "closed_at")
   private Instant closedAt;
-
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private Instant createdAt;
-
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
 
   public static Buncheol create(final Long hostId, final BuncheolParams params) {
     return new Buncheol(hostId, params);
@@ -177,17 +170,5 @@ public class Buncheol {
     if (deadline == null || !deadline.isAfter(Instant.now())) {
       throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
     }
-  }
-
-  @PrePersist
-  void onCreate() {
-    Instant now = Instant.now();
-    this.createdAt = now;
-    this.updatedAt = now;
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    this.updatedAt = Instant.now();
   }
 }

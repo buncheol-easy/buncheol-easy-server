@@ -11,7 +11,6 @@ import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -33,14 +32,7 @@ class ShippingAddressDomainServiceTest {
   private ShippingAddress savedAddress(
       Long id, Long userId, String method, String storeName, String alias, boolean isDefault) {
     return new ShippingAddress(
-        id,
-        userId,
-        ShippingMethod.of(method),
-        storeName,
-        alias,
-        isDefault,
-        Instant.now(),
-        Instant.now());
+        id, userId, ShippingMethod.of(method), storeName, alias, isDefault);
   }
 
   @Nested

@@ -21,8 +21,7 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -43,7 +42,7 @@ class DeliveryServiceTest {
   @Mock private BuncheolDomainService buncheolDomainService;
 
   @Spy
-  private Clock clock = Clock.fixed(Instant.parse("2026-03-23T12:00:00Z"), ZoneId.of("Asia/Seoul"));
+  private Clock clock = Clock.fixed(Instant.parse("2026-03-23T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long HOST_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;
@@ -120,7 +119,7 @@ class DeliveryServiceTest {
     void 참여자_본인이_수령_확인한다() {
       // given
       Delivery delivery = createSnapshotDelivery();
-      delivery.registerTracking("TRACK123", LocalDateTime.now(clock));
+      delivery.registerTracking("TRACK123", Instant.now(clock));
       Participation participation = mock(Participation.class);
       given(participation.getParticipantId()).willReturn(PARTICIPANT_ID);
 

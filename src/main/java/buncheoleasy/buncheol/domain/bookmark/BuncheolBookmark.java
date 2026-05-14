@@ -7,7 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,7 +29,7 @@ public class BuncheolBookmark {
   private Long buncheolId;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   public static BuncheolBookmark create(final Long userId, final Long buncheolId) {
     return new BuncheolBookmark(userId, buncheolId);
@@ -42,6 +42,6 @@ public class BuncheolBookmark {
 
   @PrePersist
   void onCreate() {
-    this.createdAt = LocalDateTime.now();
+    this.createdAt = Instant.now();
   }
 }

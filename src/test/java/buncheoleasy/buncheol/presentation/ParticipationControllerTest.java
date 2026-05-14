@@ -22,7 +22,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import org.hamcrest.Matchers;
@@ -268,8 +268,8 @@ class ParticipationControllerTest {
 
     @Test
     void 참여_목록을_200으로_반환한다() throws Exception {
-      LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
-      LocalDateTime dueAt = LocalDateTime.of(2026, 6, 2, 12, 0);
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
       MyParticipationResponse response =
           new MyParticipationResponse(
               500L,

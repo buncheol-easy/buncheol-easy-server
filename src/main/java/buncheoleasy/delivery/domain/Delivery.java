@@ -13,7 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -54,15 +54,15 @@ public class Delivery {
 
   // 호스트가 운송장을 등록한 시각 (SNAPSHOTTED → SHIPPING 진입 시각).
   @Column(name = "tracking_registered_at")
-  private LocalDateTime trackingRegisteredAt;
+  private Instant trackingRegisteredAt;
 
   // 운송사 추적으로 배송 완료가 감지된 시각 (SHIPPING → DELIVERED 자동 전이).
   @Column(name = "delivered_at")
-  private LocalDateTime deliveredAt;
+  private Instant deliveredAt;
 
   // 참여자가 직접 수령 확인 버튼을 눌러 RECEIVED 로 전이된 시각.
   @Column(name = "received_at")
-  private LocalDateTime receivedAt;
+  private Instant receivedAt;
 
   // SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED.
   @Enumerated(EnumType.STRING)
@@ -70,10 +70,10 @@ public class Delivery {
   private DeliveryStatus status;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  private Instant updatedAt;
 
   public static Delivery createSnapshot(
       final Long participationId,
@@ -101,7 +101,7 @@ public class Delivery {
     this.status = DeliveryStatus.SNAPSHOTTED;
   }
 
-  public void registerTracking(final String trackingNumber, final LocalDateTime now) {
+  public void registerTracking(final String trackingNumber, final Instant now) {
     if (trackingNumber == null || trackingNumber.isBlank()) {
       throw new BusinessException(ErrorCode.DELIVERY_TRACKING_NUMBER_REQUIRED);
     }
@@ -118,7 +118,7 @@ public class Delivery {
     this.status = DeliveryStatus.SHIPPING;
   }
 
-  public void confirmReceipt(final LocalDateTime now) {
+  public void confirmReceipt(final Instant now) {
     if (status != DeliveryStatus.SHIPPING && status != DeliveryStatus.DELIVERED) {
       throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
     }
@@ -151,13 +151,13 @@ public class Delivery {
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
   }
 
   @PreUpdate
   void onUpdate() {
-    this.updatedAt = LocalDateTime.now();
+    this.updatedAt = Instant.now();
   }
 }

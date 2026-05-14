@@ -1,12 +1,12 @@
 package buncheoleasy.buncheol.domain;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record BuncheolParams(
     Long groupId,
     String title,
     String description,
     String purchaseSite,
-    LocalDateTime deadline,
+    Instant deadline,
     Integer gs25ShippingFee,
     Integer cuShippingFee) {}

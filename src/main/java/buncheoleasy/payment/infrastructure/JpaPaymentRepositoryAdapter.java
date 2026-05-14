@@ -4,7 +4,7 @@ import buncheoleasy.payment.domain.Payment;
 import buncheoleasy.payment.domain.PaymentRepository;
 import buncheoleasy.payment.domain.PaymentStatus;
 import buncheoleasy.payment.domain.PaymentTxType;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -29,7 +29,7 @@ public class JpaPaymentRepositoryAdapter implements PaymentRepository {
             payment.getStatus(),
             payment.getReason(),
             payment.getApprovedAt(),
-            LocalDateTime.now(),
+            Instant.now(),
             expectedStatus);
     return updated > 0;
   }

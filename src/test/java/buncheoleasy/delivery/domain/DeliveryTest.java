@@ -7,7 +7,8 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ class DeliveryTest {
   private static final String STORE_NAME = "GS25 강남점";
   private static final String RECEIVER_NICKNAME = "테스트유저";
   private static final String RECEIVER_PHONE = "01012345678";
-  private static final LocalDateTime NOW = LocalDateTime.of(2026, 3, 23, 12, 0);
+  private static final Instant NOW = Instant.parse("2026-03-23T12:00:00Z");
 
   @Nested
   @DisplayName("createSnapshot 테스트")
@@ -106,7 +107,7 @@ class DeliveryTest {
       Delivery delivery = createSnapshotDelivery();
       delivery.registerTracking("TRACK123", NOW);
 
-      LocalDateTime later = NOW.plusHours(1);
+      Instant later = NOW.plus(1, ChronoUnit.HOURS);
       delivery.registerTracking("TRACK456", later);
 
       assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
@@ -138,9 +139,9 @@ class DeliveryTest {
     void RECEIVED_상태에서_운송장_등록시_예외가_발생한다() {
       Delivery delivery = createSnapshotDelivery();
       delivery.registerTracking("TRACK123", NOW);
-      delivery.confirmReceipt(NOW.plusDays(1));
+      delivery.confirmReceipt(NOW.plus(1, ChronoUnit.DAYS));
 
-      assertThatThrownBy(() -> delivery.registerTracking("TRACK999", NOW.plusDays(2)))
+      assertThatThrownBy(() -> delivery.registerTracking("TRACK999", NOW.plus(2, ChronoUnit.DAYS)))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
@@ -156,10 +157,10 @@ class DeliveryTest {
       Delivery delivery = createSnapshotDelivery();
       delivery.registerTracking("TRACK123", NOW);
 
-      delivery.confirmReceipt(NOW.plusDays(1));
+      delivery.confirmReceipt(NOW.plus(1, ChronoUnit.DAYS));
 
       assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
-      assertThat(delivery.getReceivedAt()).isEqualTo(NOW.plusDays(1));
+      assertThat(delivery.getReceivedAt()).isEqualTo(NOW.plus(1, ChronoUnit.DAYS));
     }
 
     @Test
@@ -168,7 +169,7 @@ class DeliveryTest {
       delivery.registerTracking("TRACK123", NOW);
       setField(delivery, "status", DeliveryStatus.DELIVERED);
 
-      delivery.confirmReceipt(NOW.plusDays(1));
+      delivery.confirmReceipt(NOW.plus(1, ChronoUnit.DAYS));
 
       assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
     }
@@ -187,9 +188,9 @@ class DeliveryTest {
     void RECEIVED_상태에서_수령_완료시_예외가_발생한다() {
       Delivery delivery = createSnapshotDelivery();
       delivery.registerTracking("TRACK123", NOW);
-      delivery.confirmReceipt(NOW.plusDays(1));
+      delivery.confirmReceipt(NOW.plus(1, ChronoUnit.DAYS));
 
-      assertThatThrownBy(() -> delivery.confirmReceipt(NOW.plusDays(2)))
+      assertThatThrownBy(() -> delivery.confirmReceipt(NOW.plus(2, ChronoUnit.DAYS)))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);

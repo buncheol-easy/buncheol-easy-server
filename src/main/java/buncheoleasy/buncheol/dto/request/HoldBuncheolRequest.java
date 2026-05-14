@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 public record HoldBuncheolRequest(
@@ -16,7 +16,7 @@ public record HoldBuncheolRequest(
     @NotBlank @Size(max = 200) String title,
     @Size(max = 300) String description,
     @NotBlank @Size(max = 200) String purchaseSite,
-    @NotNull @Future LocalDateTime deadline,
+    @NotNull @Future Instant deadline,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {

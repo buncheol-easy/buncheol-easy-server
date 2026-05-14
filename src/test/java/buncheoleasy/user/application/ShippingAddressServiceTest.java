@@ -13,7 +13,7 @@ import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import buncheoleasy.user.dto.request.ShippingAddressRequest;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,8 +42,8 @@ class ShippingAddressServiceTest {
         storeName,
         alias,
         isDefault,
-        LocalDateTime.now(),
-        LocalDateTime.now());
+        Instant.now(),
+        Instant.now());
   }
 
   @Nested

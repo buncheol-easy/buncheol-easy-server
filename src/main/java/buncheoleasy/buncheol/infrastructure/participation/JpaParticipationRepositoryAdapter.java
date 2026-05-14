@@ -9,7 +9,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -137,7 +137,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
             participation.getFailReason(),
             participation.getFinalizedAt(),
             participation.getStatus(),
-            LocalDateTime.now(),
+            Instant.now(),
             expectedStatus);
     return updated > 0;
   }

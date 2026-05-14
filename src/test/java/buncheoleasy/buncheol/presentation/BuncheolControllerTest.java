@@ -21,7 +21,8 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -73,7 +74,7 @@ class BuncheolControllerTest {
   }
 
   private String validRequestJson() {
-    LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
     return """
                 {
                   "groupId": 100,
@@ -149,7 +150,7 @@ class BuncheolControllerTest {
     @Test
     void 제목이_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       String invalidJson =
           """
                     {
@@ -178,7 +179,7 @@ class BuncheolControllerTest {
     @Test
     void 배송비가_두_경우_모두_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       String invalidJson =
           """
                     {
@@ -212,7 +213,7 @@ class BuncheolControllerTest {
     @Test
     void groupId가_없으면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       String invalidJson =
           """
                     {
@@ -241,7 +242,7 @@ class BuncheolControllerTest {
     @Test
     void 마감일이_과거이면_400을_반환한다() throws Exception {
       // given
-      LocalDateTime past = LocalDateTime.now().minusDays(1);
+      Instant past = Instant.now().minus(1, ChronoUnit.DAYS);
       String invalidJson =
           """
                     {
@@ -448,8 +449,8 @@ class BuncheolControllerTest {
 
     @Test
     void 개최한_분철_목록을_200으로_반환한다() throws Exception {
-      LocalDateTime deadline = LocalDateTime.of(2026, 6, 1, 12, 0);
-      LocalDateTime createdAt = LocalDateTime.of(2026, 5, 1, 9, 0);
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
       MyHostedBuncheolResponse response =
           new MyHostedBuncheolResponse(
               10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);

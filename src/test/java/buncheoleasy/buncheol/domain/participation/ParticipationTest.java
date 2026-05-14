@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -70,7 +70,7 @@ class ParticipationTest {
     void AWAITING_PAYMENT_상태에서_확정에_성공한다() {
       Participation participation = newParticipation();
       setStatus(participation, ParticipationStatus.AWAITING_PAYMENT);
-      LocalDateTime now = LocalDateTime.of(2026, 3, 11, 15, 30);
+      Instant now = Instant.parse("2026-03-11T15:30:00Z");
 
       participation.completePayment(now);
 
@@ -87,7 +87,7 @@ class ParticipationTest {
       Participation participation = newParticipation();
       setStatus(participation, invalidStatus);
 
-      assertThatThrownBy(() -> participation.completePayment(LocalDateTime.now()))
+      assertThatThrownBy(() -> participation.completePayment(Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
@@ -107,7 +107,7 @@ class ParticipationTest {
     void 허용된_상태에서_실패_처리에_성공한다(ParticipationStatus allowedStatus) {
       Participation participation = newParticipation();
       setStatus(participation, allowedStatus);
-      LocalDateTime now = LocalDateTime.of(2026, 3, 11, 18, 0);
+      Instant now = Instant.parse("2026-03-11T18:00:00Z");
 
       participation.fail(FAIL_REASON, now);
 
@@ -124,7 +124,7 @@ class ParticipationTest {
       Participation participation = newParticipation();
       setStatus(participation, invalidStatus);
 
-      assertThatThrownBy(() -> participation.fail(FAIL_REASON, LocalDateTime.now()))
+      assertThatThrownBy(() -> participation.fail(FAIL_REASON, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);

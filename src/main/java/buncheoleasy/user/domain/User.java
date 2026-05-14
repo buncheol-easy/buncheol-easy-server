@@ -12,7 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -55,14 +55,14 @@ public class User {
   private boolean profileCompleted;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  private Instant updatedAt;
 
   // 회원 탈퇴 soft delete 시각. NULL 이면 활성 유저. @SQLRestriction 으로 모든 조회에서 자동 제외.
   @Column(name = "deleted_at")
-  private LocalDateTime deletedAt;
+  private Instant deletedAt;
 
   public static User create(final String provider, final String providerId, final String email) {
     return new User(
@@ -115,18 +115,18 @@ public class User {
   //  2) 모든 거래가 종료된 뒤 PII(phoneNumber·bankAccount·email) 를 NULL/해시로 익명화.
   //  PIPA 상 탈퇴 시 즉시 파기가 원칙이나, 결제 기록(전자상거래법 5년)은 분리 보관해야 한다.
   public void withdraw() {
-    this.deletedAt = LocalDateTime.now();
+    this.deletedAt = Instant.now();
   }
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
   }
 
   @PreUpdate
   void onUpdate() {
-    this.updatedAt = LocalDateTime.now();
+    this.updatedAt = Instant.now();
   }
 }

@@ -12,7 +12,8 @@ import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -51,7 +52,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     memberId2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버2");
     memberId3 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "테스트 멤버3");
 
-    LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
     Buncheol buncheol =
         Buncheol.create(
             hostId, new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null));

@@ -15,7 +15,8 @@ import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.lang.reflect.Field;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -57,7 +58,11 @@ class MyParticipationQueryServiceTest {
     void 참여_정보_분철_정보_멤버_이름_슬롯_수를_조합해_반환한다() {
       // 분철 1: id=10, title="뉴진스 1집 분철", deadline=+7일, status=RECRUITING, 슬롯 5개
       Buncheol buncheol =
-          buncheol(10L, "뉴진스 1집 분철", LocalDateTime.now().plusDays(7), BuncheolStatus.RECRUITING);
+          buncheol(
+              10L,
+              "뉴진스 1집 분철",
+              Instant.now().plus(7, ChronoUnit.DAYS),
+              BuncheolStatus.RECRUITING);
       List<BuncheolMember> slots =
           List.of(
               buncheolMember(101L, 10L, 1001L),
@@ -98,9 +103,10 @@ class MyParticipationQueryServiceTest {
     @Test
     void 여러_분철에_참여한_경우_분철별로_필드를_매핑한다() {
       Buncheol buncheolA =
-          buncheol(10L, "분철 A", LocalDateTime.now().plusDays(3), BuncheolStatus.CLOSED);
+          buncheol(10L, "분철 A", Instant.now().plus(3, ChronoUnit.DAYS), BuncheolStatus.CLOSED);
       Buncheol buncheolB =
-          buncheol(20L, "분철 B", LocalDateTime.now().plusDays(5), BuncheolStatus.RECRUITING);
+          buncheol(
+              20L, "분철 B", Instant.now().plus(5, ChronoUnit.DAYS), BuncheolStatus.RECRUITING);
 
       // A: 슬롯 2개 (참여한 슬롯 = 201, 멤버 이름 "지수")
       // B: 슬롯 4개 (참여한 슬롯 = 301, 멤버 이름 "제니")
@@ -113,7 +119,7 @@ class MyParticipationQueryServiceTest {
               buncheolMember(303L, 20L, 3003L),
               buncheolMember(304L, 20L, 3004L));
 
-      LocalDateTime dueAt = LocalDateTime.now().plusDays(1);
+      Instant dueAt = Instant.now().plus(1, ChronoUnit.DAYS);
       Participation pA =
           participation(500L, 10L, 201L, 80_000L, ParticipationStatus.AWAITING_PAYMENT, dueAt, 1);
       Participation pB =
@@ -155,7 +161,7 @@ class MyParticipationQueryServiceTest {
     }
   }
 
-  private Buncheol buncheol(Long id, String title, LocalDateTime deadline, BuncheolStatus status) {
+  private Buncheol buncheol(Long id, String title, Instant deadline, BuncheolStatus status) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
     setField(buncheol, "title", title);
@@ -173,7 +179,7 @@ class MyParticipationQueryServiceTest {
   }
 
   private GroupMember groupMember(Long id, String name) {
-    return new GroupMember(id, 1L, name, null, LocalDateTime.now(), LocalDateTime.now());
+    return new GroupMember(id, 1L, name, null, Instant.now(), Instant.now());
   }
 
   private Participation participation(
@@ -182,7 +188,7 @@ class MyParticipationQueryServiceTest {
       Long buncheolMemberId,
       Long bidAmount,
       ParticipationStatus status,
-      LocalDateTime dueAt,
+      Instant dueAt,
       Integer closedRank) {
     Participation participation =
         Participation.create(buncheolId, buncheolMemberId, PARTICIPANT_ID, 1L, bidAmount);

@@ -8,7 +8,8 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,7 +42,7 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   private BuncheolParams validParams() {
-    LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
     return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 3000, null);
   }
 
@@ -79,7 +80,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
-      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 2500, null);
       Buncheol buncheol = Buncheol.create(hostId, params);
 
@@ -91,7 +92,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
-      LocalDateTime deadline = LocalDateTime.now().plusDays(7);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, null, 2000);
       Buncheol buncheol = Buncheol.create(hostId, params);
 

@@ -3,7 +3,7 @@ package buncheoleasy.delivery.infrastructure;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.delivery.domain.DeliveryStatus;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -39,7 +39,7 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
             delivery.getDeliveredAt(),
             delivery.getReceivedAt(),
             delivery.getStatus(),
-            LocalDateTime.now(),
+            Instant.now(),
             expectedStatus);
     return updated > 0;
   }

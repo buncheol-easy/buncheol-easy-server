@@ -2,7 +2,7 @@ package buncheoleasy.buncheol.infrastructure;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,7 +24,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   int updateStatusIfMatches(
       @Param("id") Long id,
       @Param("newStatus") BuncheolStatus newStatus,
-      @Param("now") LocalDateTime now,
+      @Param("now") Instant now,
       @Param("expectedStatus") BuncheolStatus expectedStatus);
 
   @Query(

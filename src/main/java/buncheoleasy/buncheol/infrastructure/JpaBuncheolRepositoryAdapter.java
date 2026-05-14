@@ -3,7 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -51,7 +51,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   public boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus) {
     int updated =
         jpaBuncheolRepository.updateStatusIfMatches(
-            buncheol.getId(), buncheol.getStatus(), LocalDateTime.now(), expectedStatus);
+            buncheol.getId(), buncheol.getStatus(), Instant.now(), expectedStatus);
     return updated > 0;
   }
 

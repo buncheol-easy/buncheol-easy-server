@@ -14,7 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -50,7 +50,7 @@ public class Buncheol {
 
   // 참여(제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
   @Column(nullable = false)
-  private LocalDateTime deadline;
+  private Instant deadline;
 
   @Embedded private ShippingFeePolicy shippingFeePolicy;
 
@@ -60,13 +60,13 @@ public class Buncheol {
 
   // 분철이 RECRUITING → CLOSED 로 실제 마감된 시각 (deadline 도달 또는 호스트 수동 마감).
   @Column(name = "closed_at")
-  private LocalDateTime closedAt;
+  private Instant closedAt;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  private Instant updatedAt;
 
   public static Buncheol create(final Long hostId, final BuncheolParams params) {
     return new Buncheol(hostId, params);
@@ -101,7 +101,7 @@ public class Buncheol {
     if (status != BuncheolStatus.RECRUITING) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
-    if (!deadline.isAfter(LocalDateTime.now())) {
+    if (!deadline.isAfter(Instant.now())) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
   }
@@ -173,21 +173,21 @@ public class Buncheol {
     }
   }
 
-  private void validateDeadline(final LocalDateTime deadline) {
-    if (deadline == null || !deadline.isAfter(LocalDateTime.now())) {
+  private void validateDeadline(final Instant deadline) {
+    if (deadline == null || !deadline.isAfter(Instant.now())) {
       throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
     }
   }
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     this.createdAt = now;
     this.updatedAt = now;
   }
 
   @PreUpdate
   void onUpdate() {
-    this.updatedAt = LocalDateTime.now();
+    this.updatedAt = Instant.now();
   }
 }

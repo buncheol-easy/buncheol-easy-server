@@ -1,14 +1,14 @@
 package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record MyHostedBuncheolResponse(
     Long buncheolId,
     String title,
     String groupName,
     BuncheolStatus status,
-    LocalDateTime deadline,
+    Instant deadline,
     int memberSlotCount,
     long activeParticipationCount,
-    LocalDateTime createdAt) {}
+    Instant createdAt) {}

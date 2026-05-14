@@ -19,12 +19,8 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
       EnumSet.of(
           BuncheolStatus.RECRUITING,
           BuncheolStatus.CLOSED,
-          BuncheolStatus.GOODS_ORDERED,
-          BuncheolStatus.SELLER_SHIPPING,
-          BuncheolStatus.HOST_SHIPPING,
-          BuncheolStatus.ALL_RECEIVED,
-          BuncheolStatus.SETTLING,
-          BuncheolStatus.SETTLED);
+          BuncheolStatus.PAID,
+          BuncheolStatus.SETTLING);
 
   private final JpaBuncheolRepository jpaBuncheolRepository;
 

@@ -128,13 +128,6 @@ public class Buncheol {
     status = BuncheolStatus.CANCELLED;
   }
 
-  public void advanceStatus(final BuncheolStatus nextStatus) {
-    if (!status.canAdvanceTo(nextStatus)) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_STATUS_ADVANCE_NOT_ALLOWED);
-    }
-    this.status = nextStatus;
-  }
-
   private void validate(final Long hostId, final BuncheolParams params) {
     validateHostAndParams(hostId, params);
     validateGroupId(params.groupId());

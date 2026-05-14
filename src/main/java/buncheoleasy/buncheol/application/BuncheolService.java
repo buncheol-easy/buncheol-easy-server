@@ -74,14 +74,6 @@ public class BuncheolService {
     }
   }
 
-  public void advanceBuncheolStatus(
-      final Long hostId, final Long buncheolId, final BuncheolStatus nextStatus) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    buncheol.validateOwner(hostId);
-    final BuncheolStatus previousStatus = buncheol.getStatus();
-    buncheolDomainService.advanceBuncheolStatus(buncheol, nextStatus, previousStatus);
-  }
-
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);

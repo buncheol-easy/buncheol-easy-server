@@ -27,10 +27,12 @@ public class BuncheolDomainService {
   }
 
   public void cancelBuncheol(final Buncheol buncheol, final BuncheolStatus expectedStatus) {
+    // 상태 위반(이미 취소됨 등)은 도메인에서 BUNCHEOL_CANCEL_NOT_ALLOWED 로 던지고,
+    // CAS 실패(동시 요청으로 상태 변동)는 BUNCHEOL_CANCEL_CONFLICT 로 구분한다.
     buncheol.cancel();
     boolean updated = buncheolRepository.updateStatus(buncheol, expectedStatus);
     if (!updated) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_CONFLICT);
     }
   }
 

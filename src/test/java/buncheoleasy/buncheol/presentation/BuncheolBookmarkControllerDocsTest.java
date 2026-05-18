@@ -187,7 +187,7 @@ class BuncheolBookmarkControllerDocsTest {
                             **쿼리 파라미터** (모두 선택)
                             - `sort` — 정렬 기준
                               - `LATEST` (기본): 찜 등록 시각 내림차순. 동일 시각이면 찜 ID 내림차순으로 tie-break
-                              - `DEADLINE`: 분철 마감 시각(`deadline`) 오름차순 + 분철 ID 내림차순. 이미 마감이 지난 분철도 포함되며 가장 빠른 deadline 이 위로
+                              - `DEADLINE`: 분철 마감 시각(`deadline`) 오름차순 + 찜 ID 내림차순(동일 마감일 때 내가 더 최근에 찜한 분철이 위). 이미 마감이 지난 분철도 포함되며 가장 빠른 deadline 이 위로
                             - `hideClosed` — 마감된 분철 숨김
                               - `false` (기본): 모든 분철 포함
                               - `true`: 분철 status 가 `RECRUITING` 인 것만. **마감 정의 = `RECRUITING` 이 아닌 모든 상태** (`CLOSED` / `PAID` / `SETTLING` / `FINISHED` / `CANCELLED`)

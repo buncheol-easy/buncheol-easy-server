@@ -134,7 +134,7 @@ public enum ErrorCode {
   GROUP_MEMBER_NOT_IN_GROUP("GRP-002", "해당 그룹에 속하지 않는 멤버입니다.", HttpStatus.BAD_REQUEST),
   FAVORITE_GROUP_ALREADY_EXISTS("GRP-003", "이미 최애로 등록된 그룹입니다.", HttpStatus.CONFLICT),
   FAVORITE_GROUP_NOT_FOUND("GRP-004", "최애로 등록하지 않은 그룹입니다.", HttpStatus.NOT_FOUND),
-  FAVORITE_GROUP_LIMIT_EXCEEDED("GRP-005", "최애 그룹은 최대 5개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
+  FAVORITE_GROUP_LIMIT_EXCEEDED("GRP-005", "최애 그룹은 최대 5개까지 등록할 수 있습니다.", HttpStatus.CONFLICT),
 
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),

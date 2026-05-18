@@ -38,6 +38,7 @@ public class MyFavoriteGroupQueryService {
             f -> {
               Group group = groupById.get(f.getGroupId());
               if (group == null) {
+                // 그룹이 hard delete 된 비정상 케이스 (FK CASCADE 가 막아주므로 정상 흐름엔 없음).
                 return null;
               }
               return new MyFavoriteGroupResponse(

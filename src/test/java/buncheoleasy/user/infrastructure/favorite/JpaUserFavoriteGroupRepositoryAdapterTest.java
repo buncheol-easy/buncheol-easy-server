@@ -141,4 +141,20 @@ class JpaUserFavoriteGroupRepositoryAdapterTest {
       assertThat(result).isEmpty();
     }
   }
+
+  @Nested
+  @DisplayName("countByUserId")
+  class CountTest {
+
+    @Test
+    void 사용자의_최애_그룹_개수를_반환한다() {
+      assertThat(userFavoriteGroupRepository.countByUserId(userId)).isZero();
+
+      userFavoriteGroupRepository.save(UserFavoriteGroup.create(userId, groupId));
+      userFavoriteGroupRepository.save(UserFavoriteGroup.create(userId, otherGroupId));
+      em.flush();
+
+      assertThat(userFavoriteGroupRepository.countByUserId(userId)).isEqualTo(2);
+    }
+  }
 }

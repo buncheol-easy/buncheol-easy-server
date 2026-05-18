@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserFavoriteGroupService {
 
+  private static final int MAX_FAVORITE_GROUP_COUNT = 5;
+
   private final UserFavoriteGroupRepository userFavoriteGroupRepository;
   private final GroupDomainService groupDomainService;
 
@@ -22,6 +24,10 @@ public class UserFavoriteGroupService {
 
     if (userFavoriteGroupRepository.existsByUserIdAndGroupId(userId, groupId)) {
       throw new BusinessException(ErrorCode.FAVORITE_GROUP_ALREADY_EXISTS);
+    }
+
+    if (userFavoriteGroupRepository.countByUserId(userId) >= MAX_FAVORITE_GROUP_COUNT) {
+      throw new BusinessException(ErrorCode.FAVORITE_GROUP_LIMIT_EXCEEDED);
     }
 
     userFavoriteGroupRepository.save(UserFavoriteGroup.create(userId, groupId));

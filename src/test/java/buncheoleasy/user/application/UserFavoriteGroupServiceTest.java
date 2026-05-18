@@ -43,10 +43,26 @@ class UserFavoriteGroupServiceTest {
       willDoNothing().given(groupDomainService).validateGroupExists(GROUP_ID);
       given(userFavoriteGroupRepository.existsByUserIdAndGroupId(USER_ID, GROUP_ID))
           .willReturn(false);
+      given(userFavoriteGroupRepository.countByUserId(USER_ID)).willReturn(0);
 
       userFavoriteGroupService.addFavoriteGroup(USER_ID, GROUP_ID);
 
       then(userFavoriteGroupRepository).should().save(any(UserFavoriteGroup.class));
+    }
+
+    @Test
+    void 이미_5개를_등록한_사용자가_추가하면_400_예외가_발생한다() {
+      willDoNothing().given(groupDomainService).validateGroupExists(GROUP_ID);
+      given(userFavoriteGroupRepository.existsByUserIdAndGroupId(USER_ID, GROUP_ID))
+          .willReturn(false);
+      given(userFavoriteGroupRepository.countByUserId(USER_ID)).willReturn(5);
+
+      assertThatThrownBy(() -> userFavoriteGroupService.addFavoriteGroup(USER_ID, GROUP_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.FAVORITE_GROUP_LIMIT_EXCEEDED);
+
+      then(userFavoriteGroupRepository).should(never()).save(any());
     }
 
     @Test

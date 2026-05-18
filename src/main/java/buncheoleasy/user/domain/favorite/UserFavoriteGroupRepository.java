@@ -14,4 +14,6 @@ public interface UserFavoriteGroupRepository {
 
   /** 사용자의 최애 그룹 목록을 최신순(created_at DESC, tie-breaker id DESC) 으로 조회한다. */
   List<UserFavoriteGroup> findAllByUserIdOrderByCreatedAtDescIdDesc(Long userId);
+
+  int countByUserId(Long userId);
 }

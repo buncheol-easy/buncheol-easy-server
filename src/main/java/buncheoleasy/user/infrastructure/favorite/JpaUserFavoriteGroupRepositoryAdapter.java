@@ -39,4 +39,9 @@ public class JpaUserFavoriteGroupRepositoryAdapter implements UserFavoriteGroupR
   public List<UserFavoriteGroup> findAllByUserIdOrderByCreatedAtDescIdDesc(final Long userId) {
     return jpaUserFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId);
   }
+
+  @Override
+  public int countByUserId(final Long userId) {
+    return (int) jpaUserFavoriteGroupRepository.countByUserId(userId);
+  }
 }

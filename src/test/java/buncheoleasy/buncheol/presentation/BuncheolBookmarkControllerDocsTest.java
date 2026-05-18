@@ -178,8 +178,7 @@ class BuncheolBookmarkControllerDocsTest {
                                 .description("모집중이 아닌 분철 숨김 여부 (`true` | `false`). 기본값 `false`")
                                 .optional(),
                             parameterWithName("onlyFavoriteGroups")
-                                .description(
-                                    "최애 그룹 분철만 보기 (`true` | `false`). 기본값 `false`")
+                                .description("최애 그룹 분철만 보기 (`true` | `false`). 기본값 `false`")
                                 .optional())
                         .responseSchema(Schema.schema("MyBookmarkedBuncheolListResponse"))
                         .responseFields(

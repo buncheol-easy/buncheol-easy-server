@@ -103,11 +103,14 @@ class MyBookmarkedBuncheolQueryServiceTest {
           .willReturn(List.of(bm1, bm2, bm3));
 
       Buncheol b1 =
-          buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, Instant.parse("2026-07-01T00:00:00Z"));
+          buncheol(
+              10L, 100L, "분철 A", BuncheolStatus.RECRUITING, Instant.parse("2026-07-01T00:00:00Z"));
       Buncheol b2 =
-          buncheol(20L, 100L, "분철 B", BuncheolStatus.RECRUITING, Instant.parse("2026-06-15T00:00:00Z"));
+          buncheol(
+              20L, 100L, "분철 B", BuncheolStatus.RECRUITING, Instant.parse("2026-06-15T00:00:00Z"));
       Buncheol b3 =
-          buncheol(30L, 100L, "분철 C", BuncheolStatus.RECRUITING, Instant.parse("2026-06-01T00:00:00Z"));
+          buncheol(
+              30L, 100L, "분철 C", BuncheolStatus.RECRUITING, Instant.parse("2026-06-01T00:00:00Z"));
       given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L)))
           .willReturn(List.of(b1, b2, b3));
 
@@ -163,8 +166,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
       Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
       Buncheol bFav = buncheol(10L, 100L, "최애 그룹 분철", BuncheolStatus.RECRUITING, deadline);
       Buncheol bNonFav = buncheol(20L, 200L, "다른 그룹 분철", BuncheolStatus.RECRUITING, deadline);
-      given(buncheolRepository.findAllByIds(List.of(10L, 20L)))
-          .willReturn(List.of(bFav, bNonFav));
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L))).willReturn(List.of(bFav, bNonFav));
 
       // 사용자의 최애: 그룹 100 만
       given(userFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))

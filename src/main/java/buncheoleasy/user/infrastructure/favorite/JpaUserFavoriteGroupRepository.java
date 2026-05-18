@@ -11,4 +11,6 @@ interface JpaUserFavoriteGroupRepository extends JpaRepository<UserFavoriteGroup
   long deleteByUserIdAndGroupId(Long userId, Long groupId);
 
   List<UserFavoriteGroup> findAllByUserIdOrderByCreatedAtDescIdDesc(Long userId);
+
+  long countByUserId(Long userId);
 }

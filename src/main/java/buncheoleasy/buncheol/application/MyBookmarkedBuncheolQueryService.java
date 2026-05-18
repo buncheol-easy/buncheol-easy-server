@@ -53,9 +53,7 @@ public class MyBookmarkedBuncheolQueryService {
 
     Set<Long> favoriteGroupIds =
         onlyFavoriteGroups
-            ? userFavoriteGroupRepository
-                .findAllByUserIdOrderByCreatedAtDescIdDesc(userId)
-                .stream()
+            ? userFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId).stream()
                 .map(UserFavoriteGroup::getGroupId)
                 .collect(Collectors.toSet())
             : Set.of();
@@ -72,8 +70,7 @@ public class MyBookmarkedBuncheolQueryService {
     if (sort == BookmarkSortOption.DEADLINE) {
       filtered.sort(
           Comparator.comparing(
-                  (BuncheolBookmark bm) ->
-                      buncheolById.get(bm.getBuncheolId()).getDeadline())
+                  (BuncheolBookmark bm) -> buncheolById.get(bm.getBuncheolId()).getDeadline())
               .thenComparing(Comparator.comparing(BuncheolBookmark::getId).reversed()));
     }
 

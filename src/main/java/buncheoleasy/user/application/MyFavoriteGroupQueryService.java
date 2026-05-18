@@ -7,6 +7,7 @@ import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import buncheoleasy.user.dto.response.MyFavoriteGroupResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,7 @@ public class MyFavoriteGroupQueryService {
               return new MyFavoriteGroupResponse(
                   f.getId(), group.getId(), group.getName(), group.getImage());
             })
-        .filter(java.util.Objects::nonNull)
+        .filter(Objects::nonNull)
         .toList();
   }
 }

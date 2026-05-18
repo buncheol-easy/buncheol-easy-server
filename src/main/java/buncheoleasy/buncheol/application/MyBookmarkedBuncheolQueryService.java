@@ -11,6 +11,7 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,7 +42,7 @@ public class MyBookmarkedBuncheolQueryService {
     List<Long> groupIds =
         buncheolIds.stream()
             .map(buncheolById::get)
-            .filter(java.util.Objects::nonNull)
+            .filter(Objects::nonNull)
             .map(Buncheol::getGroupId)
             .distinct()
             .toList();
@@ -55,7 +56,7 @@ public class MyBookmarkedBuncheolQueryService {
 
     return bookmarks.stream()
         .map(bm -> toResponse(bm, buncheolById, groupNameById, thumbnailByBuncheolId))
-        .filter(java.util.Objects::nonNull)
+        .filter(Objects::nonNull)
         .toList();
   }
 

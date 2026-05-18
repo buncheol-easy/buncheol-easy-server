@@ -46,8 +46,7 @@ class ParticipationPaymentHandlerTest {
   @Mock private ShippingAddressDomainService shippingAddressDomainService;
   @Mock private UserDomainService userDomainService;
 
-  @Spy
-  private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long PARTICIPATION_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;
@@ -65,12 +64,7 @@ class ParticipationPaymentHandlerTest {
   private void stubDeliverySnapshot() {
     ShippingAddress shippingAddress =
         new ShippingAddress(
-            SHIPPING_ADDRESS_ID,
-            PARTICIPANT_ID,
-            ShippingMethod.GS25_HALF,
-            "GS25 강남점",
-            null,
-            false);
+            SHIPPING_ADDRESS_ID, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(shippingAddress);
 

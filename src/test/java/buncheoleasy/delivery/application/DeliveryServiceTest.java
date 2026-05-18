@@ -41,8 +41,7 @@ class DeliveryServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private BuncheolDomainService buncheolDomainService;
 
-  @Spy
-  private Clock clock = Clock.fixed(Instant.parse("2026-03-23T12:00:00Z"), ZoneOffset.UTC);
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-23T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long HOST_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;

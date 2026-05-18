@@ -70,8 +70,7 @@ class BuncheolServiceTest {
 
   @Mock private ApplicationEventPublisher eventPublisher;
 
-  @Spy
-  private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
 
@@ -250,8 +249,7 @@ class BuncheolServiceTest {
     @Test
     void 제목과_설명만_갱신되고_이미지는_keepImageIds_기준으로_정리된다() {
       // given
-      BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L));
+      BuncheolModifyRequest request = new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L));
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -263,9 +261,7 @@ class BuncheolServiceTest {
       // then
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheol).should().validateRecruiting(any(Instant.class));
-      then(buncheolDomainService)
-          .should()
-          .updateBuncheolContent(buncheol, "수정 제목", "수정 설명");
+      then(buncheolDomainService).should().updateBuncheolContent(buncheol, "수정 제목", "수정 설명");
       then(buncheolImageDomainService)
           .should()
           .deleteImagesExcluding(eq(BUNCHEOL_ID), keepImageIdsCaptor.capture());

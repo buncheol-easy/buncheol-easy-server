@@ -120,7 +120,8 @@ class BuncheolTest {
           new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 3000, null);
 
       // when & then
-      assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now())).doesNotThrowAnyException();
+      assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
+          .doesNotThrowAnyException();
     }
 
     @Test
@@ -171,11 +172,11 @@ class BuncheolTest {
     void 마감일이_현재보다_미래면_유효하다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(
-              1L, "제목", null, "스토어명", Instant.now().plusSeconds(1), 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", Instant.now().plusSeconds(1), 3000, null);
 
       // when & then
-      assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now())).doesNotThrowAnyException();
+      assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
+          .doesNotThrowAnyException();
     }
   }
 

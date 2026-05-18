@@ -51,8 +51,7 @@ class PaymentServiceTest {
   @Mock private TossPaymentsProperties tossPaymentsProperties;
   @Mock private TransactionTemplate transactionTemplate;
 
-  @Spy
-  private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long PARTICIPATION_ID = 1L;
   private static final String ORDER_ID = "order_abc123";
@@ -87,7 +86,8 @@ class PaymentServiceTest {
     @Test
     void 동일_금액의_PENDING_결제가_있으면_재사용한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
+      Payment existingPayment =
+          Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
           .willReturn(Optional.of(existingPayment));
@@ -106,7 +106,8 @@ class PaymentServiceTest {
     @Test
     void 다른_금액의_PENDING_결제가_있으면_실패_처리_후_새로_생성한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, 30_000L, Instant.now());
+      Payment existingPayment =
+          Payment.createPayment(PARTICIPATION_ID, ORDER_ID, 30_000L, Instant.now());
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
           .willReturn(Optional.of(existingPayment));
@@ -128,7 +129,8 @@ class PaymentServiceTest {
     @Test
     void CONFIRMING_상태의_결제가_있으면_예외가_발생한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
+      Payment existingPayment =
+          Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       existingPayment.startConfirm(PAYMENT_KEY);
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
@@ -145,7 +147,8 @@ class PaymentServiceTest {
     @Test
     void DONE_상태의_결제가_있으면_예외가_발생한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
+      Payment existingPayment =
+          Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       existingPayment.startConfirm(PAYMENT_KEY);
       existingPayment.completeConfirm(Instant.now());
 
@@ -163,7 +166,8 @@ class PaymentServiceTest {
     @Test
     void FAILED_상태의_결제가_있으면_새로_생성한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
+      Payment existingPayment =
+          Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       existingPayment.fail("이전 실패");
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))

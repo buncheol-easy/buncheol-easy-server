@@ -30,8 +30,7 @@ class UserDomainServiceTest {
 
   @Mock private UserRepository userRepository;
 
-  @Spy
-  private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   @Nested
   @DisplayName("소셜 로그인 테스트")

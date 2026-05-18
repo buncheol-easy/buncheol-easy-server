@@ -157,7 +157,8 @@ class BuncheolBookmarkControllerDocsTest {
             BuncheolStatus.RECRUITING,
             Instant.parse("2026-06-01T12:00:00Z"),
             "뉴진스",
-            "https://cdn.example.com/buncheol-thumb.jpg");
+            "https://cdn.example.com/buncheol-thumb.jpg",
+            List.of("민지", "하니", "다니엘", "해린", "혜인"));
     given(
             myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
                 USER_ID, BookmarkSortOption.LATEST, false, false))
@@ -199,6 +200,7 @@ class BuncheolBookmarkControllerDocsTest {
                             - 필터로 모두 제외되어도 빈 배열 반환 (별도 에러 없음)
                             - `thumbnailUrl` 은 분철에 등록된 이미지 중 **가장 먼저 등록된 1장의 URL**. 이미지가 없으면 `null`
                             - `deadline` 은 UTC ISO-8601 (예: `2026-06-01T12:00:00Z`)
+                            - `memberNames` 는 분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 분철에 멤버 슬롯을 **등록한 순서** 로 정렬 (`BuncheolMember.id` ASC). 멤버가 없으면 빈 배열
                             """)
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -222,11 +224,14 @@ class BuncheolBookmarkControllerDocsTest {
                                 .description(
                                     "분철 진행 상태 — `RECRUITING` | `CLOSED` | `PAID` | `SETTLING` | `FINISHED` | `CANCELLED`"),
                             fieldWithPath("[].deadline")
-                                .description("분철 모집 마감 시각 (UTC ISO-8601, 예: `2026-06-01T12:00:00Z`)"),
+                                .description(
+                                    "분철 모집 마감 시각 (UTC ISO-8601, 예: `2026-06-01T12:00:00Z`)"),
                             fieldWithPath("[].groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("[].thumbnailUrl")
                                 .description("분철 등록 이미지 중 가장 먼저 등록된 1장의 URL. 이미지가 없으면 `null`")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].memberNames")
+                                .description("분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 슬롯을 등록한 순서로 정렬"))
                         .build())));
   }
 }

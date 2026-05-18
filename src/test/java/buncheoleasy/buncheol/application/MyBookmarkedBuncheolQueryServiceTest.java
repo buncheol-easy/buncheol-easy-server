@@ -10,10 +10,14 @@ import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import java.lang.reflect.Field;
@@ -39,6 +43,8 @@ class MyBookmarkedBuncheolQueryServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
+  @Mock private BuncheolMemberRepository buncheolMemberRepository;
+  @Mock private GroupMemberRepository groupMemberRepository;
   @Mock private UserFavoriteGroupRepository userFavoriteGroupRepository;
 
   @Nested
@@ -58,7 +64,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
-    void LATEST_정렬은_찜_등록_순서_그대로_반환된다() {
+    void LATEST_정렬은_찜_등록_순서_그대로_반환되고_멤버_이름은_분철멤버_id_asc_로_포함된다() {
       BuncheolBookmark bm1 = bookmark(500L, USER_ID, 10L);
       BuncheolBookmark bm2 = bookmark(501L, USER_ID, 20L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
@@ -76,6 +82,19 @@ class MyBookmarkedBuncheolQueryServiceTest {
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 20L)))
           .willReturn(List.of(image(10L, "https://cdn/img-a.jpg")));
 
+      // 분철 10: 슬롯 등록 순(BuncheolMember.id asc) = 802 → 801 이라도 정렬 후엔 801 → 802 순.
+      // 분철 20: 단일 슬롯 803.
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(
+              List.of(
+                  buncheolMember(802L, 10L, 2002L),
+                  buncheolMember(801L, 10L, 2001L),
+                  buncheolMember(803L, 20L, 3001L)));
+      given(groupMemberRepository.findAllByIds(List.of(2002L, 2001L, 3001L)))
+          .willReturn(
+              List.of(
+                  groupMember(2002L, "민지"), groupMember(2001L, "하니"), groupMember(3001L, "카리나")));
+
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
               USER_ID, BookmarkSortOption.LATEST, false, false);
@@ -86,11 +105,14 @@ class MyBookmarkedBuncheolQueryServiceTest {
       assertThat(result.get(0).status()).isEqualTo(BuncheolStatus.RECRUITING);
       assertThat(result.get(0).groupName()).isEqualTo("뉴진스");
       assertThat(result.get(0).thumbnailUrl()).isEqualTo("https://cdn/img-a.jpg");
+      // 801(하니) 가 802(민지) 보다 먼저
+      assertThat(result.get(0).memberNames()).containsExactly("하니", "민지");
 
       assertThat(result.get(1).bookmarkId()).isEqualTo(501L);
       assertThat(result.get(1).buncheolId()).isEqualTo(20L);
       assertThat(result.get(1).status()).isEqualTo(BuncheolStatus.CLOSED);
       assertThat(result.get(1).thumbnailUrl()).isNull();
+      assertThat(result.get(1).memberNames()).containsExactly("카리나");
     }
 
     @Test
@@ -117,6 +139,8 @@ class MyBookmarkedBuncheolQueryServiceTest {
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(30L, 20L, 10L)))
           .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(30L, 20L, 10L)))
+          .willReturn(List.of());
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -127,6 +151,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
       assertThat(result.get(0).buncheolId()).isEqualTo(30L);
       assertThat(result.get(1).buncheolId()).isEqualTo(20L);
       assertThat(result.get(2).buncheolId()).isEqualTo(10L);
+      assertThat(result.get(0).memberNames()).isEmpty();
     }
 
     @Test
@@ -146,6 +171,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L))).willReturn(List.of());
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -174,6 +200,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L))).willReturn(List.of());
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -241,6 +268,21 @@ class MyBookmarkedBuncheolQueryServiceTest {
     setField(image, "buncheolId", buncheolId);
     setField(image, "imageUrl", url);
     return image;
+  }
+
+  private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {
+    BuncheolMember bm = newInstance(BuncheolMember.class);
+    setField(bm, "id", id);
+    setField(bm, "buncheolId", buncheolId);
+    setField(bm, "memberId", memberId);
+    return bm;
+  }
+
+  private GroupMember groupMember(Long id, String name) {
+    GroupMember gm = newInstance(GroupMember.class);
+    setField(gm, "id", id);
+    setField(gm, "name", name);
+    return gm;
   }
 
   private static <T> T newInstance(Class<T> type) {

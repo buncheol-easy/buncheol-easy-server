@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import java.time.Instant;
+import java.util.List;
 
 public record MyBookmarkedBuncheolResponse(
     Long bookmarkId,
@@ -10,4 +11,5 @@ public record MyBookmarkedBuncheolResponse(
     BuncheolStatus status,
     Instant deadline,
     String groupName,
-    String thumbnailUrl) {}
+    String thumbnailUrl,
+    List<String> memberNames) {}

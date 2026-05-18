@@ -59,10 +59,7 @@ class MyParticipationQueryServiceTest {
       // 분철 1: id=10, title="뉴진스 1집 분철", deadline=+7일, status=RECRUITING, 슬롯 5개
       Buncheol buncheol =
           buncheol(
-              10L,
-              "뉴진스 1집 분철",
-              Instant.now().plus(7, ChronoUnit.DAYS),
-              BuncheolStatus.RECRUITING);
+              10L, "뉴진스 1집 분철", Instant.now().plus(7, ChronoUnit.DAYS), BuncheolStatus.RECRUITING);
       List<BuncheolMember> slots =
           List.of(
               buncheolMember(101L, 10L, 1001L),
@@ -105,8 +102,7 @@ class MyParticipationQueryServiceTest {
       Buncheol buncheolA =
           buncheol(10L, "분철 A", Instant.now().plus(3, ChronoUnit.DAYS), BuncheolStatus.CLOSED);
       Buncheol buncheolB =
-          buncheol(
-              20L, "분철 B", Instant.now().plus(5, ChronoUnit.DAYS), BuncheolStatus.RECRUITING);
+          buncheol(20L, "분철 B", Instant.now().plus(5, ChronoUnit.DAYS), BuncheolStatus.RECRUITING);
 
       // A: 슬롯 2개 (참여한 슬롯 = 201, 멤버 이름 "지수")
       // B: 슬롯 4개 (참여한 슬롯 = 301, 멤버 이름 "제니")

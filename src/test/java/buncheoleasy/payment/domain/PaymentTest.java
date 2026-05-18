@@ -56,7 +56,8 @@ class PaymentTest {
     @ParameterizedTest
     @ValueSource(strings = {"", "   "})
     void orderId가_빈_값이면_예외가_발생한다(String invalidOrderId) {
-      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, invalidOrderId, AMOUNT, Instant.now()))
+      assertThatThrownBy(
+              () -> Payment.createPayment(PARTICIPATION_ID, invalidOrderId, AMOUNT, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -73,7 +74,8 @@ class PaymentTest {
     @ParameterizedTest
     @ValueSource(longs = {0L, -1L, -50_000L})
     void 금액이_0_이하면_예외가_발생한다(long invalidAmount) {
-      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, ORDER_ID, invalidAmount, Instant.now()))
+      assertThatThrownBy(
+              () -> Payment.createPayment(PARTICIPATION_ID, ORDER_ID, invalidAmount, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);

@@ -112,12 +112,7 @@ class MyHostedBuncheolQueryServiceTest {
       Instant now = Instant.parse("2026-05-01T09:00:00Z");
       Buncheol newer =
           buncheol(
-              20L,
-              200L,
-              "분철 NEW",
-              BuncheolStatus.RECRUITING,
-              now.plus(7, ChronoUnit.DAYS),
-              now);
+              20L, 200L, "분철 NEW", BuncheolStatus.RECRUITING, now.plus(7, ChronoUnit.DAYS), now);
       Buncheol older =
           buncheol(
               10L,

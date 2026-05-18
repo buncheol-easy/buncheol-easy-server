@@ -31,8 +31,7 @@ class ShippingAddressDomainServiceTest {
 
   private ShippingAddress savedAddress(
       Long id, Long userId, String method, String storeName, String alias, boolean isDefault) {
-    return new ShippingAddress(
-        id, userId, ShippingMethod.of(method), storeName, alias, isDefault);
+    return new ShippingAddress(id, userId, ShippingMethod.of(method), storeName, alias, isDefault);
   }
 
   @Nested

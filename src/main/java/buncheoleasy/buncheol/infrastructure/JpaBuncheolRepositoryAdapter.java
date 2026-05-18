@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -23,6 +24,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
           BuncheolStatus.SETTLING);
 
   private final JpaBuncheolRepository jpaBuncheolRepository;
+  private final Clock clock;
 
   @Override
   public Buncheol save(Buncheol buncheol) {
@@ -51,7 +53,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   public boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus) {
     int updated =
         jpaBuncheolRepository.updateStatusIfMatches(
-            buncheol.getId(), buncheol.getStatus(), Instant.now(), expectedStatus);
+            buncheol.getId(), buncheol.getStatus(), Instant.now(clock), expectedStatus);
     return updated > 0;
   }
 

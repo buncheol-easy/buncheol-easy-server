@@ -55,7 +55,9 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
     Buncheol buncheol =
         Buncheol.create(
-            hostId, new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null));
+            hostId,
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null),
+            Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
     em.clear();

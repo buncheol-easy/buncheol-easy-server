@@ -68,7 +68,7 @@ public class Payment extends TimestampedEntity {
   private Instant approvedAt;
 
   public static Payment createPayment(
-      final Long participationId, final String orderId, final long amount) {
+      final Long participationId, final String orderId, final long amount, final Instant now) {
     validateCreation(participationId, orderId, amount);
     return new Payment(
         participationId,
@@ -79,7 +79,7 @@ public class Payment extends TimestampedEntity {
         amount,
         PaymentStatus.PENDING,
         null,
-        Instant.now(),
+        now,
         null);
   }
 
@@ -127,12 +127,12 @@ public class Payment extends TimestampedEntity {
     this.status = PaymentStatus.CONFIRMING;
   }
 
-  public void completeConfirm() {
+  public void completeConfirm(final Instant now) {
     if (status != PaymentStatus.CONFIRMING) {
       throw new BusinessException(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
     }
     this.status = PaymentStatus.DONE;
-    this.approvedAt = Instant.now();
+    this.approvedAt = now;
   }
 
   public void fail(final String reason) {

@@ -34,7 +34,7 @@ class BuncheolTest {
     @Test
     void 유효한_파라미터로_분철_생성에_성공한다() {
       // when
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // then
       assertThat(buncheol.getHostId()).isEqualTo(HOST_ID);
@@ -46,7 +46,7 @@ class BuncheolTest {
     @Test
     void hostId가_null이면_예외가_발생한다() {
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(null, validParams()))
+      assertThatThrownBy(() -> Buncheol.create(null, validParams(), Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -55,7 +55,7 @@ class BuncheolTest {
     @Test
     void params가_null이면_예외가_발생한다() {
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, null))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, null, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -68,7 +68,7 @@ class BuncheolTest {
           new BuncheolParams(null, "제목", null, "스토어명", FUTURE_DEADLINE, 3000, null);
 
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -88,7 +88,7 @@ class BuncheolTest {
           new BuncheolParams(1L, title, null, "스토어명", FUTURE_DEADLINE, 3000, null);
 
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -102,7 +102,7 @@ class BuncheolTest {
           new BuncheolParams(1L, longTitle, null, "스토어명", FUTURE_DEADLINE, 3000, null);
 
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
@@ -120,7 +120,7 @@ class BuncheolTest {
           new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 3000, null);
 
       // when & then
-      assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
+      assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now())).doesNotThrowAnyException();
     }
 
     @Test
@@ -131,7 +131,7 @@ class BuncheolTest {
           new BuncheolParams(1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, 3000, null);
 
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
@@ -148,7 +148,7 @@ class BuncheolTest {
       BuncheolParams params = new BuncheolParams(1L, "제목", null, "스토어명", null, 3000, null);
 
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
@@ -161,7 +161,7 @@ class BuncheolTest {
       BuncheolParams params = new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, 3000, null);
 
       // when & then
-      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params))
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
@@ -175,7 +175,7 @@ class BuncheolTest {
               1L, "제목", null, "스토어명", Instant.now().plusSeconds(1), 3000, null);
 
       // when & then
-      assertThatCode(() -> Buncheol.create(HOST_ID, params)).doesNotThrowAnyException();
+      assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now())).doesNotThrowAnyException();
     }
   }
 
@@ -186,7 +186,7 @@ class BuncheolTest {
     @Test
     void 분철_생성_직후_상태는_RECRUITING이다() {
       // when
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // then
       assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
@@ -200,7 +200,7 @@ class BuncheolTest {
     @Test
     void 개최자가_요청하면_예외가_발생하지_않는다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // when & then
       assertThatCode(() -> buncheol.validateOwner(HOST_ID)).doesNotThrowAnyException();
@@ -209,7 +209,7 @@ class BuncheolTest {
     @Test
     void 개최자가_아니면_예외가_발생한다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // when & then
       assertThatThrownBy(() -> buncheol.validateOwner(999L))
@@ -226,7 +226,7 @@ class BuncheolTest {
     @Test
     void RECRUITING_상태에서_취소하면_CANCELLED로_변경된다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // when
       buncheol.cancel();
@@ -238,7 +238,7 @@ class BuncheolTest {
     @Test
     void CLOSED_상태에서는_취소에_실패한다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
       setStatus(buncheol, BuncheolStatus.CLOSED);
 
       // when & then
@@ -251,7 +251,7 @@ class BuncheolTest {
     @Test
     void 이미_CANCELLED_상태면_취소에_실패한다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
       buncheol.cancel();
 
       // when & then
@@ -269,20 +269,20 @@ class BuncheolTest {
     @Test
     void RECRUITING_상태이고_마감전이면_유효하다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // when & then
-      assertThatCode(buncheol::validateRecruiting).doesNotThrowAnyException();
+      assertThatCode(() -> buncheol.validateRecruiting(Instant.now())).doesNotThrowAnyException();
     }
 
     @Test
     void 마감일이_지났으면_RECRUITING이어도_예외가_발생한다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
       setDeadline(buncheol, Instant.now().minusSeconds(1));
 
       // when & then
-      assertThatThrownBy(buncheol::validateRecruiting)
+      assertThatThrownBy(() -> buncheol.validateRecruiting(Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
@@ -296,7 +296,7 @@ class BuncheolTest {
     @Test
     void 지원하는_배송방법이면_예외가_발생하지_않는다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // when & then
       assertThatCode(() -> buncheol.validateShippingMethodSupported(ShippingMethod.GS25_HALF))
@@ -306,7 +306,7 @@ class BuncheolTest {
     @Test
     void 지원하지_않는_배송방법이면_예외가_발생한다() {
       // given
-      Buncheol buncheol = Buncheol.create(HOST_ID, validParams());
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
 
       // when & then
       assertThatThrownBy(() -> buncheol.validateShippingMethodSupported(ShippingMethod.CU_HALF))

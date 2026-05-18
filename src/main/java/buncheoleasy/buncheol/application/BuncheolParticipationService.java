@@ -11,6 +11,8 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
+import java.time.Clock;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +24,7 @@ public class BuncheolParticipationService {
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
   private final ShippingAddressDomainService shippingAddressDomainService;
+  private final Clock clock;
 
   public Participation createParticipation(
       final Long buncheolId, final Long participantId, final ParticipateRequest request) {
@@ -56,7 +59,7 @@ public class BuncheolParticipationService {
 
   private Buncheol validateRecruitingBuncheol(final Long buncheolId, final Long participantId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    buncheol.validateRecruiting();
+    buncheol.validateRecruiting(Instant.now(clock));
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }

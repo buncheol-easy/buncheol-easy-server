@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -299,7 +300,7 @@ class UserTest {
       assertThat(user.getDeletedAt()).isNull();
 
       // when
-      user.withdraw();
+      user.withdraw(Instant.now());
 
       // then
       assertThat(user.getDeletedAt()).isNotNull();

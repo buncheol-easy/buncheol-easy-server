@@ -59,7 +59,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 분철을_저장하면_ID가_할당된다() {
-      Buncheol buncheol = Buncheol.create(hostId, validParams());
+      Buncheol buncheol = Buncheol.create(hostId, validParams(), Instant.now());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -70,7 +70,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 저장된_분철의_초기_상태는_RECRUITING이다() {
-      Buncheol buncheol = Buncheol.create(hostId, validParams());
+      Buncheol buncheol = Buncheol.create(hostId, validParams(), Instant.now());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -82,7 +82,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void gs25_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 2500, null);
-      Buncheol buncheol = Buncheol.create(hostId, params);
+      Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -94,7 +94,7 @@ class JpaBuncheolRepositoryAdapterTest {
     void cu_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
       BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, null, 2000);
-      Buncheol buncheol = Buncheol.create(hostId, params);
+      Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
       em.flush();
@@ -109,7 +109,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void ID로_분철을_조회할_수_있다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
 
@@ -122,7 +122,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 도메인_updateContent_호출_시_더티체킹으로_DB가_갱신된다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
       // managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
       Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
@@ -137,7 +137,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 분철_상태를_수정할_수_있다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
       BuncheolStatus expectedStatus = buncheol.getStatus();
       buncheol.cancel();
 
@@ -150,7 +150,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 예상_상태가_다르면_업데이트되지_않는다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams()));
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
       buncheol.cancel();
 
       // expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)
@@ -179,15 +179,15 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void 호스트의_RECRUITING_분철이_있으면_true를_반환한다() {
-      persistAndDetach(Buncheol.create(hostId, validParams()));
+      persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
       assertThat(buncheolRepository.existsActiveByHostId(hostId)).isTrue();
     }
 
     @Test
     void 호스트의_분철이_모두_FINISHED_또는_CANCELLED면_false를_반환한다() {
-      Buncheol finished = persistAndDetach(Buncheol.create(hostId, validParams()));
-      Buncheol cancelled = persistAndDetach(Buncheol.create(hostId, validParams()));
+      Buncheol finished = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      Buncheol cancelled = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
       forceStatus(finished.getId(), BuncheolStatus.FINISHED);
       forceStatus(cancelled.getId(), BuncheolStatus.CANCELLED);
 
@@ -197,7 +197,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void 다른_호스트의_활성_분철은_영향을_주지_않는다() {
       Long otherHostId = TestUserFixture.insertUser(jdbcTemplate, "other_host");
-      persistAndDetach(Buncheol.create(otherHostId, validParams()));
+      persistAndDetach(Buncheol.create(otherHostId, validParams(), Instant.now()));
 
       assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
     }

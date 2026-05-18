@@ -2,6 +2,8 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Clock;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -10,9 +12,10 @@ import org.springframework.stereotype.Service;
 public class BuncheolDomainService {
 
   private final BuncheolRepository buncheolRepository;
+  private final Clock clock;
 
   public Buncheol createBuncheol(final Long hostId, final BuncheolParams params) {
-    return buncheolRepository.save(Buncheol.create(hostId, params));
+    return buncheolRepository.save(Buncheol.create(hostId, params, Instant.now(clock)));
   }
 
   public Buncheol getBuncheol(final Long id) {

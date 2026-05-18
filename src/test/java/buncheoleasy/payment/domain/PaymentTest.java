@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ class PaymentTest {
   private static final long AMOUNT = 50_000L;
 
   private Payment createPendingPayment() {
-    return Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+    return Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
   }
 
   @Nested
@@ -29,7 +30,7 @@ class PaymentTest {
     @Test
     void 결제_생성에_성공한다() {
       // when
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       // then
       assertThat(payment.getParticipationId()).isEqualTo(PARTICIPATION_ID);
@@ -46,7 +47,7 @@ class PaymentTest {
 
     @Test
     void participationId가_null이면_예외가_발생한다() {
-      assertThatThrownBy(() -> Payment.createPayment(null, ORDER_ID, AMOUNT))
+      assertThatThrownBy(() -> Payment.createPayment(null, ORDER_ID, AMOUNT, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -55,7 +56,7 @@ class PaymentTest {
     @ParameterizedTest
     @ValueSource(strings = {"", "   "})
     void orderId가_빈_값이면_예외가_발생한다(String invalidOrderId) {
-      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, invalidOrderId, AMOUNT))
+      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, invalidOrderId, AMOUNT, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -63,7 +64,7 @@ class PaymentTest {
 
     @Test
     void orderId가_null이면_예외가_발생한다() {
-      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, null, AMOUNT))
+      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, null, AMOUNT, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -72,7 +73,7 @@ class PaymentTest {
     @ParameterizedTest
     @ValueSource(longs = {0L, -1L, -50_000L})
     void 금액이_0_이하면_예외가_발생한다(long invalidAmount) {
-      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, ORDER_ID, invalidAmount))
+      assertThatThrownBy(() -> Payment.createPayment(PARTICIPATION_ID, ORDER_ID, invalidAmount, Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -115,7 +116,7 @@ class PaymentTest {
       // given
       Payment payment = createPendingPayment();
       payment.startConfirm("key1");
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       // when & then
       assertThatThrownBy(() -> payment.startConfirm("key2"))
@@ -149,7 +150,7 @@ class PaymentTest {
       payment.startConfirm("key1");
 
       // when
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       // then
       assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
@@ -162,7 +163,7 @@ class PaymentTest {
       Payment payment = createPendingPayment();
 
       // when & then
-      assertThatThrownBy(payment::completeConfirm)
+      assertThatThrownBy(() -> payment.completeConfirm(Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -173,10 +174,10 @@ class PaymentTest {
       // given
       Payment payment = createPendingPayment();
       payment.startConfirm("key1");
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       // when & then
-      assertThatThrownBy(payment::completeConfirm)
+      assertThatThrownBy(() -> payment.completeConfirm(Instant.now()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
@@ -219,7 +220,7 @@ class PaymentTest {
       // given
       Payment payment = createPendingPayment();
       payment.startConfirm("key1");
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       // when & then
       assertThatThrownBy(() -> payment.fail("사유"))
@@ -278,7 +279,7 @@ class PaymentTest {
       // given
       Payment payment = createPendingPayment();
       payment.startConfirm("key1");
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       // when & then
       assertThatThrownBy(() -> payment.failConfirm("사유"))
@@ -315,7 +316,7 @@ class PaymentTest {
     void DONE_상태_확인() {
       Payment payment = createPendingPayment();
       payment.startConfirm("key1");
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
       assertThat(payment.isPending()).isFalse();
       assertThat(payment.isConfirming()).isFalse();
       assertThat(payment.isDone()).isTrue();

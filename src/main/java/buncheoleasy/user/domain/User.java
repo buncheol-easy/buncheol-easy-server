@@ -107,7 +107,7 @@ public class User extends TimestampedEntity {
   //  1) 활성 분철(RECRUITING~SETTLING)·미정산 결제가 있으면 탈퇴 거부 (애플리케이션 레이어에서 검증).
   //  2) 모든 거래가 종료된 뒤 PII(phoneNumber·bankAccount·email) 를 NULL/해시로 익명화.
   //  PIPA 상 탈퇴 시 즉시 파기가 원칙이나, 결제 기록(전자상거래법 5년)은 분리 보관해야 한다.
-  public void withdraw() {
-    this.deletedAt = Instant.now();
+  public void withdraw(final Instant now) {
+    this.deletedAt = now;
   }
 }

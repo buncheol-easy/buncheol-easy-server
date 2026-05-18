@@ -23,6 +23,9 @@ import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmResponse
 import buncheoleasy.payment.infrastructure.TossPaymentClient.TossConfirmUnavailableException;
 import buncheoleasy.payment.infrastructure.TossPaymentsProperties;
 import java.lang.reflect.Field;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -46,6 +50,9 @@ class PaymentServiceTest {
   @Mock private TossPaymentClient tossPaymentClient;
   @Mock private TossPaymentsProperties tossPaymentsProperties;
   @Mock private TransactionTemplate transactionTemplate;
+
+  @Spy
+  private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long PARTICIPATION_ID = 1L;
   private static final String ORDER_ID = "order_abc123";
@@ -80,7 +87,7 @@ class PaymentServiceTest {
     @Test
     void 동일_금액의_PENDING_결제가_있으면_재사용한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
           .willReturn(Optional.of(existingPayment));
@@ -99,7 +106,7 @@ class PaymentServiceTest {
     @Test
     void 다른_금액의_PENDING_결제가_있으면_실패_처리_후_새로_생성한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, 30_000L);
+      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, 30_000L, Instant.now());
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
           .willReturn(Optional.of(existingPayment));
@@ -121,7 +128,7 @@ class PaymentServiceTest {
     @Test
     void CONFIRMING_상태의_결제가_있으면_예외가_발생한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       existingPayment.startConfirm(PAYMENT_KEY);
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
@@ -138,9 +145,9 @@ class PaymentServiceTest {
     @Test
     void DONE_상태의_결제가_있으면_예외가_발생한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       existingPayment.startConfirm(PAYMENT_KEY);
-      existingPayment.completeConfirm();
+      existingPayment.completeConfirm(Instant.now());
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
           .willReturn(Optional.of(existingPayment));
@@ -156,7 +163,7 @@ class PaymentServiceTest {
     @Test
     void FAILED_상태의_결제가_있으면_새로_생성한다() {
       // given
-      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment existingPayment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       existingPayment.fail("이전 실패");
 
       given(paymentDomainService.findLatestByParticipationId(PARTICIPATION_ID))
@@ -183,7 +190,7 @@ class PaymentServiceTest {
     void PENDING_상태_결제_취소에_성공한다() {
       // given
       Long userId = 100L;
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
       willDoNothing().given(paymentCompletionHandler).validateOwnership(PARTICIPATION_ID, userId);
@@ -201,7 +208,7 @@ class PaymentServiceTest {
     void 이미_실패한_결제이면_아무것도_하지_않는다() {
       // given
       Long userId = 100L;
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.fail("이미 실패");
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
@@ -219,9 +226,9 @@ class PaymentServiceTest {
     void 이미_승인된_결제이면_예외가_발생한다() {
       // given
       Long userId = 100L;
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.startConfirm(PAYMENT_KEY);
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
       willDoNothing().given(paymentCompletionHandler).validateOwnership(PARTICIPATION_ID, userId);
@@ -238,7 +245,7 @@ class PaymentServiceTest {
     void CONFIRMING_상태이면_예외가_발생한다() {
       // given
       Long userId = 100L;
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.startConfirm(PAYMENT_KEY);
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
@@ -256,7 +263,7 @@ class PaymentServiceTest {
     void 소유권_검증_실패시_예외가_발생한다() {
       // given
       Long wrongUserId = 999L;
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
       willThrow(new BusinessException(ErrorCode.PAYMENT_NO_PERMISSION))
@@ -290,7 +297,7 @@ class PaymentServiceTest {
     @Test
     void PENDING_결제_승인에_성공한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
 
@@ -313,7 +320,7 @@ class PaymentServiceTest {
     @Test
     void 토스_거절_예외_발생시_결제가_실패_처리된다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
       given(tossPaymentClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
@@ -334,7 +341,7 @@ class PaymentServiceTest {
     @Test
     void 토스_네트워크_장애시_CONFIRMING_상태를_유지한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
       given(tossPaymentClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
@@ -354,7 +361,7 @@ class PaymentServiceTest {
     @Test
     void 토스_응답_금액_불일치시_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
 
@@ -372,9 +379,9 @@ class PaymentServiceTest {
     @Test
     void 이미_승인된_결제를_같은_키로_재요청하면_멱등_처리된다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.startConfirm(PAYMENT_KEY);
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
 
@@ -388,9 +395,9 @@ class PaymentServiceTest {
     @Test
     void 이미_승인된_결제를_다른_키로_재요청하면_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.startConfirm(PAYMENT_KEY);
-      payment.completeConfirm();
+      payment.completeConfirm(Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
 
@@ -404,7 +411,7 @@ class PaymentServiceTest {
     @Test
     void 준비_단계에서_금액_불일치시_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
 
@@ -418,7 +425,7 @@ class PaymentServiceTest {
     @Test
     void CONFIRMING_상태에서_같은_키로_재시도하면_토스_승인을_진행한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.startConfirm(PAYMENT_KEY);
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
@@ -439,7 +446,7 @@ class PaymentServiceTest {
     @Test
     void CONFIRMING_상태에서_다른_키로_재시도하면_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.startConfirm(PAYMENT_KEY);
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);
@@ -454,7 +461,7 @@ class PaymentServiceTest {
     @Test
     void FAILED_상태의_결제_승인_요청시_예외가_발생한다() {
       // given
-      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT);
+      Payment payment = Payment.createPayment(PARTICIPATION_ID, ORDER_ID, AMOUNT, Instant.now());
       payment.fail("이전 실패");
 
       given(paymentDomainService.getPaymentByOrderId(ORDER_ID)).willReturn(payment);

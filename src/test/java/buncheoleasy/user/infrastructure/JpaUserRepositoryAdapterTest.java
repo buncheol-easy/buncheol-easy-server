@@ -8,6 +8,7 @@ import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -289,7 +290,7 @@ class JpaUserRepositoryAdapterTest {
 
       // when: managed 엔티티에 withdraw() 호출 → flush 시 dirty UPDATE 로 deletedAt 반영
       User managed = userRepository.findById(userId).orElseThrow();
-      managed.withdraw();
+      managed.withdraw(Instant.now());
       em.flush();
       em.clear();
 
@@ -305,7 +306,7 @@ class JpaUserRepositoryAdapterTest {
       Long userId = saved.getId();
 
       User managed = userRepository.findById(userId).orElseThrow();
-      managed.withdraw();
+      managed.withdraw(Instant.now());
       em.flush();
       em.clear();
 

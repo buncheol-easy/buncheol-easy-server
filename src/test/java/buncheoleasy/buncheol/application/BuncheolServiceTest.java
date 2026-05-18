@@ -28,7 +28,9 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.UserDomainService;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -39,6 +41,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -66,6 +69,9 @@ class BuncheolServiceTest {
   @Mock private UserDomainService userDomainService;
 
   @Mock private ApplicationEventPublisher eventPublisher;
+
+  @Spy
+  private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
 
@@ -256,7 +262,7 @@ class BuncheolServiceTest {
 
       // then
       then(buncheol).should().validateOwner(HOST_ID);
-      then(buncheol).should().validateRecruiting();
+      then(buncheol).should().validateRecruiting(any(Instant.class));
       then(buncheolDomainService)
           .should()
           .updateBuncheolContent(buncheol, "수정 제목", "수정 설명");
@@ -360,7 +366,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
           .given(buncheol)
-          .validateRecruiting();
+          .validateRecruiting(any(Instant.class));
 
       // when & then
       assertThatThrownBy(

@@ -16,6 +16,7 @@ import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolBookmarkService;
 import buncheoleasy.buncheol.application.MyBookmarkedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
@@ -137,12 +138,16 @@ class BuncheolBookmarkControllerDocsTest {
             Instant.parse("2026-06-01T12:00:00Z"),
             "뉴진스",
             "https://cdn.example.com/buncheol-thumb.jpg");
-    given(myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(USER_ID))
+    given(
+            myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+                USER_ID, BookmarkSortOption.LATEST, false))
         .willReturn(List.of(response));
 
     mockMvc
         .perform(
             get("/v1/buncheols/bookmarks/me")
+                .param("sort", "LATEST")
+                .param("hideClosed", "false")
                 .header("Authorization", "Bearer {accessToken}")
                 .with(mockAuth()))
         .andExpect(status().isOk())
@@ -153,9 +158,23 @@ class BuncheolBookmarkControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("BuncheolBookmark")
                         .summary("내가 찜한 분철 목록 조회")
-                        .description("마이페이지에서 사용자가 찜한 분철 카드 리스트를 최신 찜 등록 순으로 조회한다.")
+                        .description(
+                            """
+                            마이페이지에서 사용자가 찜한 분철 카드 리스트를 조회한다.
+
+                            **쿼리 파라미터** (모두 선택)
+                            - `sort`: `LATEST` (기본, 찜 등록 시각 내림차순) | `DEADLINE` (분철 마감 임박순)
+                            - `hideClosed`: `false` (기본) | `true` — true 면 모집중(`RECRUITING`)이 아닌 분철은 결과에서 제외
+                            """)
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .queryParameters(
+                            parameterWithName("sort")
+                                .description("정렬 기준 — `LATEST` | `DEADLINE`. 기본값 `LATEST`")
+                                .optional(),
+                            parameterWithName("hideClosed")
+                                .description("모집중이 아닌 분철 숨김 여부 (`true` | `false`). 기본값 `false`")
+                                .optional())
                         .responseSchema(Schema.schema("MyBookmarkedBuncheolListResponse"))
                         .responseFields(
                             fieldWithPath("[].bookmarkId").description("찜 ID"),

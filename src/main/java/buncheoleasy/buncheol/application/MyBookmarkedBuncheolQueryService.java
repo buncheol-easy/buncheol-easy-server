@@ -2,16 +2,19 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +30,9 @@ public class MyBookmarkedBuncheolQueryService {
   private final BuncheolImageRepository buncheolImageRepository;
 
   @Transactional(readOnly = true)
-  public List<MyBookmarkedBuncheolResponse> getMyBookmarkedBuncheols(final Long userId) {
+  public List<MyBookmarkedBuncheolResponse> getMyBookmarkedBuncheols(
+      final Long userId, final BookmarkSortOption sort, final boolean hideClosed) {
+    // bookmarks 는 기본 LATEST(찜 등록 시각 내림차순) 으로 가져온다. DEADLINE 정렬은 아래에서 별도 처리.
     List<BuncheolBookmark> bookmarks =
         buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId);
     if (bookmarks.isEmpty()) {
@@ -39,25 +44,55 @@ public class MyBookmarkedBuncheolQueryService {
         buncheolRepository.findAllByIds(buncheolIds).stream()
             .collect(Collectors.toMap(Buncheol::getId, b -> b));
 
+    List<BuncheolBookmark> filtered =
+        bookmarks.stream()
+            .filter(bm -> isVisible(bm, buncheolById, hideClosed))
+            .collect(Collectors.toCollection(ArrayList::new));
+    if (filtered.isEmpty()) {
+      return List.of();
+    }
+
+    if (sort == BookmarkSortOption.DEADLINE) {
+      filtered.sort(
+          Comparator.comparing(
+                  (BuncheolBookmark bm) ->
+                      buncheolById.get(bm.getBuncheolId()).getDeadline())
+              .thenComparing(Comparator.comparing(BuncheolBookmark::getId).reversed()));
+    }
+
     List<Long> groupIds =
-        buncheolIds.stream()
-            .map(buncheolById::get)
-            .filter(Objects::nonNull)
-            .map(Buncheol::getGroupId)
+        filtered.stream()
+            .map(bm -> buncheolById.get(bm.getBuncheolId()).getGroupId())
             .distinct()
             .toList();
     Map<Long, String> groupNameById =
         groupRepository.findAllByIds(groupIds).stream()
             .collect(Collectors.toMap(Group::getId, Group::getName));
 
+    List<Long> visibleBuncheolIds =
+        filtered.stream().map(BuncheolBookmark::getBuncheolId).distinct().toList();
     Map<Long, String> thumbnailByBuncheolId =
-        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+        buncheolImageRepository.findFirstByBuncheolIds(visibleBuncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
-    return bookmarks.stream()
+    return filtered.stream()
         .map(bm -> toResponse(bm, buncheolById, groupNameById, thumbnailByBuncheolId))
-        .filter(Objects::nonNull)
         .toList();
+  }
+
+  private boolean isVisible(
+      final BuncheolBookmark bookmark,
+      final Map<Long, Buncheol> buncheolById,
+      final boolean hideClosed) {
+    Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
+    if (buncheol == null) {
+      // 분철이 hard delete 된 비정상 케이스 (FK CASCADE 가 막아주므로 정상 흐름엔 없음).
+      return false;
+    }
+    if (hideClosed && buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+      return false;
+    }
+    return true;
   }
 
   private MyBookmarkedBuncheolResponse toResponse(
@@ -66,10 +101,6 @@ public class MyBookmarkedBuncheolQueryService {
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId) {
     Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
-    if (buncheol == null) {
-      // 분철이 hard delete 된 비정상 케이스 (FK CASCADE 가 막아주므로 정상 흐름엔 없음). 방어적으로 skip.
-      return null;
-    }
     return new MyBookmarkedBuncheolResponse(
         bookmark.getId(),
         buncheol.getId(),

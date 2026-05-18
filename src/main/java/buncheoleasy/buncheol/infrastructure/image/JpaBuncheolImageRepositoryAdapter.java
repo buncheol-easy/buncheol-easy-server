@@ -28,4 +28,12 @@ public class JpaBuncheolImageRepositoryAdapter implements BuncheolImageRepositor
     }
     jpaBuncheolImageRepository.deleteByBuncheolIdAndIdNotIn(buncheolId, keepImageIds);
   }
+
+  @Override
+  public List<BuncheolImage> findFirstByBuncheolIds(List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaBuncheolImageRepository.findFirstByBuncheolIds(buncheolIds);
+  }
 }

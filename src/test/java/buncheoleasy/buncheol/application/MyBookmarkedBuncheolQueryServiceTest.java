@@ -14,6 +14,8 @@ import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +39,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
+  @Mock private UserFavoriteGroupRepository userFavoriteGroupRepository;
 
   @Nested
   @DisplayName("내 찜한 분철 목록 조회 테스트")
@@ -49,7 +52,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
-              USER_ID, BookmarkSortOption.LATEST, false);
+              USER_ID, BookmarkSortOption.LATEST, false, false);
 
       assertThat(result).isEmpty();
     }
@@ -75,7 +78,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
-              USER_ID, BookmarkSortOption.LATEST, false);
+              USER_ID, BookmarkSortOption.LATEST, false, false);
 
       assertThat(result).hasSize(2);
       assertThat(result.get(0).bookmarkId()).isEqualTo(500L);
@@ -114,7 +117,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
-              USER_ID, BookmarkSortOption.DEADLINE, false);
+              USER_ID, BookmarkSortOption.DEADLINE, false, false);
 
       assertThat(result).hasSize(3);
       // deadline ASC: C(06-01) → B(06-15) → A(07-01)
@@ -143,11 +146,40 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
-              USER_ID, BookmarkSortOption.LATEST, true);
+              USER_ID, BookmarkSortOption.LATEST, true, false);
 
       assertThat(result).hasSize(1);
       assertThat(result.get(0).buncheolId()).isEqualTo(10L);
       assertThat(result.get(0).status()).isEqualTo(BuncheolStatus.RECRUITING);
+    }
+
+    @Test
+    void onlyFavoriteGroups_true_면_사용자_최애_그룹의_분철만_포함된다() {
+      BuncheolBookmark bmFav = bookmark(500L, USER_ID, 10L);
+      BuncheolBookmark bmNonFav = bookmark(501L, USER_ID, 20L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bmFav, bmNonFav));
+
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Buncheol bFav = buncheol(10L, 100L, "최애 그룹 분철", BuncheolStatus.RECRUITING, deadline);
+      Buncheol bNonFav = buncheol(20L, 200L, "다른 그룹 분철", BuncheolStatus.RECRUITING, deadline);
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L)))
+          .willReturn(List.of(bFav, bNonFav));
+
+      // 사용자의 최애: 그룹 100 만
+      given(userFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(favorite(700L, USER_ID, 100L)));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, true);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).buncheolId()).isEqualTo(10L);
+      assertThat(result.get(0).groupName()).isEqualTo("뉴진스");
     }
 
     @Test
@@ -162,10 +194,18 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
-              USER_ID, BookmarkSortOption.LATEST, true);
+              USER_ID, BookmarkSortOption.LATEST, true, false);
 
       assertThat(result).isEmpty();
     }
+  }
+
+  private UserFavoriteGroup favorite(Long id, Long userId, Long groupId) {
+    UserFavoriteGroup favorite = newInstance(UserFavoriteGroup.class);
+    setField(favorite, "id", id);
+    setField(favorite, "userId", userId);
+    setField(favorite, "groupId", groupId);
+    return favorite;
   }
 
   private BuncheolBookmark bookmark(Long id, Long userId, Long buncheolId) {

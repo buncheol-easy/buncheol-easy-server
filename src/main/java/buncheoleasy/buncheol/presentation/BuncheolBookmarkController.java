@@ -42,17 +42,18 @@ public class BuncheolBookmarkController {
   }
 
   /**
-   * 마이페이지 - 내가 찜한 분철 목록 조회 API.
-   *
-   * <p>sort: LATEST(기본, 찜 등록 시각 내림차순) | DEADLINE(분철 마감 임박순). hideClosed=true 면 RECRUITING 상태가
-   * 아닌 분철(CLOSED/PAID/SETTLING/FINISHED/CANCELLED) 은 결과에서 제외한다.
+   * 찜한 분철 목록 조회 API. sort: LATEST(기본, 찜 등록 시각 내림차순) | DEADLINE(분철 마감 임박순). hideClosed=true 면
+   * RECRUITING 상태가 아닌 분철은 결과에서 제외한다. onlyFavoriteGroups=true 면 분철의 그룹이 사용자 최애 그룹 중 하나인 것만
+   * 결과에 포함한다.
    */
   @GetMapping("/bookmarks/me")
   public ResponseEntity<List<MyBookmarkedBuncheolResponse>> getMyBookmarkedBuncheols(
       @AuthenticationPrincipal final Long userId,
       @RequestParam(defaultValue = "LATEST") final BookmarkSortOption sort,
-      @RequestParam(defaultValue = "false") final boolean hideClosed) {
+      @RequestParam(defaultValue = "false") final boolean hideClosed,
+      @RequestParam(defaultValue = "false") final boolean onlyFavoriteGroups) {
     return ResponseEntity.ok(
-        myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(userId, sort, hideClosed));
+        myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+            userId, sort, hideClosed, onlyFavoriteGroups));
   }
 }

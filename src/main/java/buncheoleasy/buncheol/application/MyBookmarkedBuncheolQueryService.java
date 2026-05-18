@@ -11,10 +11,13 @@ import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,10 +31,14 @@ public class MyBookmarkedBuncheolQueryService {
   private final BuncheolRepository buncheolRepository;
   private final GroupRepository groupRepository;
   private final BuncheolImageRepository buncheolImageRepository;
+  private final UserFavoriteGroupRepository userFavoriteGroupRepository;
 
   @Transactional(readOnly = true)
   public List<MyBookmarkedBuncheolResponse> getMyBookmarkedBuncheols(
-      final Long userId, final BookmarkSortOption sort, final boolean hideClosed) {
+      final Long userId,
+      final BookmarkSortOption sort,
+      final boolean hideClosed,
+      final boolean onlyFavoriteGroups) {
     // bookmarks 는 기본 LATEST(찜 등록 시각 내림차순) 으로 가져온다. DEADLINE 정렬은 아래에서 별도 처리.
     List<BuncheolBookmark> bookmarks =
         buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId);
@@ -44,9 +51,19 @@ public class MyBookmarkedBuncheolQueryService {
         buncheolRepository.findAllByIds(buncheolIds).stream()
             .collect(Collectors.toMap(Buncheol::getId, b -> b));
 
+    Set<Long> favoriteGroupIds =
+        onlyFavoriteGroups
+            ? userFavoriteGroupRepository
+                .findAllByUserIdOrderByCreatedAtDescIdDesc(userId)
+                .stream()
+                .map(UserFavoriteGroup::getGroupId)
+                .collect(Collectors.toSet())
+            : Set.of();
+
     List<BuncheolBookmark> filtered =
         bookmarks.stream()
-            .filter(bm -> isVisible(bm, buncheolById, hideClosed))
+            .filter(
+                bm -> isVisible(bm, buncheolById, hideClosed, onlyFavoriteGroups, favoriteGroupIds))
             .collect(Collectors.toCollection(ArrayList::new));
     if (filtered.isEmpty()) {
       return List.of();
@@ -83,13 +100,18 @@ public class MyBookmarkedBuncheolQueryService {
   private boolean isVisible(
       final BuncheolBookmark bookmark,
       final Map<Long, Buncheol> buncheolById,
-      final boolean hideClosed) {
+      final boolean hideClosed,
+      final boolean onlyFavoriteGroups,
+      final Set<Long> favoriteGroupIds) {
     Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
     if (buncheol == null) {
       // 분철이 hard delete 된 비정상 케이스 (FK CASCADE 가 막아주므로 정상 흐름엔 없음).
       return false;
     }
     if (hideClosed && buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+      return false;
+    }
+    if (onlyFavoriteGroups && !favoriteGroupIds.contains(buncheol.getGroupId())) {
       return false;
     }
     return true;

@@ -140,7 +140,7 @@ class BuncheolBookmarkControllerDocsTest {
             "https://cdn.example.com/buncheol-thumb.jpg");
     given(
             myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
-                USER_ID, BookmarkSortOption.LATEST, false))
+                USER_ID, BookmarkSortOption.LATEST, false, false))
         .willReturn(List.of(response));
 
     mockMvc
@@ -148,6 +148,7 @@ class BuncheolBookmarkControllerDocsTest {
             get("/v1/buncheols/bookmarks/me")
                 .param("sort", "LATEST")
                 .param("hideClosed", "false")
+                .param("onlyFavoriteGroups", "false")
                 .header("Authorization", "Bearer {accessToken}")
                 .with(mockAuth()))
         .andExpect(status().isOk())
@@ -165,6 +166,7 @@ class BuncheolBookmarkControllerDocsTest {
                             **쿼리 파라미터** (모두 선택)
                             - `sort`: `LATEST` (기본, 찜 등록 시각 내림차순) | `DEADLINE` (분철 마감 임박순)
                             - `hideClosed`: `false` (기본) | `true` — true 면 모집중(`RECRUITING`)이 아닌 분철은 결과에서 제외
+                            - `onlyFavoriteGroups`: `false` (기본) | `true` — true 면 분철의 그룹이 사용자 최애 그룹 중 하나인 것만 포함
                             """)
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -174,6 +176,10 @@ class BuncheolBookmarkControllerDocsTest {
                                 .optional(),
                             parameterWithName("hideClosed")
                                 .description("모집중이 아닌 분철 숨김 여부 (`true` | `false`). 기본값 `false`")
+                                .optional(),
+                            parameterWithName("onlyFavoriteGroups")
+                                .description(
+                                    "최애 그룹 분철만 보기 (`true` | `false`). 기본값 `false`")
                                 .optional())
                         .responseSchema(Schema.schema("MyBookmarkedBuncheolListResponse"))
                         .responseFields(

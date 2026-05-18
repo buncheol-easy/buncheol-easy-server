@@ -161,7 +161,7 @@ class BuncheolBookmarkControllerDocsTest {
                         .summary("내가 찜한 분철 목록 조회")
                         .description(
                             """
-                            마이페이지에서 사용자가 찜한 분철 카드 리스트를 조회한다.
+                            사용자가 찜한 분철 카드 리스트를 조회한다.
 
                             **쿼리 파라미터** (모두 선택)
                             - `sort`: `LATEST` (기본, 찜 등록 시각 내림차순) | `DEADLINE` (분철 마감 임박순)

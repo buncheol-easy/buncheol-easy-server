@@ -39,7 +39,7 @@ public class UserFavoriteGroupController {
     return ResponseEntity.noContent().build();
   }
 
-  /** 마이페이지 - 내 최애 그룹 목록 조회 API. 최신 등록 순. */
+  /** 내 최애 그룹 목록 조회 API. 최신 등록 순. */
   @GetMapping("/favorites/me")
   public ResponseEntity<List<MyFavoriteGroupResponse>> getMyFavoriteGroups(
       @AuthenticationPrincipal final Long userId) {

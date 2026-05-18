@@ -142,7 +142,7 @@ class UserFavoriteGroupControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("FavoriteGroup")
                         .summary("내 최애 그룹 목록 조회")
-                        .description("마이페이지에서 사용자가 등록한 최애 그룹 카드 리스트를 최신 등록 순으로 조회한다.")
+                        .description("사용자가 등록한 최애 그룹 카드 리스트를 최신 등록 순으로 조회한다.")
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .responseSchema(Schema.schema("MyFavoriteGroupListResponse"))

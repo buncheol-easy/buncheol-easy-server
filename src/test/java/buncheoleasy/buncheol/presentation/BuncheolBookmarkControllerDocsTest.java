@@ -98,7 +98,19 @@ class BuncheolBookmarkControllerDocsTest {
                         .tag("BuncheolBookmark")
                         .summary("분철 찜 등록")
                         .description(
-                            "분철을 사용자의 찜 목록에 추가한다. 분철 상태(모집중/마감/취소 등)에 관계없이 가능. 이미 찜한 분철이면 409 반환.")
+                            """
+                            분철을 사용자의 찜 목록에 추가한다.
+
+                            **동작 규칙**
+                            - 분철 상태와 **무관** 하게 가능 (모집중·마감·취소·완료된 분철 모두 찜 가능)
+                            - 호스트가 **자신의 분철을 찜하는 것도 허용**
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-071` (`BUNCHEOL_BOOKMARK_ALREADY_EXISTS`) | 이미 찜한 분철 |
+                            """)
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -120,7 +132,15 @@ class BuncheolBookmarkControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("BuncheolBookmark")
                         .summary("분철 찜 해제")
-                        .description("사용자가 찜한 분철을 찜 목록에서 제거한다. 찜이 없으면 404 반환.")
+                        .description(
+                            """
+                            사용자가 찜한 분철을 찜 목록에서 제거한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-072` (`BUNCHEOL_BOOKMARK_NOT_FOUND`) | 해당 분철을 찜하지 않은 상태 (다른 유저 찜 정보는 노출하지 않음) |
+                            """)
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -164,9 +184,21 @@ class BuncheolBookmarkControllerDocsTest {
                             사용자가 찜한 분철 카드 리스트를 조회한다.
 
                             **쿼리 파라미터** (모두 선택)
-                            - `sort`: `LATEST` (기본, 찜 등록 시각 내림차순) | `DEADLINE` (분철 마감 임박순)
-                            - `hideClosed`: `false` (기본) | `true` — true 면 모집중(`RECRUITING`)이 아닌 분철은 결과에서 제외
-                            - `onlyFavoriteGroups`: `false` (기본) | `true` — true 면 분철의 그룹이 사용자 최애 그룹 중 하나인 것만 포함
+                            - `sort` — 정렬 기준
+                              - `LATEST` (기본): 찜 등록 시각 내림차순. 동일 시각이면 찜 ID 내림차순으로 tie-break
+                              - `DEADLINE`: 분철 마감 시각(`deadline`) 오름차순 + 분철 ID 내림차순. 이미 마감이 지난 분철도 포함되며 가장 빠른 deadline 이 위로
+                            - `hideClosed` — 마감된 분철 숨김
+                              - `false` (기본): 모든 분철 포함
+                              - `true`: 분철 status 가 `RECRUITING` 인 것만. **마감 정의 = `RECRUITING` 이 아닌 모든 상태** (`CLOSED` / `PAID` / `SETTLING` / `FINISHED` / `CANCELLED`)
+                            - `onlyFavoriteGroups` — 최애 그룹 필터
+                              - `false` (기본): 모든 분철 포함
+                              - `true`: 분철의 그룹이 사용자 최애 그룹(`UserFavoriteGroup`) 에 등록된 것만 포함
+
+                            **응답 동작**
+                            - 찜이 없으면 빈 배열 `[]` 반환
+                            - 필터로 모두 제외되어도 빈 배열 반환 (별도 에러 없음)
+                            - `thumbnailUrl` 은 분철에 등록된 이미지 중 **가장 먼저 등록된 1장의 URL**. 이미지가 없으면 `null`
+                            - `deadline` 은 UTC ISO-8601 (예: `2026-06-01T12:00:00Z`)
                             """)
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -175,7 +207,8 @@ class BuncheolBookmarkControllerDocsTest {
                                 .description("정렬 기준 — `LATEST` | `DEADLINE`. 기본값 `LATEST`")
                                 .optional(),
                             parameterWithName("hideClosed")
-                                .description("모집중이 아닌 분철 숨김 여부 (`true` | `false`). 기본값 `false`")
+                                .description(
+                                    "`RECRUITING` 이 아닌 분철 숨김 여부 (`true` | `false`). 기본값 `false`")
                                 .optional(),
                             parameterWithName("onlyFavoriteGroups")
                                 .description("최애 그룹 분철만 보기 (`true` | `false`). 기본값 `false`")
@@ -186,11 +219,13 @@ class BuncheolBookmarkControllerDocsTest {
                             fieldWithPath("[].buncheolId").description("분철 ID"),
                             fieldWithPath("[].title").description("분철 제목"),
                             fieldWithPath("[].status")
-                                .description("분철 진행 상태 (RECRUITING | CLOSED | ...)"),
-                            fieldWithPath("[].deadline").description("분철 모집 마감일"),
+                                .description(
+                                    "분철 진행 상태 — `RECRUITING` | `CLOSED` | `PAID` | `SETTLING` | `FINISHED` | `CANCELLED`"),
+                            fieldWithPath("[].deadline")
+                                .description("분철 모집 마감 시각 (UTC ISO-8601, 예: `2026-06-01T12:00:00Z`)"),
                             fieldWithPath("[].groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("[].thumbnailUrl")
-                                .description("분철 대표 이미지 URL. 이미지가 없으면 null")
+                                .description("분철 등록 이미지 중 가장 먼저 등록된 1장의 URL. 이미지가 없으면 `null`")
                                 .optional())
                         .build())));
   }

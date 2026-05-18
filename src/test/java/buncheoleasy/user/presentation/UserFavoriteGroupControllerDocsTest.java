@@ -94,7 +94,20 @@ class UserFavoriteGroupControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("FavoriteGroup")
                         .summary("최애 그룹 등록")
-                        .description("사용자의 최애 그룹 목록에 K-pop 그룹을 추가한다. 이미 등록된 그룹이면 409 반환.")
+                        .description(
+                            """
+                            사용자의 최애 그룹 목록에 K-pop 그룹을 추가한다.
+
+                            **제한**
+                            - 사용자당 **최대 5개**까지 등록 가능. 6번째 등록 시 400 반환
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `GRP-001` (`GROUP_NOT_FOUND`) | 존재하지 않는 그룹 |
+                            | 409 | `GRP-003` (`FAVORITE_GROUP_ALREADY_EXISTS`) | 이미 최애로 등록된 그룹 |
+                            | 400 | `GRP-005` (`FAVORITE_GROUP_LIMIT_EXCEEDED`) | 최애 그룹 등록 상한(5개) 초과 |
+                            """)
                         .pathParameters(parameterWithName("groupId").description("그룹 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -116,7 +129,15 @@ class UserFavoriteGroupControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("FavoriteGroup")
                         .summary("최애 그룹 해제")
-                        .description("사용자의 최애 그룹 목록에서 K-pop 그룹을 제거한다. 등록되지 않은 그룹이면 404 반환.")
+                        .description(
+                            """
+                            사용자의 최애 그룹 목록에서 K-pop 그룹을 제거한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `GRP-004` (`FAVORITE_GROUP_NOT_FOUND`) | 해당 그룹을 최애로 등록한 상태가 아님 |
+                            """)
                         .pathParameters(parameterWithName("groupId").description("그룹 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
@@ -142,7 +163,15 @@ class UserFavoriteGroupControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("FavoriteGroup")
                         .summary("내 최애 그룹 목록 조회")
-                        .description("사용자가 등록한 최애 그룹 카드 리스트를 최신 등록 순으로 조회한다.")
+                        .description(
+                            """
+                            사용자가 등록한 최애 그룹 카드 리스트를 최신 등록 순으로 조회한다.
+
+                            **응답 동작**
+                            - 등록한 최애가 없으면 빈 배열 `[]` 반환
+                            - 결과 개수는 **0~5개** (등록 상한 5개)
+                            - `imageUrl` 은 그룹 엔티티에 등록된 대표 이미지 URL. 그룹에 이미지가 없으면 `null`
+                            """)
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .responseSchema(Schema.schema("MyFavoriteGroupListResponse"))
@@ -151,7 +180,7 @@ class UserFavoriteGroupControllerDocsTest {
                             fieldWithPath("[].groupId").description("그룹 ID"),
                             fieldWithPath("[].name").description("그룹명"),
                             fieldWithPath("[].imageUrl")
-                                .description("그룹 대표 이미지 URL. 없으면 null")
+                                .description("그룹 대표 이미지 URL. 없으면 `null`")
                                 .optional())
                         .build())));
   }

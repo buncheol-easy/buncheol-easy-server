@@ -17,6 +17,7 @@ import jakarta.persistence.PersistenceContext;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -163,6 +164,42 @@ class JpaBuncheolBookmarkRepositoryAdapterTest {
     void 찜이_없으면_빈_리스트를_반환한다() {
       List<BuncheolBookmark> result =
           buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId);
+
+      assertThat(result).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("findBookmarkedBuncheolIds (IN 배치 조회)")
+  class FindBookmarkedBuncheolIdsTest {
+
+    @Test
+    void 입력_id_목록이_비어있으면_저장소를_거치지_않고_빈_Set_을_반환한다() {
+      Set<Long> result = buncheolBookmarkRepository.findBookmarkedBuncheolIds(userId, List.of());
+
+      assertThat(result).isEmpty();
+    }
+
+    @Test
+    void 사용자가_찜한_분철의_id_만_반환된다() {
+      buncheolBookmarkRepository.save(BuncheolBookmark.create(userId, buncheolId));
+      em.flush();
+
+      Set<Long> result =
+          buncheolBookmarkRepository.findBookmarkedBuncheolIds(
+              userId, List.of(buncheolId, otherBuncheolId));
+
+      assertThat(result).containsExactly(buncheolId);
+    }
+
+    @Test
+    void 다른_사용자의_찜은_포함되지_않는다() {
+      Long otherUser = TestUserFixture.insertUser(jdbcTemplate, "other_user");
+      buncheolBookmarkRepository.save(BuncheolBookmark.create(otherUser, buncheolId));
+      em.flush();
+
+      Set<Long> result =
+          buncheolBookmarkRepository.findBookmarkedBuncheolIds(userId, List.of(buncheolId));
 
       assertThat(result).isEmpty();
     }

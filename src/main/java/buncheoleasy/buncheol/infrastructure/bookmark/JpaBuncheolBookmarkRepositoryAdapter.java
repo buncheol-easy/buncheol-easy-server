@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
@@ -38,5 +39,13 @@ public class JpaBuncheolBookmarkRepositoryAdapter implements BuncheolBookmarkRep
   @Override
   public List<BuncheolBookmark> findAllByUserIdOrderByCreatedAtDescIdDesc(final Long userId) {
     return jpaBuncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId);
+  }
+
+  @Override
+  public Set<Long> findBookmarkedBuncheolIds(final Long userId, final List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return Set.of();
+    }
+    return Set.copyOf(jpaBuncheolBookmarkRepository.findBookmarkedBuncheolIds(userId, buncheolIds));
   }
 }

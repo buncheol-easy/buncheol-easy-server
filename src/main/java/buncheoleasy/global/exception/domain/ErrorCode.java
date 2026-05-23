@@ -139,6 +139,9 @@ public enum ErrorCode {
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
 
+  /** PAGE - 페이지네이션 관련 에러 */
+  CURSOR_INVALID("PAGE-001", "유효하지 않은 커서 값입니다.", HttpStatus.BAD_REQUEST),
+
   /** C - 공통 에러 */
   INVALID_INPUT_VALUE("C-001", "적절하지 않은 입력값입니다.", HttpStatus.BAD_REQUEST),
   INTERNAL_SERVER_ERROR("C-002", "서버 내부 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);

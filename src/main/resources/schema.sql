@@ -112,6 +112,10 @@ CREATE TABLE IF NOT EXISTS buncheols
     INDEX idx_buncheols_group_id (group_id),
     INDEX idx_buncheols_title (title),
     INDEX idx_buncheols_host_created (host_id, created_at DESC),
+    -- 공개 목록 조회 (CANCELLED 제외, createdAt DESC 정렬) 의 커서 페이지네이션용
+    INDEX idx_buncheols_status_created (status, created_at DESC, id DESC),
+    -- groupId 필터 + 커서 조합용 (idx_buncheols_group_id 만으로는 정렬을 인덱스로 커버 불가)
+    INDEX idx_buncheols_group_created (group_id, created_at DESC, id DESC),
 
     CONSTRAINT fk_buncheols_host
         FOREIGN KEY (host_id)
@@ -136,6 +140,8 @@ CREATE TABLE IF NOT EXISTS buncheol_members
 
     INDEX idx_buncheol_members_buncheol_id (buncheol_id),
     UNIQUE INDEX uq_buncheol_members_buncheol_member (buncheol_id, member_id),
+    -- memberId 단독 검색 (분철 목록의 memberId 서브쿼리) 인덱스. uq_(buncheol_id, member_id) 는 member_id 단독 검색에 무용.
+    INDEX idx_buncheol_members_member (member_id, buncheol_id),
 
     CONSTRAINT fk_buncheol_members_buncheol
         FOREIGN KEY (buncheol_id)

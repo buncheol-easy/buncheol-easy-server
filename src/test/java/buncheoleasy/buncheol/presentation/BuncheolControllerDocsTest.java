@@ -10,13 +10,19 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
+import buncheoleasy.global.page.Cursor;
+import buncheoleasy.global.page.CursorResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
@@ -62,6 +68,8 @@ class BuncheolControllerDocsTest {
   @MockitoBean private BuncheolService buncheolService;
 
   @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
+
+  @MockitoBean private BuncheolListQueryService buncheolListQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -254,6 +262,121 @@ class BuncheolControllerDocsTest {
                                 .description("활성 참여자 수 (ACTIVE_BID/AWAITING_PAYMENT/CONFIRMED)"),
                             fieldWithPath("[].createdAt").description("분철 개최 일시"))
                         .build())));
+  }
+
+  @Test
+  void 분철_목록_조회() throws Exception {
+    Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    BuncheolSummaryResponse item =
+        new BuncheolSummaryResponse(10L, "뉴진스 1집 분철", deadline, true, "뉴진스", List.of("민지", "혜인"));
+    CursorResponse<BuncheolSummaryResponse> response =
+        new CursorResponse<>(List.of(item), "2026-05-15T08:00:00Z_10", true);
+
+    given(
+            buncheolListQueryService.search(
+                HOST_ID,
+                new BuncheolSearchCondition(100L, 200L, "뉴진스"),
+                Cursor.parse("2026-05-15T08:00:00Z_15"),
+                20))
+        .willReturn(response);
+
+    mockMvc
+        .perform(
+            get("/v1/buncheols")
+                .queryParam("groupId", "100")
+                .queryParam("memberId", "200")
+                .queryParam("keyword", "뉴진스")
+                .queryParam("cursor", "2026-05-15T08:00:00Z_15")
+                .queryParam("size", "20")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "buncheols-list",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("분철 목록 조회 (공개 탐색)")
+                        .description(
+                            """
+                            공개 분철 카드 리스트를 그룹/멤버/키워드 필터로 검색한다. **비로그인 호출 허용** — 토큰 없이도 호출 가능하며 이 경우
+                            모든 항목의 `bookmarked` 가 `false`. 토큰을 주면 본인 찜 여부가 채워진다.
+
+                            **응답 동작**
+                            - 정렬: `createdAt DESC, id DESC` 고정
+                            - 노출 상태: `CANCELLED` 를 제외한 모든 status (`RECRUITING` / `CLOSED` / `PAID` / `SETTLING` / `FINISHED`)
+                            - 페이지: **커서 기반 무한스크롤**. 응답의 `nextCursor` 를 다음 요청의 `cursor` 로 그대로 전달
+                            - `nextCursor` 형식: `<createdAt Instant ISO-8601>_<id>` (예: `2026-05-15T08:00:00Z_10`)
+                            - `hasNext=false` 면 `nextCursor` 는 `null`
+
+                            **쿼리 파라미터 (모두 선택)**
+                            - `groupId`: 그룹 ID 정확 일치
+                            - `memberId`: 단일 멤버 ID — 해당 멤버가 포함된 분철만
+                            - `keyword`: title 또는 description 부분 일치 (대소문자 무관)
+                            - `cursor`: 다음 페이지 커서. 미지정 시 첫 페이지
+                            - `size`: 페이지 크기 (기본 20, 서버에서 1~50 으로 클램프)
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `PAGE-001` (`CURSOR_INVALID`) | 커서 형식 오류 (구분자/Instant/숫자 파싱 실패) |
+                            """)
+                        .requestHeaders(
+                            headerWithName("Authorization")
+                                .description("`Bearer {accessToken}` — 비로그인 호출이면 헤더 자체를 생략")
+                                .optional())
+                        .queryParameters(
+                            parameterWithName("groupId").description("그룹 ID 필터").optional(),
+                            parameterWithName("memberId").description("단일 멤버 ID 필터").optional(),
+                            parameterWithName("keyword")
+                                .description("title/description 부분 일치 키워드")
+                                .optional(),
+                            parameterWithName("cursor")
+                                .description("`<createdAt>_<id>` 형식, 첫 페이지는 생략")
+                                .optional(),
+                            parameterWithName("size")
+                                .description("페이지 크기 (기본 20, 1~50)")
+                                .optional())
+                        .responseSchema(Schema.schema("BuncheolListResponse"))
+                        .responseFields(
+                            fieldWithPath("items").description("분철 카드 배열"),
+                            fieldWithPath("items[].id").description("분철 ID"),
+                            fieldWithPath("items[].title").description("분철 제목"),
+                            fieldWithPath("items[].deadline")
+                                .description("분철 모집 마감 시각 (UTC ISO-8601)"),
+                            fieldWithPath("items[].bookmarked")
+                                .description("호출 사용자의 본인 찜 여부 (비로그인이면 항상 false)"),
+                            fieldWithPath("items[].groupName").description("대상 K-pop 그룹명"),
+                            fieldWithPath("items[].memberNames")
+                                .description("분철에 포함된 멤버 이름 (호스트 등록 슬롯 순)"),
+                            fieldWithPath("nextCursor")
+                                .description(
+                                    "다음 페이지 커서 — `<createdAt>_<id>`. `hasNext=false` 면 null")
+                                .optional(),
+                            fieldWithPath("hasNext").description("다음 페이지 존재 여부"))
+                        .build())));
+  }
+
+  @Test
+  void 분철_목록_조회_비로그인_호출은_userId_null_로_전달되고_bookmarked_가_false_로_내려간다() throws Exception {
+    Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    BuncheolSummaryResponse item =
+        new BuncheolSummaryResponse(10L, "뉴진스 1집 분철", deadline, false, "뉴진스", List.of("민지"));
+    CursorResponse<BuncheolSummaryResponse> response =
+        new CursorResponse<>(List.of(item), null, false);
+
+    given(
+            buncheolListQueryService.search(
+                null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20))
+        .willReturn(response);
+
+    mockMvc
+        .perform(get("/v1/buncheols"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[0].bookmarked").value(false))
+        .andExpect(jsonPath("$.hasNext").value(false))
+        .andExpect(jsonPath("$.nextCursor").doesNotExist());
   }
 
   @Test

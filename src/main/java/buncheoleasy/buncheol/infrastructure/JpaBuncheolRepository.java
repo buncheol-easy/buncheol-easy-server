@@ -16,14 +16,15 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId);
 
   /**
-   * 활성 분철(CANCELLED 제외) 검색.
+   * {@code excludedStatus} 와 일치하지 않는 분철을 검색한다. 어댑터에서 {@link BuncheolStatus#CANCELLED} 를 전달해
+   * 취소된 분철을 목록에서 제외하는 용도로 사용한다.
    *
    * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 정렬은 {@code createdAt DESC, id DESC}, 페이지 사이즈는 {@link
    * Pageable} 로 제어한다.
    */
   @Query(
       "SELECT b FROM Buncheol b "
-          + "WHERE b.status <> buncheoleasy.buncheol.domain.BuncheolStatus.CANCELLED "
+          + "WHERE b.status <> :excludedStatus "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
@@ -35,6 +36,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR (b.createdAt = :cursorCreatedAt AND b.id < :cursorId)) "
           + "ORDER BY b.createdAt DESC, b.id DESC")
   List<Buncheol> search(
+      @Param("excludedStatus") BuncheolStatus excludedStatus,
       @Param("groupId") Long groupId,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,

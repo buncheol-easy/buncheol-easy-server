@@ -95,7 +95,8 @@ public class BuncheolListQueryService {
   }
 
   // LIKE 와일드카드(`%`, `_`) 와 이스케이프 문자 자체(`\`)를 리터럴로 매칭하도록 이스케이프한다.
-  // 호출 측 JPQL 은 `ESCAPE '\\'` 절을 명시해야 한다.
+  // 호출 측 JPQL 의 ESCAPE 절은 Java 리터럴 `"ESCAPE '\\'"` 로 작성한다
+  // (실제 SQL 로 전달되는 이스케이프 문자는 단일 역슬래시 `\`).
   private static String escapeForLike(final String raw) {
     return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
   }

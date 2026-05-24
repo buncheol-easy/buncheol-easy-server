@@ -57,6 +57,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
     Instant cursorCreatedAt = cursor.isFirstPage() ? null : cursor.createdAt();
     Long cursorId = cursor.isFirstPage() ? null : cursor.id();
     return jpaBuncheolRepository.search(
+        BuncheolStatus.CANCELLED,
         condition.groupId(),
         condition.memberId(),
         condition.keyword(),

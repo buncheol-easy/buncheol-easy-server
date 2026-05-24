@@ -4,6 +4,7 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
@@ -313,13 +314,14 @@ class BuncheolControllerDocsTest {
                             **쿼리 파라미터 (모두 선택)**
                             - `groupId`: 그룹 ID 정확 일치
                             - `memberId`: 단일 멤버 ID — 해당 멤버가 포함된 분철만
-                            - `keyword`: title 또는 description 부분 일치 (대소문자 무관)
+                            - `keyword`: title 또는 description 부분 일치 (대소문자 무관, 최대 100자)
                             - `cursor`: 다음 페이지 커서. 미지정 시 첫 페이지
                             - `size`: 페이지 크기 (기본 20, 서버에서 1~50 으로 클램프)
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `keyword` 가 100자 초과 |
                             | 400 | `PAGE-001` (`CURSOR_INVALID`) | 커서 형식 오류 (구분자/Instant/숫자 파싱 실패) |
                             """)
                         .requestHeaders(
@@ -356,6 +358,18 @@ class BuncheolControllerDocsTest {
                                 .optional(),
                             fieldWithPath("hasNext").description("다음 페이지 존재 여부"))
                         .build())));
+  }
+
+  @Test
+  void 분철_목록_조회_keyword_가_100자_초과면_400과_INVALID_INPUT_VALUE를_반환한다() throws Exception {
+    String overLimit = "a".repeat(101);
+
+    mockMvc
+        .perform(get("/v1/buncheols").queryParam("keyword", overLimit))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("C-001"));
+
+    verifyNoInteractions(buncheolListQueryService);
   }
 
   @Test

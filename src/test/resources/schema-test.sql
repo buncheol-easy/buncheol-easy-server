@@ -114,6 +114,8 @@ CREATE TABLE buncheols
 CREATE INDEX idx_buncheols_group_id ON buncheols (group_id);
 CREATE INDEX idx_buncheols_title ON buncheols (title);
 CREATE INDEX idx_buncheols_host_created ON buncheols (host_id, created_at DESC);
+CREATE INDEX idx_buncheols_status_created ON buncheols (status, created_at DESC, id DESC);
+CREATE INDEX idx_buncheols_group_created ON buncheols (group_id, created_at DESC, id DESC);
 
 CREATE TABLE buncheol_members
 (
@@ -131,6 +133,7 @@ CREATE TABLE buncheol_members
 
 CREATE INDEX idx_buncheol_members_buncheol_id ON buncheol_members (buncheol_id);
 CREATE UNIQUE INDEX uq_buncheol_members_buncheol_member ON buncheol_members (buncheol_id, member_id);
+CREATE INDEX idx_buncheol_members_member ON buncheol_members (member_id, buncheol_id);
 
 CREATE TABLE buncheol_images
 (

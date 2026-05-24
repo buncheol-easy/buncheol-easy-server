@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.domain;
 import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.page.Cursorable;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -22,7 +23,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "buncheols")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Buncheol extends TimestampedEntity {
+public class Buncheol extends TimestampedEntity implements Cursorable {
 
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;

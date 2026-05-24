@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.domain.bookmark;
 
 import java.util.List;
+import java.util.Set;
 
 public interface BuncheolBookmarkRepository {
 
@@ -14,4 +15,7 @@ public interface BuncheolBookmarkRepository {
 
   /** 사용자의 찜 목록을 최신순(created_at DESC, tie-breaker id DESC) 으로 조회한다. */
   List<BuncheolBookmark> findAllByUserIdOrderByCreatedAtDescIdDesc(Long userId);
+
+  /** 주어진 분철 ID 집합 중 해당 사용자가 찜한 것만 골라 반환한다. {@code buncheolIds} 가 비어 있으면 빈 Set. */
+  Set<Long> findBookmarkedBuncheolIds(Long userId, List<Long> buncheolIds);
 }

@@ -2,6 +2,7 @@ package buncheoleasy.global.exception.handler;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -23,6 +24,14 @@ public class GlobalExceptionHandler {
    */
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ProblemDetail handle(final MethodArgumentNotValidException exception) {
+    return ErrorCode.INVALID_INPUT_VALUE.toProblemDetail();
+  }
+
+  /*
+  @Validated 컨트롤러의 메서드 파라미터(@RequestParam 등) 검증 실패 처리
+   */
+  @ExceptionHandler(ConstraintViolationException.class)
+  public ProblemDetail handle(final ConstraintViolationException exception) {
     return ErrorCode.INVALID_INPUT_VALUE.toProblemDetail();
   }
 }

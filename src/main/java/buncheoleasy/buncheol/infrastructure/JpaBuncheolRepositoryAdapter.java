@@ -3,6 +3,8 @@ package buncheoleasy.buncheol.infrastructure;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.global.page.Cursor;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
@@ -10,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -47,6 +50,20 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   @Override
   public List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId) {
     return jpaBuncheolRepository.findAllByHostIdOrderByCreatedAtDesc(hostId);
+  }
+
+  @Override
+  public List<Buncheol> search(BuncheolSearchCondition condition, Cursor cursor, int limit) {
+    Instant cursorCreatedAt = cursor.isFirstPage() ? null : cursor.createdAt();
+    Long cursorId = cursor.isFirstPage() ? null : cursor.id();
+    return jpaBuncheolRepository.search(
+        BuncheolStatus.CANCELLED,
+        condition.groupId(),
+        condition.memberId(),
+        condition.keyword(),
+        cursorCreatedAt,
+        cursorId,
+        PageRequest.of(0, limit));
   }
 
   @Override

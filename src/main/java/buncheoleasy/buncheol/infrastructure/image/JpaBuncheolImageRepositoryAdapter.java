@@ -36,4 +36,9 @@ public class JpaBuncheolImageRepositoryAdapter implements BuncheolImageRepositor
     }
     return jpaBuncheolImageRepository.findFirstByBuncheolIds(buncheolIds);
   }
+
+  @Override
+  public List<BuncheolImage> findAllByBuncheolIdOrderByIdAsc(Long buncheolId) {
+    return jpaBuncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+  }
 }

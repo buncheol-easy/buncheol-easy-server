@@ -35,8 +35,14 @@ public class SecurityConfig {
 
   /** 사용자 컨텍스트가 필요 없는 공개 조회 API (GET 한정). */
   private static final String[] PUBLIC_GET_PATHS = {
-    "/v1/groups", "/v1/groups/*/members", "/v1/buncheols"
+    "/v1/groups", "/v1/groups/*/members", "/v1/buncheols", "/v1/buncheols/*"
   };
+
+  /**
+   * {@link #PUBLIC_GET_PATHS} 의 단일 세그먼트 매처 (예: {@code /v1/buncheols/{id}}) 는 {@code /me} 같은 인증 필요
+   * 경로까지 함께 매칭한다. 매칭 우선순위가 더 높은 위치에서 별도로 authenticated 를 강제해 공개로 새지 않도록 한다.
+   */
+  private static final String[] AUTH_REQUIRED_GET_PATHS = {"/v1/buncheols/me"};
 
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
@@ -59,6 +65,8 @@ public class SecurityConfig {
                     .permitAll() // 메서드 무관 공개 (정적 리소스, 외부 콜백 등)
                     .requestMatchers(OAUTH_PATHS)
                     .permitAll() // OAuth2 로그인 진입/콜백 경로
+                    .requestMatchers(HttpMethod.GET, AUTH_REQUIRED_GET_PATHS)
+                    .authenticated() // PUBLIC_GET_PATHS 단일 세그먼트 매처보다 우선 적용
                     .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS)
                     .permitAll() // GET 한정 공개 조회 API (비로그인 둘러보기)
                     .requestMatchers(HttpMethod.OPTIONS, "/**")

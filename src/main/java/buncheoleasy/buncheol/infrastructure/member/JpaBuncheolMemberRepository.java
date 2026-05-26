@@ -14,6 +14,8 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
 
   List<BuncheolMember> findAllByBuncheolId(Long buncheolId);
 
+  List<BuncheolMember> findAllByBuncheolIdOrderByIdAsc(Long buncheolId);
+
   @Query("SELECT m FROM BuncheolMember m WHERE m.buncheolId IN :buncheolIds")
   List<BuncheolMember> findAllByBuncheolIds(@Param("buncheolIds") List<Long> buncheolIds);
 

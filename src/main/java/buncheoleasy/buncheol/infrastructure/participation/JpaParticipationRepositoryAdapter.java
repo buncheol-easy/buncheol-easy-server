@@ -129,6 +129,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findActiveByBuncheolId(final Long buncheolId) {
+    return jpaParticipationRepository.findActiveByBuncheolId(buncheolId, ACTIVE_STATUSES);
+  }
+
+  @Override
   public boolean updateStatus(
       final Participation participation, final ParticipationStatus expectedStatus) {
     int updated =

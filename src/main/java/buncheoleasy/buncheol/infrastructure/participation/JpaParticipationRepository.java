@@ -48,6 +48,14 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("buncheolIds") List<Long> buncheolIds,
       @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
 
+  @Query(
+      "SELECT p FROM Participation p "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :activeStatuses "
+          + "ORDER BY p.bidAmount DESC, p.id ASC")
+  List<Participation> findActiveByBuncheolId(
+      @Param("buncheolId") Long buncheolId,
+      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+
   /** status 가 expectedStatus 인 경우에만 갱신 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

@@ -13,6 +13,9 @@ public interface BuncheolMemberRepository {
 
   List<BuncheolMember> findAllByBuncheolId(Long buncheolId);
 
+  /** 단일 분철의 멤버 슬롯을 등록 순(id ASC)으로 조회. */
+  List<BuncheolMember> findAllByBuncheolIdOrderByIdAsc(Long buncheolId);
+
   List<BuncheolMember> findAllByBuncheolIds(List<Long> buncheolIds);
 
   void deleteById(Long id);

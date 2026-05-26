@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.presentation;
 
+import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.ImageFile;
@@ -7,6 +8,7 @@ import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -43,6 +45,7 @@ public class BuncheolController {
   private final BuncheolService buncheolService;
   private final MyHostedBuncheolQueryService myHostedBuncheolQueryService;
   private final BuncheolListQueryService buncheolListQueryService;
+  private final BuncheolDetailQueryService buncheolDetailQueryService;
 
   /**
    * 공개 분철 목록 조회 (비로그인 허용). 그룹/멤버/키워드 필터 + 커서 기반 무한스크롤.
@@ -71,6 +74,13 @@ public class BuncheolController {
   public ResponseEntity<List<MyHostedBuncheolResponse>> getMyHostedBuncheols(
       @AuthenticationPrincipal final Long hostId) {
     return ResponseEntity.ok(myHostedBuncheolQueryService.getMyHostedBuncheols(hostId));
+  }
+
+  /** 분철 단건 상세 조회 (비로그인 허용). 멤버별 실시간 top 3 입찰·활성 참여자 수와 로그인 유저의 내 입찰 현황(rank 포함)을 포함한다. */
+  @GetMapping("/{id}")
+  public ResponseEntity<BuncheolDetailResponse> getBuncheolDetail(
+      @AuthenticationPrincipal final Long userId, @PathVariable final Long id) {
+    return ResponseEntity.ok(buncheolDetailQueryService.getDetail(id, userId));
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

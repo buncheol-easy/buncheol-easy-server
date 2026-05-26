@@ -77,6 +77,7 @@ public class BuncheolService {
     }
   }
 
+  @Transactional
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);

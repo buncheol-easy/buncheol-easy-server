@@ -101,6 +101,8 @@ public enum ErrorCode {
   PARTICIPATION_NOT_FOUND("BCH-068", "존재하지 않는 참여입니다.", HttpStatus.NOT_FOUND),
   PARTICIPATION_NO_PERMISSION("BCH-069", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   PARTICIPATION_ALREADY_EXISTS("BCH-070", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CANCEL_CONFLICT(
+      "BCH-073", "다른 요청에 의해 참여 상태가 바뀌어 취소에 실패했습니다. 다시 시도해주세요.", HttpStatus.CONFLICT),
 
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),

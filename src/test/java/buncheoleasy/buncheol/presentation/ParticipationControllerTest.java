@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -309,6 +310,84 @@ class ParticipationControllerTest {
           .perform(get("/v1/participations/me").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(content().string("[]"));
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 참여 취소 API 테스트")
+  class CancelParticipationTest {
+
+    @Test
+    void 참여_취소에_성공하면_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              delete("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
+          .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void 참여가_존재하지_않으면_404를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_NOT_FOUND))
+          .given(buncheolCheckoutService)
+          .cancelParticipation(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+
+      mockMvc
+          .perform(
+              delete("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(
+              content()
+                  .string(Matchers.containsString(ErrorCode.PARTICIPATION_NOT_FOUND.getCode())));
+    }
+
+    @Test
+    void 참여자가_아니면_403을_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION))
+          .given(buncheolCheckoutService)
+          .cancelParticipation(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+
+      mockMvc
+          .perform(
+              delete("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
+          .andExpect(status().isForbidden())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(ErrorCode.PARTICIPATION_NO_PERMISSION.getCode())));
+    }
+
+    @Test
+    void ACTIVE_BID_상태가_아니면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID))
+          .given(buncheolCheckoutService)
+          .cancelParticipation(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+
+      mockMvc
+          .perform(
+              delete("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(
+                          ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID.getCode())));
+    }
+
+    @Test
+    void CAS_충돌_시_409와_취소_충돌_코드를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_CANCEL_CONFLICT))
+          .given(buncheolCheckoutService)
+          .cancelParticipation(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
+
+      mockMvc
+          .perform(
+              delete("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(
+                          ErrorCode.PARTICIPATION_CANCEL_CONFLICT.getCode())));
     }
   }
 

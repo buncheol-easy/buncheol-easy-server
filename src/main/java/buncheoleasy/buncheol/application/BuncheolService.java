@@ -2,7 +2,6 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
-import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -82,8 +81,7 @@ public class BuncheolService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
     // TODO: 추후 참여자 존재 시 패널티 부과
-    final BuncheolStatus previousStatus = buncheol.getStatus();
-    buncheolDomainService.cancelBuncheol(buncheol, previousStatus);
+    buncheolDomainService.cancelBuncheol(buncheol);
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

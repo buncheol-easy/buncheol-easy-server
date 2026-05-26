@@ -16,7 +16,6 @@ import static org.mockito.Mockito.never;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
-import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -384,14 +383,13 @@ class BuncheolServiceTest {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
 
       // when
       buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
 
       // then
       then(buncheol).should().validateOwner(HOST_ID);
-      then(buncheolDomainService).should().cancelBuncheol(buncheol, BuncheolStatus.RECRUITING);
+      then(buncheolDomainService).should().cancelBuncheol(buncheol);
     }
 
     @Test
@@ -409,7 +407,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
 
-      then(buncheolDomainService).should(never()).cancelBuncheol(any(), any());
+      then(buncheolDomainService).should(never()).cancelBuncheol(any());
     }
 
     @Test
@@ -425,7 +423,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
 
-      then(buncheolDomainService).should(never()).cancelBuncheol(any(), any());
+      then(buncheolDomainService).should(never()).cancelBuncheol(any());
     }
   }
 }

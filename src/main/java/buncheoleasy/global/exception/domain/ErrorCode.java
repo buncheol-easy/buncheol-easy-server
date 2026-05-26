@@ -86,8 +86,6 @@ public enum ErrorCode {
   BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   BUNCHEOL_CANCEL_NOT_ALLOWED("BCH-050", "현재 상태에서는 분철을 취소할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_CANCEL_CONFLICT(
-      "BCH-052", "다른 요청에 의해 분철 상태가 바뀌어 취소에 실패했습니다. 다시 시도해주세요.", HttpStatus.CONFLICT),
 
   BUNCHEOL_NOT_RECRUITING("BCH-060", "모집 중인 분철이 아닙니다.", HttpStatus.CONFLICT),
   PARTICIPATION_MEMBER_NOT_FOUND("BCH-061", "해당 분철에 존재하지 않는 멤버입니다.", HttpStatus.NOT_FOUND),

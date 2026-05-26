@@ -23,7 +23,5 @@ public interface BuncheolRepository {
    */
   List<Buncheol> search(BuncheolSearchCondition condition, Cursor cursor, int limit);
 
-  boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus);
-
   boolean existsActiveByHostId(Long hostId);
 }

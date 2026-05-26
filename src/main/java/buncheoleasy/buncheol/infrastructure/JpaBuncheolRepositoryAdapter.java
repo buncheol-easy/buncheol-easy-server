@@ -5,7 +5,6 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.global.page.Cursor;
-import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -27,7 +26,6 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
           BuncheolStatus.SETTLING);
 
   private final JpaBuncheolRepository jpaBuncheolRepository;
-  private final Clock clock;
 
   @Override
   public Buncheol save(Buncheol buncheol) {
@@ -64,14 +62,6 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         cursorCreatedAt,
         cursorId,
         PageRequest.of(0, limit));
-  }
-
-  @Override
-  public boolean updateStatus(Buncheol buncheol, BuncheolStatus expectedStatus) {
-    int updated =
-        jpaBuncheolRepository.updateStatusIfMatches(
-            buncheol.getId(), buncheol.getStatus(), Instant.now(clock), expectedStatus);
-    return updated > 0;
   }
 
   @Override

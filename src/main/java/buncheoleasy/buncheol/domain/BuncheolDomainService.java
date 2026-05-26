@@ -29,14 +29,11 @@ public class BuncheolDomainService {
     buncheol.updateContent(title, description);
   }
 
-  public void cancelBuncheol(final Buncheol buncheol, final BuncheolStatus expectedStatus) {
-    // 상태 위반(이미 취소됨 등)은 도메인에서 BUNCHEOL_CANCEL_NOT_ALLOWED 로 던지고,
-    // CAS 실패(동시 요청으로 상태 변동)는 BUNCHEOL_CANCEL_CONFLICT 로 구분한다.
+  public void cancelBuncheol(final Buncheol buncheol) {
+    // 호스트 본인만 자신의 분철을 취소할 수 있어 다중 동시 요청이 의미 있는 경합을 만들지 않는다.
+    // 따라서 CAS 없이 도메인 메서드로 상태 위반(BUNCHEOL_CANCEL_NOT_ALLOWED) 만 검증하고
+    // managed 엔티티의 in-memory 전이를 JPA dirty checking 으로 커밋 시점에 반영한다.
     buncheol.cancel();
-    boolean updated = buncheolRepository.updateStatus(buncheol, expectedStatus);
-    if (!updated) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_CONFLICT);
-    }
   }
 
   public boolean hasActiveBuncheolHostedBy(final Long hostId) {

@@ -140,29 +140,17 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void 분철_상태를_수정할_수_있다() {
+    void managed_엔티티에서_cancel_호출_시_더티체킹으로_DB에_CANCELLED가_반영된다() {
       Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      BuncheolStatus expectedStatus = buncheol.getStatus();
-      buncheol.cancel();
 
-      boolean updated = buncheolRepository.updateStatus(buncheol, expectedStatus);
+      // findById 로 managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
+      Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
+      managed.cancel();
+      em.flush();
+      em.clear();
 
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      assertThat(updated).isTrue();
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
-    }
-
-    @Test
-    void 예상_상태가_다르면_업데이트되지_않는다() {
-      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      buncheol.cancel();
-
-      // expectedStatus를 CLOSED로 전달 (실제는 RECRUITING)
-      boolean updated = buncheolRepository.updateStatus(buncheol, BuncheolStatus.CLOSED);
-
-      Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      assertThat(updated).isFalse();
-      assertThat(found.getStatus()).isEqualTo(BuncheolStatus.RECRUITING);
     }
   }
 

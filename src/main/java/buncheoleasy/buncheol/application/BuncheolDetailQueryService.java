@@ -63,7 +63,7 @@ public class BuncheolDetailQueryService {
     List<BuncheolMember> buncheolMembers =
         buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
 
-    Map<Long, GroupMember> groupMemberById =
+    Map<Long, GroupMember> groupMemberByGroupMemberId =
         buncheolMembers.isEmpty()
             ? Map.of()
             : groupMemberRepository
@@ -84,7 +84,7 @@ public class BuncheolDetailQueryService {
 
     List<BuncheolMemberBidResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberBid(bm, groupMemberById, participationsByMember))
+            .map(bm -> toMemberBid(bm, groupMemberByGroupMemberId, participationsByMember))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -108,9 +108,9 @@ public class BuncheolDetailQueryService {
 
   private BuncheolMemberBidResponse toMemberBid(
       final BuncheolMember buncheolMember,
-      final Map<Long, GroupMember> groupMemberById,
+      final Map<Long, GroupMember> groupMemberByGroupMemberId,
       final Map<Long, List<Participation>> participationsByMember) {
-    GroupMember groupMember = groupMemberById.get(buncheolMember.getMemberId());
+    GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     List<Participation> bids =
         participationsByMember.getOrDefault(buncheolMember.getId(), List.of());
     List<Long> topBidAmounts =

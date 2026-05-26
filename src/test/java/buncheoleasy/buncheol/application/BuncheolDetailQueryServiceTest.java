@@ -72,6 +72,20 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
+    void 분철은_있지만_그룹이_없으면_GROUP_NOT_FOUND() {
+      Buncheol buncheol =
+          buncheol(BUNCHEOL_ID, GROUP_ID, "제목", BuncheolStatus.RECRUITING,
+              ShippingFeePolicy.of(3000, null));
+      given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(buncheol));
+      given(groupRepository.findById(GROUP_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME))
+          .isInstanceOf(BusinessException.class)
+          .extracting(e -> ((BusinessException) e).getErrorCode())
+          .isEqualTo(ErrorCode.GROUP_NOT_FOUND);
+    }
+
+    @Test
     void 비로그인_호출시_myParticipation_은_null() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, 4000));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))

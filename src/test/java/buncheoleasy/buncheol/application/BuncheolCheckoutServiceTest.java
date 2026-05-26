@@ -41,6 +41,8 @@ class BuncheolCheckoutServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private PaymentService paymentService;
 
+  // @Mock 으로 두면 instant() 가 null 을 반환해 stub 이 필요해진다. Clock.fixed 의 실제 동작을
+  // 그대로 사용하기 위해 @Spy 로 감싼다 (ParticipationPaymentHandlerTest 와 동일 패턴).
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long BUNCHEOL_ID = 1L;

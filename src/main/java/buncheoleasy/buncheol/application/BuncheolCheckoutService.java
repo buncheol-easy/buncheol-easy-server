@@ -50,6 +50,8 @@ public class BuncheolCheckoutService {
     Participation participation = participationDomainService.getParticipation(participationId);
     participation.validateOwnedBy(participantId);
 
+    // 도메인 가드 거부(BCH-067)는 try 밖에서 그대로 전파해 CAS 충돌(BCH-073) 과 구분한다.
+    // cancel() 호출이 try 안으로 이동하면 두 경로의 ErrorCode 가 섞이므로 위치 유지.
     participation.cancel(Instant.now(clock));
 
     try {

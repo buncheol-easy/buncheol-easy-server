@@ -133,6 +133,73 @@ class JpaBuncheolImageRepositoryAdapterTest {
     }
   }
 
+  @Nested
+  @DisplayName("단일 분철 이미지 전체 조회 테스트")
+  class FindAllByBuncheolIdOrderByIdAscTest {
+
+    @Test
+    void 등록_순서대로_이미지_전체를_조회한다() {
+      buncheolImageRepository.saveAll(
+          List.of(
+              BuncheolImage.create(buncheolId, "https://cdn.example.com/image1.jpg"),
+              BuncheolImage.create(buncheolId, "https://cdn.example.com/image2.jpg"),
+              BuncheolImage.create(buncheolId, "https://cdn.example.com/image3.jpg")));
+      em.flush();
+      em.clear();
+
+      List<BuncheolImage> result =
+          buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+
+      assertThat(result)
+          .extracting(BuncheolImage::getImageUrl)
+          .containsExactly(
+              "https://cdn.example.com/image1.jpg",
+              "https://cdn.example.com/image2.jpg",
+              "https://cdn.example.com/image3.jpg");
+    }
+
+    @Test
+    void 이미지가_없으면_빈_리스트를_반환한다() {
+      List<BuncheolImage> result =
+          buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+
+      assertThat(result).isEmpty();
+    }
+
+    @Test
+    void 다른_분철의_이미지는_포함하지_않는다() {
+      Long anotherHostId = TestUserFixture.insertUser(jdbcTemplate, "host456");
+      Buncheol another =
+          Buncheol.create(
+              anotherHostId,
+              new BuncheolParams(
+                  TestGroupFixture.insertGroup(jdbcTemplate, "다른 그룹"),
+                  "다른 제목",
+                  null,
+                  "다른 스토어",
+                  Instant.now().plus(7, ChronoUnit.DAYS),
+                  3000,
+                  null),
+              Instant.now());
+      buncheolRepository.save(another);
+      em.flush();
+
+      buncheolImageRepository.saveAll(
+          List.of(BuncheolImage.create(buncheolId, "https://cdn.example.com/own.jpg")));
+      buncheolImageRepository.saveAll(
+          List.of(BuncheolImage.create(another.getId(), "https://cdn.example.com/other.jpg")));
+      em.flush();
+      em.clear();
+
+      List<BuncheolImage> result =
+          buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+
+      assertThat(result)
+          .extracting(BuncheolImage::getImageUrl)
+          .containsExactly("https://cdn.example.com/own.jpg");
+    }
+  }
+
   private int countImagesByBuncheolId(final Long targetBuncheolId) {
     return jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM buncheol_images WHERE buncheol_id = ?",

@@ -28,4 +28,6 @@ interface JpaBuncheolImageRepository extends JpaRepository<BuncheolImage, Long> 
           + "  WHERE b2.buncheolId IN :buncheolIds "
           + "  GROUP BY b2.buncheolId)")
   List<BuncheolImage> findFirstByBuncheolIds(@Param("buncheolIds") List<Long> buncheolIds);
+
+  List<BuncheolImage> findAllByBuncheolIdOrderByIdAsc(Long buncheolId);
 }

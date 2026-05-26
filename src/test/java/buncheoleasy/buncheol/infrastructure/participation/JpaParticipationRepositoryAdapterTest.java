@@ -200,4 +200,84 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(result).isEmpty();
     }
   }
+
+  @Nested
+  @DisplayName("findActiveByBuncheolId — 분철 단위 활성 참여 전체 조회")
+  class FindActiveByBuncheolIdTest {
+
+    @Test
+    void 활성_상태_참여를_bid_amount_DESC_id_ASC_로_조회한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long otherParticipantId = TestUserFixture.insertUser(jdbcTemplate, "other_xx");
+      Long addrA = insertShippingAddress(participantId, "주매장A");
+      Long addrB = insertShippingAddress(otherParticipantId, "타매장B");
+      Long addrC = insertShippingAddress(otherParticipantId, "타매장C");
+
+      insertParticipation(buncheolId, bmId, addrA, 50_000L, ParticipationStatus.ACTIVE_BID);
+      insertParticipationForUser(
+          buncheolId, bmId, otherParticipantId, addrB, 70_000L, ParticipationStatus.ACTIVE_BID);
+      // CANCELLED 는 제외돼야 한다
+      insertParticipationForUser(
+          buncheolId, bmId, otherParticipantId, addrC, 90_000L, ParticipationStatus.CANCELLED);
+
+      List<Participation> result = participationRepository.findActiveByBuncheolId(buncheolId);
+
+      assertThat(result).extracting(Participation::getBidAmount).containsExactly(70_000L, 50_000L);
+    }
+
+    @Test
+    void 다른_분철의_참여는_포함하지_않는다() {
+      Long targetId = createBuncheol();
+      Long otherId = createBuncheol();
+      Long targetMemberId = createBuncheolMember(targetId);
+      Long otherMemberId = createBuncheolMember(otherId);
+      Long addrTarget = insertShippingAddress(participantId, "타겟매장");
+      Long addrOther = insertShippingAddress(participantId, "다른매장");
+
+      insertParticipation(
+          targetId, targetMemberId, addrTarget, 40_000L, ParticipationStatus.ACTIVE_BID);
+      insertParticipation(
+          otherId, otherMemberId, addrOther, 80_000L, ParticipationStatus.ACTIVE_BID);
+
+      List<Participation> result = participationRepository.findActiveByBuncheolId(targetId);
+
+      assertThat(result)
+          .singleElement()
+          .satisfies(p -> assertThat(p.getBidAmount()).isEqualTo(40_000L));
+    }
+
+    @Test
+    void 활성_참여가_없으면_빈_리스트를_반환한다() {
+      Long buncheolId = createBuncheol();
+
+      List<Participation> result = participationRepository.findActiveByBuncheolId(buncheolId);
+
+      assertThat(result).isEmpty();
+    }
+  }
+
+  private void insertParticipationForUser(
+      Long buncheolId,
+      Long buncheolMemberId,
+      Long userId,
+      Long shippingAddressId,
+      long bidAmount,
+      ParticipationStatus status) {
+    jdbcTemplate.update(
+        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+            + " shipping_address_id, bid_amount, status, active_participant_id) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        buncheolId,
+        buncheolMemberId,
+        userId,
+        shippingAddressId,
+        bidAmount,
+        status.name(),
+        status == ParticipationStatus.ACTIVE_BID
+                || status == ParticipationStatus.AWAITING_PAYMENT
+                || status == ParticipationStatus.CONFIRMED
+            ? userId
+            : null);
+  }
 }

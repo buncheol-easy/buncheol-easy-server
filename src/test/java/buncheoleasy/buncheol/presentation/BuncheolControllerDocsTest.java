@@ -15,15 +15,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.MyBidResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
@@ -71,6 +78,8 @@ class BuncheolControllerDocsTest {
   @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
 
   @MockitoBean private BuncheolListQueryService buncheolListQueryService;
+
+  @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -391,6 +400,126 @@ class BuncheolControllerDocsTest {
         .andExpect(jsonPath("$.items[0].bookmarked").value(false))
         .andExpect(jsonPath("$.hasNext").value(false))
         .andExpect(jsonPath("$.nextCursor").doesNotExist());
+  }
+
+  @Test
+  void 분철_단건_상세_조회() throws Exception {
+    Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    BuncheolDetailResponse response =
+        new BuncheolDetailResponse(
+            10L,
+            "뉴진스 1집 분철",
+            "뉴진스",
+            "공식 스토어",
+            deadline,
+            "공식 스토어 단독 구성",
+            BuncheolStatus.RECRUITING,
+            List.of("https://cdn.example.com/img1.jpg"),
+            List.of(
+                new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000),
+                new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
+            List.of(
+                new BuncheolMemberBidResponse(
+                    101L,
+                    1001L,
+                    "민지",
+                    "https://cdn.example.com/minji.png",
+                    List.of(90_000L, 70_000L, 50_000L),
+                    4),
+                new BuncheolMemberBidResponse(
+                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", List.of(35_000L), 1)),
+            new MyParticipationSummaryResponse(
+                2,
+                List.of(
+                    new MyBidResponse(601L, 101L, 50_000L, 3),
+                    new MyBidResponse(351L, 102L, 35_000L, 1))));
+    given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
+
+    mockMvc
+        .perform(
+            get("/v1/buncheols/{id}", 10L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "buncheols-detail",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("분철 단건 상세 조회")
+                        .description(
+                            """
+                            분철 상세 화면에 필요한 모든 정보를 단일 응답으로 제공한다. **비로그인 호출 허용** — 토큰 없이도
+                            호출 가능하며 이 경우 `myParticipation` 이 `null` 로 내려간다.
+
+                            **응답 동작**
+                            - `CANCELLED` 상태 분철도 200 으로 응답하며 `status` 로 구분
+                            - 멤버별 `topBidAmounts` 는 활성 입찰 금액 DESC 상위 3개 (활성 = ACTIVE_BID / AWAITING_PAYMENT / CONFIRMED)
+                            - `activeParticipantCount` 는 해당 멤버 슬롯의 활성 참여자 수
+                            - 로그인 유저 한정: `myParticipation.bids[].rank` 는 해당 멤버 내 내 입찰 금액 순위 (1-base)
+                            - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 distinct 멤버 슬롯 수
+                            - `myParticipation.bids[].participationId` 는 입찰 철회 API 호출에 사용
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            """)
+                        .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization")
+                                .description("`Bearer {accessToken}` — 비로그인 호출이면 헤더 자체를 생략")
+                                .optional())
+                        .responseSchema(Schema.schema("BuncheolDetailResponse"))
+                        .responseFields(
+                            fieldWithPath("id").description("분철 ID"),
+                            fieldWithPath("title").description("분철 제목"),
+                            fieldWithPath("groupName").description("대상 K-pop 그룹명"),
+                            fieldWithPath("purchaseSite").description("구매처"),
+                            fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
+                            fieldWithPath("description").description("분철 설명").optional(),
+                            fieldWithPath("status")
+                                .description("분철 진행 상태 (RECRUITING / CLOSED / CANCELLED / ...)"),
+                            fieldWithPath("imageUrls").description("분철 이미지 URL 배열 (등록 순)"),
+                            fieldWithPath("shippingOptions").description("지원 배송방법 + 배송비 배열"),
+                            fieldWithPath("shippingOptions[].method")
+                                .description("배송방법 (GS25_HALF | CU_HALF)"),
+                            fieldWithPath("shippingOptions[].fee").description("해당 배송방법 배송비 (원)"),
+                            fieldWithPath("members").description("분철 멤버 슬롯 배열 (등록 순)"),
+                            fieldWithPath("members[].buncheolMemberId")
+                                .description("분철 멤버 슬롯 ID (참여 시 사용)"),
+                            fieldWithPath("members[].memberId").description("그룹 멤버 ID"),
+                            fieldWithPath("members[].memberName").description("멤버 이름"),
+                            fieldWithPath("members[].memberImage")
+                                .description("멤버 이미지 URL")
+                                .optional(),
+                            fieldWithPath("members[].topBidAmounts")
+                                .description("실시간 활성 입찰 금액 DESC 상위 3개"),
+                            fieldWithPath("members[].activeParticipantCount")
+                                .description("해당 멤버 슬롯의 현재 활성 참여자 수"),
+                            fieldWithPath("myParticipation")
+                                .description("로그인 유저의 활성 참여 요약. 비로그인이면 null")
+                                .optional(),
+                            fieldWithPath("myParticipation.participatedMemberCount")
+                                .description("이 분철에서 내가 활성 참여 중인 distinct 멤버 슬롯 수")
+                                .optional(),
+                            fieldWithPath("myParticipation.bids")
+                                .description("내 활성 입찰 목록 (멤버별 1건)")
+                                .optional(),
+                            fieldWithPath("myParticipation.bids[].participationId")
+                                .description("참여 ID (입찰 철회 API에 사용)")
+                                .optional(),
+                            fieldWithPath("myParticipation.bids[].buncheolMemberId")
+                                .description("내가 입찰한 멤버 슬롯 ID")
+                                .optional(),
+                            fieldWithPath("myParticipation.bids[].bidAmount")
+                                .description("내 입찰 금액")
+                                .optional(),
+                            fieldWithPath("myParticipation.bids[].rank")
+                                .description("해당 멤버 내 내 입찰 순위 (1-base)")
+                                .optional())
+                        .build())));
   }
 
   @Test

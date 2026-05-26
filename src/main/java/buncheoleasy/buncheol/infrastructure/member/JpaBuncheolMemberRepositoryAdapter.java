@@ -37,6 +37,11 @@ public class JpaBuncheolMemberRepositoryAdapter implements BuncheolMemberReposit
   }
 
   @Override
+  public List<BuncheolMember> findAllByBuncheolIdOrderByIdAsc(Long buncheolId) {
+    return jpaBuncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+  }
+
+  @Override
   public List<BuncheolMember> findAllByBuncheolIds(List<Long> buncheolIds) {
     if (buncheolIds.isEmpty()) {
       return List.of();

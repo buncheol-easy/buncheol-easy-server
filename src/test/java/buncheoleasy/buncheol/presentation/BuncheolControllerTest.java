@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.presentation;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -14,12 +15,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
+import buncheoleasy.buncheol.dto.response.MyBidResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
@@ -55,6 +63,8 @@ class BuncheolControllerTest {
   @MockitoBean private BuncheolService buncheolService;
 
   @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
+
+  @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -475,6 +485,110 @@ class BuncheolControllerTest {
           .perform(get("/v1/buncheols/me").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(content().string("[]"));
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 단건 상세 조회 API 테스트")
+  class GetBuncheolDetailTest {
+
+    @Test
+    void 로그인_유저는_myParticipation_을_포함해_200으로_반환한다() throws Exception {
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      BuncheolDetailResponse response =
+          new BuncheolDetailResponse(
+              10L,
+              "뉴진스 1집 분철",
+              "뉴진스",
+              "공식 스토어",
+              deadline,
+              "분철 설명",
+              BuncheolStatus.RECRUITING,
+              List.of("https://cdn/img1.jpg"),
+              List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
+              List.of(
+                  new BuncheolMemberBidResponse(
+                      101L, 1001L, "민지", "minji.png", List.of(90_000L, 70_000L, 50_000L), 4)),
+              new MyParticipationSummaryResponse(
+                  1, List.of(new MyBidResponse(601L, 101L, 50_000L, 3))));
+      given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.id").value(10))
+          .andExpect(jsonPath("$.groupName").value("뉴진스"))
+          .andExpect(jsonPath("$.status").value("RECRUITING"))
+          .andExpect(jsonPath("$.imageUrls[0]").value("https://cdn/img1.jpg"))
+          .andExpect(jsonPath("$.shippingOptions[0].method").value("GS25_HALF"))
+          .andExpect(jsonPath("$.shippingOptions[0].fee").value(3000))
+          .andExpect(jsonPath("$.members[0].buncheolMemberId").value(101))
+          .andExpect(jsonPath("$.members[0].topBidAmounts[0]").value(90000))
+          .andExpect(jsonPath("$.members[0].activeParticipantCount").value(4))
+          .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
+          .andExpect(jsonPath("$.myParticipation.bids[0].participationId").value(601))
+          .andExpect(jsonPath("$.myParticipation.bids[0].rank").value(3));
+    }
+
+    @Test
+    void 비로그인_호출은_userId_null_로_전달되고_myParticipation_은_null_로_내려간다() throws Exception {
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      BuncheolDetailResponse response =
+          new BuncheolDetailResponse(
+              10L,
+              "뉴진스 1집 분철",
+              "뉴진스",
+              "공식 스토어",
+              deadline,
+              null,
+              BuncheolStatus.RECRUITING,
+              List.of(),
+              List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
+              List.of(),
+              null);
+      given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}", 10L))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.myParticipation").doesNotExist());
+
+      then(buncheolDetailQueryService).should().getDetail(eq(10L), isNull());
+    }
+
+    @Test
+    void CANCELLED_분철도_status_CANCELLED_로_200을_반환한다() throws Exception {
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      BuncheolDetailResponse response =
+          new BuncheolDetailResponse(
+              10L,
+              "뉴진스 1집 분철",
+              "뉴진스",
+              "공식 스토어",
+              deadline,
+              null,
+              BuncheolStatus.CANCELLED,
+              List.of(),
+              List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
+              List.of(),
+              null);
+      given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}", 10L))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void 존재하지_않는_분철이면_404를_반환한다() throws Exception {
+      given(buncheolDetailQueryService.getDetail(10L, HOST_ID))
+          .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }
   }
 }

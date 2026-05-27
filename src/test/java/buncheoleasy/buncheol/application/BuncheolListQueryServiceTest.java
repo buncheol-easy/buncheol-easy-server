@@ -7,12 +7,15 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
+import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.Cursor;
@@ -42,6 +45,7 @@ class BuncheolListQueryServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private BuncheolBookmarkRepository buncheolBookmarkRepository;
+  @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
 
   @Nested
@@ -54,6 +58,8 @@ class BuncheolListQueryServiceTest {
       Buncheol b2 = buncheol(11L, 100L, "분철 B", Instant.parse("2026-05-14T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
+          .willReturn(List.of(image(10L, "https://cdn.example.com/a.jpg")));
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
           .willReturn(Map.of(10L, List.of("민지"), 11L, List.of("하니")));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L, 11L)))
@@ -67,8 +73,10 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items().get(0).id()).isEqualTo(10L);
       assertThat(result.items().get(0).bookmarked()).isTrue();
       assertThat(result.items().get(0).groupName()).isEqualTo("뉴진스");
+      assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
       assertThat(result.items().get(0).memberNames()).containsExactly("민지");
       assertThat(result.items().get(1).bookmarked()).isFalse();
+      assertThat(result.items().get(1).thumbnailUrl()).isNull();
       assertThat(result.hasNext()).isFalse();
       assertThat(result.nextCursor()).isNull();
     }
@@ -85,6 +93,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt()))
           .willReturn(List.of(b1, b2, bDropped));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L))).willReturn(List.of());
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
           .willReturn(Map.of());
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L, 11L)))
@@ -106,7 +115,7 @@ class BuncheolListQueryServiceTest {
     }
 
     @Test
-    void visible_이_비어있으면_그룹_멤버_북마크_조회를_모두_생략한다() {
+    void visible_이_비어있으면_그룹_멤버_북마크_이미지_조회를_모두_생략한다() {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       CursorResponse<BuncheolSummaryResponse> result =
@@ -116,7 +125,11 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items()).isEmpty();
       assertThat(result.hasNext()).isFalse();
       assertThat(result.nextCursor()).isNull();
-      verifyNoInteractions(groupRepository, buncheolMemberNameResolver, buncheolBookmarkRepository);
+      verifyNoInteractions(
+          groupRepository,
+          buncheolMemberNameResolver,
+          buncheolBookmarkRepository,
+          buncheolImageRepository);
     }
   }
 
@@ -129,6 +142,7 @@ class BuncheolListQueryServiceTest {
       Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
 
       CursorResponse<BuncheolSummaryResponse> result =
@@ -138,6 +152,53 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items()).hasSize(1);
       assertThat(result.items().get(0).bookmarked()).isFalse();
       verify(buncheolBookmarkRepository, never()).findBookmarkedBuncheolIds(anyLong(), anyList());
+    }
+  }
+
+  @Nested
+  @DisplayName("대표이미지 매핑")
+  class ThumbnailTest {
+
+    @Test
+    void 이미지가_없는_분철은_thumbnailUrl_이_null_로_매핑된다() {
+      Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
+      Buncheol b2 = buncheol(11L, 100L, "분철 B", Instant.parse("2026-05-14T08:00:00Z"));
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      // 10L 만 이미지 등록, 11L 은 미등록
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
+          .willReturn(List.of(image(10L, "https://cdn.example.com/a.jpg")));
+      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
+          .willReturn(Map.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
+      assertThat(result.items().get(1).thumbnailUrl()).isNull();
+    }
+
+    @Test
+    void 모든_분철에_이미지가_있으면_각각_thumbnailUrl_이_채워진다() {
+      Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
+      Buncheol b2 = buncheol(11L, 100L, "분철 B", Instant.parse("2026-05-14T08:00:00Z"));
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
+          .willReturn(
+              List.of(
+                  image(10L, "https://cdn.example.com/a.jpg"),
+                  image(11L, "https://cdn.example.com/b.jpg")));
+      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
+          .willReturn(Map.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
+      assertThat(result.items().get(1).thumbnailUrl()).isEqualTo("https://cdn.example.com/b.jpg");
     }
   }
 
@@ -155,8 +216,7 @@ class BuncheolListQueryServiceTest {
           1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 999);
 
       ArgumentCaptor<Integer> limitCaptor = ArgumentCaptor.forClass(Integer.class);
-      verify(buncheolRepository, org.mockito.Mockito.times(2))
-          .search(any(), any(), limitCaptor.capture());
+      verify(buncheolRepository, times(2)).search(any(), any(), limitCaptor.capture());
       assertThat(limitCaptor.getAllValues()).containsExactly(2, 51); // (1+1), (50+1)
     }
 
@@ -203,6 +263,13 @@ class BuncheolListQueryServiceTest {
     setField(group, "id", id);
     setField(group, "name", name);
     return group;
+  }
+
+  private BuncheolImage image(Long buncheolId, String imageUrl) {
+    BuncheolImage image = newInstance(BuncheolImage.class);
+    setField(image, "buncheolId", buncheolId);
+    setField(image, "imageUrl", imageUrl);
+    return image;
   }
 
   private static <T> T newInstance(Class<T> type) {

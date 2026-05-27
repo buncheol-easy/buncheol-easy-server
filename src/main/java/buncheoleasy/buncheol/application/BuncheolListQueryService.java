@@ -3,6 +3,8 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
+import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.Cursor;
@@ -33,6 +35,7 @@ public class BuncheolListQueryService {
   private final BuncheolRepository buncheolRepository;
   private final GroupRepository groupRepository;
   private final BuncheolBookmarkRepository buncheolBookmarkRepository;
+  private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
 
   @Transactional(readOnly = true)
@@ -57,6 +60,9 @@ public class BuncheolListQueryService {
     final Map<Long, String> groupNameById =
         groupRepository.findAllByIds(groupIds).stream()
             .collect(Collectors.toMap(Group::getId, Group::getName));
+    final Map<Long, String> thumbnailByBuncheolId =
+        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+            .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
     final Map<Long, List<String>> memberNamesByBuncheolId =
         buncheolMemberNameResolver.findNamesByBuncheolIds(buncheolIds);
     final Set<Long> bookmarkedBuncheolIds =
@@ -74,6 +80,7 @@ public class BuncheolListQueryService {
                         b.getDeadline(),
                         bookmarkedBuncheolIds.contains(b.getId()),
                         groupNameById.get(b.getGroupId()),
+                        thumbnailByBuncheolId.get(b.getId()),
                         memberNamesByBuncheolId.getOrDefault(b.getId(), List.of())))
             .toList();
 

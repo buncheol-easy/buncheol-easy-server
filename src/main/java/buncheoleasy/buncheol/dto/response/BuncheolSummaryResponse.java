@@ -10,4 +10,5 @@ public record BuncheolSummaryResponse(
     Instant deadline,
     boolean bookmarked,
     String groupName,
+    String thumbnailUrl,
     List<String> memberNames) {}

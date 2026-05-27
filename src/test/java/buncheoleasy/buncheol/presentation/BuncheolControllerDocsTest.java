@@ -278,7 +278,14 @@ class BuncheolControllerDocsTest {
   void 분철_목록_조회() throws Exception {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     BuncheolSummaryResponse item =
-        new BuncheolSummaryResponse(10L, "뉴진스 1집 분철", deadline, true, "뉴진스", List.of("민지", "혜인"));
+        new BuncheolSummaryResponse(
+            10L,
+            "뉴진스 1집 분철",
+            deadline,
+            true,
+            "뉴진스",
+            "https://cdn.example.com/buncheol-10-thumb.jpg",
+            List.of("민지", "혜인"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "2026-05-15T08:00:00Z_10", true);
 
@@ -359,6 +366,9 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("items[].bookmarked")
                                 .description("호출 사용자의 본인 찜 여부 (비로그인이면 항상 false)"),
                             fieldWithPath("items[].groupName").description("대상 K-pop 그룹명"),
+                            fieldWithPath("items[].thumbnailUrl")
+                                .description("대표이미지 URL — 분철에 등록된 첫 이미지. 이미지 없으면 null")
+                                .optional(),
                             fieldWithPath("items[].memberNames")
                                 .description("분철에 포함된 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("nextCursor")
@@ -385,7 +395,7 @@ class BuncheolControllerDocsTest {
   void 분철_목록_조회_비로그인_호출은_userId_null_로_전달되고_bookmarked_가_false_로_내려간다() throws Exception {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     BuncheolSummaryResponse item =
-        new BuncheolSummaryResponse(10L, "뉴진스 1집 분철", deadline, false, "뉴진스", List.of("민지"));
+        new BuncheolSummaryResponse(10L, "뉴진스 1집 분철", deadline, false, "뉴진스", null, List.of("민지"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), null, false);
 

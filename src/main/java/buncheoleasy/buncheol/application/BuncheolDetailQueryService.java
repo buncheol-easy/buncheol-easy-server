@@ -101,10 +101,10 @@ public class BuncheolDetailQueryService {
         buncheol.getDeadline(),
         buncheol.getDescription(),
         buncheol.getStatus(),
-        hostedByMe,
         imageUrls,
         shippingOptions,
         memberResponses,
+        hostedByMe,
         myParticipation);
   }
 

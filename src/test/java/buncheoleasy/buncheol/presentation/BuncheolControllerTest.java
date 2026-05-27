@@ -504,7 +504,6 @@ class BuncheolControllerTest {
               deadline,
               "분철 설명",
               BuncheolStatus.RECRUITING,
-              true,
               List.of("https://cdn/img1.jpg"),
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(
@@ -516,6 +515,7 @@ class BuncheolControllerTest {
                       40_000L,
                       List.of(90_000L, 70_000L, 50_000L),
                       4)),
+              true,
               new MyParticipationSummaryResponse(
                   1, List.of(new MyBidResponse(601L, 101L, 50_000L, 3))));
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
@@ -551,10 +551,10 @@ class BuncheolControllerTest {
               deadline,
               null,
               BuncheolStatus.RECRUITING,
-              false,
               List.of(),
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
+              false,
               null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
@@ -579,10 +579,10 @@ class BuncheolControllerTest {
               deadline,
               null,
               BuncheolStatus.CANCELLED,
-              false,
               List.of(),
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
+              false,
               null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 

@@ -18,8 +18,8 @@ public record BuncheolDetailResponse(
     Instant deadline,
     String description,
     BuncheolStatus status,
-    boolean hostedByMe,
     List<String> imageUrls,
     List<ShippingOptionResponse> shippingOptions,
     List<BuncheolMemberBidResponse> members,
+    boolean hostedByMe,
     MyParticipationSummaryResponse myParticipation) {}

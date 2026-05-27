@@ -57,10 +57,10 @@ class SecurityConfigTest {
                   Instant.parse("2026-06-01T12:00:00Z"),
                   null,
                   null,
+                  List.of(),
+                  List.of(),
+                  List.of(),
                   false,
-                  List.of(),
-                  List.of(),
-                  List.of(),
                   null));
 
       mockMvc.perform(get("/v1/buncheols/{id}", 10L)).andExpect(status().isOk());

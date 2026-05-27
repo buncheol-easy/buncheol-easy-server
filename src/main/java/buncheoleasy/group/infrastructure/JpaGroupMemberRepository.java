@@ -13,4 +13,8 @@ interface JpaGroupMemberRepository extends JpaRepository<GroupMember, Long> {
       @Param("groupId") Long groupId, @Param("ids") List<Long> ids);
 
   List<GroupMember> findAllByGroupId(Long groupId);
+
+  List<GroupMember> findAllByName(String name);
+
+  List<GroupMember> findAllByGroupIdIn(List<Long> groupIds);
 }

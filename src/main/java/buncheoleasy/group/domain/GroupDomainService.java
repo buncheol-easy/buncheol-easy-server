@@ -37,4 +37,16 @@ public class GroupDomainService {
   public List<GroupMember> getGroupMembers(final Long id) {
     return groupMemberRepository.findAllByGroupId(id);
   }
+
+  public List<GroupMember> findMembersByName(final String name) {
+    return groupMemberRepository.findAllByName(name);
+  }
+
+  public List<GroupMember> findMembersInGroups(final List<Long> groupIds) {
+    return groupMemberRepository.findAllByGroupIds(groupIds);
+  }
+
+  public List<Group> findGroupsByIds(final List<Long> groupIds) {
+    return groupRepository.findAllByIds(groupIds);
+  }
 }

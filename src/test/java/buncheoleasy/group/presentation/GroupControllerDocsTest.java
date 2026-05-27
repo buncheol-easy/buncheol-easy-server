@@ -13,6 +13,7 @@ import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.group.application.GroupService;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
+import buncheoleasy.group.dto.response.GroupWithMembersResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.util.List;
@@ -84,6 +85,47 @@ class GroupControllerDocsTest {
                             fieldWithPath("[].id").description("그룹 ID"),
                             fieldWithPath("[].name").description("그룹 이름"),
                             fieldWithPath("[].image").description("그룹 이미지 URL").optional())
+                        .build())));
+  }
+
+  @Test
+  void 멤버_이름으로_그룹_검색() throws Exception {
+    // given
+    given(groupService.searchGroupsByMemberName("민지"))
+        .willReturn(
+            List.of(
+                new GroupWithMembersResponse(
+                    1L,
+                    "NewJeans",
+                    "https://example.com/newjeans.jpg",
+                    List.of(
+                        new GroupMemberResponse(10L, "민지", "https://example.com/minji.jpg"),
+                        new GroupMemberResponse(11L, "하니", "https://example.com/hani.jpg")))));
+
+    // when & then
+    mockMvc
+        .perform(get("/v1/groups/members").param("keyword", "민지"))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "groups-search-by-member-name",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Group")
+                        .summary("멤버 이름으로 그룹 검색")
+                        .description("멤버 이름과 keyword 가 정확히 일치하는 멤버가 속한 그룹과 그 그룹의 전 멤버를 함께 반환한다.")
+                        .queryParameters(
+                            parameterWithName("keyword").description("정확히 일치시킬 멤버 이름"))
+                        .responseSchema(Schema.schema("GroupWithMembersListResponse"))
+                        .responseFields(
+                            fieldWithPath("[].id").description("그룹 ID"),
+                            fieldWithPath("[].name").description("그룹 이름"),
+                            fieldWithPath("[].image").description("그룹 이미지 URL").optional(),
+                            fieldWithPath("[].members[].id").description("멤버 ID"),
+                            fieldWithPath("[].members[].name").description("멤버 이름"),
+                            fieldWithPath("[].members[].image")
+                                .description("멤버 이미지 URL")
+                                .optional())
                         .build())));
   }
 

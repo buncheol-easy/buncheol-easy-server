@@ -4,6 +4,7 @@ import buncheoleasy.group.application.GroupService;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +32,7 @@ public class GroupController {
 
   @GetMapping("/members")
   public ResponseEntity<List<GroupWithMembersResponse>> searchGroupsByMemberName(
-      @RequestParam @Size(max = 100) final String keyword) {
+      @RequestParam @NotBlank @Size(max = 100) final String keyword) {
     return ResponseEntity.ok(groupService.searchGroupsByMemberName(keyword));
   }
 

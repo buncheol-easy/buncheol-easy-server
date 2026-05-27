@@ -5,6 +5,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -32,6 +33,14 @@ public class GlobalExceptionHandler {
    */
   @ExceptionHandler(ConstraintViolationException.class)
   public ProblemDetail handle(final ConstraintViolationException exception) {
+    return ErrorCode.INVALID_INPUT_VALUE.toProblemDetail();
+  }
+
+  /*
+  required = true 인 @RequestParam 키 자체가 누락된 요청 처리
+   */
+  @ExceptionHandler(MissingServletRequestParameterException.class)
+  public ProblemDetail handle(final MissingServletRequestParameterException exception) {
     return ErrorCode.INVALID_INPUT_VALUE.toProblemDetail();
   }
 }

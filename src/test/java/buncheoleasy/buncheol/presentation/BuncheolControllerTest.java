@@ -508,7 +508,14 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(
                   new BuncheolMemberBidResponse(
-                      101L, 1001L, "민지", "minji.png", List.of(90_000L, 70_000L, 50_000L), 4)),
+                      101L,
+                      1001L,
+                      "민지",
+                      "minji.png",
+                      40_000L,
+                      List.of(90_000L, 70_000L, 50_000L),
+                      4)),
+              true,
               new MyParticipationSummaryResponse(
                   1, List.of(new MyBidResponse(601L, 101L, 50_000L, 3))));
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
@@ -519,10 +526,12 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.id").value(10))
           .andExpect(jsonPath("$.groupName").value("뉴진스"))
           .andExpect(jsonPath("$.status").value("RECRUITING"))
+          .andExpect(jsonPath("$.hostedByMe").value(true))
           .andExpect(jsonPath("$.imageUrls[0]").value("https://cdn/img1.jpg"))
           .andExpect(jsonPath("$.shippingOptions[0].method").value("GS25_HALF"))
           .andExpect(jsonPath("$.shippingOptions[0].fee").value(3000))
           .andExpect(jsonPath("$.members[0].buncheolMemberId").value(101))
+          .andExpect(jsonPath("$.members[0].bidMinPrice").value(40000))
           .andExpect(jsonPath("$.members[0].topBidAmounts[0]").value(90000))
           .andExpect(jsonPath("$.members[0].activeParticipantCount").value(4))
           .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
@@ -545,12 +554,14 @@ class BuncheolControllerTest {
               List.of(),
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
+              false,
               null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
           .perform(get("/v1/buncheols/{id}", 10L))
           .andExpect(status().isOk())
+          .andExpect(jsonPath("$.hostedByMe").value(false))
           .andExpect(jsonPath("$.myParticipation").doesNotExist());
 
       then(buncheolDetailQueryService).should().getDetail(eq(10L), isNull());
@@ -571,6 +582,7 @@ class BuncheolControllerTest {
               List.of(),
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
+              false,
               null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 

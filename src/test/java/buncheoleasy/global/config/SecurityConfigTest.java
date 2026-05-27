@@ -60,6 +60,7 @@ class SecurityConfigTest {
                   List.of(),
                   List.of(),
                   List.of(),
+                  false,
                   null));
 
       mockMvc.perform(get("/v1/buncheols/{id}", 10L)).andExpect(status().isOk());

@@ -55,6 +55,7 @@ class BuncheolDetailQueryServiceTest {
   private static final Long GROUP_ID = 100L;
   private static final Long ME = 999L;
   private static final Long OTHER_USER = 888L;
+  private static final Long HOST_ID = 777L;
   private static final Instant DEADLINE = Instant.parse("2026-06-01T12:00:00Z");
 
   @Nested
@@ -103,11 +104,40 @@ class BuncheolDetailQueryServiceTest {
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
 
       assertThat(response.myParticipation()).isNull();
+      assertThat(response.hostedByMe()).isFalse();
       assertThat(response.imageUrls()).containsExactly("img-a.jpg", "img-b.jpg");
       assertThat(response.shippingOptions())
           .extracting("method", "fee")
           .containsExactly(
               tuple(ShippingMethod.GS25_HALF, 3000), tuple(ShippingMethod.CU_HALF, 4000));
+    }
+
+    @Test
+    void 호스트_본인이_조회하면_hostedByMe_가_true() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.hostedByMe()).isTrue();
+    }
+
+    @Test
+    void 호스트가_아닌_로그인_유저가_조회하면_hostedByMe_가_false() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.hostedByMe()).isFalse();
     }
 
     @Test
@@ -137,8 +167,8 @@ class BuncheolDetailQueryServiceTest {
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(
               List.of(
-                  buncheolMember(101L, BUNCHEOL_ID, 1001L),
-                  buncheolMember(102L, BUNCHEOL_ID, 1002L)));
+                  buncheolMember(101L, BUNCHEOL_ID, 1001L, 40_000L),
+                  buncheolMember(102L, BUNCHEOL_ID, 1002L, 30_000L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
           .willReturn(
               List.of(
@@ -160,10 +190,12 @@ class BuncheolDetailQueryServiceTest {
       BuncheolMemberBidResponse minji = response.members().get(0);
       assertThat(minji.buncheolMemberId()).isEqualTo(101L);
       assertThat(minji.memberName()).isEqualTo("민지");
+      assertThat(minji.bidMinPrice()).isEqualTo(40_000L);
       assertThat(minji.topBidAmounts()).containsExactly(90_000L, 70_000L, 50_000L);
       assertThat(minji.activeParticipantCount()).isEqualTo(4);
       BuncheolMemberBidResponse haerin = response.members().get(1);
       assertThat(haerin.buncheolMemberId()).isEqualTo(102L);
+      assertThat(haerin.bidMinPrice()).isEqualTo(30_000L);
       assertThat(haerin.topBidAmounts()).containsExactly(35_000L);
       assertThat(haerin.activeParticipantCount()).isEqualTo(1);
 
@@ -278,6 +310,7 @@ class BuncheolDetailQueryServiceTest {
       ShippingFeePolicy shippingFeePolicy) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
+    setField(buncheol, "hostId", HOST_ID);
     setField(buncheol, "groupId", groupId);
     setField(buncheol, "title", title);
     setField(buncheol, "description", "분철 설명");
@@ -289,10 +322,16 @@ class BuncheolDetailQueryServiceTest {
   }
 
   private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {
+    return buncheolMember(id, buncheolId, memberId, 50_000L);
+  }
+
+  private BuncheolMember buncheolMember(
+      Long id, Long buncheolId, Long memberId, long bidMinPrice) {
     BuncheolMember member = newInstance(BuncheolMember.class);
     setField(member, "id", id);
     setField(member, "buncheolId", buncheolId);
     setField(member, "memberId", memberId);
+    setField(member, "bidMinPrice", bidMinPrice);
     return member;
   }
 

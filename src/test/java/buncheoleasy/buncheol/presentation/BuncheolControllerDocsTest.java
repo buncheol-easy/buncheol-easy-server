@@ -11,6 +11,7 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -608,6 +609,43 @@ class BuncheolControllerDocsTest {
                         .tag("Buncheol")
                         .summary("분철 취소")
                         .description("호스트가 자신이 개최한 분철을 취소한다.")
+                        .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .build())));
+  }
+
+  @Test
+  void 분철_수동_마감() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/buncheols/{id}/close", 10L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-close",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("분철 수동 마감")
+                        .description(
+                            """
+                            호스트가 `deadline` 도래 전 모집을 조기에 종료한다. 분철의 `status` 가 `CLOSED` 로
+                            전이되고 `closedAt` 에 호출 시각이 기록된다.
+
+                            **호출 가능 조건**
+                            - 호출 유저가 분철 개최자(host) 본인
+                            - 분철 상태가 `RECRUITING`
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 호스트가 아님 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 이미 `CLOSED`/`PAID`/`SETTLING`/`FINISHED`/`CANCELLED` 상태 |
+                            """)
                         .pathParameters(parameterWithName("id").description("분철 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))

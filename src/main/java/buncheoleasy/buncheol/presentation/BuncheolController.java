@@ -109,6 +109,14 @@ public class BuncheolController {
     return ResponseEntity.noContent().build();
   }
 
+  /** 분철 수동 마감 API. 호스트가 deadline 도래 전 모집을 조기에 종료한다. */
+  @PostMapping("/{id}/close")
+  public ResponseEntity<Void> closeBuncheol(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
+    buncheolService.closeBuncheol(hostId, id);
+    return ResponseEntity.noContent().build();
+  }
+
   private List<ImageFile> toImageFiles(final List<MultipartFile> files) {
     if (files == null) {
       return List.of();

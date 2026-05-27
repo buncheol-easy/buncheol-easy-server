@@ -17,4 +17,9 @@ public enum BuncheolStatus {
   public boolean isCancellable() {
     return this == RECRUITING;
   }
+
+  // 호스트가 수동 마감 가능한 구간. RECRUITING → CLOSED 전이는 모집 단계에서만 의미가 있다.
+  public boolean isCloseable() {
+    return this == RECRUITING;
+  }
 }

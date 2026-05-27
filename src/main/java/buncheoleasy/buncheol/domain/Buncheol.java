@@ -122,6 +122,17 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     status = BuncheolStatus.CANCELLED;
   }
 
+  // 호스트가 deadline 도래 전 모집을 조기에 종료. RECRUITING 일 때만 허용.
+  // deadline 경과 후에도 status 가 RECRUITING 인 잔류 케이스 (자동 마감 스케줄러 도입 전) 도 정리 대상이므로
+  // deadline 비교는 하지 않는다.
+  public void close(final Instant now) {
+    if (!status.isCloseable()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+    this.status = BuncheolStatus.CLOSED;
+    this.closedAt = now;
+  }
+
   private void validate(final Long hostId, final BuncheolParams params, final Instant now) {
     validateHostAndParams(hostId, params);
     validateGroupId(params.groupId());

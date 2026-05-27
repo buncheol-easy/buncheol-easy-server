@@ -473,11 +473,59 @@ class BuncheolControllerDocsTest {
 
                             **응답 동작**
                             - `CANCELLED` 상태 분철도 200 으로 응답하며 `status` 로 구분
+                            - 멤버별 `bidMinPrice` 는 호스트가 설정한 해당 멤버 슬롯의 최소 제시 금액 (원, 양수)
                             - 멤버별 `topBidAmounts` 는 활성 입찰 금액 DESC 상위 3개 (활성 = ACTIVE_BID / AWAITING_PAYMENT / CONFIRMED)
                             - `activeParticipantCount` 는 해당 멤버 슬롯의 활성 참여자 수
+                            - `hostedByMe` 는 호출 유저가 개최자인지 여부 (비로그인 호출이면 항상 false)
                             - 로그인 유저 한정: `myParticipation.bids[].rank` 는 해당 멤버 내 내 입찰 금액 순위 (1-base)
                             - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 distinct 멤버 슬롯 수
                             - `myParticipation.bids[].participationId` 는 입찰 철회 API 호출에 사용
+
+                            **응답 예시**
+                            ```json
+                            {
+                              "id": 10,
+                              "title": "뉴진스 1집 분철",
+                              "groupName": "뉴진스",
+                              "purchaseSite": "공식 스토어",
+                              "deadline": "2026-06-01T12:00:00Z",
+                              "description": "공식 스토어 단독 구성",
+                              "status": "RECRUITING",
+                              "imageUrls": ["https://cdn.example.com/img1.jpg"],
+                              "shippingOptions": [
+                                {"method": "GS25_HALF", "fee": 3000},
+                                {"method": "CU_HALF", "fee": 4000}
+                              ],
+                              "members": [
+                                {
+                                  "buncheolMemberId": 101,
+                                  "memberId": 1001,
+                                  "memberName": "민지",
+                                  "memberImage": "https://cdn.example.com/minji.png",
+                                  "bidMinPrice": 40000,
+                                  "topBidAmounts": [90000, 70000, 50000],
+                                  "activeParticipantCount": 4
+                                },
+                                {
+                                  "buncheolMemberId": 102,
+                                  "memberId": 1002,
+                                  "memberName": "해린",
+                                  "memberImage": "https://cdn.example.com/haerin.png",
+                                  "bidMinPrice": 30000,
+                                  "topBidAmounts": [35000],
+                                  "activeParticipantCount": 1
+                                }
+                              ],
+                              "hostedByMe": true,
+                              "myParticipation": {
+                                "participatedMemberCount": 2,
+                                "bids": [
+                                  {"participationId": 601, "buncheolMemberId": 101, "bidAmount": 50000, "rank": 3},
+                                  {"participationId": 351, "buncheolMemberId": 102, "bidAmount": 35000, "rank": 1}
+                                ]
+                              }
+                            }
+                            ```
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |

@@ -414,6 +414,7 @@ class BuncheolControllerDocsTest {
             deadline,
             "공식 스토어 단독 구성",
             BuncheolStatus.RECRUITING,
+            true,
             List.of("https://cdn.example.com/img1.jpg"),
             List.of(
                 new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000),
@@ -424,10 +425,17 @@ class BuncheolControllerDocsTest {
                     1001L,
                     "민지",
                     "https://cdn.example.com/minji.png",
+                    40_000L,
                     List.of(90_000L, 70_000L, 50_000L),
                     4),
                 new BuncheolMemberBidResponse(
-                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", List.of(35_000L), 1)),
+                    102L,
+                    1002L,
+                    "해린",
+                    "https://cdn.example.com/haerin.png",
+                    30_000L,
+                    List.of(35_000L),
+                    1)),
             new MyParticipationSummaryResponse(
                 2,
                 List.of(
@@ -481,6 +489,8 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("description").description("분철 설명").optional(),
                             fieldWithPath("status")
                                 .description("분철 진행 상태 (RECRUITING / CLOSED / CANCELLED / ...)"),
+                            fieldWithPath("hostedByMe")
+                                .description("호출 유저가 개최자인지 여부 (비로그인은 false)"),
                             fieldWithPath("imageUrls").description("분철 이미지 URL 배열 (등록 순)"),
                             fieldWithPath("shippingOptions").description("지원 배송방법 + 배송비 배열"),
                             fieldWithPath("shippingOptions[].method")
@@ -494,6 +504,8 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("members[].memberImage")
                                 .description("멤버 이미지 URL")
                                 .optional(),
+                            fieldWithPath("members[].bidMinPrice")
+                                .description("호스트가 설정한 해당 멤버 슬롯의 최소 제시 금액 (원)"),
                             fieldWithPath("members[].topBidAmounts")
                                 .description("실시간 활성 입찰 금액 DESC 상위 3개"),
                             fieldWithPath("members[].activeParticipantCount")

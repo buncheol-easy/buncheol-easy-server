@@ -91,6 +91,7 @@ public class BuncheolDetailQueryService {
         toShippingOptions(buncheol.getShippingFeePolicy());
     MyParticipationSummaryResponse myParticipation =
         userId == null ? null : toMyParticipation(userId, buncheolMembers, participationsByMember);
+    boolean hostedByMe = userId != null && buncheol.isHost(userId);
 
     return new BuncheolDetailResponse(
         buncheol.getId(),
@@ -100,6 +101,7 @@ public class BuncheolDetailQueryService {
         buncheol.getDeadline(),
         buncheol.getDescription(),
         buncheol.getStatus(),
+        hostedByMe,
         imageUrls,
         shippingOptions,
         memberResponses,
@@ -120,6 +122,7 @@ public class BuncheolDetailQueryService {
         buncheolMember.getMemberId(),
         groupMember == null ? null : groupMember.getName(),
         groupMember == null ? null : groupMember.getImage(),
+        buncheolMember.getBidMinPrice(),
         topBidAmounts,
         bids.size());
   }

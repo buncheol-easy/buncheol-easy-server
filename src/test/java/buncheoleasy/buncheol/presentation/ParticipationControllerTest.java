@@ -372,23 +372,6 @@ class ParticipationControllerTest {
                       Matchers.containsString(
                           ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID.getCode())));
     }
-
-    @Test
-    void CAS_충돌_시_409와_취소_충돌_코드를_반환한다() throws Exception {
-      willThrow(new BusinessException(ErrorCode.PARTICIPATION_CANCEL_CONFLICT))
-          .given(buncheolCheckoutService)
-          .cancelParticipation(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID));
-
-      mockMvc
-          .perform(
-              delete("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
-          .andExpect(status().isConflict())
-          .andExpect(
-              content()
-                  .string(
-                      Matchers.containsString(
-                          ErrorCode.PARTICIPATION_CANCEL_CONFLICT.getCode())));
-    }
   }
 
   private void setFieldValue(final Object target, final String fieldName, final Object value) {

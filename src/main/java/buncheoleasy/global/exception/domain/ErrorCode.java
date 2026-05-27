@@ -105,9 +105,6 @@ public enum ErrorCode {
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),
 
-  PARTICIPATION_CANCEL_CONFLICT(
-      "BCH-073", "다른 요청에 의해 참여 상태가 바뀌어 취소에 실패했습니다. 다시 시도해주세요.", HttpStatus.CONFLICT),
-
   /** PAY - 결제 관련 에러 */
   PAYMENT_NOT_FOUND("PAY-001", "존재하지 않는 결제입니다.", HttpStatus.NOT_FOUND),
   PAYMENT_STATE_TRANSITION_INVALID(

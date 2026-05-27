@@ -2,13 +2,9 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
@@ -138,7 +134,7 @@ class BuncheolCheckoutServiceTest {
   class CancelParticipationTest {
 
     @Test
-    void ACTIVE_BID_상태에서_취소에_성공하면_CAS_업데이트를_호출한다() {
+    void ACTIVE_BID_상태에서_취소에_성공한다() {
       Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
 
@@ -149,9 +145,6 @@ class BuncheolCheckoutServiceTest {
 
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
       assertThat(participation.getFinalizedAt()).isEqualTo(Instant.parse("2026-03-11T12:00:00Z"));
-      then(participationDomainService)
-          .should()
-          .updateParticipationStatus(participation, ParticipationStatus.ACTIVE_BID);
     }
 
     @Test
@@ -168,7 +161,6 @@ class BuncheolCheckoutServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
-      then(participationDomainService).should(never()).updateParticipationStatus(any(), any());
     }
 
     @Test
@@ -185,27 +177,6 @@ class BuncheolCheckoutServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-      then(participationDomainService).should(never()).updateParticipationStatus(any(), any());
-    }
-
-    @Test
-    void CAS_충돌_시_취소_충돌_예외로_변환된다() {
-      Participation participation = newParticipation();
-      setId(participation, PARTICIPATION_ID);
-
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-      willThrow(new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID))
-          .given(participationDomainService)
-          .updateParticipationStatus(participation, ParticipationStatus.ACTIVE_BID);
-
-      assertThatThrownBy(
-              () -> buncheolCheckoutService.cancelParticipation(PARTICIPANT_ID, PARTICIPATION_ID))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_CONFLICT);
-      // CAS 충돌이 도메인 cancel() 이후 단계에서 발생함을 보장한다 (호출 순서 회귀 보호).
-      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
     }
   }
 

@@ -95,6 +95,60 @@ class ParticipationTest {
   }
 
   @Nested
+  @DisplayName("참여자 소유권 검증 테스트")
+  class ValidateOwnedByTest {
+
+    @Test
+    void 소유자이면_예외가_발생하지_않는다() {
+      Participation participation = newParticipation();
+
+      participation.validateOwnedBy(PARTICIPANT_ID);
+    }
+
+    @Test
+    void 소유자가_아니면_예외가_발생한다() {
+      Participation participation = newParticipation();
+      Long otherUserId = 999L;
+
+      assertThatThrownBy(() -> participation.validateOwnedBy(otherUserId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
+    }
+  }
+
+  @Nested
+  @DisplayName("참여 취소 테스트")
+  class CancelTest {
+
+    @Test
+    void ACTIVE_BID_상태에서_취소에_성공한다() {
+      Participation participation = newParticipation();
+      Instant now = Instant.parse("2026-03-11T17:00:00Z");
+
+      participation.cancel(now);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
+      assertThat(participation.getFinalizedAt()).isEqualTo(now);
+      assertThat(participation.getFailReason()).isNull();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"AWAITING_PAYMENT", "CONFIRMED", "CANCELLED", "FAILED"})
+    void ACTIVE_BID이_아닌_상태에서_취소하면_예외가_발생한다(ParticipationStatus invalidStatus) {
+      Participation participation = newParticipation();
+      setStatus(participation, invalidStatus);
+
+      assertThatThrownBy(() -> participation.cancel(Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
+  @Nested
   @DisplayName("참여 실패 테스트")
   class FailTest {
 

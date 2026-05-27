@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,5 +40,13 @@ public class ParticipationController {
   public ResponseEntity<List<MyParticipationResponse>> getMyParticipations(
       @AuthenticationPrincipal final Long participantId) {
     return ResponseEntity.ok(myParticipationQueryService.getMyParticipations(participantId));
+  }
+
+  /** 분철 참여 취소 API. 현재는 ACTIVE_BID 상태에서만 취소가 가능하다. */
+  @DeleteMapping("/{participationId}")
+  public ResponseEntity<Void> cancelParticipation(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    buncheolCheckoutService.cancelParticipation(participantId, participationId);
+    return ResponseEntity.noContent().build();
   }
 }

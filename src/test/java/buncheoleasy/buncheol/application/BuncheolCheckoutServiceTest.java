@@ -15,12 +15,16 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.application.PaymentService;
 import java.lang.reflect.Field;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,6 +36,10 @@ class BuncheolCheckoutServiceTest {
   @Mock private BuncheolParticipationService buncheolParticipationService;
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private PaymentService paymentService;
+
+  // @Mock 으로 두면 instant() 가 null 을 반환해 stub 이 필요해진다. Clock.fixed 의 실제 동작을
+  // 그대로 사용하기 위해 @Spy 로 감싼다 (ParticipationPaymentHandlerTest 와 동일 패턴).
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long BUNCHEOL_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;
@@ -118,6 +126,57 @@ class BuncheolCheckoutServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("참여 취소 테스트")
+  class CancelParticipationTest {
+
+    @Test
+    void ACTIVE_BID_상태에서_취소에_성공한다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      buncheolCheckoutService.cancelParticipation(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
+      assertThat(participation.getFinalizedAt()).isEqualTo(Instant.parse("2026-03-11T12:00:00Z"));
+    }
+
+    @Test
+    void 참여자가_다르면_권한_예외가_발생한다() {
+      Long wrongUserId = 999L;
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      assertThatThrownBy(
+              () -> buncheolCheckoutService.cancelParticipation(wrongUserId, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
+    }
+
+    @Test
+    void ACTIVE_BID_상태가_아니면_상태_전환_예외가_발생한다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+      setFieldValue(participation, "status", ParticipationStatus.AWAITING_PAYMENT);
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      assertThatThrownBy(
+              () -> buncheolCheckoutService.cancelParticipation(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
   }
 

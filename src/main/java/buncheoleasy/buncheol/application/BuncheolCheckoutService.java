@@ -8,6 +8,8 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.application.PaymentService;
+import java.time.Clock;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,7 @@ public class BuncheolCheckoutService {
   private final BuncheolParticipationService buncheolParticipationService;
   private final ParticipationDomainService participationDomainService;
   private final PaymentService paymentService;
+  private final Clock clock;
 
   /** 분철 참여 신청. 결제는 마감 후 낙찰자에 한해 별도로 진행한다. */
   @Transactional
@@ -31,10 +34,7 @@ public class BuncheolCheckoutService {
   public PaymentOrderInfo startPaymentCheckout(
       final Long participantId, final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
-
-    if (!participation.getParticipantId().equals(participantId)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
-    }
+    participation.validateOwnedBy(participantId);
 
     if (participation.getStatus() != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED);
@@ -42,5 +42,14 @@ public class BuncheolCheckoutService {
 
     return paymentService.createPaymentOrder(
         participation.getId(), participation.getBidAmount(), "분철 낙찰자 결제");
+  }
+
+  /** 참여자 본인의 분철 참여 취소. 현재는 ACTIVE_BID 상태에서만 허용한다. */
+  @Transactional
+  public void cancelParticipation(final Long participantId, final Long participationId) {
+    Participation participation = participationDomainService.getParticipation(participationId);
+    participation.validateOwnedBy(participantId);
+
+    participation.cancel(Instant.now(clock));
   }
 }

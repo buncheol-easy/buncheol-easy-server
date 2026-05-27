@@ -106,6 +106,12 @@ public class Participation extends TimestampedEntity {
     }
   }
 
+  public void validateOwnedBy(final Long participantId) {
+    if (!this.participantId.equals(participantId)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
+    }
+  }
+
   // AWAITING_PAYMENT → CONFIRMED: 낙찰자 결제 완료
   public void completePayment(final Instant now) {
     if (status != ParticipationStatus.AWAITING_PAYMENT) {
@@ -124,6 +130,15 @@ public class Participation extends TimestampedEntity {
     }
     this.status = ParticipationStatus.FAILED;
     this.failReason = reason;
+    this.finalizedAt = now;
+  }
+
+  // ACTIVE_BID → CANCELLED: 참여자 본인의 자발적 참여 취소
+  public void cancel(final Instant now) {
+    if (status != ParticipationStatus.ACTIVE_BID) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.CANCELLED;
     this.finalizedAt = now;
   }
 }

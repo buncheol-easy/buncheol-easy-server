@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.global.page.Cursor;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,4 +29,10 @@ public interface BuncheolRepository {
   List<Buncheol> search(BuncheolSearchCondition condition, Cursor cursor, int limit);
 
   boolean existsActiveByHostId(Long hostId);
+
+  /**
+   * {@code since} 이후 등록된 분철 중 CANCELLED 가 아닌 것을 그룹별로 집계해, 등록 수가 많은 순으로 상위 {@code limit} 개 groupId 를
+   * 반환한다. 동률은 groupId DESC 로 끊는다. 한 건도 없는 그룹은 결과에 포함되지 않는다.
+   */
+  List<Long> findGroupIdsByBuncheolCountSince(Instant since, int limit);
 }

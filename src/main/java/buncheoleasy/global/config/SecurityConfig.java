@@ -36,10 +36,12 @@ public class SecurityConfig {
   /** 사용자 컨텍스트가 필요 없는 공개 조회 API (GET 한정). */
   private static final String[] PUBLIC_GET_PATHS = {
     "/v1/groups",
+    "/v1/groups/popular",
     "/v1/groups/members",
     "/v1/groups/*/members",
     "/v1/buncheols",
-    "/v1/buncheols/*"
+    "/v1/buncheols/*",
+    "/v1/search-keywords/recent"
   };
 
   /**

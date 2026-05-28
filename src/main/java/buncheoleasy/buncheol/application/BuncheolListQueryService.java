@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>비로그인 호출도 허용한다 ({@code userId == null} 이면 모든 항목의 {@code bookmarked} 가 false). 정렬은 {@code
  * createdAt DESC, id DESC} 고정, hasNext 판별을 위해 size+1 fetch 패턴을 사용한다.
+ *
+ * <p>로그인 사용자가 keyword 검색을 한 경우 {@link BuncheolSearchedEvent} 를 발행해 비동기 listener 가 최근 검색 이력을 갱신하도록 한다.
+ * groupId/memberId 단독 호출은 프론트가 같은 사용자 입력에서 파생시킨 부수 요청이라 이력으로 남기지 않는다.
  */
 @Service
 @RequiredArgsConstructor
@@ -37,6 +41,7 @@ public class BuncheolListQueryService {
   private final BuncheolBookmarkRepository buncheolBookmarkRepository;
   private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
+  private final ApplicationEventPublisher eventPublisher;
 
   @Transactional(readOnly = true)
   public CursorResponse<BuncheolSummaryResponse> search(
@@ -45,11 +50,18 @@ public class BuncheolListQueryService {
       final Cursor cursor,
       final int requestedSize) {
     final int safeSize = clampSize(requestedSize);
-    final BuncheolSearchCondition normalized = normalizeKeyword(condition);
+    final String trimmedKeyword = trimKeyword(condition.keyword());
+    final BuncheolSearchCondition normalized =
+        new BuncheolSearchCondition(
+            condition.groupId(), condition.memberId(), escapeForLike(trimmedKeyword));
 
     final List<Buncheol> fetched = buncheolRepository.search(normalized, cursor, safeSize + 1);
     final boolean hasNext = fetched.size() > safeSize;
     final List<Buncheol> visible = hasNext ? fetched.subList(0, safeSize) : fetched;
+
+    // 결과 0건이어도 "검색 시도" 자체를 이력으로 남긴다 (검색창의 일반적인 UX 와 동일).
+    publishSearchedEventIfMeaningful(userId, trimmedKeyword);
+
     if (visible.isEmpty()) {
       return CursorResponse.empty();
     }
@@ -92,19 +104,28 @@ public class BuncheolListQueryService {
     return Math.max(MIN_SIZE, Math.min(requested, MAX_SIZE));
   }
 
-  private BuncheolSearchCondition normalizeKeyword(final BuncheolSearchCondition condition) {
-    final String keyword = condition.keyword();
-    if (keyword == null || keyword.isBlank()) {
-      return new BuncheolSearchCondition(condition.groupId(), condition.memberId(), null);
+  private void publishSearchedEventIfMeaningful(
+      final Long userId, final String trimmedKeyword) {
+    if (userId == null || trimmedKeyword == null) {
+      return;
     }
-    final String escaped = escapeForLike(keyword.trim());
-    return new BuncheolSearchCondition(condition.groupId(), condition.memberId(), escaped);
+    eventPublisher.publishEvent(new BuncheolSearchedEvent(userId, trimmedKeyword));
+  }
+
+  private static String trimKeyword(final String keyword) {
+    if (keyword == null || keyword.isBlank()) {
+      return null;
+    }
+    return keyword.trim();
   }
 
   // LIKE 와일드카드(`%`, `_`) 와 이스케이프 문자 자체(`\`)를 리터럴로 매칭하도록 이스케이프한다.
   // 호출 측 JPQL 의 ESCAPE 절은 Java 리터럴 `"ESCAPE '\\'"` 로 작성한다
   // (실제 SQL 로 전달되는 이스케이프 문자는 단일 역슬래시 `\`).
-  private static String escapeForLike(final String raw) {
-    return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+  private static String escapeForLike(final String trimmed) {
+    if (trimmed == null) {
+      return null;
+    }
+    return trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
   }
 }

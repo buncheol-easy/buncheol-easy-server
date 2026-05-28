@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS buncheol_images;
 DROP TABLE IF EXISTS buncheol_members;
 DROP TABLE IF EXISTS buncheol_bookmarks;
 DROP TABLE IF EXISTS buncheols;
+DROP TABLE IF EXISTS user_recent_searches;
 DROP TABLE IF EXISTS user_favorite_groups;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS `groups`;
@@ -258,3 +259,16 @@ CREATE TABLE user_favorite_groups
 
 CREATE INDEX idx_user_favorite_groups_user_id ON user_favorite_groups (user_id);
 CREATE UNIQUE INDEX uq_user_favorite_groups_user_group ON user_favorite_groups (user_id, group_id);
+
+CREATE TABLE user_recent_searches
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT       NOT NULL,
+    keyword    VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_user_recent_searches_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_user_recent_searches_user_created ON user_recent_searches (user_id, created_at DESC, id DESC);

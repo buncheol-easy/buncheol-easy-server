@@ -30,6 +30,11 @@ public class GroupController {
     return ResponseEntity.ok(groupService.searchGroups(keyword));
   }
 
+  @GetMapping("/popular")
+  public ResponseEntity<List<GroupResponse>> getPopularGroups() {
+    return ResponseEntity.ok(groupService.getPopularGroups());
+  }
+
   @GetMapping("/members")
   public ResponseEntity<List<GroupWithMembersResponse>> searchGroupsByMemberName(
       @RequestParam @NotBlank @Size(max = 100) final String keyword) {

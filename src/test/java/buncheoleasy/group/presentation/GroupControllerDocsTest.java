@@ -130,6 +130,36 @@ class GroupControllerDocsTest {
   }
 
   @Test
+  void 인기_아티스트_조회() throws Exception {
+    // given
+    given(groupService.getPopularGroups())
+        .willReturn(
+            List.of(
+                new GroupResponse(1L, "NewJeans", "https://example.com/newjeans.jpg"),
+                new GroupResponse(2L, "aespa", "https://example.com/aespa.jpg"),
+                new GroupResponse(3L, "IVE", "https://example.com/ive.jpg")));
+
+    // when & then
+    mockMvc
+        .perform(get("/v1/groups/popular"))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "groups-popular",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Group")
+                        .summary("인기 아티스트 조회")
+                        .description("최근 30일간 분철 등록 수가 많은 순으로 그룹 상위 5개를 반환한다. CANCELLED 분철은 집계에서 제외.")
+                        .responseSchema(Schema.schema("GroupListResponse"))
+                        .responseFields(
+                            fieldWithPath("[].id").description("그룹 ID"),
+                            fieldWithPath("[].name").description("그룹 이름"),
+                            fieldWithPath("[].image").description("그룹 이미지 URL").optional())
+                        .build())));
+  }
+
+  @Test
   void 그룹_멤버_조회() throws Exception {
     // given
     given(groupService.getGroupMembers(1L))

@@ -353,3 +353,25 @@ CREATE TABLE IF NOT EXISTS user_favorite_groups
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- user_recent_searches 테이블 생성 (검색창 최근 검색어 — 사용자가 친 단어를 단일 컬럼에 보관)
+-- 프론트가 그룹·멤버 name → id 변환을 책임지므로, 서버는 검색 요청의 (keyword|groupId|memberId)
+-- 중 무엇이 와도 최종적으로 사용자가 입력한 텍스트 1개로 normalize 해 저장한다.
+CREATE TABLE IF NOT EXISTS user_recent_searches
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT       NOT NULL COMMENT '검색 사용자',
+    keyword    VARCHAR(100) NOT NULL COMMENT '사용자가 검색창에 친 텍스트 (group.name / member.name normalize 포함)',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    -- 사용자별 최신순 조회 + 7개 초과 정리(offset) 쿼리 양쪽 모두 활용
+    INDEX idx_user_recent_searches_user_created (user_id, created_at DESC, id DESC),
+
+    CONSTRAINT fk_user_recent_searches_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

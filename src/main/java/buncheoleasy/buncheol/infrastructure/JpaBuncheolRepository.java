@@ -49,4 +49,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "WHERE b.hostId = :hostId AND b.status IN :activeStatuses")
   boolean existsByHostIdAndStatusIn(
       @Param("hostId") Long hostId, @Param("activeStatuses") Set<BuncheolStatus> activeStatuses);
+
+  // 최근 N일 분철 등록 수 상위 그룹 id 만 인기도 순으로 반환. Group 본문 매핑은 호출 측 책임.
+  // 부정 조건(`status <> CANCELLED`) 대신 IN 절을 써 옵티마이저가 인덱스 활용을 안정적으로 판단하게 한다.
+  @Query(
+      "SELECT b.groupId FROM Buncheol b "
+          + "WHERE b.status IN :statuses AND b.createdAt >= :since "
+          + "GROUP BY b.groupId "
+          + "ORDER BY COUNT(b) DESC, b.groupId DESC")
+  List<Long> findGroupIdsByBuncheolCountSince(
+      @Param("since") Instant since,
+      @Param("statuses") Set<BuncheolStatus> statuses,
+      Pageable pageable);
 }

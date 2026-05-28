@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -449,6 +450,63 @@ class BuncheolControllerTest {
           .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
           .andExpect(status().isForbidden())
           .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 수동 마감 테스트")
+  class CloseBuncheolTest {
+
+    @Test
+    void 수동_마감에_성공하면_204를_반환한다() throws Exception {
+      // when & then
+      mockMvc
+          .perform(post("/v1/buncheols/{id}/close", 10L).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService).should().closeBuncheol(HOST_ID, 10L);
+    }
+
+    @Test
+    void 분철이_없으면_404를_반환한다() throws Exception {
+      // given
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND))
+          .given(buncheolService)
+          .closeBuncheol(HOST_ID, 10L);
+
+      // when & then
+      mockMvc
+          .perform(post("/v1/buncheols/{id}/close", 10L).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+    }
+
+    @Test
+    void 소유자가_아니면_403을_반환한다() throws Exception {
+      // given
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
+          .given(buncheolService)
+          .closeBuncheol(HOST_ID, 10L);
+
+      // when & then
+      mockMvc
+          .perform(post("/v1/buncheols/{id}/close", 10L).with(mockAuth()))
+          .andExpect(status().isForbidden())
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+
+    @Test
+    void 모집중이_아니면_409를_반환한다() throws Exception {
+      // given
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
+          .given(buncheolService)
+          .closeBuncheol(HOST_ID, 10L);
+
+      // when & then
+      mockMvc
+          .perform(post("/v1/buncheols/{id}/close", 10L).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_RECRUITING.getCode())));
     }
   }
 

@@ -454,4 +454,73 @@ class BuncheolServiceTest {
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
   }
+
+  @Nested
+  @DisplayName("분철 수동 마감 테스트")
+  class CloseBuncheolTest {
+
+    @Test
+    void 분철_수동_마감에_성공한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(buncheolDomainService).should().closeBuncheol(buncheol);
+    }
+
+    @Test
+    void 소유자가_아니면_마감에_실패한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
+          .given(buncheol)
+          .validateOwner(HOST_ID);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(buncheolDomainService).should(never()).closeBuncheol(any());
+    }
+
+    @Test
+    void 분철이_없으면_마감에_실패한다() {
+      // given
+      Long buncheolId = 999L;
+      given(buncheolDomainService.getBuncheol(buncheolId))
+          .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.closeBuncheol(HOST_ID, buncheolId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
+
+      then(buncheolDomainService).should(never()).closeBuncheol(any());
+    }
+
+    @Test
+    void RECRUITING이_아닌_상태면_마감에_실패한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
+          .given(buncheolDomainService)
+          .closeBuncheol(buncheol);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+  }
 }

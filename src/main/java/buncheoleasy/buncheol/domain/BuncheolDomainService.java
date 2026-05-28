@@ -36,6 +36,14 @@ public class BuncheolDomainService {
     buncheol.cancel();
   }
 
+  public void closeBuncheol(final Buncheol buncheol) {
+    // 호스트 본인만 호출 가능해 close 자체의 동시 경합은 사실상 없다 — CAS 없이 도메인 가드 + dirty checking 으로 처리.
+    // 단, close flush 전에 들어온 새 입찰(JpaParticipationRepositoryAdapter.saveIfRecruiting) 은 status=RECRUITING
+    // 가드를 통과해 INSERT 될 수 있다. 이런 잔류 입찰은 후속 closedRank 결정 단계에서 closedAt 이전 입찰만
+    // 인정하는 정책으로 자연스럽게 무효화된다 (별도 PR).
+    buncheol.close(Instant.now(clock));
+  }
+
   public boolean hasActiveBuncheolHostedBy(final Long hostId) {
     return buncheolRepository.existsActiveByHostId(hostId);
   }

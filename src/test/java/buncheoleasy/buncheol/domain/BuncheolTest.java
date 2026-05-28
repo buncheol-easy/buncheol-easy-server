@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -260,6 +261,57 @@ class BuncheolTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("수동 마감 테스트")
+  class CloseTest {
+
+    @Test
+    void RECRUITING_상태에서_마감하면_CLOSED와_closedAt이_세팅된다() {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      Instant now = Instant.parse("2026-05-27T12:00:00Z");
+
+      // when
+      buncheol.close(now);
+
+      // then
+      assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.CLOSED);
+      assertThat(buncheol.getClosedAt()).isEqualTo(now);
+    }
+
+    @Test
+    void deadline이_이미_지나도_RECRUITING이면_마감에_성공한다() {
+      // given - 자동 마감 스케줄러 부재로 deadline 경과 후에도 RECRUITING 잔류 가능
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      setDeadline(buncheol, Instant.now().minusSeconds(1));
+      Instant now = Instant.parse("2026-05-27T12:00:00Z");
+
+      // when
+      buncheol.close(now);
+
+      // then
+      assertThat(buncheol.getStatus()).isEqualTo(BuncheolStatus.CLOSED);
+      assertThat(buncheol.getClosedAt()).isEqualTo(now);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING"},
+        mode = EnumSource.Mode.EXCLUDE)
+    void RECRUITING이_아닌_상태에서는_마감에_실패한다(BuncheolStatus status) {
+      // given
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      setStatus(buncheol, status);
+
+      // when & then
+      assertThatThrownBy(() -> buncheol.close(Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
   }
 

@@ -29,4 +29,23 @@ class BuncheolStatusTest {
       assertThat(status.isCancellable()).isFalse();
     }
   }
+
+  @Nested
+  @DisplayName("수동 마감 가능 여부 테스트")
+  class IsCloseableTest {
+
+    @Test
+    void RECRUITING_상태에서만_마감_가능하다() {
+      assertThat(BuncheolStatus.RECRUITING.isCloseable()).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING"},
+        mode = EnumSource.Mode.EXCLUDE)
+    void RECRUITING_외_상태에서는_마감_불가하다(BuncheolStatus status) {
+      assertThat(status.isCloseable()).isFalse();
+    }
+  }
 }

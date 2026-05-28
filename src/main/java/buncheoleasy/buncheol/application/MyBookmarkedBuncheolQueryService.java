@@ -116,6 +116,11 @@ public class MyBookmarkedBuncheolQueryService {
       // 분철이 hard delete 된 비정상 케이스 (FK CASCADE 가 막아주므로 정상 흐름엔 없음).
       return false;
     }
+    // 호스트가 취소한 분철은 사용자 옵션과 무관하게 항상 숨긴다 — 마이페이지 모든 진입점에서
+    // 취소된 분철을 노출하지 않는 정책(KAN-88).
+    if (buncheol.getStatus() == BuncheolStatus.CANCELLED) {
+      return false;
+    }
     if (hideClosed && buncheol.getStatus() != BuncheolStatus.RECRUITING) {
       return false;
     }

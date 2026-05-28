@@ -27,7 +27,7 @@ public class MyHostedBuncheolQueryService {
 
   @Transactional(readOnly = true)
   public List<MyHostedBuncheolResponse> getMyHostedBuncheols(final Long hostId) {
-    List<Buncheol> buncheols = buncheolRepository.findAllByHostIdOrderByCreatedAtDesc(hostId);
+    List<Buncheol> buncheols = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
     if (buncheols.isEmpty()) {
       return List.of();
     }

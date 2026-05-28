@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -27,6 +28,7 @@ public class BuncheolService {
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
+  private final ParticipationDomainService participationDomainService;
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
   private final ApplicationEventPublisher eventPublisher;
@@ -81,7 +83,11 @@ public class BuncheolService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
     // TODO: 추후 참여자 존재 시 패널티 부과
+    final Instant now = Instant.now(clock);
     buncheolDomainService.cancelBuncheol(buncheol);
+    // 분철과 같은 트랜잭션 안에서 활성 참여를 모두 자동 CANCELLED 로 전이.
+    // bulk UPDATE 의 flushAutomatically=true 가 위의 Buncheol dirty 변경도 함께 flush 한다.
+    participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

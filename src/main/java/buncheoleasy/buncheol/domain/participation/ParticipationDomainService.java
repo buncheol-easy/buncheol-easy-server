@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain.participation;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -38,5 +39,9 @@ public class ParticipationDomainService {
 
   public boolean hasActiveParticipationBy(final Long participantId) {
     return participationRepository.existsActiveByParticipantId(participantId);
+  }
+
+  public int cancelActiveByBuncheolId(final Long buncheolId, final Instant now) {
+    return participationRepository.cancelActiveByBuncheolId(buncheolId, now);
   }
 }

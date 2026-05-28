@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -76,4 +77,26 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("newStatus") ParticipationStatus newStatus,
       @Param("now") Instant now,
       @Param("expectedStatus") ParticipationStatus expectedStatus);
+
+  /**
+   * 분철의 활성 참여를 모두 CANCELLED 로 일괄 전이. 호스트가 분철을 취소한 흐름에서 호출되어 좀비 참여가 남지 않도록 한다.
+   *
+   * <p>bulk UPDATE 는 {@link Participation#cancel(Instant)} 의 도메인 상태 가드를 우회한다. 호출자는 호스트가 분철을
+   * 취소할 때만 진입한다는 invariant 를 책임지며, 향후 도메인 이벤트({@code ParticipationCancelled} 등)가 도입되면
+   * {@code ApplicationEventPublisher} 로 cascade 발행하는 패턴으로 전환할 것.
+   *
+   * <p>또한 {@code @PreUpdate} 콜백이 발동되지 않으므로 {@code updatedAt} 을 직접 set 한다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, "
+          + "    p.finalizedAt = :now, "
+          + "    p.updatedAt = :now "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :activeStatuses")
+  int cancelByBuncheolIdAndStatusIn(
+      @Param("buncheolId") Long buncheolId,
+      @Param("activeStatuses") Set<ParticipationStatus> activeStatuses,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("now") Instant now);
 }

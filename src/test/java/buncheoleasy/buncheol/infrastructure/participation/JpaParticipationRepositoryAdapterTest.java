@@ -257,6 +257,71 @@ class JpaParticipationRepositoryAdapterTest {
     }
   }
 
+  @Nested
+  @DisplayName("cancelActiveByBuncheolId — 분철 취소 시 활성 참여 일괄 전이")
+  class CancelActiveByBuncheolIdTest {
+
+    @Test
+    void ACTIVE_BID_만_CANCELLED_로_전이된다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addrActive = insertShippingAddress(participantId, "활성매장");
+      insertParticipation(buncheolId, bmId, addrActive, 35_000L, ParticipationStatus.ACTIVE_BID);
+
+      int affected =
+          participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
+
+      assertThat(affected).isEqualTo(1);
+      List<Participation> all =
+          participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(participantId);
+      assertThat(all)
+          .singleElement()
+          .satisfies(
+              p -> {
+                assertThat(p.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
+                assertThat(p.getFinalizedAt()).isNotNull();
+              });
+    }
+
+    @Test
+    void ACTIVE_BID_이_아닌_상태는_영향받지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      // 운영 MySQL 에선 active_participant_id (STORED generated column) + UNIQUE 제약 때문에
+      // 같은 (buncheolMemberId, participantId) 쌍의 활성 참여를 두 번 INSERT 하면 충돌한다.
+      // 그래서 비활성(CANCELLED/FAILED) 상태들만 섞어 둔다. (H2 스키마는 STORED 컬럼이 plain BIGINT 라
+      // 운영 제약이 실제로 무력하지만, 운영 환경 가정과 일치시키기 위해 동일 패턴을 유지한다.)
+      Long addrCancelled = insertShippingAddress(participantId, "이미취소");
+      Long addrFailed = insertShippingAddress(participantId, "실패");
+      insertParticipation(
+          buncheolId, bmId, addrCancelled, 30_000L, ParticipationStatus.CANCELLED);
+      insertParticipation(buncheolId, bmId, addrFailed, 40_000L, ParticipationStatus.FAILED);
+
+      int affected =
+          participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
+
+      assertThat(affected).isZero();
+    }
+
+    @Test
+    void 다른_분철의_ACTIVE_BID_는_영향받지_않는다() {
+      Long target = createBuncheol();
+      Long other = createBuncheol();
+      Long targetBmId = createBuncheolMember(target);
+      Long otherBmId = createBuncheolMember(other);
+      Long addrTarget = insertShippingAddress(participantId, "타겟매장");
+      Long addrOther = insertShippingAddress(participantId, "다른매장");
+      insertParticipation(
+          target, targetBmId, addrTarget, 35_000L, ParticipationStatus.ACTIVE_BID);
+      insertParticipation(other, otherBmId, addrOther, 50_000L, ParticipationStatus.ACTIVE_BID);
+
+      int affected = participationRepository.cancelActiveByBuncheolId(target, Instant.now());
+
+      assertThat(affected).isEqualTo(1);
+      assertThat(participationRepository.findActiveByBuncheolId(other)).hasSize(1);
+    }
+  }
+
   private void insertParticipationForUser(
       Long buncheolId,
       Long buncheolMemberId,

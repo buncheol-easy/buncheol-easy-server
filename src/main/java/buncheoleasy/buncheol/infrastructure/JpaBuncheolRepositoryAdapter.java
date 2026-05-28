@@ -46,8 +46,9 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId) {
-    return jpaBuncheolRepository.findAllByHostIdOrderByCreatedAtDesc(hostId);
+  public List<Buncheol> findVisibleByHostIdOrderByCreatedAtDesc(Long hostId) {
+    return jpaBuncheolRepository.findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
+        hostId, BuncheolStatus.CANCELLED);
   }
 
   @Override

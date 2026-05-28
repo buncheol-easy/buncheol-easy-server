@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.domain.participation;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,4 +23,14 @@ public interface ParticipationRepository {
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
   boolean updateStatus(Participation participation, ParticipationStatus expectedStatus);
+
+  /**
+   * 분철의 활성 참여({@link ParticipationStatus#activeUnderRecruiting()})를 모두 {@link
+   * ParticipationStatus#CANCELLED} 로 일괄 전이한다. 호스트가 분철을 취소했을 때 자동 호출되어, 좀비 참여가 남지 않도록 보장한다.
+   *
+   * <p>구현체는 {@code @Modifying} bulk UPDATE 로 동작하므로 호출 측 트랜잭션({@code @Transactional}) 이 필수다.
+   *
+   * @return 갱신된 참여 행 수
+   */
+  int cancelActiveByBuncheolId(Long buncheolId, Instant now);
 }

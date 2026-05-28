@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -147,5 +148,16 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
             Instant.now(clock),
             expectedStatus);
     return updated > 0;
+  }
+
+  @Override
+  public int cancelActiveByBuncheolId(final Long buncheolId, final Instant now) {
+    Set<ParticipationStatus> activeStatuses = ParticipationStatus.activeUnderRecruiting();
+    if (activeStatuses.isEmpty()) {
+      // JPQL `IN ()` 는 DB 에 따라 SQL syntax 에러를 던지므로 사전 가드.
+      return 0;
+    }
+    return jpaParticipationRepository.cancelByBuncheolIdAndStatusIn(
+        buncheolId, activeStatuses, ParticipationStatus.CANCELLED, now);
   }
 }

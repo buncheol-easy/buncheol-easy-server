@@ -98,6 +98,36 @@ class MyParticipationQueryServiceTest {
     }
 
     @Test
+    void 개최자_취소로_자동_CANCELLED_된_참여도_응답에_포함된다() {
+      // 호스트가 분철을 취소하면 ACTIVE 참여는 BuncheolService 흐름에서 자동 CANCELLED 로 전이된다.
+      // 따라서 분철은 CANCELLED, 참여도 CANCELLED 상태이며, 사용자에겐 "취소된 참여 이력" 으로 그대로 보여야 한다.
+      // (KAN-88 이전 동작: CANCELLED 분철의 참여를 응답에서 제외 → 사용자는 자신의 참여 이력을 잃었음.
+      //  이제는 자동 cancel cascade 가 도메인을 일관되게 만들어 줘서 응답에 그대로 노출 가능.)
+      Buncheol cancelled =
+          buncheol(
+              20L, "개최자가 취소한 분철", Instant.now().plus(7, ChronoUnit.DAYS), BuncheolStatus.CANCELLED);
+      Participation autoCancelled =
+          participation(600L, 20L, 201L, 30_000L, ParticipationStatus.CANCELLED, null, null);
+
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(autoCancelled));
+      given(buncheolRepository.findAllByIds(List.of(20L))).willReturn(List.of(cancelled));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(20L)))
+          .willReturn(List.of(buncheolMember(201L, 20L, 2001L)));
+      given(groupMemberRepository.findAllByIds(List.of(2001L)))
+          .willReturn(List.of(groupMember(2001L, "지수")));
+
+      List<MyParticipationResponse> result =
+          myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).buncheolId()).isEqualTo(20L);
+      assertThat(result.get(0).participationStatus())
+          .isEqualTo(ParticipationStatus.CANCELLED);
+      assertThat(result.get(0).buncheolStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+    }
+
+    @Test
     void 여러_분철에_참여한_경우_분철별로_필드를_매핑한다() {
       Buncheol buncheolA =
           buncheol(10L, "분철 A", Instant.now().plus(3, ChronoUnit.DAYS), BuncheolStatus.CLOSED);

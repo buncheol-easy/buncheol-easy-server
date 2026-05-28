@@ -19,6 +19,7 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -62,6 +63,8 @@ class BuncheolServiceTest {
   @Mock private BuncheolImageDomainService buncheolImageDomainService;
 
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
+
+  @Mock private ParticipationDomainService participationDomainService;
 
   @Mock private GroupDomainService groupDomainService;
 
@@ -379,7 +382,7 @@ class BuncheolServiceTest {
   class CancelBuncheolTest {
 
     @Test
-    void 분철_취소에_성공한다() {
+    void 분철_취소에_성공하고_해당_분철의_ACTIVE_참여도_일괄_CANCELLED_된다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -390,6 +393,9 @@ class BuncheolServiceTest {
       // then
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().cancelBuncheol(buncheol);
+      then(participationDomainService)
+          .should()
+          .cancelActiveByBuncheolId(BUNCHEOL_ID, Instant.now(clock));
     }
 
     @Test
@@ -408,6 +414,7 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
 
       then(buncheolDomainService).should(never()).cancelBuncheol(any());
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
 
     @Test
@@ -424,6 +431,27 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
 
       then(buncheolDomainService).should(never()).cancelBuncheol(any());
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+    }
+
+    @Test
+    void 분철_상태가_취소_불가면_참여_cascade가_호출되지_않는다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED))
+          .given(buncheolDomainService)
+          .cancelBuncheol(buncheol);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(buncheolDomainService).should().cancelBuncheol(buncheol);
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
   }
 }

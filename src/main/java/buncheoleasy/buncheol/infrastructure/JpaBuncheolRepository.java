@@ -12,7 +12,8 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
-  List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId);
+  List<Buncheol> findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
+      Long hostId, BuncheolStatus excludedStatus);
 
   /**
    * {@code excludedStatus} 와 일치하지 않는 분철을 검색한다. 어댑터에서 {@link BuncheolStatus#CANCELLED} 를 전달해 취소된 분철을

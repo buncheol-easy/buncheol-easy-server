@@ -44,7 +44,7 @@ class MyHostedBuncheolQueryServiceTest {
 
     @Test
     void 개최한_분철이_없으면_빈_리스트를_반환한다() {
-      given(buncheolRepository.findAllByHostIdOrderByCreatedAtDesc(HOST_ID)).willReturn(List.of());
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID)).willReturn(List.of());
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
@@ -59,7 +59,7 @@ class MyHostedBuncheolQueryServiceTest {
       Buncheol buncheol =
           buncheol(10L, 100L, "뉴진스 1집 분철", BuncheolStatus.RECRUITING, deadline, createdAt);
 
-      given(buncheolRepository.findAllByHostIdOrderByCreatedAtDesc(HOST_ID))
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
           .willReturn(List.of(buncheol));
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
           .willReturn(
@@ -93,7 +93,7 @@ class MyHostedBuncheolQueryServiceTest {
       Buncheol buncheol =
           buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, deadline, createdAt);
 
-      given(buncheolRepository.findAllByHostIdOrderByCreatedAtDesc(HOST_ID))
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
           .willReturn(List.of(buncheol));
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
           .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
@@ -122,7 +122,7 @@ class MyHostedBuncheolQueryServiceTest {
               now.minus(1, ChronoUnit.DAYS),
               now.minus(30, ChronoUnit.DAYS));
 
-      given(buncheolRepository.findAllByHostIdOrderByCreatedAtDesc(HOST_ID))
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
           .willReturn(List.of(newer, older));
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(20L, 10L)))
           .willReturn(

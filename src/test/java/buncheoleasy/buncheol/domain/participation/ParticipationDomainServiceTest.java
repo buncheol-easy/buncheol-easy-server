@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -156,6 +157,22 @@ class ParticipationDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 cancel cascade — 활성 참여 일괄 전이 테스트")
+  class CancelActiveByBuncheolIdTest {
+
+    @Test
+    void 리포지토리에_그대로_위임하고_갱신_행_수를_반환한다() {
+      Instant now = Instant.parse("2026-05-14T12:00:00Z");
+      given(participationRepository.cancelActiveByBuncheolId(1L, now)).willReturn(3);
+
+      int affected = participationDomainService.cancelActiveByBuncheolId(1L, now);
+
+      assertThat(affected).isEqualTo(3);
+      then(participationRepository).should().cancelActiveByBuncheolId(1L, now);
     }
   }
 }

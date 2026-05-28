@@ -199,6 +199,31 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
+    void hideClosed_false_여도_CANCELLED_분철은_항상_제외된다() {
+      BuncheolBookmark bmRecruiting = bookmark(500L, USER_ID, 10L);
+      BuncheolBookmark bmCancelled = bookmark(501L, USER_ID, 20L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bmRecruiting, bmCancelled));
+
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Buncheol recruiting = buncheol(10L, 100L, "모집중 분철", BuncheolStatus.RECRUITING, deadline);
+      Buncheol cancelled = buncheol(20L, 100L, "취소된 분철", BuncheolStatus.CANCELLED, deadline);
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L)))
+          .willReturn(List.of(recruiting, cancelled));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, false);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).buncheolId()).isEqualTo(10L);
+    }
+
+    @Test
     void 필터로_모두_제외되면_빈_리스트를_반환한다() {
       BuncheolBookmark bm = bookmark(500L, USER_ID, 10L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))

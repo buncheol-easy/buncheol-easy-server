@@ -57,6 +57,35 @@ class JpaBuncheolRepositoryAdapterTest {
     return buncheol;
   }
 
+  // 공통 픽스처 헬퍼 — 여러 nested 테스트에서 status·createdAt 을 강제 주입한다.
+  private void forceStatus(Long buncheolId, BuncheolStatus status) {
+    jdbcTemplate.update(
+        "UPDATE buncheols SET status = ? WHERE id = ?", status.name(), buncheolId);
+    em.clear();
+  }
+
+  private void forceCreatedAt(Long buncheolId, Instant createdAt) {
+    jdbcTemplate.update(
+        "UPDATE buncheols SET created_at = ? WHERE id = ?",
+        Timestamp.from(createdAt),
+        buncheolId);
+    em.clear();
+  }
+
+  // 분철 params 가 테스트와 무관할 때만 사용. params 가 케이스의 검증 대상이면 (예: keyword/groupId 필터)
+  // 반드시 아래 3-인자 오버로드를 직접 호출해 default validParams() 가 새지 않도록 한다.
+  private Long persistWithCreatedAt(Long hostId, Instant createdAt) {
+    return persistWithCreatedAt(hostId, validParams(), createdAt);
+  }
+
+  private Long persistWithCreatedAt(Long hostId, BuncheolParams params, Instant createdAt) {
+    Buncheol b = Buncheol.create(hostId, params, Instant.now());
+    buncheolRepository.save(b);
+    em.flush();
+    forceCreatedAt(b.getId(), createdAt);
+    return b.getId();
+  }
+
   @Nested
   @DisplayName("분철 저장 테스트")
   class SaveTest {
@@ -155,14 +184,46 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("호스트의 분철 목록 조회 테스트")
+  class FindVisibleByHostIdOrderByCreatedAtDescTest {
+
+    @Test
+    void 호스트의_CANCELLED_분철은_제외된다() {
+      Long active = persistWithCreatedAt(hostId, Instant.parse("2026-05-15T08:00:00Z"));
+      Long cancelled = persistWithCreatedAt(hostId, Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(cancelled, BuncheolStatus.CANCELLED);
+
+      List<Buncheol> result = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(active);
+    }
+
+    @Test
+    void FINISHED_분철은_포함되어_반환된다() {
+      Long recruiting = persistWithCreatedAt(hostId, Instant.parse("2026-05-15T08:00:00Z"));
+      Long finished = persistWithCreatedAt(hostId, Instant.parse("2026-05-10T08:00:00Z"));
+      forceStatus(finished, BuncheolStatus.FINISHED);
+
+      List<Buncheol> result = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(recruiting, finished);
+    }
+
+    @Test
+    void 다른_호스트의_분철은_반환되지_않는다() {
+      Long otherHostId = TestUserFixture.insertUser(jdbcTemplate, "other_host");
+      Long mine = persistWithCreatedAt(hostId, Instant.parse("2026-05-15T08:00:00Z"));
+      persistWithCreatedAt(otherHostId, Instant.parse("2026-05-14T08:00:00Z"));
+
+      List<Buncheol> result = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(mine);
+    }
+  }
+
+  @Nested
   @DisplayName("호스트의 활성 분철 존재 여부 테스트")
   class ExistsActiveByHostIdTest {
-
-    private void forceStatus(Long buncheolId, BuncheolStatus status) {
-      jdbcTemplate.update(
-          "UPDATE buncheols SET status = ? WHERE id = ?", status.name(), buncheolId);
-      em.clear();
-    }
 
     @Test
     void 호스트의_분철이_없으면_false를_반환한다() {
@@ -198,28 +259,6 @@ class JpaBuncheolRepositoryAdapterTest {
   @Nested
   @DisplayName("분철 목록 검색(search) 테스트")
   class SearchTest {
-
-    private void forceStatus(Long buncheolId, BuncheolStatus status) {
-      jdbcTemplate.update(
-          "UPDATE buncheols SET status = ? WHERE id = ?", status.name(), buncheolId);
-      em.clear();
-    }
-
-    private void forceCreatedAt(Long buncheolId, Instant createdAt) {
-      jdbcTemplate.update(
-          "UPDATE buncheols SET created_at = ? WHERE id = ?",
-          Timestamp.from(createdAt),
-          buncheolId);
-      em.clear();
-    }
-
-    private Long persistWithCreatedAt(Long hostId, BuncheolParams params, Instant createdAt) {
-      Buncheol b = Buncheol.create(hostId, params, Instant.now());
-      buncheolRepository.save(b);
-      em.flush();
-      forceCreatedAt(b.getId(), createdAt);
-      return b.getId();
-    }
 
     private BuncheolParams paramsWithTitleAndDescription(
         Long gId, String title, String description) {

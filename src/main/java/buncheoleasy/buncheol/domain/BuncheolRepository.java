@@ -13,7 +13,11 @@ public interface BuncheolRepository {
 
   List<Buncheol> findAllByIds(List<Long> ids);
 
-  List<Buncheol> findAllByHostIdOrderByCreatedAtDesc(Long hostId);
+  /**
+   * 호스트의 분철 중 사용자에게 노출 가능한 항목을 {@code createdAt DESC} 정렬로 조회한다. 취소된({@link
+   * BuncheolStatus#CANCELLED}) 분철은 결과에서 제외한다.
+   */
+  List<Buncheol> findVisibleByHostIdOrderByCreatedAtDesc(Long hostId);
 
   /**
    * 활성 분철(CANCELLED 제외) 중 검색 조건에 부합하는 항목을 {@code createdAt DESC, id DESC} 정렬로 최대 {@code limit} 개

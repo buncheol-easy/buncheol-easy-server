@@ -300,7 +300,8 @@ class BuncheolTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"CLOSED", "PAID", "SETTLING", "FINISHED", "CANCELLED"})
+        names = {"RECRUITING"},
+        mode = EnumSource.Mode.EXCLUDE)
     void RECRUITING이_아닌_상태에서는_마감에_실패한다(BuncheolStatus status) {
       // given
       Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());

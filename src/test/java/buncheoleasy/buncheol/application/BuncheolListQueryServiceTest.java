@@ -35,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("BuncheolListQueryService 단위 테스트")
@@ -47,6 +48,7 @@ class BuncheolListQueryServiceTest {
   @Mock private BuncheolBookmarkRepository buncheolBookmarkRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   @Nested
   @DisplayName("검색 결과 반환")
@@ -244,6 +246,93 @@ class BuncheolListQueryServiceTest {
           ArgumentCaptor.forClass(BuncheolSearchCondition.class);
       verify(buncheolRepository).search(captor.capture(), any(), anyInt());
       assertThat(captor.getValue().keyword()).isEqualTo("뉴진스");
+    }
+  }
+
+  @Nested
+  @DisplayName("최근 검색어 이벤트 발행")
+  class SearchedEventTest {
+
+    @Test
+    void 비로그인이면_이벤트를_발행하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          null, new BuncheolSearchCondition(null, null, "ive원영"), Cursor.firstPage(), 20);
+
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void 키워드가_없으면_이벤트를_발행하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void 키워드가_blank_면_이벤트를_발행하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, "   "), Cursor.firstPage(), 20);
+
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void groupId_만_있으면_이벤트를_발행하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(100L, null, null), Cursor.firstPage(), 20);
+
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void memberId_만_있으면_이벤트를_발행하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, 200L, null), Cursor.firstPage(), 20);
+
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void 로그인_사용자가_키워드로_검색하면_trim_된_원문이_이벤트에_실려_발행된다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, "  ive원영  "), Cursor.firstPage(), 20);
+
+      ArgumentCaptor<BuncheolSearchedEvent> captor =
+          ArgumentCaptor.forClass(BuncheolSearchedEvent.class);
+      verify(eventPublisher).publishEvent(captor.capture());
+      assertThat(captor.getValue().userId()).isEqualTo(1L);
+      assertThat(captor.getValue().rawKeyword()).isEqualTo("ive원영");
+    }
+
+    @Test
+    void 이벤트의_rawKeyword_는_LIKE_escape_되지_않은_원문이다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, "100%"), Cursor.firstPage(), 20);
+
+      ArgumentCaptor<BuncheolSearchCondition> repoCaptor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(repoCaptor.capture(), any(), anyInt());
+      assertThat(repoCaptor.getValue().keyword()).isEqualTo("100\\%"); // repo 에는 escape 된 값
+
+      ArgumentCaptor<BuncheolSearchedEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolSearchedEvent.class);
+      verify(eventPublisher).publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue().rawKeyword()).isEqualTo("100%"); // 이벤트엔 원문
     }
   }
 

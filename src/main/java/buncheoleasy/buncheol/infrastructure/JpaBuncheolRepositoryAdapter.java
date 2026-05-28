@@ -69,4 +69,10 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   public boolean existsActiveByHostId(Long hostId) {
     return jpaBuncheolRepository.existsByHostIdAndStatusIn(hostId, ACTIVE_STATUSES);
   }
+
+  @Override
+  public List<Long> findGroupIdsByBuncheolCountSince(final Instant since, final int limit) {
+    return jpaBuncheolRepository.findGroupIdsByBuncheolCountSince(
+        since, BuncheolStatus.activeOrFinished(), PageRequest.of(0, limit));
+  }
 }

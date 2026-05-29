@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
+import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
@@ -39,6 +40,7 @@ class SecurityConfigTest {
 
   @MockitoBean private BuncheolListQueryService buncheolListQueryService;
   @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
+  @MockitoBean private BuncheolManagementQueryService buncheolManagementQueryService;
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
   @Nested
@@ -84,6 +86,23 @@ class SecurityConfigTest {
     @Test
     void 내_개최_분철_조회는_비로그인이면_401() throws Exception {
       mockMvc.perform(get("/v1/buncheols/me")).andExpect(status().isUnauthorized());
+    }
+  }
+
+  @Nested
+  @DisplayName("호스트 전용 GET — 단일 세그먼트 공개 매처에 걸리지 않음")
+  class HostOnlyGetPaths {
+
+    /**
+     * {@code /v1/buncheols/{id}/management} 는 두 세그먼트라 공개 매처({@code /v1/buncheols/*}) 에 걸리지 않고
+     * {@code anyRequest().authenticated()} 로 보호된다. 공개 매처가 {@code /v1/buncheols/**} 로 넓어지면 이 테스트가
+     * 깨지며 노출 회귀를 잡아낸다.
+     */
+    @Test
+    void 개최자_분철_관리_조회는_비로그인이면_401() throws Exception {
+      mockMvc
+          .perform(get("/v1/buncheols/{id}/management", 10L))
+          .andExpect(status().isUnauthorized());
     }
   }
 

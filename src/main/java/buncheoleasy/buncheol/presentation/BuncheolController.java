@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
+import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.ImageFile;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
@@ -9,6 +10,7 @@ import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -46,6 +48,7 @@ public class BuncheolController {
   private final MyHostedBuncheolQueryService myHostedBuncheolQueryService;
   private final BuncheolListQueryService buncheolListQueryService;
   private final BuncheolDetailQueryService buncheolDetailQueryService;
+  private final BuncheolManagementQueryService buncheolManagementQueryService;
 
   /**
    * 공개 분철 목록 조회 (비로그인 허용). 그룹/멤버/키워드 필터 + 커서 기반 무한스크롤.
@@ -81,6 +84,17 @@ public class BuncheolController {
   public ResponseEntity<BuncheolDetailResponse> getBuncheolDetail(
       @AuthenticationPrincipal final Long userId, @PathVariable final Long id) {
     return ResponseEntity.ok(buncheolDetailQueryService.getDetail(id, userId));
+  }
+
+  /**
+   * 개최자 분철 관리 화면 조회 API. 호스트 본인만 호출 가능 (그 외 {@code BUNCHEOL_NO_PERMISSION}). 분철 기본 정보와 함께 옵션별
+   * 현 최고가·낙찰자 배송지(닉네임·전화번호 포함)·운송장 등록 상태를 모두 노출한다. 분철 상태(RECRUITING/CLOSED/...)에 관계없이
+   * 호출 가능하며, 옵션별 {@code winner} 필드는 결제 완료 전에는 null 로 내려간다.
+   */
+  @GetMapping("/{id}/management")
+  public ResponseEntity<BuncheolManagementResponse> getBuncheolManagement(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
+    return ResponseEntity.ok(buncheolManagementQueryService.getManagement(id, hostId));
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

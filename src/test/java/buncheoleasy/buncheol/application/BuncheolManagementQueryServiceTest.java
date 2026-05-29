@@ -162,6 +162,28 @@ class BuncheolManagementQueryServiceTest {
     }
 
     @Test
+    void 결제대기_상태_참여는_participationCount_에_포함되지만_winner_는_null() {
+      // AWAITING_PAYMENT 는 활성 참여라 집계·최고가엔 잡히지만 CONFIRMED 가 아니라 낙찰자(winner)로 노출되면 안 된다.
+      stubBasicBuncheol(BuncheolStatus.CLOSED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진", "yujin.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(awaitingPaymentBid(601L, 101L, WINNER_USER, 90_000L)));
+      // CONFIRMED 가 없으니 Delivery 조회는 빈 id 목록으로 들어간다.
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementOptionResponse option = response.options().get(0);
+      assertThat(option.participationCount()).isEqualTo(1);
+      assertThat(option.currentHighestBid()).isEqualTo(90_000L);
+      assertThat(option.winner()).isNull();
+    }
+
+    @Test
     void 낙찰자가_있는_옵션은_winner_와_Delivery_정보가_채워진다() {
       stubBasicBuncheol(BuncheolStatus.PAID);
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
@@ -350,6 +372,12 @@ class BuncheolManagementQueryServiceTest {
   private Participation confirmedBid(
       final Long id, final Long buncheolMemberId, final Long participantId, final long bidAmount) {
     return participation(id, buncheolMemberId, participantId, bidAmount, ParticipationStatus.CONFIRMED);
+  }
+
+  private Participation awaitingPaymentBid(
+      final Long id, final Long buncheolMemberId, final Long participantId, final long bidAmount) {
+    return participation(
+        id, buncheolMemberId, participantId, bidAmount, ParticipationStatus.AWAITING_PAYMENT);
   }
 
   private Participation participation(

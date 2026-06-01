@@ -37,6 +37,7 @@ class BuncheolCheckoutServiceTest {
 
   @Mock private BuncheolParticipationService buncheolParticipationService;
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationPaymentAmountResolver participationPaymentAmountResolver;
   @Mock private PaymentService paymentService;
   @Mock private PaymentCompletionHandler paymentCompletionHandler;
 
@@ -137,11 +138,17 @@ class BuncheolCheckoutServiceTest {
   class ConfirmMockPaymentTest {
 
     @Test
-    void 소유권_검증_후_결제_완료_처리에_위임한다() {
+    void 소유권_검증_후_확정하고_제시가더하기배송비로_결제를_기록한다() {
+      Participation participation = newParticipation();
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      given(participationPaymentAmountResolver.resolve(participation)).willReturn(53_000L);
+
       buncheolCheckoutService.confirmMockPayment(PARTICIPANT_ID, PARTICIPATION_ID);
 
       then(paymentCompletionHandler).should().validateOwnership(PARTICIPATION_ID, PARTICIPANT_ID);
       then(paymentCompletionHandler).should().onPaymentCompleted(PARTICIPATION_ID);
+      then(paymentService).should().recordMockPayment(PARTICIPATION_ID, 53_000L);
     }
   }
 

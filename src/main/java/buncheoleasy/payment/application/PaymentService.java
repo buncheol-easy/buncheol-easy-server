@@ -52,6 +52,18 @@ public class PaymentService {
     return toPaymentOrderInfo(paymentOrder, paymentOrderName);
   }
 
+  /**
+   * 결제 수단 확정 전 mock 결제: Toss 승인 단계 없이 즉시 완료(DONE)된 결제를 기록한다. {@code amount} 는 제시가 + 배송비. 추후 실제 PG
+   * 흐름으로 교체된다.
+   */
+  @Transactional
+  public void recordMockPayment(final Long participationId, final long amount) {
+    Payment payment =
+        Payment.createCompleted(
+            participationId, generatePaymentOrderId(), amount, Instant.now(clock));
+    paymentDomainService.create(payment);
+  }
+
   public void confirmPayment(
       final String paymentKey, final String paymentOrderId, final long amount) {
     boolean alreadyDone = prepareConfirmation(paymentKey, paymentOrderId, amount);

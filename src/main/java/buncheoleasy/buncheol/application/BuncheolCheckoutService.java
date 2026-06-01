@@ -21,6 +21,7 @@ public class BuncheolCheckoutService {
 
   private final BuncheolParticipationService buncheolParticipationService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationPaymentAmountResolver participationPaymentAmountResolver;
   private final PaymentService paymentService;
   private final PaymentCompletionHandler paymentCompletionHandler;
   private final Clock clock;
@@ -47,13 +48,20 @@ public class BuncheolCheckoutService {
   }
 
   /**
-   * 분철 낙찰자의 (mock) 결제 확정. 결제 수단이 확정되기 전까지는 이 API 호출 즉시 결제가 완료된 것으로 보고 참여를 CONFIRMED 로 전환한다(+배송
-   * 스냅샷 생성). 추후 실제 PG 가 도입되면 이 진입점을 실제 결제 흐름으로 교체한다. AWAITING_PAYMENT(낙찰) 상태가 아니면 예외.
+   * 분철 낙찰자의 (mock) 결제 확정. 결제 수단이 확정되기 전까지는 이 API 호출 즉시 결제가 완료된 것으로 보고, 참여를 CONFIRMED 로 전환(+배송
+   * 스냅샷)하고 제시가 + 배송비로 완료된 결제(Payment DONE)를 기록한다. 추후 실제 PG 도입 시 이 진입점을 실제 결제 흐름으로 교체한다.
+   * AWAITING_PAYMENT(낙찰) 상태가 아니면 onPaymentCompleted 단계에서 예외가 발생해 결제 기록도 함께 롤백된다.
    */
   @Transactional
   public void confirmMockPayment(final Long participantId, final Long participationId) {
     paymentCompletionHandler.validateOwnership(participationId, participantId);
+    Participation participation = participationDomainService.getParticipation(participationId);
+    long amount = participationPaymentAmountResolver.resolve(participation);
+    // 중복 결제(따닥) 방지: onPaymentCompleted 의 AWAITING_PAYMENT 상태 가드가 recordMockPayment 이전에 차단한다.
+    // 동시 요청 경합은 배송 스냅샷의 uq_deliveries_participation_id 가 백스톱(DONE Payment 1건 보장)이다.
+    // 더 견고히 하려면 확정 전이를 CAS 로 끌어올릴 것 — 후속 과제(낙관락/조건부 UPDATE).
     paymentCompletionHandler.onPaymentCompleted(participationId);
+    paymentService.recordMockPayment(participationId, amount);
   }
 
   /** 참여자 본인의 분철 참여 취소. 현재는 ACTIVE_BID 상태에서만 허용한다. */

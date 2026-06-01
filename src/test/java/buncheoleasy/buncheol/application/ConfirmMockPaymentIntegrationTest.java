@@ -76,6 +76,43 @@ class ConfirmMockPaymentIntegrationTest {
             Integer.class,
             participationId);
     assertThat(deliveryCount).isEqualTo(1);
+
+    // 결제 수단 미확정 mock 이라도 완료(DONE) 결제가 제시가+배송비 금액으로 1건 기록된다.
+    Integer paymentCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM payments WHERE participation_id = ? AND status = 'DONE'",
+            Integer.class,
+            participationId);
+    assertThat(paymentCount).isEqualTo(1);
+
+    Long paidAmount =
+        jdbcTemplate.queryForObject(
+            "SELECT amount FROM payments WHERE participation_id = ? AND status = 'DONE'",
+            Long.class,
+            participationId);
+    assertThat(paidAmount).isEqualTo(53_000L); // 제시가 50,000 + GS25 배송비 3,000
+  }
+
+  @Test
+  void 이미_확정된_참여를_다시_결제하면_예외이고_결제는_1건만_남는다() {
+    Long participationId = insertParticipation(ParticipationStatus.AWAITING_PAYMENT, 50_000L);
+    buncheolCheckoutService.confirmMockPayment(participantId, participationId);
+    em.flush();
+    em.clear();
+
+    // 두 번째 확정은 AWAITING_PAYMENT 가드에 막혀 예외 → 결제도 추가로 기록되지 않는다.
+    assertThatThrownBy(
+            () -> buncheolCheckoutService.confirmMockPayment(participantId, participationId))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+
+    Integer paymentCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM payments WHERE participation_id = ?",
+            Integer.class,
+            participationId);
+    assertThat(paymentCount).isEqualTo(1);
   }
 
   @Test

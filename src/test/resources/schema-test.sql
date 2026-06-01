@@ -117,6 +117,7 @@ CREATE INDEX idx_buncheols_title ON buncheols (title);
 CREATE INDEX idx_buncheols_host_created ON buncheols (host_id, created_at DESC);
 CREATE INDEX idx_buncheols_status_created ON buncheols (status, created_at DESC, id DESC);
 CREATE INDEX idx_buncheols_group_created ON buncheols (group_id, created_at DESC, id DESC);
+CREATE INDEX idx_buncheols_status_deadline ON buncheols (status, deadline);
 
 CREATE TABLE buncheol_members
 (

@@ -2,7 +2,6 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -40,13 +39,9 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
   @Override
   public void onPaymentCompleted(final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
-    final ParticipationStatus previousStatus = participation.getStatus();
-
-    Instant now = Instant.now(clock);
-    participation.completePayment(now);
-
-    participationDomainService.updateParticipationStatus(participation, previousStatus);
-
+    // AWAITING_PAYMENT → CONFIRMED. 도메인 가드(completePayment)가 상태를 검증하고, 변경은 dirty checking 으로 커밋 시 반영된다.
+    // CAS updateStatus 와 혼용하면 flushAutomatically 가 dirty 변경을 먼저 flush 해 CAS WHERE 가 100% 실패하므로 함께 쓰지 않는다.
+    participation.completePayment(Instant.now(clock));
     createDeliverySnapshot(participation);
   }
 

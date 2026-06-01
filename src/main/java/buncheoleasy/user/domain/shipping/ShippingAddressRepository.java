@@ -11,6 +11,9 @@ public interface ShippingAddressRepository {
 
   Optional<ShippingAddress> findById(Long id);
 
+  /** 여러 배송지를 id 로 일괄 조회. 참여 목록의 배송비 산정처럼 배송지 다건이 필요한 조회에서 N+1 을 피하기 위해 사용. */
+  List<ShippingAddress> findAllByIds(List<Long> ids);
+
   List<ShippingAddress> getUserShippingAddresses(Long userId);
 
   int countByUserId(Long userId);

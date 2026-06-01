@@ -264,6 +264,38 @@ class ParticipationControllerTest {
   }
 
   @Nested
+  @DisplayName("낙찰자 mock 결제 확정 API 테스트")
+  class ConfirmMockPaymentTest {
+
+    @Test
+    void 결제_확정에_성공하면_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/participations/{participationId}/payment", PARTICIPATION_ID)
+                  .with(mockAuth()))
+          .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void AWAITING_PAYMENT_상태가_아니면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID))
+          .given(buncheolCheckoutService)
+          .confirmMockPayment(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      mockMvc
+          .perform(
+              post("/v1/participations/{participationId}/payment", PARTICIPATION_ID)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(
+                          ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID.getCode())));
+    }
+  }
+
+  @Nested
   @DisplayName("내 참여 목록 조회 API 테스트")
   class GetMyParticipationsTest {
 
@@ -279,6 +311,8 @@ class ParticipationControllerTest {
               5,
               "민지",
               50_000L,
+              3_000L,
+              53_000L,
               ParticipationStatus.AWAITING_PAYMENT,
               BuncheolStatus.CLOSED,
               deadline,
@@ -297,6 +331,8 @@ class ParticipationControllerTest {
           .andExpect(jsonPath("$[0].buncheolMemberCount").value(5))
           .andExpect(jsonPath("$[0].memberName").value("민지"))
           .andExpect(jsonPath("$[0].bidAmount").value(50_000))
+          .andExpect(jsonPath("$[0].shippingFee").value(3_000))
+          .andExpect(jsonPath("$[0].paymentAmount").value(53_000))
           .andExpect(jsonPath("$[0].participationStatus").value("AWAITING_PAYMENT"))
           .andExpect(jsonPath("$[0].buncheolStatus").value("CLOSED"))
           .andExpect(jsonPath("$[0].closedRank").value(1));

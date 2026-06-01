@@ -75,4 +75,16 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
     return jpaBuncheolRepository.findGroupIdsByBuncheolCountSince(
         since, BuncheolStatus.activeOrFinished(), PageRequest.of(0, limit));
   }
+
+  @Override
+  public List<Long> findRecruitingIdsPastDeadline(final Instant now, final int limit) {
+    return jpaBuncheolRepository.findIdsByStatusAndDeadlineBefore(
+        BuncheolStatus.RECRUITING, now, PageRequest.of(0, limit));
+  }
+
+  @Override
+  public int closeIfRecruiting(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.closeIfRecruiting(
+        buncheolId, BuncheolStatus.CLOSED, BuncheolStatus.RECRUITING, now);
+  }
 }

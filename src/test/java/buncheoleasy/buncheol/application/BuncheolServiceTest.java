@@ -471,6 +471,10 @@ class BuncheolServiceTest {
       // then
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().closeBuncheol(buncheol);
+      // 마감 직후 낙찰자 선정 후속 처리가 같은 트랜잭션에서 트리거된다.
+      then(participationDomainService)
+          .should()
+          .selectWinners(BUNCHEOL_ID, Instant.parse("2026-05-14T12:00:00Z"));
     }
 
     @Test

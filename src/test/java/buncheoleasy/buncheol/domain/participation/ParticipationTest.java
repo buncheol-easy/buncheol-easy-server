@@ -185,6 +185,72 @@ class ParticipationTest {
     }
   }
 
+  @Nested
+  @DisplayName("낙찰자 선정 테스트")
+  class AwardAsWinnerTest {
+
+    @Test
+    void ACTIVE_BID_상태에서_낙찰_선정에_성공한다() {
+      Participation participation = newParticipation();
+      Instant dueAt = Instant.parse("2026-03-13T15:30:00Z");
+
+      participation.awardAsWinner(dueAt);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(participation.getClosedRank()).isEqualTo(1);
+      assertThat(participation.getDueAt()).isEqualTo(dueAt);
+      assertThat(participation.getFinalizedAt()).isNull();
+      assertThat(participation.getFailReason()).isNull();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"AWAITING_PAYMENT", "CONFIRMED", "CANCELLED", "FAILED"})
+    void ACTIVE_BID이_아닌_상태에서_낙찰_선정하면_예외가_발생한다(ParticipationStatus invalidStatus) {
+      Participation participation = newParticipation();
+      setStatus(participation, invalidStatus);
+
+      assertThatThrownBy(() -> participation.awardAsWinner(Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
+  @Nested
+  @DisplayName("낙찰 실패(미선정) 테스트")
+  class MarkNotSelectedTest {
+
+    @Test
+    void ACTIVE_BID_상태에서_미선정_처리에_성공한다() {
+      Participation participation = newParticipation();
+      Instant now = Instant.parse("2026-03-13T16:00:00Z");
+
+      participation.markNotSelected(2, now);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.FAILED);
+      assertThat(participation.getClosedRank()).isEqualTo(2);
+      assertThat(participation.getFailReason()).isEqualTo("낙찰 실패");
+      assertThat(participation.getFinalizedAt()).isEqualTo(now);
+      assertThat(participation.getDueAt()).isNull();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"AWAITING_PAYMENT", "CONFIRMED", "CANCELLED", "FAILED"})
+    void ACTIVE_BID이_아닌_상태에서_미선정_처리하면_예외가_발생한다(ParticipationStatus invalidStatus) {
+      Participation participation = newParticipation();
+      setStatus(participation, invalidStatus);
+
+      assertThatThrownBy(() -> participation.markNotSelected(2, Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
   private static Participation newParticipation() {
     return Participation.create(
         BUNCHEOL_ID, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, BID_AMOUNT);

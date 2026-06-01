@@ -258,6 +258,47 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("findBiddingByBuncheolId — 낙찰 선정용 ACTIVE_BID 참여만 조회")
+  class FindBiddingByBuncheolIdTest {
+
+    @Test
+    void ACTIVE_BID만_bid_amount_DESC로_조회하고_다른_상태는_제외한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long p1 = TestUserFixture.insertUser(jdbcTemplate, "bid_p1");
+      Long p2 = TestUserFixture.insertUser(jdbcTemplate, "bid_p2");
+      Long p3 = TestUserFixture.insertUser(jdbcTemplate, "bid_p3");
+      Long p4 = TestUserFixture.insertUser(jdbcTemplate, "bid_p4");
+      Long a1 = insertShippingAddress(p1, "매장1");
+      Long a2 = insertShippingAddress(p2, "매장2");
+      Long a3 = insertShippingAddress(p3, "매장3");
+      Long a4 = insertShippingAddress(p4, "매장4");
+
+      insertParticipationForUser(buncheolId, bmId, p1, a1, 50_000L, ParticipationStatus.ACTIVE_BID);
+      insertParticipationForUser(buncheolId, bmId, p2, a2, 30_000L, ParticipationStatus.ACTIVE_BID);
+      // 낙찰 후보가 아닌 상태들 — 결과에서 제외돼야 한다 (재실행 멱등성의 근거).
+      insertParticipationForUser(buncheolId, bmId, p3, a3, 70_000L, ParticipationStatus.CANCELLED);
+      insertParticipationForUser(
+          buncheolId, bmId, p4, a4, 90_000L, ParticipationStatus.AWAITING_PAYMENT);
+
+      List<Participation> result = participationRepository.findBiddingByBuncheolId(buncheolId);
+
+      assertThat(result)
+          .extracting(Participation::getBidAmount)
+          .containsExactly(50_000L, 30_000L);
+    }
+
+    @Test
+    void ACTIVE_BID_참여가_없으면_빈_리스트를_반환한다() {
+      Long buncheolId = createBuncheol();
+
+      List<Participation> result = participationRepository.findBiddingByBuncheolId(buncheolId);
+
+      assertThat(result).isEmpty();
+    }
+  }
+
+  @Nested
   @DisplayName("cancelActiveByBuncheolId — 분철 취소 시 활성 참여 일괄 전이")
   class CancelActiveByBuncheolIdTest {
 

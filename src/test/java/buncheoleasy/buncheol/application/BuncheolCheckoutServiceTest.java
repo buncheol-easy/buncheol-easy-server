@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
@@ -12,6 +13,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.payment.application.PaymentCompletionHandler;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.application.PaymentService;
 import java.lang.reflect.Field;
@@ -36,6 +38,7 @@ class BuncheolCheckoutServiceTest {
   @Mock private BuncheolParticipationService buncheolParticipationService;
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private PaymentService paymentService;
+  @Mock private PaymentCompletionHandler paymentCompletionHandler;
 
   // @Mock 으로 두면 instant() 가 null 을 반환해 stub 이 필요해진다. Clock.fixed 의 실제 동작을
   // 그대로 사용하기 위해 @Spy 로 감싼다 (ParticipationPaymentHandlerTest 와 동일 패턴).
@@ -126,6 +129,19 @@ class BuncheolCheckoutServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_ORDER_CREATION_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("mock 결제 확정 테스트")
+  class ConfirmMockPaymentTest {
+
+    @Test
+    void 소유권_검증_후_결제_완료_처리에_위임한다() {
+      buncheolCheckoutService.confirmMockPayment(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(paymentCompletionHandler).should().validateOwnership(PARTICIPATION_ID, PARTICIPANT_ID);
+      then(paymentCompletionHandler).should().onPaymentCompleted(PARTICIPATION_ID);
     }
   }
 

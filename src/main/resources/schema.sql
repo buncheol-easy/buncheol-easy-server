@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS buncheols
     INDEX idx_buncheols_status_created (status, created_at DESC, id DESC),
     -- groupId 필터 + 커서 조합용 (idx_buncheols_group_id 만으로는 정렬을 인덱스로 커버 불가)
     INDEX idx_buncheols_group_created (group_id, created_at DESC, id DESC),
+    -- 자동 마감 스케줄러 폴링 (status = 'RECRUITING' AND deadline <= now) 용
+    INDEX idx_buncheols_status_deadline (status, deadline),
 
     CONSTRAINT fk_buncheols_host
         FOREIGN KEY (host_id)

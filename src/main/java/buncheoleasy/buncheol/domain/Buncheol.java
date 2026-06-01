@@ -112,7 +112,7 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   }
 
   // 참여자가 선택한 배송수단의 배송비. 낙찰자 결제 금액(제시가 + 배송비) 계산에 사용한다.
-  public int shippingFeeFor(final ShippingMethod shippingMethod) {
+  public long shippingFeeFor(final ShippingMethod shippingMethod) {
     return shippingFeePolicy.feeFor(shippingMethod);
   }
 

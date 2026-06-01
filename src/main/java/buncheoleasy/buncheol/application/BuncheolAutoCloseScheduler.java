@@ -40,6 +40,7 @@ public class BuncheolAutoCloseScheduler {
     }
 
     int closedCount = 0;
+    int failedCount = 0;
     for (Long buncheolId : expiredIds) {
       try {
         if (buncheolAutoCloseService.closeExpired(buncheolId, now)) {
@@ -47,9 +48,14 @@ public class BuncheolAutoCloseScheduler {
         }
       } catch (Exception e) {
         // 한 건 실패가 폴링 배치 전체를 중단시키지 않도록 격리하고 다음 분철로 진행한다.
+        failedCount++;
         log.error("분철 자동 마감 실패 - buncheolId: {}", buncheolId, e);
       }
     }
-    log.info("분철 자동 마감 폴링 완료 - 대상: {}, 마감: {}", expiredIds.size(), closedCount);
+    log.info(
+        "분철 자동 마감 폴링 완료 - 대상: {}, 마감: {}, 실패: {}",
+        expiredIds.size(),
+        closedCount,
+        failedCount);
   }
 }

@@ -35,7 +35,7 @@ class ParticipationPaymentAmountResolverTest {
         new ShippingAddress(200L, 100L, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
     given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
     given(shippingAddressDomainService.getShippingAddress(200L)).willReturn(shippingAddress);
-    given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(3_000);
+    given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(3_000L);
 
     long amount = participationPaymentAmountResolver.resolve(participation);
 

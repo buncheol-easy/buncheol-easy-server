@@ -22,7 +22,7 @@ public record ShippingFeePolicy(
   }
 
   /** 선택한 배송수단의 배송비. 해당 배송수단을 이 분철이 지원하지 않으면 예외. */
-  public int feeFor(final ShippingMethod shippingMethod) {
+  public long feeFor(final ShippingMethod shippingMethod) {
     Integer fee =
         switch (shippingMethod) {
           case GS25_HALF -> gs25ShippingFee;

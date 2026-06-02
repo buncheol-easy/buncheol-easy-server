@@ -18,17 +18,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
+import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.MyBidResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.buncheol.dto.response.WinnerDeliveryResponse;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -81,6 +86,8 @@ class BuncheolControllerDocsTest {
   @MockitoBean private BuncheolListQueryService buncheolListQueryService;
 
   @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
+
+  @MockitoBean private BuncheolManagementQueryService buncheolManagementQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -612,6 +619,170 @@ class BuncheolControllerDocsTest {
                         .pathParameters(parameterWithName("id").description("분철 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .build())));
+  }
+
+  @Test
+  void 개최자_분철_관리_화면_조회() throws Exception {
+    Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
+    WinnerDeliveryResponse winner =
+        new WinnerDeliveryResponse(
+            5001L,
+            ShippingMethod.GS25_HALF,
+            "GS25 강남역점",
+            "유진팬",
+            "010-1234-5678",
+            "1234567890",
+            DeliveryStatus.SHIPPING);
+    BuncheolManagementResponse response =
+        new BuncheolManagementResponse(
+            10L,
+            "호두 자랑",
+            "IVE",
+            "호두네",
+            BuncheolStatus.CLOSED,
+            deadline,
+            4,
+            1,
+            List.of(
+                new BuncheolManagementOptionResponse(
+                    101L, 1001L, "안유진", "https://cdn.example.com/yujin.png", 1, 90_000L, winner),
+                new BuncheolManagementOptionResponse(
+                    102L, 1002L, "레이", "https://cdn.example.com/rei.png", 0, null, null)));
+    given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
+
+    mockMvc
+        .perform(
+            get("/v1/buncheols/{id}/management", 10L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "buncheols-management",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("개최자 분철 관리 화면 조회")
+                        .description(
+                            """
+                            호스트 본인의 분철 관리 화면에 필요한 모든 정보를 단일 응답으로 제공한다.
+                            **호스트 본인만 호출 가능** — 그 외 호출은 403.
+
+                            **응답 동작**
+                            - 분철 상태(`RECRUITING` / `CLOSED` / `PAID` / `SETTLING` / `FINISHED`) 무관하게 호출 가능
+                            - `optionCount` = 분철에 등록된 멤버 슬롯 수
+                            - `totalParticipationCount` = 분철 전체 참여 수 (ACTIVE_BID + AWAITING_PAYMENT + CONFIRMED). 한 유저가 여러 슬롯에 입찰할 수 있어 distinct 참여자 수와 다를 수 있음
+                            - 옵션별 `participationCount` = 해당 옵션의 참여 수 (한 슬롯에 한 유저 활성 참여 최대 1건이라 사실상 참여자 수)
+                            - 옵션별 `currentHighestBid` = 해당 옵션의 최고 제시 금액 (상태 무관). 참여 없으면 null. 마감 후 미낙찰 활성 입찰가가 낙찰가보다 높으면 `winner` 금액과 다를 수 있음
+                            - 옵션별 `winner` = 낙찰 확정(CONFIRMED)자의 배송/운송장 정보. 결제 미완료 또는 낙찰 전이면 null (슬롯당 최대 1명이라 null 여부로 낙찰 여부 판단)
+                            - `winner.trackingNumber` = 호스트가 등록한 운송장 번호. 미등록 시 null
+                            - `winner.deliveryStatus` = `SNAPSHOTTED` (운송장 미등록) / `SHIPPING` / `DELIVERED` / `RECEIVED`
+
+                            **응답 예시**
+                            ```json
+                            {
+                              "id": 10,
+                              "title": "호두 자랑",
+                              "groupName": "IVE",
+                              "purchaseSite": "호두네",
+                              "status": "CLOSED",
+                              "deadline": "2026-05-27T00:00:00Z",
+                              "optionCount": 4,
+                              "totalParticipationCount": 1,
+                              "options": [
+                                {
+                                  "buncheolMemberId": 101,
+                                  "memberId": 1001,
+                                  "memberName": "안유진",
+                                  "memberImage": "https://cdn.example.com/yujin.png",
+                                  "participationCount": 1,
+                                  "currentHighestBid": 90000,
+                                  "winner": {
+                                    "deliveryId": 5001,
+                                    "shippingMethod": "GS25_HALF",
+                                    "storeName": "GS25 강남역점",
+                                    "receiverNickname": "유진팬",
+                                    "receiverPhoneNumber": "010-1234-5678",
+                                    "trackingNumber": "1234567890",
+                                    "deliveryStatus": "SHIPPING"
+                                  }
+                                },
+                                {
+                                  "buncheolMemberId": 102,
+                                  "memberId": 1002,
+                                  "memberName": "레이",
+                                  "memberImage": "https://cdn.example.com/rei.png",
+                                  "participationCount": 0,
+                                  "currentHighestBid": null,
+                                  "winner": null
+                                }
+                              ]
+                            }
+                            ```
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 호스트가 아님 |
+                            """)
+                        .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .responseSchema(Schema.schema("BuncheolManagementResponse"))
+                        .responseFields(
+                            fieldWithPath("id").description("분철 ID"),
+                            fieldWithPath("title").description("분철 제목"),
+                            fieldWithPath("groupName").description("대상 K-pop 그룹명"),
+                            fieldWithPath("purchaseSite").description("구매처"),
+                            fieldWithPath("status")
+                                .description(
+                                    "분철 진행 상태 (RECRUITING / CLOSED / PAID / SETTLING / FINISHED)"),
+                            fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
+                            fieldWithPath("optionCount").description("분철에 등록된 멤버 슬롯 수"),
+                            fieldWithPath("totalParticipationCount")
+                                .description("분철 전체 참여 수 (활성 입찰 + 결제 대기 + 낙찰 확정)"),
+                            fieldWithPath("options").description("옵션(멤버 슬롯) 배열 (등록 순)"),
+                            fieldWithPath("options[].buncheolMemberId")
+                                .description("분철 멤버 슬롯 ID"),
+                            fieldWithPath("options[].memberId").description("그룹 멤버 ID"),
+                            fieldWithPath("options[].memberName")
+                                .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
+                                .optional(),
+                            fieldWithPath("options[].memberImage")
+                                .description("멤버 이미지 URL. 멤버가 삭제·이동돼 조회되지 않으면 null")
+                                .optional(),
+                            fieldWithPath("options[].participationCount")
+                                .description("옵션별 참여 수 (활성/결제대기/낙찰 합계)"),
+                            fieldWithPath("options[].currentHighestBid")
+                                .description("옵션별 최고 제시 금액 (원, 상태 무관). 참여 없으면 null")
+                                .optional(),
+                            fieldWithPath("options[].winner")
+                                .description("낙찰 확정자 배송/운송장 정보. 낙찰 전 또는 결제 미완료 시 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.deliveryId")
+                                .description("배송 ID (운송장 등록 API 호출에 사용)")
+                                .optional(),
+                            fieldWithPath("options[].winner.shippingMethod")
+                                .description("배송방법 스냅샷 (GS25_HALF | CU_HALF)")
+                                .optional(),
+                            fieldWithPath("options[].winner.storeName")
+                                .description("편의점 지점명 스냅샷")
+                                .optional(),
+                            fieldWithPath("options[].winner.receiverNickname")
+                                .description("수령인 닉네임 스냅샷")
+                                .optional(),
+                            fieldWithPath("options[].winner.receiverPhoneNumber")
+                                .description("수령인 전화번호 스냅샷")
+                                .optional(),
+                            fieldWithPath("options[].winner.trackingNumber")
+                                .description("호스트가 등록한 운송장 번호. 미등록 시 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.deliveryStatus")
+                                .description(
+                                    "배송 상태 (SNAPSHOTTED / SHIPPING / DELIVERED / RECEIVED)")
+                                .optional())
                         .build())));
   }
 

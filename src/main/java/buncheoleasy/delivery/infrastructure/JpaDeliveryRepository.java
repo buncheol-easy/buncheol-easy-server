@@ -3,6 +3,7 @@ package buncheoleasy.delivery.infrastructure;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
 
   Optional<Delivery> findByParticipationId(Long participationId);
+
+  List<Delivery> findAllByParticipationIdIn(List<Long> participationIds);
 
   /**
    * status 가 expectedStatus 인 경우에만 한 행을 갱신한다 (compare-and-swap). bulk JPQL UPDATE는 영속성 컨텍스트를 우회하므로

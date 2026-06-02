@@ -5,6 +5,7 @@ import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -29,6 +30,14 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
   @Override
   public Optional<Delivery> findByParticipationId(final Long participationId) {
     return jpaDeliveryRepository.findByParticipationId(participationId);
+  }
+
+  @Override
+  public List<Delivery> findAllByParticipationIds(final List<Long> participationIds) {
+    if (participationIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaDeliveryRepository.findAllByParticipationIdIn(participationIds);
   }
 
   @Override

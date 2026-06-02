@@ -17,15 +17,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
+import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
 import buncheoleasy.buncheol.dto.response.MyBidResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.buncheol.dto.response.WinnerDeliveryResponse;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -66,6 +71,8 @@ class BuncheolControllerTest {
   @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
 
   @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
+
+  @MockitoBean private BuncheolManagementQueryService buncheolManagementQueryService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -657,6 +664,87 @@ class BuncheolControllerTest {
 
       mockMvc
           .perform(get("/v1/buncheols/{id}", 10L).with(mockAuth()))
+          .andExpect(status().isNotFound())
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("개최자 분철 관리 화면 조회 API 테스트")
+  class GetBuncheolManagementTest {
+
+    @Test
+    void 호스트_본인이_조회하면_옵션별_낙찰자_배송_정보까지_200으로_반환한다() throws Exception {
+      Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
+      WinnerDeliveryResponse winner =
+          new WinnerDeliveryResponse(
+              5001L,
+              ShippingMethod.GS25_HALF,
+              "GS25 강남역점",
+              "유진팬",
+              "010-1234-5678",
+              "1234567890",
+              DeliveryStatus.SHIPPING);
+      BuncheolManagementResponse response =
+          new BuncheolManagementResponse(
+              10L,
+              "호두 자랑",
+              "IVE",
+              "호두네",
+              BuncheolStatus.CLOSED,
+              deadline,
+              4,
+              1,
+              List.of(
+                  new BuncheolManagementOptionResponse(
+                      101L, 1001L, "안유진", "yujin.png", 1, 90_000L, winner),
+                  new BuncheolManagementOptionResponse(
+                      102L, 1002L, "레이", "rei.png", 0, null, null)));
+      given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}/management", 10L).with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.id").value(10))
+          .andExpect(jsonPath("$.title").value("호두 자랑"))
+          .andExpect(jsonPath("$.groupName").value("IVE"))
+          .andExpect(jsonPath("$.purchaseSite").value("호두네"))
+          .andExpect(jsonPath("$.status").value("CLOSED"))
+          .andExpect(jsonPath("$.optionCount").value(4))
+          .andExpect(jsonPath("$.totalParticipationCount").value(1))
+          .andExpect(jsonPath("$.options[0].buncheolMemberId").value(101))
+          .andExpect(jsonPath("$.options[0].memberName").value("안유진"))
+          .andExpect(jsonPath("$.options[0].participationCount").value(1))
+          .andExpect(jsonPath("$.options[0].currentHighestBid").value(90000))
+          .andExpect(jsonPath("$.options[0].winner.deliveryId").value(5001))
+          .andExpect(jsonPath("$.options[0].winner.shippingMethod").value("GS25_HALF"))
+          .andExpect(jsonPath("$.options[0].winner.storeName").value("GS25 강남역점"))
+          .andExpect(jsonPath("$.options[0].winner.receiverNickname").value("유진팬"))
+          .andExpect(jsonPath("$.options[0].winner.receiverPhoneNumber").value("010-1234-5678"))
+          .andExpect(jsonPath("$.options[0].winner.trackingNumber").value("1234567890"))
+          .andExpect(jsonPath("$.options[0].winner.deliveryStatus").value("SHIPPING"))
+          .andExpect(jsonPath("$.options[1].winner").doesNotExist())
+          .andExpect(jsonPath("$.options[1].currentHighestBid").doesNotExist());
+    }
+
+    @Test
+    void 호스트가_아니면_403을_반환한다() throws Exception {
+      given(buncheolManagementQueryService.getManagement(10L, HOST_ID))
+          .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION));
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}/management", 10L).with(mockAuth()))
+          .andExpect(status().isForbidden())
+          .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+
+    @Test
+    void 존재하지_않는_분철이면_404를_반환한다() throws Exception {
+      given(buncheolManagementQueryService.getManagement(10L, HOST_ID))
+          .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+
+      mockMvc
+          .perform(get("/v1/buncheols/{id}/management", 10L).with(mockAuth()))
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
     }

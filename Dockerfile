@@ -2,6 +2,9 @@ FROM eclipse-temurin:21-jdk AS build
 
 WORKDIR /app
 
+# Gradle 빌드 JVM 힙 제한 (t3.small 2GB OOM 방지)
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx768m"
+
 COPY gradlew settings.gradle build.gradle ./
 COPY gradle ./gradle
 

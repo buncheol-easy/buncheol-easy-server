@@ -11,6 +11,8 @@ public record MyParticipationResponse(
     int buncheolMemberCount,
     String memberName,
     long bidAmount,
+    long shippingFee,
+    long paymentAmount,
     ParticipationStatus participationStatus,
     BuncheolStatus buncheolStatus,
     Instant buncheolDeadline,

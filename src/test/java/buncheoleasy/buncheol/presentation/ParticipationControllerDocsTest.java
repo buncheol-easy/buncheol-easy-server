@@ -147,6 +147,8 @@ class ParticipationControllerDocsTest {
             5,
             "민지",
             50_000L,
+            3_000L,
+            53_000L,
             ParticipationStatus.AWAITING_PAYMENT,
             BuncheolStatus.CLOSED,
             deadline,
@@ -178,7 +180,9 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("[].buncheolTitle").description("분철 제목"),
                             fieldWithPath("[].buncheolMemberCount").description("분철에 포함된 멤버 슬롯 수"),
                             fieldWithPath("[].memberName").description("내가 참여한 멤버 이름"),
-                            fieldWithPath("[].bidAmount").description("입찰 금액"),
+                            fieldWithPath("[].bidAmount").description("입찰 금액 (제시가)"),
+                            fieldWithPath("[].shippingFee").description("배송비 (참여자가 선택한 배송수단 기준)"),
+                            fieldWithPath("[].paymentAmount").description("낙찰자 결제 금액 (제시가 + 배송비)"),
                             fieldWithPath("[].participationStatus")
                                 .description(
                                     "내 참여 상태 (ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED)"),
@@ -191,6 +195,29 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("[].closedRank")
                                 .description("마감 후 입찰 순위 (1위부터). 마감 전이면 null")
                                 .optional())
+                        .build())));
+  }
+
+  @Test
+  void 낙찰자_mock_결제_확정() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participations/{participationId}/payment", 500L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-payment-confirm-mock",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("낙찰자 결제 확정 (mock)")
+                        .description(
+                            "분철 낙찰자가 결제를 확정해 참여를 CONFIRMED 로 전환한다. 결제 수단 확정 전까지는 호출 즉시 결제된 것으로 처리한다. (추후 실제 PG 로 교체)")
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 

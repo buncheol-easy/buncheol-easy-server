@@ -119,9 +119,6 @@ class ParticipationPaymentHandlerTest {
 
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
       assertThat(participation.getFinalizedAt()).isNotNull();
-      then(participationDomainService)
-          .should()
-          .updateParticipationStatus(participation, ParticipationStatus.AWAITING_PAYMENT);
 
       ArgumentCaptor<Delivery> deliveryCaptor = ArgumentCaptor.forClass(Delivery.class);
       then(deliveryDomainService).should().createDelivery(deliveryCaptor.capture());

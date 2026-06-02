@@ -35,6 +35,16 @@ public class ParticipationController {
         .body(CreatePaymentOrderResponse.from(paymentOrderInfo));
   }
 
+  /**
+   * 분철 낙찰자 (mock) 결제 확정 API. 결제 수단 확정 전까지는 호출 즉시 참여를 CONFIRMED 로 전환한다. 추후 실제 결제 수단(PG) 으로 교체한다.
+   */
+  @PostMapping("/{participationId}/payment")
+  public ResponseEntity<Void> confirmMockPayment(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    buncheolCheckoutService.confirmMockPayment(participantId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
   /** 마이페이지 - 내가 참여한 분철 목록 조회 API. 최신 참여 순으로 정렬한다. */
   @GetMapping("/me")
   public ResponseEntity<List<MyParticipationResponse>> getMyParticipations(

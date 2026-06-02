@@ -22,6 +22,9 @@ public interface ParticipationRepository {
   /** 단일 분철의 활성 참여 전체를 {@code bidAmount DESC, id ASC} 정렬로 조회. 멤버별 그룹핑·top N·순위 계산을 위한 단일 조회 진입점. */
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
+  /** 단일 분철의 ACTIVE_BID 참여만 {@code bidAmount DESC, id ASC} 정렬로 조회. 마감 시 멤버별 낙찰자 선정용. */
+  List<Participation> findBiddingByBuncheolId(Long buncheolId);
+
   boolean updateStatus(Participation participation, ParticipationStatus expectedStatus);
 
   /**

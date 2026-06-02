@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -14,6 +15,9 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -36,6 +40,7 @@ class MyParticipationQueryServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private BuncheolMemberRepository buncheolMemberRepository;
   @Mock private GroupMemberRepository groupMemberRepository;
+  @Mock private ShippingAddressRepository shippingAddressRepository;
 
   private static final Long PARTICIPANT_ID = 100L;
 
@@ -78,6 +83,8 @@ class MyParticipationQueryServiceTest {
       // 참여한 슬롯(102) 의 멤버(1002) 만 조회된다.
       given(groupMemberRepository.findAllByIds(List.of(1002L)))
           .willReturn(List.of(groupMember(1002L, "민지")));
+      given(shippingAddressRepository.findAllByIds(List.of(1L)))
+          .willReturn(List.of(shippingAddress(1L, ShippingMethod.GS25_HALF)));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -90,6 +97,8 @@ class MyParticipationQueryServiceTest {
       assertThat(response.buncheolMemberCount()).isEqualTo(5);
       assertThat(response.memberName()).isEqualTo("민지");
       assertThat(response.bidAmount()).isEqualTo(50_000L);
+      assertThat(response.shippingFee()).isEqualTo(3_000L);
+      assertThat(response.paymentAmount()).isEqualTo(53_000L);
       assertThat(response.participationStatus()).isEqualTo(ParticipationStatus.ACTIVE_BID);
       assertThat(response.buncheolStatus()).isEqualTo(BuncheolStatus.RECRUITING);
       assertThat(response.buncheolDeadline()).isEqualTo(buncheol.getDeadline());
@@ -116,6 +125,8 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(buncheolMember(201L, 20L, 2001L)));
       given(groupMemberRepository.findAllByIds(List.of(2001L)))
           .willReturn(List.of(groupMember(2001L, "지수")));
+      given(shippingAddressRepository.findAllByIds(List.of(1L)))
+          .willReturn(List.of(shippingAddress(1L, ShippingMethod.GS25_HALF)));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -125,6 +136,8 @@ class MyParticipationQueryServiceTest {
       assertThat(result.get(0).participationStatus())
           .isEqualTo(ParticipationStatus.CANCELLED);
       assertThat(result.get(0).buncheolStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+      assertThat(result.get(0).shippingFee()).isEqualTo(3_000L);
+      assertThat(result.get(0).paymentAmount()).isEqualTo(33_000L);
     }
 
     @Test
@@ -159,6 +172,8 @@ class MyParticipationQueryServiceTest {
       // 참여한 슬롯(201, 301) 의 멤버(2001, 3001) 만 조회된다.
       given(groupMemberRepository.findAllByIds(List.of(2001L, 3001L)))
           .willReturn(List.of(groupMember(2001L, "지수"), groupMember(3001L, "제니")));
+      given(shippingAddressRepository.findAllByIds(List.of(1L)))
+          .willReturn(List.of(shippingAddress(1L, ShippingMethod.GS25_HALF)));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -170,6 +185,8 @@ class MyParticipationQueryServiceTest {
       assertThat(first.buncheolMemberCount()).isEqualTo(2);
       assertThat(first.memberName()).isEqualTo("지수");
       assertThat(first.bidAmount()).isEqualTo(80_000L);
+      assertThat(first.shippingFee()).isEqualTo(3_000L);
+      assertThat(first.paymentAmount()).isEqualTo(83_000L);
       assertThat(first.participationStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(first.buncheolStatus()).isEqualTo(BuncheolStatus.CLOSED);
       assertThat(first.paymentDueAt()).isEqualTo(dueAt);
@@ -180,6 +197,8 @@ class MyParticipationQueryServiceTest {
       assertThat(second.buncheolMemberCount()).isEqualTo(4);
       assertThat(second.memberName()).isEqualTo("제니");
       assertThat(second.bidAmount()).isEqualTo(30_000L);
+      assertThat(second.shippingFee()).isEqualTo(3_000L);
+      assertThat(second.paymentAmount()).isEqualTo(33_000L);
       assertThat(second.participationStatus()).isEqualTo(ParticipationStatus.ACTIVE_BID);
       assertThat(second.buncheolStatus()).isEqualTo(BuncheolStatus.RECRUITING);
       assertThat(second.paymentDueAt()).isNull();
@@ -193,7 +212,12 @@ class MyParticipationQueryServiceTest {
     setField(buncheol, "title", title);
     setField(buncheol, "deadline", deadline);
     setField(buncheol, "status", status);
+    setField(buncheol, "shippingFeePolicy", ShippingFeePolicy.of(3000, 3500));
     return buncheol;
+  }
+
+  private ShippingAddress shippingAddress(Long id, ShippingMethod method) {
+    return new ShippingAddress(id, PARTICIPANT_ID, method, "지점명", null, false);
   }
 
   private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {

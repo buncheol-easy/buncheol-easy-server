@@ -32,6 +32,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -183,6 +184,29 @@ class PaymentServiceTest {
       // then
       assertThat(result.paymentOrderId()).isNotEqualTo(ORDER_ID);
       then(paymentDomainService).should().create(any(Payment.class));
+    }
+  }
+
+  @Nested
+  @DisplayName("mock 결제 기록 테스트")
+  class RecordMockPaymentTest {
+
+    @Test
+    void 즉시_완료된_DONE_결제를_생성한다() {
+      // given
+      ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+
+      // when
+      paymentService.recordMockPayment(PARTICIPATION_ID, AMOUNT);
+
+      // then
+      then(paymentDomainService).should().create(captor.capture());
+      Payment created = captor.getValue();
+      assertThat(created.getParticipationId()).isEqualTo(PARTICIPATION_ID);
+      assertThat(created.getAmount()).isEqualTo(AMOUNT);
+      assertThat(created.isDone()).isTrue();
+      assertThat(created.getPaymentKey()).isNull();
+      assertThat(created.getOrderId()).startsWith("order_");
     }
   }
 

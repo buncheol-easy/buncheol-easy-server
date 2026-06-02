@@ -7,7 +7,9 @@ import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -173,6 +175,66 @@ class ParticipationDomainServiceTest {
 
       assertThat(affected).isEqualTo(3);
       then(participationRepository).should().cancelActiveByBuncheolId(1L, now);
+    }
+  }
+
+  @Nested
+  @DisplayName("낙찰자 선정 테스트")
+  class SelectWinnersTest {
+
+    private static final Long BUNCHEOL_ID = 1L;
+
+    private Participation bid(final Long memberId, final Long participantId, final long bidAmount) {
+      return Participation.create(BUNCHEOL_ID, memberId, participantId, 200L, bidAmount);
+    }
+
+    @Test
+    void 멤버별_최고가_1인을_낙찰하고_나머지를_미선정_처리한다() {
+      Instant now = Instant.parse("2026-03-13T12:00:00Z");
+      Participation memberA1 = bid(10L, 100L, 50_000L);
+      Participation memberA2 = bid(10L, 101L, 30_000L);
+      Participation memberB1 = bid(20L, 102L, 20_000L);
+      // 리포지토리는 bidAmount DESC, id ASC 로 정렬해 반환한다.
+      given(participationRepository.findBiddingByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(memberA1, memberA2, memberB1));
+
+      participationDomainService.selectWinners(BUNCHEOL_ID, now);
+
+      Instant expectedDueAt = now.plus(Duration.ofHours(48));
+      assertThat(memberA1.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(memberA1.getClosedRank()).isEqualTo(1);
+      assertThat(memberA1.getDueAt()).isEqualTo(expectedDueAt);
+
+      assertThat(memberA2.getStatus()).isEqualTo(ParticipationStatus.FAILED);
+      assertThat(memberA2.getClosedRank()).isEqualTo(2);
+      assertThat(memberA2.getFailReason()).isEqualTo("낙찰 실패");
+      assertThat(memberA2.getFinalizedAt()).isEqualTo(now);
+
+      assertThat(memberB1.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(memberB1.getClosedRank()).isEqualTo(1);
+      assertThat(memberB1.getDueAt()).isEqualTo(expectedDueAt);
+    }
+
+    @Test
+    void 단독_참여_멤버는_곧바로_낙찰된다() {
+      Instant now = Instant.parse("2026-03-13T12:00:00Z");
+      Participation only = bid(10L, 100L, 10_000L);
+      given(participationRepository.findBiddingByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(only));
+
+      participationDomainService.selectWinners(BUNCHEOL_ID, now);
+
+      assertThat(only.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(only.getClosedRank()).isEqualTo(1);
+    }
+
+    @Test
+    void ACTIVE_BID_참여가_없으면_아무_전이도_하지_않는다() {
+      Instant now = Instant.parse("2026-03-13T12:00:00Z");
+      given(participationRepository.findBiddingByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      participationDomainService.selectWinners(BUNCHEOL_ID, now);
+
+      then(participationRepository).should().findBiddingByBuncheolId(BUNCHEOL_ID);
     }
   }
 }

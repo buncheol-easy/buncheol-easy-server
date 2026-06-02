@@ -95,9 +95,9 @@ public class BuncheolService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
     buncheolDomainService.closeBuncheol(buncheol);
-    // TODO: 마감 시 등수 산정(Participation.closedRank) + 1순위 낙찰자 결제 요청
-    //   (ACTIVE_BID → AWAITING_PAYMENT) 후속 처리 미구현. 해당 로직 추가 시 본 메서드에서 함께
-    //   호출해야 한다 — 자동 마감 스케줄러도 같은 후속 처리를 트리거해야 하므로 도메인 서비스 레벨로 추출 권장.
+    // 마감 직후 같은 트랜잭션에서 낙찰자 선정(멤버별 1순위 AWAITING_PAYMENT, 그 외 FAILED).
+    // 자동 마감 스케줄러도 동일하게 selectWinners 를 호출해 후속 처리를 공유한다.
+    participationDomainService.selectWinners(buncheolId, Instant.now(clock));
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

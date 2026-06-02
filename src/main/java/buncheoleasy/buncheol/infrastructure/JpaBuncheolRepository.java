@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -61,4 +62,24 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("since") Instant since,
       @Param("statuses") Set<BuncheolStatus> statuses,
       Pageable pageable);
+
+  // deadline 이 지난 특정 상태(RECRUITING) 분철 id 만 deadline 오름차순으로 조회. 자동 마감 폴링용. limit 은 Pageable 로 제어.
+  @Query(
+      "SELECT b.id FROM Buncheol b "
+          + "WHERE b.status = :status AND b.deadline <= :now "
+          + "ORDER BY b.deadline ASC")
+  List<Long> findIdsByStatusAndDeadlineBefore(
+      @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
+
+  // RECRUITING → CLOSED CAS UPDATE. 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감을 막는다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :closedStatus, b.closedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus")
+  int closeIfRecruiting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("closedStatus") BuncheolStatus closedStatus,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("now") Instant now);
 }

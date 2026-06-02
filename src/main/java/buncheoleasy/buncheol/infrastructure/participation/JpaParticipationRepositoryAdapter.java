@@ -42,6 +42,9 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           ParticipationStatus.AWAITING_PAYMENT,
           ParticipationStatus.CONFIRMED);
 
+  private static final List<ParticipationStatus> BIDDING_STATUSES =
+      List.of(ParticipationStatus.ACTIVE_BID);
+
   private static final Field ID_FIELD;
 
   static {
@@ -132,6 +135,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public List<Participation> findActiveByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.findActiveByBuncheolId(buncheolId, ACTIVE_STATUSES);
+  }
+
+  @Override
+  public List<Participation> findBiddingByBuncheolId(final Long buncheolId) {
+    return jpaParticipationRepository.findActiveByBuncheolId(buncheolId, BIDDING_STATUSES);
   }
 
   @Override

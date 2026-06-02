@@ -83,6 +83,42 @@ class PaymentTest {
   }
 
   @Nested
+  @DisplayName("mock 완료 결제 생성 테스트")
+  class CreateCompletedTest {
+
+    @Test
+    void 즉시_DONE_상태의_결제를_생성한다() {
+      // given
+      Instant now = Instant.parse("2026-05-14T12:00:00Z");
+
+      // when
+      Payment payment = Payment.createCompleted(PARTICIPATION_ID, ORDER_ID, AMOUNT, now);
+
+      // then
+      assertThat(payment.getParticipationId()).isEqualTo(PARTICIPATION_ID);
+      assertThat(payment.getTxType()).isEqualTo(PaymentTxType.PAYMENT);
+      assertThat(payment.getOrderId()).isEqualTo(ORDER_ID);
+      assertThat(payment.getPaymentKey()).isNull(); // PG 미연동
+      assertThat(payment.getAmount()).isEqualTo(AMOUNT);
+      assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+      assertThat(payment.isDone()).isTrue();
+      assertThat(payment.getRequestedAt()).isEqualTo(now);
+      assertThat(payment.getApprovedAt()).isEqualTo(now);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1L})
+    void 금액이_0_이하면_예외가_발생한다(long invalidAmount) {
+      assertThatThrownBy(
+              () ->
+                  Payment.createCompleted(PARTICIPATION_ID, ORDER_ID, invalidAmount, Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PAYMENT_STATE_TRANSITION_INVALID);
+    }
+  }
+
+  @Nested
   @DisplayName("결제 승인 시작 테스트")
   class StartConfirmTest {
 

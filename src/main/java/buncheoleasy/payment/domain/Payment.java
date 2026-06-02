@@ -83,6 +83,26 @@ public class Payment extends TimestampedEntity {
         null);
   }
 
+  /**
+   * 결제 수단 확정 전 mock 결제용 팩토리. PENDING/CONFIRMING 단계 없이 즉시 완료(DONE)된 결제를 기록한다. PG 미연동이라 {@code
+   * paymentKey} 는 null 이며, 추후 실제 PG 도입 시 정상 결제 흐름(createPayment → 승인)으로 대체된다.
+   */
+  public static Payment createCompleted(
+      final Long participationId, final String orderId, final long amount, final Instant now) {
+    validateCreation(participationId, orderId, amount);
+    return new Payment(
+        participationId,
+        PaymentTxType.PAYMENT,
+        orderId,
+        null,
+        null,
+        amount,
+        PaymentStatus.DONE,
+        null,
+        now,
+        now);
+  }
+
   private static void validateCreation(
       final Long participationId, final String orderId, final long amount) {
     if (participationId == null) {

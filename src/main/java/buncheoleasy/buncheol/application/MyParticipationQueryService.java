@@ -9,6 +9,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +27,7 @@ public class MyParticipationQueryService {
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final ShippingAddressRepository shippingAddressRepository;
 
   @Transactional(readOnly = true)
   public List<MyParticipationResponse> getMyParticipations(final Long participantId) {
@@ -63,6 +66,13 @@ public class MyParticipationQueryService {
         groupMemberRepository.findAllByIds(participatedGroupMemberIds).stream()
             .collect(Collectors.toMap(GroupMember::getId, GroupMember::getName));
 
+    // 결제 금액(제시가 + 배송비) 산정을 위해 참여별 배송지를 한 번에 조회한다 (배송수단 → 분철 배송비 정책 매핑).
+    List<Long> shippingAddressIds =
+        participations.stream().map(Participation::getShippingAddressId).distinct().toList();
+    Map<Long, ShippingAddress> shippingAddressById =
+        shippingAddressRepository.findAllByIds(shippingAddressIds).stream()
+            .collect(Collectors.toMap(ShippingAddress::getId, sa -> sa));
+
     return participations.stream()
         .map(
             p ->
@@ -71,7 +81,8 @@ public class MyParticipationQueryService {
                     buncheolById,
                     buncheolMemberById,
                     slotCountByBuncheolId,
-                    groupMemberNameById))
+                    groupMemberNameById,
+                    shippingAddressById))
         .toList();
   }
 
@@ -80,11 +91,17 @@ public class MyParticipationQueryService {
       final Map<Long, Buncheol> buncheolById,
       final Map<Long, BuncheolMember> buncheolMemberById,
       final Map<Long, Long> slotCountByBuncheolId,
-      final Map<Long, String> groupMemberNameById) {
+      final Map<Long, String> groupMemberNameById,
+      final Map<Long, ShippingAddress> shippingAddressById) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
+    // 참여가 존재하는 한 배송지는 FK RESTRICT 로 삭제 불가하고, 배송수단은 참여 생성 시 정책 지원이 검증되므로
+    // shippingAddress non-null · feeFor 성공이 보장된다 (이 불변식이 깨지면 목록 조회 전체가 실패하니 주의).
+    ShippingAddress shippingAddress = shippingAddressById.get(participation.getShippingAddressId());
+    long shippingFee = buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
+    long paymentAmount = participation.getBidAmount() + shippingFee;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
@@ -92,6 +109,8 @@ public class MyParticipationQueryService {
         slotCount,
         groupMemberNameById.get(buncheolMember.getMemberId()),
         participation.getBidAmount(),
+        shippingFee,
+        paymentAmount,
         participation.getStatus(),
         buncheol.getStatus(),
         buncheol.getDeadline(),

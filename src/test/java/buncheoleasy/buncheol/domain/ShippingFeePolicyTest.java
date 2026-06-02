@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -80,6 +81,36 @@ class ShippingFeePolicyTest {
     void 양수_배송비는_유효하다(int fee) {
       // when & then
       assertThatCode(() -> ShippingFeePolicy.of(fee, null)).doesNotThrowAnyException();
+    }
+  }
+
+  @Nested
+  @DisplayName("배송수단별 배송비 조회 테스트")
+  class FeeForTest {
+
+    @Test
+    void GS25_배송수단의_배송비를_반환한다() {
+      ShippingFeePolicy policy = ShippingFeePolicy.of(3000, 2500);
+
+      assertThat(policy.feeFor(ShippingMethod.GS25_HALF)).isEqualTo(3000);
+    }
+
+    @Test
+    void CU_배송수단의_배송비를_반환한다() {
+      ShippingFeePolicy policy = ShippingFeePolicy.of(3000, 2500);
+
+      assertThat(policy.feeFor(ShippingMethod.CU_HALF)).isEqualTo(2500);
+    }
+
+    @Test
+    void 정책이_지원하지_않는_배송수단이면_예외가_발생한다() {
+      // CU 배송비를 설정하지 않은 정책에 CU 배송수단으로 조회
+      ShippingFeePolicy policy = ShippingFeePolicy.of(3000, null);
+
+      assertThatThrownBy(() -> policy.feeFor(ShippingMethod.CU_HALF))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED);
     }
   }
 }

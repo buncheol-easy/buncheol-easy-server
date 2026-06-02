@@ -22,6 +22,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Participation extends TimestampedEntity {
 
+  private static final String FAIL_REASON_NOT_SELECTED = "낙찰 실패";
+
   // 일반 save 경로 외에 JpaParticipationRepositoryAdapter 의 conditional INSERT 흐름에서
   // ReflectionUtils 로 직접 주입되는 필드. 필드명·타입 변경 시 어댑터의 정적 ID_FIELD 초기화도 함께 갱신할 것.
   @Id
@@ -110,6 +112,27 @@ public class Participation extends TimestampedEntity {
     if (!this.participantId.equals(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
     }
+  }
+
+  // ACTIVE_BID → AWAITING_PAYMENT: 마감 시 멤버 슬롯별 최고가 낙찰자로 선정되어 결제 요청 대상이 된다.
+  public void awardAsWinner(final Instant dueAt) {
+    if (status != ParticipationStatus.ACTIVE_BID) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.AWAITING_PAYMENT;
+    this.closedRank = 1;
+    this.dueAt = dueAt;
+  }
+
+  // ACTIVE_BID → FAILED: 마감 시 낙찰되지 못한 참여. 제시가 순위(closedRank)도 함께 기록한다.
+  public void markNotSelected(final int closedRank, final Instant now) {
+    if (status != ParticipationStatus.ACTIVE_BID) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.FAILED;
+    this.closedRank = closedRank;
+    this.failReason = FAIL_REASON_NOT_SELECTED;
+    this.finalizedAt = now;
   }
 
   // AWAITING_PAYMENT → CONFIRMED: 낙찰자 결제 완료

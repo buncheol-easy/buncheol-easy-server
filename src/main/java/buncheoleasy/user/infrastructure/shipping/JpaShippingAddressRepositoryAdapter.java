@@ -30,6 +30,14 @@ public class JpaShippingAddressRepositoryAdapter implements ShippingAddressRepos
   }
 
   @Override
+  public List<ShippingAddress> findAllByIds(List<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return jpaShippingAddressRepository.findAllById(ids);
+  }
+
+  @Override
   public List<ShippingAddress> getUserShippingAddresses(Long userId) {
     return jpaShippingAddressRepository.findAllByUserId(userId);
   }

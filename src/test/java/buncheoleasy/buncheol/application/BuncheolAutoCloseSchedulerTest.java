@@ -34,7 +34,7 @@ class BuncheolAutoCloseSchedulerTest {
     given(buncheolAutoCloseService.closeExpired(2L, NOW)).willReturn(true);
     given(buncheolAutoCloseService.closeExpired(3L, NOW)).willReturn(false);
 
-    buncheolAutoCloseScheduler.closeExpiredBuncheols();
+    buncheolAutoCloseScheduler.closeByFallbackPolling();
 
     then(buncheolAutoCloseService).should().closeExpired(1L, NOW);
     then(buncheolAutoCloseService).should().closeExpired(2L, NOW);
@@ -47,7 +47,7 @@ class BuncheolAutoCloseSchedulerTest {
     given(buncheolAutoCloseService.closeExpired(1L, NOW)).willThrow(new RuntimeException("DB 오류"));
     given(buncheolAutoCloseService.closeExpired(2L, NOW)).willReturn(true);
 
-    buncheolAutoCloseScheduler.closeExpiredBuncheols();
+    buncheolAutoCloseScheduler.closeByFallbackPolling();
 
     // 1L 처리가 실패해도 2L 까지 진행돼야 한다.
     then(buncheolAutoCloseService).should().closeExpired(2L, NOW);
@@ -57,9 +57,19 @@ class BuncheolAutoCloseSchedulerTest {
   void 만료된_분철이_없으면_마감을_시도하지_않는다() {
     given(buncheolAutoCloseService.findExpiredBuncheolIds(NOW)).willReturn(List.of());
 
-    buncheolAutoCloseScheduler.closeExpiredBuncheols();
+    buncheolAutoCloseScheduler.closeByFallbackPolling();
 
     then(buncheolAutoCloseService).should().findExpiredBuncheolIds(NOW);
     then(buncheolAutoCloseService).shouldHaveNoMoreInteractions();
+  }
+
+  @Test
+  void 정시_cron_도_같은_마감_로직을_탄다() {
+    given(buncheolAutoCloseService.findExpiredBuncheolIds(NOW)).willReturn(List.of(1L));
+    given(buncheolAutoCloseService.closeExpired(1L, NOW)).willReturn(true);
+
+    buncheolAutoCloseScheduler.closeAtHour();
+
+    then(buncheolAutoCloseService).should().closeExpired(1L, NOW);
   }
 }

@@ -88,12 +88,13 @@ app:
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
   buncheol:
-    # 마감시간이 지난 분철을 자동 마감(CLOSED)하고 낙찰자를 선정하는 폴링 스케줄러.
-    # 분철 마감시간은 '시' 단위로만 설정되므로 분 단위 폴링(60s)이면 충분하다(최대 1분 내 마감).
-    # cron 정시 발화 대신 폴링을 써, 다운타임 복구와 동시각 대량 마감(배치 초과)을 자연스럽게 흡수한다.
+    # 마감시간이 지난 분철을 자동 마감(CLOSED)하고 낙찰자를 선정하는 스케줄러.
+    # 분철 마감시간이 '시' 단위라 매시 정각 cron 으로 정밀 마감(통지 지연 최소화)하고,
+    # 저빈도 폴링(fallback)을 안전망으로 둬 cron 누락(다운타임)·동시각 대량 마감(배치 초과)을 복구한다.
     auto-close:
       enabled: ${BUNCHEOL_AUTO_CLOSE_ENABLED:true}
-      interval-ms: ${BUNCHEOL_AUTO_CLOSE_INTERVAL_MS:60000}
+      cron: "${BUNCHEOL_AUTO_CLOSE_CRON:0 0 * * * *}"
+      fallback-interval-ms: ${BUNCHEOL_AUTO_CLOSE_FALLBACK_INTERVAL_MS:300000}
       initial-delay-ms: ${BUNCHEOL_AUTO_CLOSE_INITIAL_DELAY_MS:10000}
 
 delivery:

@@ -45,6 +45,14 @@ public class ParticipationController {
     return ResponseEntity.noContent().build();
   }
 
+  /** 분철 낙찰자(구매자) 입금 완료 신고 API. AWAITING_PAYMENT 상태에서 입금 기한 내에만 가능하다. */
+  @PostMapping("/{participationId}/payment/report")
+  public ResponseEntity<Void> reportPayment(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    buncheolCheckoutService.reportPayment(participantId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
   /** 마이페이지 - 내가 참여한 분철 목록 조회 API. 최신 참여 순으로 정렬한다. */
   @GetMapping("/me")
   public ResponseEntity<List<MyParticipationResponse>> getMyParticipations(

@@ -167,6 +167,10 @@ public class Participation extends TimestampedEntity {
     if (status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
+    // 입금 기한(dueAt) 이 없거나 지난 뒤에는 신고할 수 없다 (만료/차순위 이양 대상).
+    if (dueAt == null || now.isAfter(dueAt)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_DUE_PASSED);
+    }
     this.status = ParticipationStatus.PAYMENT_REPORTED;
     this.paymentReportedAt = now;
   }

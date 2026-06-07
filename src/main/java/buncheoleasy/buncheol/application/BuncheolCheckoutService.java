@@ -64,6 +64,14 @@ public class BuncheolCheckoutService {
     paymentService.recordMockPayment(participationId, amount);
   }
 
+  /** 낙찰자(구매자)의 '입금 완료' 신고. AWAITING_PAYMENT → PAYMENT_REPORTED (입금 기한 내에만 가능). */
+  @Transactional
+  public void reportPayment(final Long participantId, final Long participationId) {
+    Participation participation = participationDomainService.getParticipation(participationId);
+    participation.validateOwnedBy(participantId);
+    participation.reportPayment(Instant.now(clock));
+  }
+
   /** 참여자 본인의 분철 참여 취소. 현재는 ACTIVE_BID 상태에서만 허용한다. */
   @Transactional
   public void cancelParticipation(final Long participantId, final Long participationId) {

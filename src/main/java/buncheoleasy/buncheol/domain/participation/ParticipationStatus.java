@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 public enum ParticipationStatus {
   ACTIVE_BID("제시 진행 중"),
   AWAITING_PAYMENT("낙찰자 결제 대기"),
+  PAYMENT_REPORTED("입금 완료 신고"),
   CONFIRMED("참여 확정"),
   CANCELLED("참여 취소"),
   FAILED("참여 실패");

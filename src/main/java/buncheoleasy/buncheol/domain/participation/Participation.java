@@ -66,7 +66,15 @@ public class Participation extends TimestampedEntity {
   @Column(name = "finalized_at")
   private Instant finalizedAt;
 
-  // ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED.
+  // 구매자가 '입금 완료'를 신고한 시각 (계좌이체 수동확인 MVP). PAYMENT_REPORTED 진입 시 세팅, reject 시 NULL.
+  @Column(name = "payment_reported_at")
+  private Instant paymentReportedAt;
+
+  // 개최자가 입금을 확인한 시각. 수동확인으로 CONFIRMED 진입 시 세팅.
+  @Column(name = "payment_confirmed_at")
+  private Instant paymentConfirmedAt;
+
+  // ACTIVE_BID | AWAITING_PAYMENT | PAYMENT_REPORTED | CONFIRMED | CANCELLED | FAILED.
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
@@ -135,7 +143,7 @@ public class Participation extends TimestampedEntity {
     this.finalizedAt = now;
   }
 
-  // AWAITING_PAYMENT → CONFIRMED: 낙찰자 결제 완료
+  // AWAITING_PAYMENT → CONFIRMED: 낙찰자 결제 완료 (PG 결제 흐름). 수동입금 MVP 에선 confirmManualPayment 사용.
   public void completePayment(final Instant now) {
     if (status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
@@ -143,6 +151,35 @@ public class Participation extends TimestampedEntity {
     this.status = ParticipationStatus.CONFIRMED;
     this.finalizedAt = now;
     this.failReason = null;
+  }
+
+  // AWAITING_PAYMENT → PAYMENT_REPORTED: (계좌이체 MVP) 구매자가 개최자 계좌로 송금 후 '입금 완료'를 신고.
+  public void reportPayment(final Instant now) {
+    if (status != ParticipationStatus.AWAITING_PAYMENT) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.PAYMENT_REPORTED;
+    this.paymentReportedAt = now;
+  }
+
+  // PAYMENT_REPORTED → CONFIRMED: (계좌이체 MVP) 개최자가 실제 입금을 확인. PG 용 completePayment 와 분리한다.
+  public void confirmManualPayment(final Instant now) {
+    if (status != ParticipationStatus.PAYMENT_REPORTED) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.CONFIRMED;
+    this.paymentConfirmedAt = now;
+    this.finalizedAt = now;
+    this.failReason = null;
+  }
+
+  // PAYMENT_REPORTED → AWAITING_PAYMENT: 개최자가 입금 불일치로 반려. 구매자가 dueAt 내 다시 신고할 수 있게 되돌린다.
+  public void rejectPayment() {
+    if (status != ParticipationStatus.PAYMENT_REPORTED) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.AWAITING_PAYMENT;
+    this.paymentReportedAt = null;
   }
 
   // ACTIVE_BID/AWAITING_PAYMENT → FAILED: 낙찰 실패 또는 결제 미진행

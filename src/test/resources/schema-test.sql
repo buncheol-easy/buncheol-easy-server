@@ -162,6 +162,8 @@ CREATE TABLE participations
     closed_rank           INT          NULL,
     fail_reason           VARCHAR(100) NULL,
     finalized_at          TIMESTAMP    NULL,
+    payment_reported_at   TIMESTAMP    NULL,
+    payment_confirmed_at  TIMESTAMP    NULL,
     status                VARCHAR(30)  NOT NULL,
     -- H2 generated column 안정성 이슈로 테스트 스키마에서는 일반 컬럼으로 유지
     confirmed_member_id   BIGINT       NULL,

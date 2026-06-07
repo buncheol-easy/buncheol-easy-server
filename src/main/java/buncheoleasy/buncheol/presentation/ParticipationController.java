@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
+import buncheoleasy.buncheol.application.HostPaymentService;
 import buncheoleasy.buncheol.application.MyParticipationQueryService;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ParticipationController {
 
   private final BuncheolCheckoutService buncheolCheckoutService;
+  private final HostPaymentService hostPaymentService;
   private final MyParticipationQueryService myParticipationQueryService;
 
   /** 분철 낙찰자 결제 주문 생성 API */
@@ -50,6 +52,14 @@ public class ParticipationController {
   public ResponseEntity<Void> reportPayment(
       @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
     buncheolCheckoutService.reportPayment(participantId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 분철 개최자 수동 입금확인 API. 구매자가 신고한 참여(PAYMENT_REPORTED)를 개최자가 확인해 CONFIRMED 로 전환한다. */
+  @PostMapping("/{participationId}/payment/confirm")
+  public ResponseEntity<Void> confirmPayment(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
+    hostPaymentService.confirmPayment(hostId, participationId);
     return ResponseEntity.noContent().build();
   }
 

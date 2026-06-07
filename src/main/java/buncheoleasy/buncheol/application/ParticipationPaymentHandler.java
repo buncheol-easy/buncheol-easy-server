@@ -2,15 +2,9 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.delivery.domain.Delivery;
-import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentCompletionHandler;
-import buncheoleasy.user.domain.User;
-import buncheoleasy.user.domain.UserDomainService;
-import buncheoleasy.user.domain.shipping.ShippingAddress;
-import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +17,7 @@ import org.springframework.stereotype.Service;
 public class ParticipationPaymentHandler implements PaymentCompletionHandler {
 
   private final ParticipationDomainService participationDomainService;
-  private final DeliveryDomainService deliveryDomainService;
-  private final ShippingAddressDomainService shippingAddressDomainService;
-  private final UserDomainService userDomainService;
+  private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final Clock clock;
 
   @Override
@@ -42,22 +34,7 @@ public class ParticipationPaymentHandler implements PaymentCompletionHandler {
     // AWAITING_PAYMENT → CONFIRMED. 도메인 가드(completePayment)가 상태를 검증하고, 변경은 dirty checking 으로 커밋 시 반영된다.
     // CAS updateStatus 와 혼용하면 flushAutomatically 가 dirty 변경을 먼저 flush 해 CAS WHERE 가 100% 실패하므로 함께 쓰지 않는다.
     participation.completePayment(Instant.now(clock));
-    createDeliverySnapshot(participation);
-  }
-
-  private void createDeliverySnapshot(final Participation participation) {
-    ShippingAddress shippingAddress =
-        shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
-    User user = userDomainService.getUser(participation.getParticipantId());
-
-    Delivery delivery =
-        Delivery.createSnapshot(
-            participation.getId(),
-            shippingAddress.getShippingMethod(),
-            shippingAddress.getStoreName(),
-            user.getNickname().value(),
-            user.getPhoneNumber().value());
-    deliveryDomainService.createDelivery(delivery);
+    deliverySnapshotCreator.create(participation);
   }
 
   @Override

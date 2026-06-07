@@ -185,7 +185,9 @@ CREATE TABLE IF NOT EXISTS participations
     closed_rank           INT          NULL COMMENT '마감 시점 제시 순위',
     fail_reason           VARCHAR(100) NULL COMMENT 'FAILED 사유',
     finalized_at          DATETIME     NULL COMMENT '참여 확정/실패 최종 확정 시각',
-    status                VARCHAR(30)  NOT NULL COMMENT 'ACTIVE_BID | AWAITING_PAYMENT | CONFIRMED | CANCELLED | FAILED',
+    payment_reported_at   DATETIME     NULL COMMENT '구매자 입금완료 신고 시각 (계좌이체 MVP)',
+    payment_confirmed_at  DATETIME     NULL COMMENT '개최자 입금확인 시각 (계좌이체 MVP)',
+    status                VARCHAR(30)  NOT NULL COMMENT 'ACTIVE_BID | AWAITING_PAYMENT | PAYMENT_REPORTED | CONFIRMED | CANCELLED | FAILED',
     confirmed_member_id   BIGINT GENERATED ALWAYS AS (
                               IF(status = 'CONFIRMED', buncheol_member_id, NULL)
                               ) STORED COMMENT 'CONFIRMED일 때만 buncheol_member_id 값',
@@ -196,7 +198,7 @@ CREATE TABLE IF NOT EXISTS participations
 
     INDEX idx_participations_buncheol_id (buncheol_id),
     active_participant_id BIGINT GENERATED ALWAYS AS (
-                              IF(status IN ('ACTIVE_BID', 'AWAITING_PAYMENT', 'CONFIRMED'),
+                              IF(status IN ('ACTIVE_BID', 'AWAITING_PAYMENT', 'PAYMENT_REPORTED', 'CONFIRMED'),
                                  participant_id, NULL)
                               ) STORED COMMENT '활성 상태일 때만 participant_id 값',
 

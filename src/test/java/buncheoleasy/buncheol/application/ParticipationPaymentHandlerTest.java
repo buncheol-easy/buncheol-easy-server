@@ -10,17 +10,8 @@ import static org.mockito.Mockito.never;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
-import buncheoleasy.delivery.domain.Delivery;
-import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.user.domain.Nickname;
-import buncheoleasy.user.domain.PhoneNumber;
-import buncheoleasy.user.domain.User;
-import buncheoleasy.user.domain.UserDomainService;
-import buncheoleasy.user.domain.shipping.ShippingAddress;
-import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
-import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
@@ -29,7 +20,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -42,9 +32,7 @@ class ParticipationPaymentHandlerTest {
   @InjectMocks private ParticipationPaymentHandler participationPaymentHandler;
 
   @Mock private ParticipationDomainService participationDomainService;
-  @Mock private DeliveryDomainService deliveryDomainService;
-  @Mock private ShippingAddressDomainService shippingAddressDomainService;
-  @Mock private UserDomainService userDomainService;
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
 
@@ -59,22 +47,6 @@ class ParticipationPaymentHandlerTest {
     setId(participation, PARTICIPATION_ID);
     setStatus(participation, ParticipationStatus.AWAITING_PAYMENT);
     return participation;
-  }
-
-  private void stubDeliverySnapshot() {
-    ShippingAddress shippingAddress =
-        new ShippingAddress(
-            SHIPPING_ADDRESS_ID, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
-    given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
-        .willReturn(shippingAddress);
-
-    User user = User.create("KAKAO", "kakao123", "test@test.com");
-    setFieldValue(user, "nickname", Nickname.of("TestUser"));
-    setFieldValue(user, "phoneNumber", PhoneNumber.of("01012345678"));
-    given(userDomainService.getUser(PARTICIPANT_ID)).willReturn(user);
-
-    given(deliveryDomainService.createDelivery(any(Delivery.class)))
-        .willAnswer(invocation -> invocation.getArgument(0));
   }
 
   @Nested
@@ -96,8 +68,7 @@ class ParticipationPaymentHandlerTest {
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      assertThatThrownBy(
-              () -> participationPaymentHandler.validateOwnership(PARTICIPATION_ID, 999L))
+      assertThatThrownBy(() -> participationPaymentHandler.validateOwnership(PARTICIPATION_ID, 999L))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYMENT_NO_PERMISSION);
@@ -109,26 +80,16 @@ class ParticipationPaymentHandlerTest {
   class OnPaymentCompletedTest {
 
     @Test
-    void 낙찰자_결제_완료시_참여가_확정되고_배송_스냅샷이_생성된다() {
+    void 낙찰자_결제_완료시_참여가_확정되고_배송_스냅샷_생성을_위임한다() {
       Participation participation = newAwaitingBalanceParticipation();
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
-      stubDeliverySnapshot();
 
       participationPaymentHandler.onPaymentCompleted(PARTICIPATION_ID);
 
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
       assertThat(participation.getFinalizedAt()).isNotNull();
-
-      ArgumentCaptor<Delivery> deliveryCaptor = ArgumentCaptor.forClass(Delivery.class);
-      then(deliveryDomainService).should().createDelivery(deliveryCaptor.capture());
-
-      Delivery delivery = deliveryCaptor.getValue();
-      assertThat(delivery.getParticipationId()).isEqualTo(PARTICIPATION_ID);
-      assertThat(delivery.getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
-      assertThat(delivery.getStoreName()).isEqualTo("GS25 강남점");
-      assertThat(delivery.getReceiverNickname()).isEqualTo("TestUser");
-      assertThat(delivery.getReceiverPhoneNumber()).isEqualTo("01012345678");
+      then(deliverySnapshotCreator).should().create(participation);
     }
   }
 

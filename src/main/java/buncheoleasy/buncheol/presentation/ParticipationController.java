@@ -1,8 +1,11 @@
 package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
+import buncheoleasy.buncheol.application.HostPaymentService;
 import buncheoleasy.buncheol.application.MyParticipationQueryService;
+import buncheoleasy.buncheol.application.ParticipationPaymentQueryService;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.buncheol.dto.response.ParticipationPaymentDetailResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.dto.response.CreatePaymentOrderResponse;
 import java.util.List;
@@ -23,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ParticipationController {
 
   private final BuncheolCheckoutService buncheolCheckoutService;
+  private final HostPaymentService hostPaymentService;
+  private final ParticipationPaymentQueryService participationPaymentQueryService;
   private final MyParticipationQueryService myParticipationQueryService;
 
   /** 분철 낙찰자 결제 주문 생성 API */
@@ -43,6 +48,30 @@ public class ParticipationController {
       @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
     buncheolCheckoutService.confirmMockPayment(participantId, participationId);
     return ResponseEntity.noContent().build();
+  }
+
+  /** 분철 낙찰자(구매자) 입금 완료 신고 API. AWAITING_PAYMENT 상태에서 입금 기한 내에만 가능하다. */
+  @PostMapping("/{participationId}/payment/report")
+  public ResponseEntity<Void> reportPayment(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    buncheolCheckoutService.reportPayment(participantId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 분철 개최자 수동 입금확인 API. 구매자가 신고한 참여(PAYMENT_REPORTED)를 개최자가 확인해 CONFIRMED 로 전환한다. */
+  @PostMapping("/{participationId}/payment/confirm")
+  public ResponseEntity<Void> confirmPayment(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
+    hostPaymentService.confirmPayment(hostId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 분철 낙찰자(구매자) 본인의 결제 상세 조회 API. AWAITING_PAYMENT/PAYMENT_REPORTED 에서만 개최자 계좌를 노출한다. */
+  @GetMapping("/{participationId}/payment")
+  public ResponseEntity<ParticipationPaymentDetailResponse> getPaymentDetail(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    return ResponseEntity.ok(
+        participationPaymentQueryService.getPaymentDetail(participantId, participationId));
   }
 
   /** 마이페이지 - 내가 참여한 분철 목록 조회 API. 최신 참여 순으로 정렬한다. */

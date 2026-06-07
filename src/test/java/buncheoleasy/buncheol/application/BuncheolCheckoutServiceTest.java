@@ -153,6 +153,77 @@ class BuncheolCheckoutServiceTest {
   }
 
   @Nested
+  @DisplayName("입금 완료 신고 테스트")
+  class ReportPaymentTest {
+
+    private static final Instant NOW = Instant.parse("2026-03-11T12:00:00Z");
+    private static final Instant FUTURE_DUE = Instant.parse("2026-03-12T12:00:00Z");
+    private static final Instant PAST_DUE = Instant.parse("2026-03-10T12:00:00Z");
+
+    @Test
+    void AWAITING_PAYMENT_상태에서_기한_내_신고에_성공한다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+      participation.awardAsWinner(FUTURE_DUE);
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
+      assertThat(participation.getPaymentReportedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 참여자가_다르면_권한_예외가_발생한다() {
+      Long wrongUserId = 999L;
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      assertThatThrownBy(() -> buncheolCheckoutService.reportPayment(wrongUserId, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
+    }
+
+    @Test
+    void AWAITING_PAYMENT_상태가_아니면_상태_전환_예외가_발생한다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+      // ACTIVE_BID 상태 (기본)
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      assertThatThrownBy(
+              () -> buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+
+    @Test
+    void 입금_기한이_지났으면_예외가_발생한다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+      participation.awardAsWinner(PAST_DUE);
+
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      assertThatThrownBy(
+              () -> buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_DUE_PASSED);
+    }
+  }
+
+  @Nested
   @DisplayName("참여 취소 테스트")
   class CancelParticipationTest {
 

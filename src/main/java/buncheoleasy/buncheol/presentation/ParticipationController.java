@@ -3,7 +3,9 @@ package buncheoleasy.buncheol.presentation;
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
 import buncheoleasy.buncheol.application.HostPaymentService;
 import buncheoleasy.buncheol.application.MyParticipationQueryService;
+import buncheoleasy.buncheol.application.ParticipationPaymentQueryService;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.buncheol.dto.response.ParticipationPaymentDetailResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.dto.response.CreatePaymentOrderResponse;
 import java.util.List;
@@ -25,6 +27,7 @@ public class ParticipationController {
 
   private final BuncheolCheckoutService buncheolCheckoutService;
   private final HostPaymentService hostPaymentService;
+  private final ParticipationPaymentQueryService participationPaymentQueryService;
   private final MyParticipationQueryService myParticipationQueryService;
 
   /** 분철 낙찰자 결제 주문 생성 API */
@@ -61,6 +64,14 @@ public class ParticipationController {
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
     hostPaymentService.confirmPayment(hostId, participationId);
     return ResponseEntity.noContent().build();
+  }
+
+  /** 분철 낙찰자(구매자) 본인의 결제 상세 조회 API. AWAITING_PAYMENT/PAYMENT_REPORTED 에서만 개최자 계좌를 노출한다. */
+  @GetMapping("/{participationId}/payment")
+  public ResponseEntity<ParticipationPaymentDetailResponse> getPaymentDetail(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    return ResponseEntity.ok(
+        participationPaymentQueryService.getPaymentDetail(participantId, participationId));
   }
 
   /** 마이페이지 - 내가 참여한 분철 목록 조회 API. 최신 참여 순으로 정렬한다. */

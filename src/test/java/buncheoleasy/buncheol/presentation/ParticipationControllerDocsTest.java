@@ -16,11 +16,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolCheckoutService;
+import buncheoleasy.buncheol.application.HostPaymentService;
 import buncheoleasy.buncheol.application.MyParticipationQueryService;
+import buncheoleasy.buncheol.application.ParticipationPaymentQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.buncheol.dto.response.ParticipationPaymentDetailResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
@@ -63,6 +66,10 @@ class ParticipationControllerDocsTest {
   @Autowired private WebApplicationContext context;
 
   @MockitoBean private BuncheolCheckoutService buncheolCheckoutService;
+
+  @MockitoBean private HostPaymentService hostPaymentService;
+
+  @MockitoBean private ParticipationPaymentQueryService participationPaymentQueryService;
 
   @MockitoBean private MyParticipationQueryService myParticipationQueryService;
 
@@ -283,6 +290,110 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("amount").description("결제 금액"),
                             fieldWithPath("successUrl").description("결제 성공 시 리다이렉트 URL"),
                             fieldWithPath("failUrl").description("결제 실패 시 리다이렉트 URL"))
+                        .build())));
+  }
+
+  @Test
+  void 구매자_입금완료_신고() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participations/{participationId}/payment/report", 500L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-payment-report",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("구매자 입금 완료 신고")
+                        .description(
+                            "낙찰자가 개최자 계좌로 송금 후 '입금했어요'를 누른다. AWAITING_PAYMENT → PAYMENT_REPORTED 로"
+                                + " 전이하며, 입금 기한 내에만 가능하다.")
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .build())));
+  }
+
+  @Test
+  void 개최자_입금확인() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participations/{participationId}/payment/confirm", 500L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-payment-confirm",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("개최자 수동 입금 확인")
+                        .description(
+                            "개최자가 실제 입금을 확인해 PAYMENT_REPORTED → CONFIRMED 로 전환한다. 확정 시 배송 스냅샷이"
+                                + " 생성된다. 개최자 본인만 호출할 수 있다.")
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .build())));
+  }
+
+  @Test
+  void 낙찰자_결제_상세_조회() throws Exception {
+    ParticipationPaymentDetailResponse detail =
+        new ParticipationPaymentDetailResponse(
+            500L,
+            ParticipationStatus.AWAITING_PAYMENT,
+            50_000L,
+            3_000L,
+            53_000L,
+            Instant.parse("2026-06-02T12:00:00Z"),
+            new ParticipationPaymentDetailResponse.HostAccountResponse(
+                "국민은행", "12345678", "홍길동"));
+    given(participationPaymentQueryService.getPaymentDetail(PARTICIPANT_ID, 500L))
+        .willReturn(detail);
+
+    mockMvc
+        .perform(
+            get("/v1/participations/{participationId}/payment", 500L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "participations-payment-detail",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("낙찰자 결제 상세 조회")
+                        .description(
+                            "낙찰자 본인이 결제 금액·기한·개최자 계좌를 조회한다. 개최자 계좌는 AWAITING_PAYMENT/PAYMENT_REPORTED"
+                                + " 단계에서만 노출되며, 그 외 상태에서는 hostAccount 가 null 이다.")
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .responseSchema(Schema.schema("ParticipationPaymentDetailResponse"))
+                        .responseFields(
+                            fieldWithPath("participationId").description("참여 ID"),
+                            fieldWithPath("paymentStatus")
+                                .description(
+                                    "결제(참여) 상태 (AWAITING_PAYMENT | PAYMENT_REPORTED | CONFIRMED 등)"),
+                            fieldWithPath("bidAmount").description("낙찰가 (제시가)"),
+                            fieldWithPath("shippingFee").description("배송비"),
+                            fieldWithPath("totalAmount").description("총 결제 금액 (낙찰가 + 배송비)"),
+                            fieldWithPath("paymentDueAt").description("입금 기한").optional(),
+                            fieldWithPath("hostAccount.bankName")
+                                .description("개최자 은행명 (노출 조건 미충족 시 hostAccount 전체가 null)")
+                                .optional(),
+                            fieldWithPath("hostAccount.accountNumber")
+                                .description("개최자 계좌번호")
+                                .optional(),
+                            fieldWithPath("hostAccount.accountHolder")
+                                .description("개최자 예금주")
+                                .optional())
                         .build())));
   }
 }

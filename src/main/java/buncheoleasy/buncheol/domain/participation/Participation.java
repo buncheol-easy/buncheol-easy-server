@@ -132,7 +132,16 @@ public class Participation extends TimestampedEntity {
     this.dueAt = dueAt;
   }
 
+  // ACTIVE_BID 유지 + 제시가 순위만 부여: 마감 시 2순위 이하를 차순위 승계 후보로 남긴다.
+  public void assignClosedRank(final int closedRank) {
+    if (status != ParticipationStatus.ACTIVE_BID) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.closedRank = closedRank;
+  }
+
   // ACTIVE_BID → FAILED: 마감 시 낙찰되지 못한 참여. 제시가 순위(closedRank)도 함께 기록한다.
+  // (계좌이체 MVP 의 happy-path 마감에선 미사용 — 2순위 이하는 assignClosedRank 로 ACTIVE_BID 유지한다.)
   public void markNotSelected(final int closedRank, final Instant now) {
     if (status != ParticipationStatus.ACTIVE_BID) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);

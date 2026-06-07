@@ -95,8 +95,8 @@ public class BuncheolService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
     buncheolDomainService.closeBuncheol(buncheol);
-    // 마감 직후 같은 트랜잭션에서 낙찰자 선정(멤버별 1순위 AWAITING_PAYMENT, 그 외 FAILED).
-    // 자동 마감 스케줄러도 동일하게 selectWinners 를 호출해 후속 처리를 공유한다.
+    // 마감 직후 같은 트랜잭션에서 낙찰자 선정: 멤버별 1순위만 AWAITING_PAYMENT(입금 대기), 2순위 이하는 ACTIVE_BID 유지(차순위 승계 후보).
+    // Buncheol RECRUITING→CLOSED 가드 덕에 정확히 1회만 실행된다 (자동 마감 스케줄러도 동일 경로 재사용).
     participationDomainService.selectWinners(buncheolId, Instant.now(clock));
   }
 

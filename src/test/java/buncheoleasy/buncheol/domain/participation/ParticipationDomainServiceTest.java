@@ -189,7 +189,7 @@ class ParticipationDomainServiceTest {
     }
 
     @Test
-    void 멤버별_최고가_1인을_낙찰하고_나머지를_미선정_처리한다() {
+    void 멤버별_최고가_1인을_낙찰하고_나머지는_차순위_후보로_ACTIVE_BID_유지한다() {
       Instant now = Instant.parse("2026-03-13T12:00:00Z");
       Participation memberA1 = bid(10L, 100L, 50_000L);
       Participation memberA2 = bid(10L, 101L, 30_000L);
@@ -200,15 +200,16 @@ class ParticipationDomainServiceTest {
 
       participationDomainService.selectWinners(BUNCHEOL_ID, now);
 
-      Instant expectedDueAt = now.plus(Duration.ofHours(48));
+      Instant expectedDueAt = now.plus(Duration.ofHours(24));
       assertThat(memberA1.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(memberA1.getClosedRank()).isEqualTo(1);
       assertThat(memberA1.getDueAt()).isEqualTo(expectedDueAt);
 
-      assertThat(memberA2.getStatus()).isEqualTo(ParticipationStatus.FAILED);
+      // 2순위는 차순위 승계 후보로 ACTIVE_BID 유지 + closedRank 만 부여 (FAILED 처리하지 않음).
+      assertThat(memberA2.getStatus()).isEqualTo(ParticipationStatus.ACTIVE_BID);
       assertThat(memberA2.getClosedRank()).isEqualTo(2);
-      assertThat(memberA2.getFailReason()).isEqualTo("낙찰 실패");
-      assertThat(memberA2.getFinalizedAt()).isEqualTo(now);
+      assertThat(memberA2.getDueAt()).isNull();
+      assertThat(memberA2.getFinalizedAt()).isNull();
 
       assertThat(memberB1.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(memberB1.getClosedRank()).isEqualTo(1);

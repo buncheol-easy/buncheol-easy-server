@@ -107,6 +107,7 @@ class JpaParticipationRepositoryAdapterTest {
         status.name(),
         status == ParticipationStatus.ACTIVE_BID
                 || status == ParticipationStatus.AWAITING_PAYMENT
+                || status == ParticipationStatus.PAYMENT_REPORTED
                 || status == ParticipationStatus.CONFIRMED
             ? participantId
             : null);
@@ -255,6 +256,26 @@ class JpaParticipationRepositoryAdapterTest {
 
       assertThat(result).isEmpty();
     }
+
+    @Test
+    void PAYMENT_REPORTED_참여도_활성_참여로_포함한다() {
+      // 입금신고(PAYMENT_REPORTED) 가 ACTIVE_STATUSES 에서 빠지면 관리/상세 화면에서 사라진다 — 회귀 방지.
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "입금신고매장");
+      insertParticipation(
+          buncheolId, bmId, addr, 50_000L, ParticipationStatus.PAYMENT_REPORTED);
+
+      List<Participation> result = participationRepository.findActiveByBuncheolId(buncheolId);
+
+      assertThat(result)
+          .singleElement()
+          .satisfies(
+              p -> {
+                assertThat(p.getStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
+                assertThat(p.getBidAmount()).isEqualTo(50_000L);
+              });
+    }
   }
 
   @Nested
@@ -382,6 +403,7 @@ class JpaParticipationRepositoryAdapterTest {
         status.name(),
         status == ParticipationStatus.ACTIVE_BID
                 || status == ParticipationStatus.AWAITING_PAYMENT
+                || status == ParticipationStatus.PAYMENT_REPORTED
                 || status == ParticipationStatus.CONFIRMED
             ? userId
             : null);

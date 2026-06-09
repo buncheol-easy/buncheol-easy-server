@@ -251,16 +251,118 @@ class ParticipationTest {
     }
   }
 
+  @Nested
+  @DisplayName("미입금 만료 테스트")
+  class ExpireUnpaidTest {
+
+    private static final Instant DUE_AT = Instant.parse("2026-03-13T12:00:00Z");
+    private static final Instant AFTER_DUE = Instant.parse("2026-03-13T12:00:01Z");
+
+    @Test
+    void AWAITING_PAYMENT_이고_기한이_지났으면_FAILED_로_전이한다() {
+      Participation participation = awaitingWithDue(DUE_AT);
+
+      participation.expireUnpaid(AFTER_DUE);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.FAILED);
+      assertThat(participation.getFailReason()).isEqualTo("입금 기한 초과");
+      assertThat(participation.getFinalizedAt()).isEqualTo(AFTER_DUE);
+    }
+
+    @Test
+    void dueAt_이_null_이면_PAYMENT_NOT_DUE_YET_예외가_발생한다() {
+      Participation participation = newParticipation();
+      setStatus(participation, ParticipationStatus.AWAITING_PAYMENT); // dueAt 은 null
+
+      assertThatThrownBy(() -> participation.expireUnpaid(AFTER_DUE))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_NOT_DUE_YET);
+    }
+
+    @Test
+    void 기한_정각이거나_아직_안_지났으면_PAYMENT_NOT_DUE_YET_예외가_발생한다() {
+      Participation participation = awaitingWithDue(DUE_AT);
+
+      // now == dueAt (정각) 은 아직 만료 아님
+      assertThatThrownBy(() -> participation.expireUnpaid(DUE_AT))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_NOT_DUE_YET);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"ACTIVE_BID", "PAYMENT_REPORTED", "CONFIRMED", "CANCELLED", "FAILED"})
+    void AWAITING_PAYMENT_이_아니면_만료_대상이_아니라_예외가_발생한다(ParticipationStatus invalidStatus) {
+      // PAYMENT_REPORTED/CONFIRMED 포함 — 입금신고·확정 건은 만료되지 않는다.
+      Participation participation = newParticipation();
+      setStatus(participation, invalidStatus);
+      setField(participation, "dueAt", DUE_AT);
+
+      assertThatThrownBy(() -> participation.expireUnpaid(AFTER_DUE))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+
+    private Participation awaitingWithDue(final Instant dueAt) {
+      Participation participation = newParticipation();
+      setStatus(participation, ParticipationStatus.AWAITING_PAYMENT);
+      setField(participation, "dueAt", dueAt);
+      return participation;
+    }
+  }
+
+  @Nested
+  @DisplayName("차순위 승계 테스트")
+  class PromoteToWinnerTest {
+
+    private static final Instant NEW_DUE_AT = Instant.parse("2026-03-14T12:00:00Z");
+
+    @Test
+    void ACTIVE_BID_을_AWAITING_PAYMENT_로_승계하고_closedRank_는_보존한다() {
+      Participation participation = newParticipation();
+      setField(participation, "closedRank", 2); // 마감 시점 2순위
+
+      participation.promoteToWinner(NEW_DUE_AT);
+
+      assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(participation.getDueAt()).isEqualTo(NEW_DUE_AT);
+      assertThat(participation.getClosedRank()).isEqualTo(2); // 덮어쓰지 않는다
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"AWAITING_PAYMENT", "PAYMENT_REPORTED", "CONFIRMED", "CANCELLED", "FAILED"})
+    void ACTIVE_BID_이_아니면_승계할_수_없어_예외가_발생한다(ParticipationStatus invalidStatus) {
+      Participation participation = newParticipation();
+      setStatus(participation, invalidStatus);
+
+      assertThatThrownBy(() -> participation.promoteToWinner(NEW_DUE_AT))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
   private static Participation newParticipation() {
     return Participation.create(
         BUNCHEOL_ID, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, BID_AMOUNT);
   }
 
   private void setStatus(final Participation participation, final ParticipationStatus status) {
+    setField(participation, "status", status);
+  }
+
+  private static void setField(
+      final Object target, final String fieldName, final Object value) {
     try {
-      Field statusField = Participation.class.getDeclaredField("status");
-      statusField.setAccessible(true);
-      statusField.set(participation, status);
+      Field field = Participation.class.getDeclaredField(fieldName);
+      field.setAccessible(true);
+      field.set(target, value);
     } catch (NoSuchFieldException | IllegalAccessException e) {
       throw new RuntimeException(e);
     }

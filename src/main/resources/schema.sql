@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS participations
     payment_reported_at   DATETIME     NULL COMMENT '구매자 입금완료 신고 시각 (계좌이체 MVP)',
     payment_confirmed_at  DATETIME     NULL COMMENT '개최자 입금확인 시각 (계좌이체 MVP)',
     status                VARCHAR(30)  NOT NULL COMMENT 'ACTIVE_BID | AWAITING_PAYMENT | PAYMENT_REPORTED | CONFIRMED | CANCELLED | FAILED',
+    version               BIGINT       NOT NULL DEFAULT 0 COMMENT '낙관적 락 버전',
     confirmed_member_id   BIGINT GENERATED ALWAYS AS (
                               IF(status = 'CONFIRMED', buncheol_member_id, NULL)
                               ) STORED COMMENT 'CONFIRMED일 때만 buncheol_member_id 값',

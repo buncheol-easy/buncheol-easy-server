@@ -1,7 +1,9 @@
 spring:
   datasource:
     driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    # CASE_INSENSITIVE_IDENTIFIERS: H2 예약어(groups 등)를 Hibernate 가 "groups" 로 따옴표 조회할 때
+    # H2 저장 식별자(GROUPS)와 대소문자 불일치가 나는 문제를 MySQL 동작에 맞춰 흡수한다.
+    url: jdbc:h2:mem:testdb;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password:
   jpa:

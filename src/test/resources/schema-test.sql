@@ -165,6 +165,7 @@ CREATE TABLE participations
     payment_reported_at   TIMESTAMP    NULL,
     payment_confirmed_at  TIMESTAMP    NULL,
     status                VARCHAR(30)  NOT NULL,
+    version               BIGINT       NOT NULL DEFAULT 0,
     -- H2 generated column 안정성 이슈로 테스트 스키마에서는 일반 컬럼으로 유지
     confirmed_member_id   BIGINT       NULL,
     active_participant_id BIGINT       NULL,

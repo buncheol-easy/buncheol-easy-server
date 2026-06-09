@@ -25,6 +25,18 @@ public interface ParticipationRepository {
   /** 단일 분철의 ACTIVE_BID 참여만 {@code bidAmount DESC, id ASC} 정렬로 조회. 마감 시 멤버별 낙찰자 선정용. */
   List<Participation> findBiddingByBuncheolId(Long buncheolId);
 
+  /**
+   * 한 멤버 슬롯의 차순위 승계 후보를 1건 조회. ACTIVE_BID 이면서 closedRank 가 부여된(마감을 거친) 참여만 대상으로 하며 {@code
+   * closedRank ASC, id ASC} 정렬의 첫 건(다음 순위)을 반환한다. 후보가 없으면 empty.
+   */
+  Optional<Participation> findTopActiveBidInSlot(Long buncheolMemberId);
+
+  /**
+   * 한 멤버 슬롯에 결제 진행 중(AWAITING_PAYMENT / PAYMENT_REPORTED / CONFIRMED) 참여가 존재하는지. 차순위 승계 전 중복 결제 대상이
+   * 생기지 않도록 가드하는 용도다. 만료된 낙찰자를 FAILED 로 전이한 뒤 호출하면(영속성 컨텍스트 auto-flush) 해당 낙찰자는 집계에서 제외된다.
+   */
+  boolean existsPaymentInProgressInSlot(Long buncheolMemberId);
+
   boolean updateStatus(Participation participation, ParticipationStatus expectedStatus);
 
   /**

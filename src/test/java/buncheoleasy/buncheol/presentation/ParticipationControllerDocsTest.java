@@ -342,6 +342,32 @@ class ParticipationControllerDocsTest {
   }
 
   @Test
+  void 개최자_미입금_낙찰자_만료() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participations/{participationId}/payment/expire", 500L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-payment-expire",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("개최자 미입금 낙찰자 만료 및 차순위 승계")
+                        .description(
+                            "개최자가 입금 기한이 지난 AWAITING_PAYMENT 낙찰자를 FAILED 처리하고, 같은 멤버 슬롯의 차순위"
+                                + " 후보(ACTIVE_BID)를 입금대기로 승계한다. 승계 결과는 분철 관리 화면 재조회로 확인한다. 개최자 본인만"
+                                + " 호출할 수 있으며, PAYMENT_REPORTED/CONFIRMED 는 만료 대상이 아니고 입금 기한 전에는 거부된다(BCH-074).")
+                        .pathParameters(
+                            parameterWithName("participationId").description("만료시킬 낙찰자 참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .build())));
+  }
+
+  @Test
   void 낙찰자_결제_상세_조회() throws Exception {
     ParticipationPaymentDetailResponse detail =
         new ParticipationPaymentDetailResponse(

@@ -46,6 +46,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private static final List<ParticipationStatus> BIDDING_STATUSES =
       List.of(ParticipationStatus.ACTIVE_BID);
 
+  // 슬롯당 1명만 존재해야 하는 결제 진행 상태들 (차순위 승계 중복 가드용).
+  private static final List<ParticipationStatus> PAYMENT_IN_PROGRESS_STATUSES =
+      List.of(
+          ParticipationStatus.AWAITING_PAYMENT,
+          ParticipationStatus.PAYMENT_REPORTED,
+          ParticipationStatus.CONFIRMED);
+
   private static final Field ID_FIELD;
 
   static {
@@ -121,7 +128,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsActiveByParticipantId(final Long participantId) {
-    return jpaParticipationRepository.existsActiveByParticipantId(participantId, ACTIVE_STATUSES);
+    return jpaParticipationRepository.existsByParticipantIdAndStatusIn(participantId, ACTIVE_STATUSES);
   }
 
   @Override
@@ -141,6 +148,19 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public List<Participation> findBiddingByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.findActiveByBuncheolId(buncheolId, BIDDING_STATUSES);
+  }
+
+  @Override
+  public Optional<Participation> findTopActiveBidInSlot(final Long buncheolMemberId) {
+    return jpaParticipationRepository
+        .findFirstByBuncheolMemberIdAndStatusAndClosedRankNotNullOrderByClosedRankAscIdAsc(
+            buncheolMemberId, ParticipationStatus.ACTIVE_BID);
+  }
+
+  @Override
+  public boolean existsPaymentInProgressInSlot(final Long buncheolMemberId) {
+    return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
+        buncheolMemberId, PAYMENT_IN_PROGRESS_STATUSES);
   }
 
   @Override

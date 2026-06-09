@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ParticipationDomainService {
 
-  // 낙찰자 입금 기한 (계좌이체 MVP). 1순위·차순위 모두 24h. 미입금 만료/차순위 이양은 관리자 수동 API(별도 작업).
+  // 낙찰자 입금 기한 (계좌이체 MVP). 1순위 낙찰·차순위 승계 모두 24h 를 부여한다.
   private static final Duration PAYMENT_DUE_WINDOW = Duration.ofHours(24);
 
   private final ParticipationRepository participationRepository;
@@ -50,6 +50,35 @@ public class ParticipationDomainService {
 
   public int cancelActiveByBuncheolId(final Long buncheolId, final Instant now) {
     return participationRepository.cancelActiveByBuncheolId(buncheolId, now);
+  }
+
+  /**
+   * 미입금 낙찰자를 만료(FAILED)시키고 같은 멤버 슬롯의 차순위 후보를 승계한다.
+   *
+   * <ol>
+   *   <li>{@code winner} 를 {@link Participation#expireUnpaid(Instant)} 로 FAILED 전이 (AWAITING_PAYMENT + 기한 경과만 허용)
+   *   <li>슬롯에 결제 진행 중(AWAITING/PAYMENT_REPORTED/CONFIRMED) 참여가 남아 있으면 중복 결제 대상을 막기 위해 승계하지 않는다.
+   *       1단계에서 winner 를 FAILED 로 바꾼 뒤 조회하므로(영속성 컨텍스트 auto-flush) 정상 흐름에선 가드가 통과한다.
+   *   <li>{@code closedRank ASC} 차순위 ACTIVE_BID 후보를 새 입금 기한으로 {@link Participation#promoteToWinner(Instant)} 승계
+   * </ol>
+   *
+   * <p>엔티티를 직접 변경하는 dirty checking 방식이므로 호출자 트랜잭션({@code @Transactional}) 안에서 실행돼야 한다.
+   *
+   * @return 승계된 차순위 참여. 후보가 없거나 중복 가드에 걸리면 empty (이때 winner 만 FAILED 로 남는다)
+   */
+  public Optional<Participation> expireWinnerAndPromoteNext(
+      final Participation winner, final Instant now) {
+    winner.expireUnpaid(now);
+
+    final Long buncheolMemberId = winner.getBuncheolMemberId();
+    if (participationRepository.existsPaymentInProgressInSlot(buncheolMemberId)) {
+      return Optional.empty();
+    }
+
+    Optional<Participation> next =
+        participationRepository.findTopActiveBidInSlot(buncheolMemberId);
+    next.ifPresent(candidate -> candidate.promoteToWinner(now.plus(PAYMENT_DUE_WINDOW)));
+    return next;
   }
 
   /**

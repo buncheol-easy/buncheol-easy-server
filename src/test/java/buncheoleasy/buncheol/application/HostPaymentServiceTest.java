@@ -2,9 +2,11 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
@@ -112,6 +114,46 @@ class HostPaymentServiceTest {
           .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
 
       then(deliverySnapshotCreator).shouldHaveNoInteractions();
+    }
+  }
+
+  @Nested
+  @DisplayName("미입금 낙찰자 만료 테스트")
+  class ExpirePaymentTest {
+
+    @Test
+    void 개최자가_호출하면_권한_검증_후_도메인서비스에_만료_승계를_위임한다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      hostPaymentService.expirePayment(HOST_ID, PARTICIPATION_ID);
+
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(participationDomainService).should().expireWinnerAndPromoteNext(participation, NOW);
+    }
+
+    @Test
+    void 개최자가_아니면_예외가_발생하고_만료를_수행하지_않는다() {
+      Participation participation = newParticipation();
+      setId(participation, PARTICIPATION_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
+          .given(buncheol)
+          .validateOwner(WRONG_HOST_ID);
+
+      assertThatThrownBy(() -> hostPaymentService.expirePayment(WRONG_HOST_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(participationDomainService)
+          .should(never())
+          .expireWinnerAndPromoteNext(any(), any());
     }
   }
 

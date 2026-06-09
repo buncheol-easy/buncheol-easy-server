@@ -32,12 +32,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
 
-  @Query(
-      "SELECT COUNT(p) > 0 FROM Participation p "
-          + "WHERE p.participantId = :participantId AND p.status IN :activeStatuses")
-  boolean existsActiveByParticipantId(
-      @Param("participantId") Long participantId,
-      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+  boolean existsByParticipantIdAndStatusIn(Long participantId, List<ParticipationStatus> statuses);
 
   @Query(
       "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount("
@@ -56,6 +51,15 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   List<Participation> findActiveByBuncheolId(
       @Param("buncheolId") Long buncheolId,
       @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+
+  /** 차순위 승계 후보: ACTIVE_BID + closedRank IS NOT NULL 중 closedRank ASC, id ASC 첫 건. */
+  Optional<Participation>
+      findFirstByBuncheolMemberIdAndStatusAndClosedRankNotNullOrderByClosedRankAscIdAsc(
+          Long buncheolMemberId, ParticipationStatus status);
+
+  /** 슬롯 내 결제 진행 중 참여 존재 여부 (중복 승계 가드). */
+  boolean existsByBuncheolMemberIdAndStatusIn(
+      Long buncheolMemberId, List<ParticipationStatus> statuses);
 
   /** status 가 expectedStatus 인 경우에만 갱신 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

@@ -46,7 +46,7 @@ class BuncheolAutoCloseServiceIntegrationTest {
   }
 
   @Test
-  void 마감_시_멤버별_최고가는_낙찰_나머지는_탈락_처리되고_분철은_CLOSED_된다() {
+  void 마감_시_멤버별_최고가는_낙찰_나머지는_차순위_후보로_ACTIVE_BID_유지되고_분철은_CLOSED_된다() {
     Long buncheolId = insertBuncheol(pastDeadline(), "RECRUITING");
     Long buncheolMemberId = insertBuncheolMember(buncheolId);
     Long winnerId = TestUserFixture.insertUser(jdbcTemplate, "winner_close");
@@ -65,7 +65,8 @@ class BuncheolAutoCloseServiceIntegrationTest {
     assertThat(participationStatus(winnerParticipationId)).isEqualTo("AWAITING_PAYMENT");
     assertThat(closedRank(winnerParticipationId)).isEqualTo(1);
 
-    assertThat(participationStatus(loserParticipationId)).isEqualTo("FAILED");
+    // 설계 A: 2순위 이하는 FAILED 가 아니라 차순위 승계 후보로 ACTIVE_BID 를 유지하고 closedRank 만 부여한다.
+    assertThat(participationStatus(loserParticipationId)).isEqualTo("ACTIVE_BID");
     assertThat(closedRank(loserParticipationId)).isEqualTo(2);
   }
 
@@ -106,7 +107,8 @@ class BuncheolAutoCloseServiceIntegrationTest {
 
     assertThat(participationStatus(earlyParticipationId)).isEqualTo("AWAITING_PAYMENT");
     assertThat(closedRank(earlyParticipationId)).isEqualTo(1);
-    assertThat(participationStatus(lateParticipationId)).isEqualTo("FAILED");
+    // 설계 A: 동점 차순위도 FAILED 가 아니라 ACTIVE_BID 를 유지한다.
+    assertThat(participationStatus(lateParticipationId)).isEqualTo("ACTIVE_BID");
     assertThat(closedRank(lateParticipationId)).isEqualTo(2);
   }
 

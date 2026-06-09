@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -79,6 +80,13 @@ public class Participation extends TimestampedEntity {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
+
+  // 낙관적 락 버전. 같은 participation 에 대한 만료/승계 등 dirty-checking 갱신이 동시에 들어오면
+  // 한 트랜잭션만 커밋되고 나머지는 OptimisticLockException 으로 실패한다 (중복 만료/이중 승계 방지).
+  // bulk UPDATE(updateStatusIfMatches 등)는 status CAS 로 별도 가드하므로 이 버전을 증가시키지 않는다.
+  @Version
+  @Column(nullable = false)
+  private Long version;
 
   public static Participation create(
       final Long buncheolId,

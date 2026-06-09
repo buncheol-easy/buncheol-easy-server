@@ -1,18 +1,21 @@
 package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -114,6 +117,28 @@ class BuncheolPaymentExpireIntegrationTest {
 
     assertThat(status(winnerId)).isEqualTo("FAILED");
     assertThat(managementOption().winner()).isNull();
+  }
+
+  @Test
+  void 같은_낙찰자에_대한_동시_만료는_낙관적_락으로_하나만_성공한다() {
+    Long winnerId = seedActiveBid("opt_lock_u", WINNER_BID);
+
+    buncheolService.closeBuncheol(hostId, buncheolId); // winner → AWAITING_PAYMENT
+    em.flush();
+    expireDueAt(winnerId);
+    em.flush();
+    em.clear();
+
+    // 트랜잭션 A 가 만료 처리할 winner 를 영속성 컨텍스트로 로드한다 (낙찰 시 awardAsWinner 로 이미 version 이 증가한 상태).
+    Participation winner = em.find(Participation.class, winnerId);
+    assertThat(winner.getVersion()).isNotNull();
+
+    // 트랜잭션 B 가 같은 winner 를 먼저 만료해 커밋한 상황을 모사: DB version 을 직접 올린다.
+    jdbcTemplate.update("UPDATE participations SET version = version + 1 WHERE id = ?", winnerId);
+
+    // A 가 들고 있던 stale 엔티티를 변경 후 flush 하면 version 불일치로 낙관적 락 충돌이 발생한다.
+    winner.expireUnpaid(Instant.now());
+    assertThatThrownBy(() -> em.flush()).isInstanceOf(OptimisticLockException.class);
   }
 
   // --- 조회 헬퍼 ---

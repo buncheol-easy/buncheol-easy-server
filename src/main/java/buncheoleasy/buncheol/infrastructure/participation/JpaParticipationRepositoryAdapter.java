@@ -128,7 +128,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsActiveByParticipantId(final Long participantId) {
-    return jpaParticipationRepository.existsActiveByParticipantId(participantId, ACTIVE_STATUSES);
+    return jpaParticipationRepository.existsByParticipantIdAndStatusIn(participantId, ACTIVE_STATUSES);
   }
 
   @Override
@@ -152,13 +152,14 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public Optional<Participation> findTopActiveBidInSlot(final Long buncheolMemberId) {
-    return jpaParticipationRepository.findTopActiveBidInSlot(
-        buncheolMemberId, ParticipationStatus.ACTIVE_BID);
+    return jpaParticipationRepository
+        .findFirstByBuncheolMemberIdAndStatusAndClosedRankNotNullOrderByClosedRankAscIdAsc(
+            buncheolMemberId, ParticipationStatus.ACTIVE_BID);
   }
 
   @Override
   public boolean existsPaymentInProgressInSlot(final Long buncheolMemberId) {
-    return jpaParticipationRepository.existsPaymentInProgressInSlot(
+    return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
         buncheolMemberId, PAYMENT_IN_PROGRESS_STATUSES);
   }
 

@@ -33,4 +33,17 @@ public class HostPaymentService {
     participation.confirmManualPayment(Instant.now(clock));
     deliverySnapshotCreator.create(participation);
   }
+
+  /**
+   * 미입금 낙찰자 만료 처리. 입금 기한이 지난 AWAITING_PAYMENT 낙찰자를 FAILED 로 전이하고 같은 멤버 슬롯의 차순위 후보를 입금대기로 승계한다.
+   * PAYMENT_REPORTED/CONFIRMED 는 만료 대상이 아니며, 기한 전 호출도 거부된다.
+   */
+  @Transactional
+  public void expirePayment(final Long hostId, final Long participationId) {
+    Participation winner = participationDomainService.getParticipation(participationId);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(winner.getBuncheolId());
+    buncheol.validateOwner(hostId);
+
+    participationDomainService.expireWinnerAndPromoteNext(winner, Instant.now(clock));
+  }
 }

@@ -66,6 +66,17 @@ public class ParticipationController {
     return ResponseEntity.noContent().build();
   }
 
+  /**
+   * 분철 개최자의 미입금 낙찰자 만료 API. 입금 기한이 지난 AWAITING_PAYMENT 낙찰자를 FAILED 처리하고 차순위 후보를 입금대기로 승계한다. 승계 결과는
+   * management 재조회로 확인한다.
+   */
+  @PostMapping("/{participationId}/payment/expire")
+  public ResponseEntity<Void> expirePayment(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
+    hostPaymentService.expirePayment(hostId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
   /** 분철 낙찰자(구매자) 본인의 결제 상세 조회 API. AWAITING_PAYMENT/PAYMENT_REPORTED 에서만 개최자 계좌를 노출한다. */
   @GetMapping("/{participationId}/payment")
   public ResponseEntity<ParticipationPaymentDetailResponse> getPaymentDetail(

@@ -57,6 +57,26 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("buncheolId") Long buncheolId,
       @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
 
+  /** 차순위 승계 후보: ACTIVE_BID + closedRank IS NOT NULL 중 closedRank ASC, id ASC 첫 건. */
+  @Query(
+      "SELECT p FROM Participation p "
+          + "WHERE p.buncheolMemberId = :buncheolMemberId "
+          + "AND p.status = :activeBidStatus "
+          + "AND p.closedRank IS NOT NULL "
+          + "ORDER BY p.closedRank ASC, p.id ASC "
+          + "LIMIT 1")
+  Optional<Participation> findTopActiveBidInSlot(
+      @Param("buncheolMemberId") Long buncheolMemberId,
+      @Param("activeBidStatus") ParticipationStatus activeBidStatus);
+
+  /** 슬롯 내 결제 진행 중 참여 존재 여부 (중복 승계 가드). */
+  @Query(
+      "SELECT COUNT(p) > 0 FROM Participation p "
+          + "WHERE p.buncheolMemberId = :buncheolMemberId AND p.status IN :paymentStatuses")
+  boolean existsPaymentInProgressInSlot(
+      @Param("buncheolMemberId") Long buncheolMemberId,
+      @Param("paymentStatuses") List<ParticipationStatus> paymentStatuses);
+
   /** status 가 expectedStatus 인 경우에만 갱신 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

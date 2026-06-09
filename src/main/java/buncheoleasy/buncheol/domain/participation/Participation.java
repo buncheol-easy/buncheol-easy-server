@@ -23,6 +23,7 @@ import lombok.NoArgsConstructor;
 public class Participation extends TimestampedEntity {
 
   private static final String FAIL_REASON_NOT_SELECTED = "낙찰 실패";
+  private static final String FAIL_REASON_PAYMENT_OVERDUE = "입금 기한 초과";
 
   // 일반 save 경로 외에 JpaParticipationRepositoryAdapter 의 conditional INSERT 흐름에서
   // ReflectionUtils 로 직접 주입되는 필드. 필드명·타입 변경 시 어댑터의 정적 ID_FIELD 초기화도 함께 갱신할 것.
@@ -184,6 +185,30 @@ public class Participation extends TimestampedEntity {
     this.paymentConfirmedAt = now;
     this.finalizedAt = now;
     this.failReason = null;
+  }
+
+  // AWAITING_PAYMENT(입금 기한 경과) → FAILED: 미입금 낙찰자 만료. 차순위 승계의 선행 단계다.
+  // status 가드로 PAYMENT_REPORTED/CONFIRMED 는 만료 대상에서 자동 제외되고, dueAt 미경과 시에도 막는다.
+  public void expireUnpaid(final Instant now) {
+    if (status != ParticipationStatus.AWAITING_PAYMENT) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    if (dueAt == null || !now.isAfter(dueAt)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_NOT_DUE_YET);
+    }
+    this.status = ParticipationStatus.FAILED;
+    this.failReason = FAIL_REASON_PAYMENT_OVERDUE;
+    this.finalizedAt = now;
+  }
+
+  // ACTIVE_BID → AWAITING_PAYMENT: 만료된 낙찰자를 대신해 차순위 후보를 승계한다. 새 입금 기한(dueAt)만 부여하고
+  // closedRank(마감 시점 순위)는 감사/추적 정보로 보존한다 — 현재 결제 대상 여부는 status 로 판단한다.
+  public void promoteToWinner(final Instant dueAt) {
+    if (status != ParticipationStatus.ACTIVE_BID) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    this.status = ParticipationStatus.AWAITING_PAYMENT;
+    this.dueAt = dueAt;
   }
 
   // PAYMENT_REPORTED → AWAITING_PAYMENT: 개최자가 입금 불일치로 반려. 구매자가 dueAt 내 다시 신고할 수 있게 되돌린다.

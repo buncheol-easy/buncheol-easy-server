@@ -2,11 +2,14 @@ package buncheoleasy.buncheol.domain.participation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -236,6 +239,89 @@ class ParticipationDomainServiceTest {
       participationDomainService.selectWinners(BUNCHEOL_ID, now);
 
       then(participationRepository).should().findBiddingByBuncheolId(BUNCHEOL_ID);
+    }
+  }
+
+  @Nested
+  @DisplayName("미입금 만료 및 차순위 승계 테스트")
+  class ExpireWinnerAndPromoteNextTest {
+
+    private static final Long BUNCHEOL_MEMBER_ID = 10L;
+    private static final Instant DUE_AT = Instant.parse("2026-03-13T12:00:00Z");
+    private static final Instant NOW = Instant.parse("2026-03-13T12:00:01Z"); // dueAt 경과 직후
+
+    @Test
+    void 차순위_후보가_있으면_winner를_FAILED_처리하고_후보를_승계한다() {
+      Participation winner = awaitingWinner();
+      Participation candidate = activeBidCandidate(2);
+      given(participationRepository.existsPaymentInProgressInSlot(BUNCHEOL_MEMBER_ID))
+          .willReturn(false);
+      given(participationRepository.findTopActiveBidInSlot(BUNCHEOL_MEMBER_ID))
+          .willReturn(Optional.of(candidate));
+
+      Optional<Participation> promoted =
+          participationDomainService.expireWinnerAndPromoteNext(winner, NOW);
+
+      assertThat(winner.getStatus()).isEqualTo(ParticipationStatus.FAILED);
+      assertThat(winner.getFailReason()).isEqualTo("입금 기한 초과");
+      assertThat(promoted).containsSame(candidate);
+      assertThat(candidate.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(candidate.getDueAt()).isEqualTo(NOW.plus(Duration.ofHours(24))); // 새 24h 기한
+      assertThat(candidate.getClosedRank()).isEqualTo(2); // 마감 순위 보존
+    }
+
+    @Test
+    void 차순위_후보가_없으면_winner만_FAILED_로_남는다() {
+      Participation winner = awaitingWinner();
+      given(participationRepository.existsPaymentInProgressInSlot(BUNCHEOL_MEMBER_ID))
+          .willReturn(false);
+      given(participationRepository.findTopActiveBidInSlot(BUNCHEOL_MEMBER_ID))
+          .willReturn(Optional.empty());
+
+      Optional<Participation> promoted =
+          participationDomainService.expireWinnerAndPromoteNext(winner, NOW);
+
+      assertThat(winner.getStatus()).isEqualTo(ParticipationStatus.FAILED);
+      assertThat(promoted).isEmpty();
+    }
+
+    @Test
+    void 슬롯에_결제_진행중_참여가_있으면_중복_승계하지_않는다() {
+      Participation winner = awaitingWinner();
+      given(participationRepository.existsPaymentInProgressInSlot(BUNCHEOL_MEMBER_ID))
+          .willReturn(true);
+
+      Optional<Participation> promoted =
+          participationDomainService.expireWinnerAndPromoteNext(winner, NOW);
+
+      assertThat(winner.getStatus()).isEqualTo(ParticipationStatus.FAILED); // 만료는 수행됨
+      assertThat(promoted).isEmpty();
+      // 가드에 걸리면 차순위 후보 조회 자체를 하지 않는다.
+      then(participationRepository).should(never()).findTopActiveBidInSlot(any());
+    }
+
+    private Participation awaitingWinner() {
+      Participation winner = Participation.create(1L, BUNCHEOL_MEMBER_ID, 100L, 200L, 50_000L);
+      setField(winner, "status", ParticipationStatus.AWAITING_PAYMENT);
+      setField(winner, "dueAt", DUE_AT);
+      setField(winner, "closedRank", 1);
+      return winner;
+    }
+
+    private Participation activeBidCandidate(final int closedRank) {
+      Participation candidate = Participation.create(1L, BUNCHEOL_MEMBER_ID, 101L, 201L, 30_000L);
+      setField(candidate, "closedRank", closedRank);
+      return candidate;
+    }
+  }
+
+  private static void setField(final Object target, final String fieldName, final Object value) {
+    try {
+      Field field = Participation.class.getDeclaredField(fieldName);
+      field.setAccessible(true);
+      field.set(target, value);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
     }
   }
 }

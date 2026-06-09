@@ -40,6 +40,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       List.of(
           ParticipationStatus.ACTIVE_BID,
           ParticipationStatus.AWAITING_PAYMENT,
+          ParticipationStatus.PAYMENT_REPORTED,
           ParticipationStatus.CONFIRMED);
 
   private static final List<ParticipationStatus> BIDDING_STATUSES =

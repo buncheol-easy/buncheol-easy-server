@@ -27,14 +27,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 개최자 분철 관리 화면 조회 서비스. 호스트 본인 권한을 검증한 뒤, 분철·옵션·참여·낙찰자 배송 정보를 단일 응답으로 조립한다.
+ * 개최자 분철 관리 화면 조회 서비스. 호스트 본인 권한을 검증한 뒤, 분철·옵션·참여·낙찰자 결제/배송 정보를 단일 응답으로 조립한다.
  *
  * <p>{@link ParticipationRepository#findActiveByBuncheolId(Long)} 는 ACTIVE_BID/AWAITING_PAYMENT/
- * CONFIRMED 셋을 모두 {@code bidAmount DESC, id ASC} 로 가져오므로 옵션별 최고가·낙찰자 후보를 메모리에서 그룹핑한다.
+ * PAYMENT_REPORTED/CONFIRMED 를 모두 {@code bidAmount DESC, id ASC} 로 가져오므로 옵션별 최고가·낙찰자 후보를 메모리에서 그룹핑한다.
  */
 @Service
 @RequiredArgsConstructor
 public class BuncheolManagementQueryService {
+
+  /** 결제 대상(현재 낙찰자)으로 노출하는 상태. ACTIVE_BID 차순위 후보는 제외한다. */
+  private static final List<ParticipationStatus> WINNER_STATUSES =
+      List.of(
+          ParticipationStatus.AWAITING_PAYMENT,
+          ParticipationStatus.PAYMENT_REPORTED,
+          ParticipationStatus.CONFIRMED);
 
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
@@ -114,12 +121,12 @@ public class BuncheolManagementQueryService {
     // 입력은 bidAmount DESC, id ASC 정렬이므로 첫 원소가 상태 무관 최고가다.
     Long currentHighestBid = bids.isEmpty() ? null : bids.get(0).getBidAmount();
 
-    // 슬롯당 CONFIRMED 는 도메인 불변식상 최대 1건이다.
+    // 결제 대상(낙찰자)은 슬롯당 도메인 불변식상 최대 1건이다. 정렬상 최고가가 곧 closedRank=1 낙찰자다.
     WinnerDeliveryResponse winner =
         bids.stream()
-            .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
+            .filter(p -> WINNER_STATUSES.contains(p.getStatus()))
             .findFirst()
-            .map(confirmed -> toWinner(deliveryByParticipationId.get(confirmed.getId())))
+            .map(w -> toWinner(w, deliveryByParticipationId.get(w.getId())))
             .orElse(null);
 
     return new BuncheolManagementOptionResponse(
@@ -132,17 +139,21 @@ public class BuncheolManagementQueryService {
         winner);
   }
 
-  private WinnerDeliveryResponse toWinner(final Delivery delivery) {
-    if (delivery == null) {
-      return null;
-    }
+  /** 결제 필드는 라이브 상태값, 배송 필드는 CONFIRMED 스냅샷(미생성 시 null)이다. */
+  private WinnerDeliveryResponse toWinner(final Participation winner, final Delivery delivery) {
     return new WinnerDeliveryResponse(
-        delivery.getId(),
-        delivery.getShippingMethod(),
-        delivery.getStoreName(),
-        delivery.getReceiverNickname(),
-        delivery.getReceiverPhoneNumber(),
-        delivery.getTrackingNumber(),
-        delivery.getStatus());
+        winner.getId(),
+        winner.getStatus(),
+        winner.getBidAmount(),
+        winner.getDueAt(),
+        winner.getPaymentReportedAt(),
+        winner.getPaymentConfirmedAt(),
+        delivery == null ? null : delivery.getId(),
+        delivery == null ? null : delivery.getShippingMethod(),
+        delivery == null ? null : delivery.getStoreName(),
+        delivery == null ? null : delivery.getReceiverNickname(),
+        delivery == null ? null : delivery.getReceiverPhoneNumber(),
+        delivery == null ? null : delivery.getTrackingNumber(),
+        delivery == null ? null : delivery.getStatus());
   }
 }

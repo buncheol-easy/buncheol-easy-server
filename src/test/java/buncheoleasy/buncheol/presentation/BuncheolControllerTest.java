@@ -21,6 +21,7 @@ import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
@@ -678,6 +679,12 @@ class BuncheolControllerTest {
       Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
       WinnerDeliveryResponse winner =
           new WinnerDeliveryResponse(
+              601L,
+              ParticipationStatus.CONFIRMED,
+              90_000L,
+              Instant.parse("2026-05-28T00:00:00Z"),
+              Instant.parse("2026-05-27T09:00:00Z"),
+              Instant.parse("2026-05-27T10:00:00Z"),
               5001L,
               ShippingMethod.GS25_HALF,
               "GS25 강남역점",
@@ -716,6 +723,10 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.options[0].memberName").value("안유진"))
           .andExpect(jsonPath("$.options[0].participationCount").value(1))
           .andExpect(jsonPath("$.options[0].currentHighestBid").value(90000))
+          .andExpect(jsonPath("$.options[0].winner.participationId").value(601))
+          .andExpect(jsonPath("$.options[0].winner.paymentStatus").value("CONFIRMED"))
+          .andExpect(jsonPath("$.options[0].winner.bidAmount").value(90000))
+          .andExpect(jsonPath("$.options[0].winner.paymentConfirmedAt").value("2026-05-27T10:00:00Z"))
           .andExpect(jsonPath("$.options[0].winner.deliveryId").value(5001))
           .andExpect(jsonPath("$.options[0].winner.shippingMethod").value("GS25_HALF"))
           .andExpect(jsonPath("$.options[0].winner.storeName").value("GS25 강남역점"))

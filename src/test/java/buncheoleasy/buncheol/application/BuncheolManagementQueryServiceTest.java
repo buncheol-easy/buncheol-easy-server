@@ -60,6 +60,9 @@ class BuncheolManagementQueryServiceTest {
   private static final Long OTHER_USER = 888L;
   private static final Long WINNER_USER = 555L;
   private static final Instant DEADLINE = Instant.parse("2026-06-01T12:00:00Z");
+  private static final Instant DUE_AT = Instant.parse("2026-06-02T12:00:00Z");
+  private static final Instant REPORTED_AT = Instant.parse("2026-06-01T15:00:00Z");
+  private static final Instant CONFIRMED_AT = Instant.parse("2026-06-01T18:00:00Z");
 
   @Nested
   @DisplayName("개최자 분철 관리 화면 조회")
@@ -162,15 +165,17 @@ class BuncheolManagementQueryServiceTest {
     }
 
     @Test
-    void 결제대기_상태_참여는_participationCount_에_포함되지만_winner_는_null() {
-      // AWAITING_PAYMENT 는 활성 참여라 집계·최고가엔 잡히지만 CONFIRMED 가 아니라 낙찰자(winner)로 노출되면 안 된다.
+    void 결제대기_AWAITING_PAYMENT_낙찰자는_winner로_노출되고_배송필드는_null() {
+      // AWAITING_PAYMENT 는 현재 결제 대상이라 winner 로 노출하되, 배송 스냅샷은 CONFIRMED 전이라 아직 null 이다.
       stubBasicBuncheol(BuncheolStatus.CLOSED);
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember(101L, 1001L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "안유진", "yujin.png")));
+      Participation awaiting = awaitingPaymentBid(601L, 101L, WINNER_USER, 90_000L);
+      setField(awaiting, "dueAt", DUE_AT);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(awaitingPaymentBid(601L, 101L, WINNER_USER, 90_000L)));
+          .willReturn(List.of(awaiting));
       // CONFIRMED 가 없으니 Delivery 조회는 빈 id 목록으로 들어간다.
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
 
@@ -180,7 +185,45 @@ class BuncheolManagementQueryServiceTest {
       BuncheolManagementOptionResponse option = response.options().get(0);
       assertThat(option.participationCount()).isEqualTo(1);
       assertThat(option.currentHighestBid()).isEqualTo(90_000L);
-      assertThat(option.winner()).isNull();
+      assertThat(option.winner()).isNotNull();
+      assertThat(option.winner().participationId()).isEqualTo(601L);
+      assertThat(option.winner().paymentStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
+      assertThat(option.winner().bidAmount()).isEqualTo(90_000L);
+      assertThat(option.winner().paymentDueAt()).isEqualTo(DUE_AT);
+      assertThat(option.winner().paymentReportedAt()).isNull();
+      assertThat(option.winner().paymentConfirmedAt()).isNull();
+      // 배송 스냅샷은 아직 없다.
+      assertThat(option.winner().deliveryId()).isNull();
+      assertThat(option.winner().shippingMethod()).isNull();
+      assertThat(option.winner().trackingNumber()).isNull();
+      assertThat(option.winner().deliveryStatus()).isNull();
+    }
+
+    @Test
+    void 입금신고_PAYMENT_REPORTED_낙찰자는_winner로_노출되고_신고시각이_채워진다() {
+      stubBasicBuncheol(BuncheolStatus.CLOSED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진", "yujin.png")));
+      Participation reported =
+          participation(601L, 101L, WINNER_USER, 90_000L, ParticipationStatus.PAYMENT_REPORTED);
+      setField(reported, "dueAt", DUE_AT);
+      setField(reported, "paymentReportedAt", REPORTED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(reported));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementOptionResponse option = response.options().get(0);
+      assertThat(option.winner()).isNotNull();
+      assertThat(option.winner().participationId()).isEqualTo(601L);
+      assertThat(option.winner().paymentStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
+      assertThat(option.winner().paymentReportedAt()).isEqualTo(REPORTED_AT);
+      assertThat(option.winner().paymentConfirmedAt()).isNull();
+      assertThat(option.winner().deliveryId()).isNull();
     }
 
     @Test
@@ -191,6 +234,9 @@ class BuncheolManagementQueryServiceTest {
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "안유진", "yujin.png")));
       Participation confirmed = confirmedBid(601L, 101L, WINNER_USER, 90_000L);
+      setField(confirmed, "dueAt", DUE_AT);
+      setField(confirmed, "paymentReportedAt", REPORTED_AT);
+      setField(confirmed, "paymentConfirmedAt", CONFIRMED_AT);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(confirmed));
       Delivery delivery =
@@ -206,6 +252,13 @@ class BuncheolManagementQueryServiceTest {
       assertThat(option.participationCount()).isEqualTo(1);
       assertThat(option.currentHighestBid()).isEqualTo(90_000L);
       assertThat(option.winner()).isNotNull();
+      // 결제 필드: CONFIRMED 낙찰자
+      assertThat(option.winner().participationId()).isEqualTo(601L);
+      assertThat(option.winner().paymentStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
+      assertThat(option.winner().bidAmount()).isEqualTo(90_000L);
+      assertThat(option.winner().paymentReportedAt()).isEqualTo(REPORTED_AT);
+      assertThat(option.winner().paymentConfirmedAt()).isEqualTo(CONFIRMED_AT);
+      // 배송 필드: CONFIRMED 스냅샷
       assertThat(option.winner().deliveryId()).isEqualTo(5001L);
       assertThat(option.winner().shippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
       assertThat(option.winner().storeName()).isEqualTo("GS25 강남역점");

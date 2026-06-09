@@ -22,6 +22,7 @@ import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
@@ -627,6 +628,12 @@ class BuncheolControllerDocsTest {
     Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
     WinnerDeliveryResponse winner =
         new WinnerDeliveryResponse(
+            601L,
+            ParticipationStatus.CONFIRMED,
+            90_000L,
+            Instant.parse("2026-05-28T00:00:00Z"),
+            Instant.parse("2026-05-27T09:00:00Z"),
+            Instant.parse("2026-05-27T10:00:00Z"),
             5001L,
             ShippingMethod.GS25_HALF,
             "GS25 강남역점",
@@ -672,10 +679,16 @@ class BuncheolControllerDocsTest {
                             **응답 동작**
                             - 분철 상태(`RECRUITING` / `CLOSED` / `PAID` / `SETTLING` / `FINISHED`) 무관하게 호출 가능
                             - `optionCount` = 분철에 등록된 멤버 슬롯 수
-                            - `totalParticipationCount` = 분철 전체 참여 수 (ACTIVE_BID + AWAITING_PAYMENT + CONFIRMED). 한 유저가 여러 슬롯에 입찰할 수 있어 distinct 참여자 수와 다를 수 있음
+                            - `totalParticipationCount` = 분철 전체 참여 수 (ACTIVE_BID + AWAITING_PAYMENT + PAYMENT_REPORTED + CONFIRMED). 한 유저가 여러 슬롯에 입찰할 수 있어 distinct 참여자 수와 다를 수 있음
                             - 옵션별 `participationCount` = 해당 옵션의 참여 수 (한 슬롯에 한 유저 활성 참여 최대 1건이라 사실상 참여자 수)
                             - 옵션별 `currentHighestBid` = 해당 옵션의 최고 제시 금액 (상태 무관). 참여 없으면 null. 마감 후 미낙찰 활성 입찰가가 낙찰가보다 높으면 `winner` 금액과 다를 수 있음
-                            - 옵션별 `winner` = 낙찰 확정(CONFIRMED)자의 배송/운송장 정보. 결제 미완료 또는 낙찰 전이면 null (슬롯당 최대 1명이라 null 여부로 낙찰 여부 판단)
+                            - 옵션별 `winner` = 현재 결제 대상(낙찰자)의 결제·배송 현황. 노출 상태는 `AWAITING_PAYMENT`(입금대기) / `PAYMENT_REPORTED`(입금신고) / `CONFIRMED`(입금확정). 낙찰 전(ACTIVE_BID 차순위 후보만 존재)이면 null (슬롯당 최대 1명이라 null 여부로 낙찰 여부 판단)
+                            - `winner.participationId` = 낙찰자 참여 ID. **개최자 수동 입금확인 API(`POST /v1/participations/{id}/payment/confirm`) 의 대상 식별자**
+                            - `winner.paymentStatus` = 결제 진행 상태 (`AWAITING_PAYMENT` / `PAYMENT_REPORTED` / `CONFIRMED`)
+                            - `winner.bidAmount` = 낙찰가 (원). 개최자가 실제 입금액 대조에 사용
+                            - `winner.paymentReportedAt` = 구매자 입금완료 신고 시각. 미신고 시 null
+                            - `winner.paymentConfirmedAt` = 개최자 입금확인 시각. 미확인 시 null
+                            - 배송 필드(`winner.deliveryId` ~ `winner.deliveryStatus`)는 입금확인(CONFIRMED) 시점 스냅샷이라 **그 전(AWAITING_PAYMENT / PAYMENT_REPORTED)에는 모두 null**
                             - `winner.trackingNumber` = 호스트가 등록한 운송장 번호. 미등록 시 null
                             - `winner.deliveryStatus` = `SNAPSHOTTED` (운송장 미등록) / `SHIPPING` / `DELIVERED` / `RECEIVED`
 
@@ -699,6 +712,12 @@ class BuncheolControllerDocsTest {
                                   "participationCount": 1,
                                   "currentHighestBid": 90000,
                                   "winner": {
+                                    "participationId": 601,
+                                    "paymentStatus": "CONFIRMED",
+                                    "bidAmount": 90000,
+                                    "paymentDueAt": "2026-05-28T00:00:00Z",
+                                    "paymentReportedAt": "2026-05-27T09:00:00Z",
+                                    "paymentConfirmedAt": "2026-05-27T10:00:00Z",
                                     "deliveryId": 5001,
                                     "shippingMethod": "GS25_HALF",
                                     "storeName": "GS25 강남역점",
@@ -742,7 +761,7 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("optionCount").description("분철에 등록된 멤버 슬롯 수"),
                             fieldWithPath("totalParticipationCount")
-                                .description("분철 전체 참여 수 (활성 입찰 + 결제 대기 + 낙찰 확정)"),
+                                .description("분철 전체 참여 수 (활성 입찰 + 결제 대기 + 입금 신고 + 낙찰 확정)"),
                             fieldWithPath("options").description("옵션(멤버 슬롯) 배열 (등록 순)"),
                             fieldWithPath("options[].buncheolMemberId")
                                 .description("분철 멤버 슬롯 ID"),
@@ -754,15 +773,35 @@ class BuncheolControllerDocsTest {
                                 .description("멤버 이미지 URL. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
                             fieldWithPath("options[].participationCount")
-                                .description("옵션별 참여 수 (활성/결제대기/낙찰 합계)"),
+                                .description("옵션별 참여 수 (활성/결제대기/입금신고/낙찰 합계)"),
                             fieldWithPath("options[].currentHighestBid")
                                 .description("옵션별 최고 제시 금액 (원, 상태 무관). 참여 없으면 null")
                                 .optional(),
                             fieldWithPath("options[].winner")
-                                .description("낙찰 확정자 배송/운송장 정보. 낙찰 전 또는 결제 미완료 시 null")
+                                .description(
+                                    "현재 결제 대상(낙찰자) 결제·배송 현황. 노출 상태는 AWAITING_PAYMENT/PAYMENT_REPORTED/CONFIRMED. 낙찰 전이면 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.participationId")
+                                .description("낙찰자 참여 ID (개최자 입금확인 API 호출에 사용)")
+                                .optional(),
+                            fieldWithPath("options[].winner.paymentStatus")
+                                .description(
+                                    "결제 진행 상태 (AWAITING_PAYMENT / PAYMENT_REPORTED / CONFIRMED)")
+                                .optional(),
+                            fieldWithPath("options[].winner.bidAmount")
+                                .description("낙찰가 (원). 실제 입금액 대조에 사용")
+                                .optional(),
+                            fieldWithPath("options[].winner.paymentDueAt")
+                                .description("입금 기한 (UTC ISO-8601). 미설정 시 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.paymentReportedAt")
+                                .description("구매자 입금완료 신고 시각. 미신고 시 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.paymentConfirmedAt")
+                                .description("개최자 입금확인 시각. 미확인 시 null")
                                 .optional(),
                             fieldWithPath("options[].winner.deliveryId")
-                                .description("배송 ID (운송장 등록 API 호출에 사용)")
+                                .description("배송 ID (운송장 등록 API 호출에 사용). CONFIRMED 전에는 null")
                                 .optional(),
                             fieldWithPath("options[].winner.shippingMethod")
                                 .description("배송방법 스냅샷 (GS25_HALF | CU_HALF)")

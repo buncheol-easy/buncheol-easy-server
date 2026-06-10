@@ -26,15 +26,14 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("BuncheolCheckoutService 단위 테스트")
@@ -49,6 +48,7 @@ class BuncheolCheckoutServiceTest {
   @Mock private ParticipationPaymentAmountResolver participationPaymentAmountResolver;
   @Mock private PaymentService paymentService;
   @Mock private PaymentCompletionHandler paymentCompletionHandler;
+  @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private Clock clock;
 
   private static final Long BUNCHEOL_ID = 1L;
@@ -187,6 +187,7 @@ class BuncheolCheckoutServiceTest {
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
       assertThat(participation.getPaymentReportedAt()).isEqualTo(NOW);
       assertThat(participation.getShippingAddressId()).isEqualTo(200L);
+      then(eventPublisher).should().publishEvent(any(PaymentReportedEvent.class));
     }
 
     @Test

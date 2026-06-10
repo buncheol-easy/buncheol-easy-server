@@ -1,10 +1,13 @@
 package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("BuncheolAutoCloseService 단위 테스트")
@@ -28,6 +32,8 @@ class BuncheolAutoCloseServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
 
   @Mock private ParticipationDomainService participationDomainService;
+
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   @Nested
   @DisplayName("만료 분철 조회 테스트")
@@ -51,11 +57,15 @@ class BuncheolAutoCloseServiceTest {
     @Test
     void CAS_마감에_성공하면_낙찰자를_선정하고_true를_반환한다() {
       given(buncheolRepository.closeIfRecruiting(BUNCHEOL_ID, NOW)).willReturn(1);
+      Participation winner = mock(Participation.class);
+      given(winner.getId()).willReturn(50L);
+      given(participationDomainService.selectWinners(BUNCHEOL_ID, NOW)).willReturn(List.of(winner));
 
       boolean result = buncheolAutoCloseService.closeExpired(BUNCHEOL_ID, NOW);
 
       assertThat(result).isTrue();
       then(participationDomainService).should().selectWinners(BUNCHEOL_ID, NOW);
+      then(eventPublisher).should().publishEvent(any(ParticipationWonEvent.class));
     }
 
     @Test

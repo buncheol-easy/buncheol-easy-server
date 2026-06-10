@@ -37,6 +37,9 @@ public interface ParticipationRepository {
    */
   boolean existsPaymentInProgressInSlot(Long buncheolMemberId);
 
+  /** 입금 기한 임박(AWAITING_PAYMENT, due_at ∈ (now, dueBefore]) 참여 조회. 기한 임박 알림 스케줄러용. */
+  List<Participation> findAwaitingPaymentReminderTargets(Instant now, Instant dueBefore);
+
   boolean updateStatus(Participation participation, ParticipationStatus expectedStatus);
 
   /**

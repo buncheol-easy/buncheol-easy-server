@@ -61,6 +61,14 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   boolean existsByBuncheolMemberIdAndStatusIn(
       Long buncheolMemberId, List<ParticipationStatus> statuses);
 
+  @Query(
+      "SELECT p FROM Participation p "
+          + "WHERE p.status = :status AND p.dueAt > :now AND p.dueAt <= :dueBefore")
+  List<Participation> findByStatusAndDueAtWithin(
+      @Param("status") ParticipationStatus status,
+      @Param("now") Instant now,
+      @Param("dueBefore") Instant dueBefore);
+
   /** status 가 expectedStatus 인 경우에만 갱신 (compare-and-swap). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

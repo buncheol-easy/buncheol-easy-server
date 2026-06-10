@@ -164,6 +164,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findAwaitingPaymentReminderTargets(
+      final Instant now, final Instant dueBefore) {
+    return jpaParticipationRepository.findByStatusAndDueAtWithin(
+        ParticipationStatus.AWAITING_PAYMENT, now, dueBefore);
+  }
+
+  @Override
   public boolean updateStatus(
       final Participation participation, final ParticipationStatus expectedStatus) {
     int updated =

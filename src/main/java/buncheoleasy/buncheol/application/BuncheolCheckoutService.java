@@ -16,6 +16,7 @@ import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ public class BuncheolCheckoutService {
   private final ParticipationPaymentAmountResolver participationPaymentAmountResolver;
   private final PaymentService paymentService;
   private final PaymentCompletionHandler paymentCompletionHandler;
+  private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
   /** 분철 참여 신청. 결제는 마감 후 낙찰자에 한해 별도로 진행한다. */
@@ -84,6 +86,7 @@ public class BuncheolCheckoutService {
         participationShippingAddressResolver.resolve(
             participantId, buncheol, request.shippingAddressId());
     participation.reportPayment(Instant.now(clock), shippingAddress.getId());
+    eventPublisher.publishEvent(new PaymentReportedEvent(participationId));
   }
 
   /** 참여자 본인의 분철 참여 취소. 현재는 ACTIVE_BID 상태에서만 허용한다. */

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -19,6 +20,7 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("HostPaymentService 단위 테스트")
@@ -37,6 +40,7 @@ class HostPaymentServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private Buncheol buncheol;
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
@@ -79,6 +83,7 @@ class HostPaymentServiceTest {
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
       assertThat(participation.getPaymentConfirmedAt()).isEqualTo(NOW);
       then(deliverySnapshotCreator).should().create(participation);
+      then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
     }
 
     @Test
@@ -154,6 +159,36 @@ class HostPaymentServiceTest {
       then(participationDomainService)
           .should(never())
           .expireWinnerAndPromoteNext(any(), any());
+    }
+
+    @Test
+    void 차순위가_승계되면_새_낙찰자에게_낙찰_이벤트를_발행한다() {
+      Participation winner = newParticipation();
+      setId(winner, PARTICIPATION_ID);
+      Participation promoted = mock(Participation.class);
+      given(promoted.getId()).willReturn(77L);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(winner);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(participationDomainService.expireWinnerAndPromoteNext(winner, NOW))
+          .willReturn(Optional.of(promoted));
+
+      hostPaymentService.expirePayment(HOST_ID, PARTICIPATION_ID);
+
+      then(eventPublisher).should().publishEvent(any(ParticipationWonEvent.class));
+    }
+
+    @Test
+    void 차순위_후보가_없으면_낙찰_이벤트를_발행하지_않는다() {
+      Participation winner = newParticipation();
+      setId(winner, PARTICIPATION_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(winner);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(participationDomainService.expireWinnerAndPromoteNext(winner, NOW))
+          .willReturn(Optional.empty());
+
+      hostPaymentService.expirePayment(HOST_ID, PARTICIPATION_ID);
+
+      then(eventPublisher).should(never()).publishEvent(any(ParticipationWonEvent.class));
     }
   }
 

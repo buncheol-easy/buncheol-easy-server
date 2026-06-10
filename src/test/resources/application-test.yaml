@@ -42,6 +42,10 @@ app:
     # 테스트에서는 자동 마감 스케줄러를 비활성화 (의도치 않은 마감/낙찰 트리거 방지)
     auto-close:
       enabled: false
+  notification:
+    # 테스트에서는 기한 임박 알림 스케줄러를 비활성화
+    payment-due-reminder:
+      enabled: false
 
 delivery:
   tracker:
@@ -56,3 +60,10 @@ toss:
   payments:
     client-key: test_ck_test
     secret-key: test_sk_test
+
+aligo:
+  alimtalk:
+    api-key: test-aligo-api-key
+    user-id: test-aligo-user-id
+    sender-key: test-aligo-sender-key
+    sender: "01000000000"

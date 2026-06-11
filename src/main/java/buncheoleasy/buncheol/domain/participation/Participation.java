@@ -43,7 +43,7 @@ public class Participation extends TimestampedEntity {
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
 
-  // 참여 시점에 선택한 배송지 (shipping_addresses.id). 분철 마감 후엔 변경 불가.
+  // 참여(입찰) 시점에 선택한 배송지 (shipping_addresses.id). 입금 완료 신고 시 낙찰자가 고른 최종 배송지로 갱신된다.
   @Column(name = "shipping_address_id", nullable = false)
   private Long shippingAddressId;
 
@@ -171,8 +171,9 @@ public class Participation extends TimestampedEntity {
     this.failReason = null;
   }
 
-  // AWAITING_PAYMENT → PAYMENT_REPORTED: (계좌이체 MVP) 구매자가 개최자 계좌로 송금 후 '입금 완료'를 신고.
-  public void reportPayment(final Instant now) {
+  // AWAITING_PAYMENT → PAYMENT_REPORTED: (계좌이체 MVP) 구매자가 개최자 계좌로 송금 후 최종 배송지와 함께 '입금 완료'를 신고.
+  // shippingAddressId 의 소유·분철 지원 여부 검증은 호출 측(application)에서 수행한다.
+  public void reportPayment(final Instant now, final Long shippingAddressId) {
     if (status != ParticipationStatus.AWAITING_PAYMENT) {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
@@ -182,6 +183,7 @@ public class Participation extends TimestampedEntity {
     }
     this.status = ParticipationStatus.PAYMENT_REPORTED;
     this.paymentReportedAt = now;
+    this.shippingAddressId = shippingAddressId;
   }
 
   // PAYMENT_REPORTED → CONFIRMED: (계좌이체 MVP) 개최자가 실제 입금을 확인. PG 용 completePayment 와 분리한다.

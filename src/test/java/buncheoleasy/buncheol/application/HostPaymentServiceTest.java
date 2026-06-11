@@ -58,7 +58,7 @@ class HostPaymentServiceTest {
     Participation participation = newParticipation();
     setId(participation, PARTICIPATION_ID);
     participation.awardAsWinner(FUTURE_DUE); // AWAITING_PAYMENT
-    participation.reportPayment(NOW); // PAYMENT_REPORTED
+    participation.reportPayment(NOW, 200L); // PAYMENT_REPORTED
     return participation;
   }
 

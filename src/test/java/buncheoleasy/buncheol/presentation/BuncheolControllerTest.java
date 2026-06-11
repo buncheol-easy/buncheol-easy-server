@@ -31,6 +31,7 @@ import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.buncheol.dto.response.WinnerDeliveryResponse;
+import buncheoleasy.buncheol.dto.response.WinnerShippingAddressResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -685,6 +686,8 @@ class BuncheolControllerTest {
               Instant.parse("2026-05-28T00:00:00Z"),
               Instant.parse("2026-05-27T09:00:00Z"),
               Instant.parse("2026-05-27T10:00:00Z"),
+              new WinnerShippingAddressResponse(ShippingMethod.GS25_HALF, "GS25 강남역점"),
+              "유진팬",
               5001L,
               ShippingMethod.GS25_HALF,
               "GS25 강남역점",
@@ -727,6 +730,8 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.options[0].winner.paymentStatus").value("CONFIRMED"))
           .andExpect(jsonPath("$.options[0].winner.bidAmount").value(90000))
           .andExpect(jsonPath("$.options[0].winner.paymentConfirmedAt").value("2026-05-27T10:00:00Z"))
+          .andExpect(jsonPath("$.options[0].winner.shippingAddress.storeName").value("GS25 강남역점"))
+          .andExpect(jsonPath("$.options[0].winner.depositorName").value("유진팬"))
           .andExpect(jsonPath("$.options[0].winner.deliveryId").value(5001))
           .andExpect(jsonPath("$.options[0].winner.shippingMethod").value("GS25_HALF"))
           .andExpect(jsonPath("$.options[0].winner.storeName").value("GS25 강남역점"))

@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.WinnerDeliveryResponse;
+import buncheoleasy.buncheol.dto.response.WinnerShippingAddressResponse;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -18,6 +19,10 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,10 +48,16 @@ public class BuncheolManagementQueryService {
           ParticipationStatus.PAYMENT_REPORTED,
           ParticipationStatus.CONFIRMED);
 
+  /** 최종 배송지를 노출하는, 결제까지 완료(입금신고)한 낙찰자 상태. AWAITING_PAYMENT 는 아직 최종 배송지 확정 전이라 제외한다. */
+  private static final List<ParticipationStatus> SHIPPING_ADDRESS_VISIBLE_STATUSES =
+      List.of(ParticipationStatus.PAYMENT_REPORTED, ParticipationStatus.CONFIRMED);
+
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
   private final DeliveryRepository deliveryRepository;
+  private final ShippingAddressRepository shippingAddressRepository;
+  private final UserRepository userRepository;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
 
@@ -84,8 +95,11 @@ public class BuncheolManagementQueryService {
                 Collectors.groupingBy(
                     Participation::getBuncheolMemberId, Collectors.toUnmodifiableList()));
 
+    List<Participation> winners =
+        participations.stream().filter(p -> WINNER_STATUSES.contains(p.getStatus())).toList();
+
     List<Long> confirmedParticipationIds =
-        participations.stream()
+        winners.stream()
             .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
             .map(Participation::getId)
             .toList();
@@ -93,9 +107,31 @@ public class BuncheolManagementQueryService {
         deliveryRepository.findAllByParticipationIds(confirmedParticipationIds).stream()
             .collect(Collectors.toMap(Delivery::getParticipationId, Function.identity()));
 
+    List<Long> reportedShippingAddressIds =
+        winners.stream()
+            .filter(p -> SHIPPING_ADDRESS_VISIBLE_STATUSES.contains(p.getStatus()))
+            .map(Participation::getShippingAddressId)
+            .toList();
+    Map<Long, ShippingAddress> shippingAddressById =
+        shippingAddressRepository.findAllByIds(reportedShippingAddressIds).stream()
+            .collect(Collectors.toMap(ShippingAddress::getId, Function.identity()));
+
+    List<Long> winnerUserIds = winners.stream().map(Participation::getParticipantId).toList();
+    Map<Long, User> userById =
+        userRepository.findAllByIds(winnerUserIds).stream()
+            .collect(Collectors.toMap(User::getId, Function.identity()));
+
     List<BuncheolManagementOptionResponse> options =
         buncheolMembers.stream()
-            .map(bm -> toOption(bm, groupMemberById, participationsByMember, deliveryByParticipationId))
+            .map(
+                bm ->
+                    toOption(
+                        bm,
+                        groupMemberById,
+                        participationsByMember,
+                        deliveryByParticipationId,
+                        shippingAddressById,
+                        userById))
             .toList();
 
     return new BuncheolManagementResponse(
@@ -114,7 +150,9 @@ public class BuncheolManagementQueryService {
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberById,
       final Map<Long, List<Participation>> participationsByMember,
-      final Map<Long, Delivery> deliveryByParticipationId) {
+      final Map<Long, Delivery> deliveryByParticipationId,
+      final Map<Long, ShippingAddress> shippingAddressById,
+      final Map<Long, User> userById) {
     GroupMember groupMember = groupMemberById.get(buncheolMember.getMemberId());
     List<Participation> bids = participationsByMember.getOrDefault(buncheolMember.getId(), List.of());
 
@@ -126,7 +164,13 @@ public class BuncheolManagementQueryService {
         bids.stream()
             .filter(p -> WINNER_STATUSES.contains(p.getStatus()))
             .findFirst()
-            .map(w -> toWinner(w, deliveryByParticipationId.get(w.getId())))
+            .map(
+                w ->
+                    toWinner(
+                        w,
+                        deliveryByParticipationId.get(w.getId()),
+                        shippingAddressById,
+                        userById.get(w.getParticipantId())))
             .orElse(null);
 
     return new BuncheolManagementOptionResponse(
@@ -139,8 +183,12 @@ public class BuncheolManagementQueryService {
         winner);
   }
 
-  /** 결제 필드는 라이브 상태값, 배송 필드는 CONFIRMED 스냅샷(미생성 시 null)이다. */
-  private WinnerDeliveryResponse toWinner(final Participation winner, final Delivery delivery) {
+  /** 결제 필드는 라이브 상태값, 배송지는 입금신고 이후 라이브 값, 배송 필드는 CONFIRMED 스냅샷(미생성 시 null)이다. */
+  private WinnerDeliveryResponse toWinner(
+      final Participation winner,
+      final Delivery delivery,
+      final Map<Long, ShippingAddress> shippingAddressById,
+      final User user) {
     return new WinnerDeliveryResponse(
         winner.getId(),
         winner.getStatus(),
@@ -148,6 +196,8 @@ public class BuncheolManagementQueryService {
         winner.getDueAt(),
         winner.getPaymentReportedAt(),
         winner.getPaymentConfirmedAt(),
+        toShippingAddress(winner, shippingAddressById),
+        user == null ? null : user.getNickname().value(),
         delivery == null ? null : delivery.getId(),
         delivery == null ? null : delivery.getShippingMethod(),
         delivery == null ? null : delivery.getStoreName(),
@@ -155,5 +205,15 @@ public class BuncheolManagementQueryService {
         delivery == null ? null : delivery.getReceiverPhoneNumber(),
         delivery == null ? null : delivery.getTrackingNumber(),
         delivery == null ? null : delivery.getStatus());
+  }
+
+  // 입금신고/입금확인(SHIPPING_ADDRESS_VISIBLE_STATUSES) 낙찰자만 최종 배송지를 노출한다. 그 외(AWAITING_PAYMENT)는 null.
+  private WinnerShippingAddressResponse toShippingAddress(
+      final Participation winner, final Map<Long, ShippingAddress> shippingAddressById) {
+    if (!SHIPPING_ADDRESS_VISIBLE_STATUSES.contains(winner.getStatus())) {
+      return null;
+    }
+    ShippingAddress shippingAddress = shippingAddressById.get(winner.getShippingAddressId());
+    return shippingAddress == null ? null : WinnerShippingAddressResponse.from(shippingAddress);
   }
 }

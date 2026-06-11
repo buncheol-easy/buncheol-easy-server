@@ -1,14 +1,18 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
+import buncheoleasy.buncheol.dto.request.ReportPaymentRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentCompletionHandler;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.application.PaymentService;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class BuncheolCheckoutService {
 
   private final BuncheolParticipationService buncheolParticipationService;
+  private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final ParticipationPaymentAmountResolver participationPaymentAmountResolver;
   private final PaymentService paymentService;
   private final PaymentCompletionHandler paymentCompletionHandler;
@@ -64,12 +70,20 @@ public class BuncheolCheckoutService {
     paymentService.recordMockPayment(participationId, amount);
   }
 
-  /** 낙찰자(구매자)의 '입금 완료' 신고. AWAITING_PAYMENT → PAYMENT_REPORTED (입금 기한 내에만 가능). */
+  /**
+   * 낙찰자(구매자)의 '입금 완료' 신고. AWAITING_PAYMENT → PAYMENT_REPORTED (입금 기한 내에만 가능). 신고 시 최종 배송지를 함께 받아 본인
+   * 소유·분철 지원 여부를 검증하고 참여의 배송지를 해당 배송지로 갱신한다.
+   */
   @Transactional
-  public void reportPayment(final Long participantId, final Long participationId) {
+  public void reportPayment(
+      final Long participantId, final Long participationId, final ReportPaymentRequest request) {
     Participation participation = participationDomainService.getParticipation(participationId);
     participation.validateOwnedBy(participantId);
-    participation.reportPayment(Instant.now(clock));
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    ShippingAddress shippingAddress =
+        participationShippingAddressResolver.resolve(
+            participantId, buncheol, request.shippingAddressId());
+    participation.reportPayment(Instant.now(clock), shippingAddress.getId());
   }
 
   /** 참여자 본인의 분철 참여 취소. 현재는 ACTIVE_BID 상태에서만 허용한다. */

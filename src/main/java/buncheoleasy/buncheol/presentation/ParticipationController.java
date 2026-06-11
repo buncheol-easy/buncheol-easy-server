@@ -4,10 +4,12 @@ import buncheoleasy.buncheol.application.BuncheolCheckoutService;
 import buncheoleasy.buncheol.application.HostPaymentService;
 import buncheoleasy.buncheol.application.MyParticipationQueryService;
 import buncheoleasy.buncheol.application.ParticipationPaymentQueryService;
+import buncheoleasy.buncheol.dto.request.ReportPaymentRequest;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationPaymentDetailResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.dto.response.CreatePaymentOrderResponse;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -50,11 +53,13 @@ public class ParticipationController {
     return ResponseEntity.noContent().build();
   }
 
-  /** 분철 낙찰자(구매자) 입금 완료 신고 API. AWAITING_PAYMENT 상태에서 입금 기한 내에만 가능하다. */
+  /** 분철 낙찰자(구매자) 입금 완료 신고 API. 최종 배송지를 함께 받으며, AWAITING_PAYMENT 상태에서 입금 기한 내에만 가능하다. */
   @PostMapping("/{participationId}/payment/report")
   public ResponseEntity<Void> reportPayment(
-      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
-    buncheolCheckoutService.reportPayment(participantId, participationId);
+      @AuthenticationPrincipal final Long participantId,
+      @PathVariable final Long participationId,
+      @Valid @RequestBody final ReportPaymentRequest request) {
+    buncheolCheckoutService.reportPayment(participantId, participationId, request);
     return ResponseEntity.noContent().build();
   }
 

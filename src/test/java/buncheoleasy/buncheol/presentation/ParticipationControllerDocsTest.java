@@ -22,6 +22,7 @@ import buncheoleasy.buncheol.application.ParticipationPaymentQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.request.ReportPaymentRequest;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationPaymentDetailResponse;
 import buncheoleasy.payment.application.PaymentOrderInfo;
@@ -298,6 +299,8 @@ class ParticipationControllerDocsTest {
     mockMvc
         .perform(
             post("/v1/participations/{participationId}/payment/report", 500L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"shippingAddressId\": 200}")
                 .header("Authorization", "Bearer {accessToken}")
                 .with(mockAuth()))
         .andExpect(status().isNoContent())
@@ -310,10 +313,13 @@ class ParticipationControllerDocsTest {
                         .summary("구매자 입금 완료 신고")
                         .description(
                             "낙찰자가 개최자 계좌로 송금 후 '입금했어요'를 누른다. AWAITING_PAYMENT → PAYMENT_REPORTED 로"
-                                + " 전이하며, 입금 기한 내에만 가능하다.")
+                                + " 전이하며, 입금 기한 내에만 가능하다. 신고 시 최종 배송지 ID를 본문으로 받는다.")
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestSchema(Schema.schema("ReportPaymentRequest"))
+                        .requestFields(
+                            fieldWithPath("shippingAddressId").description("낙찰자가 선택한 최종 배송지 ID"))
                         .build())));
   }
 

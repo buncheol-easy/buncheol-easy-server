@@ -38,4 +38,9 @@ public class JpaUserRepositoryAdapter implements UserRepository {
   public boolean existsByNicknameExcludingId(String nickname, Long excludeId) {
     return jpaUserRepository.existsByNicknameAndIdNot(Nickname.of(nickname), excludeId);
   }
+
+  @Override
+  public java.util.List<User> findAllByIds(java.util.Collection<Long> ids) {
+    return jpaUserRepository.findAllById(ids);
+  }
 }

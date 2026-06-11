@@ -2,20 +2,27 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
+import buncheoleasy.buncheol.dto.request.ReportPaymentRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.payment.application.PaymentCompletionHandler;
 import buncheoleasy.payment.application.PaymentOrderInfo;
 import buncheoleasy.payment.application.PaymentService;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,16 +43,16 @@ class BuncheolCheckoutServiceTest {
   @InjectMocks private BuncheolCheckoutService buncheolCheckoutService;
 
   @Mock private BuncheolParticipationService buncheolParticipationService;
+  @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private ParticipationPaymentAmountResolver participationPaymentAmountResolver;
   @Mock private PaymentService paymentService;
   @Mock private PaymentCompletionHandler paymentCompletionHandler;
-
-  // @Mock 으로 두면 instant() 가 null 을 반환해 stub 이 필요해진다. Clock.fixed 의 실제 동작을
-  // 그대로 사용하기 위해 @Spy 로 감싼다 (ParticipationPaymentHandlerTest 와 동일 패턴).
-  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-11T12:00:00Z"), ZoneOffset.UTC);
+  @Mock private Clock clock;
 
   private static final Long BUNCHEOL_ID = 1L;
+  private static final Long HOST_ID = 777L;
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long PARTICIPATION_ID = 50L;
   private static final long BID_AMOUNT = 30_000L;
@@ -165,14 +172,21 @@ class BuncheolCheckoutServiceTest {
       Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
       participation.awardAsWinner(FUTURE_DUE);
+      Buncheol buncheol = Buncheol.create(HOST_ID, new BuncheolParams(10L, "T", null, "S", FUTURE_DUE, 3000, null), NOW);
+      ShippingAddress address = new ShippingAddress(200L, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "S", null, false);
 
+      given(clock.instant()).willReturn(NOW);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(any())).willReturn(buncheol);
+      given(participationShippingAddressResolver.resolve(any(), any(), any()))
+          .willReturn(address);
 
-      buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID);
+      buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID, new ReportPaymentRequest(200L));
 
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
       assertThat(participation.getPaymentReportedAt()).isEqualTo(NOW);
+      assertThat(participation.getShippingAddressId()).isEqualTo(200L);
     }
 
     @Test
@@ -184,9 +198,9 @@ class BuncheolCheckoutServiceTest {
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
-      assertThatThrownBy(() -> buncheolCheckoutService.reportPayment(wrongUserId, PARTICIPATION_ID))
+      assertThatThrownBy(() -> buncheolCheckoutService.reportPayment(wrongUserId, PARTICIPATION_ID, new ReportPaymentRequest(200L)))
           .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
+          .extracting(e -> ((BusinessException) e).getErrorCode())
           .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
     }
 
@@ -195,14 +209,19 @@ class BuncheolCheckoutServiceTest {
       Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
       // ACTIVE_BID 상태 (기본)
+      Buncheol buncheol = Buncheol.create(HOST_ID, new BuncheolParams(10L, "T", null, "S", FUTURE_DUE, 3000, null), NOW);
+      ShippingAddress address = new ShippingAddress(200L, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "S", null, false);
 
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(any())).willReturn(buncheol);
+      given(participationShippingAddressResolver.resolve(any(), any(), any()))
+          .willReturn(address);
 
       assertThatThrownBy(
-              () -> buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID))
+              () -> buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID, new ReportPaymentRequest(200L)))
           .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
+          .extracting(e -> ((BusinessException) e).getErrorCode())
           .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
 
@@ -211,14 +230,20 @@ class BuncheolCheckoutServiceTest {
       Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
       participation.awardAsWinner(PAST_DUE);
+      Buncheol buncheol = Buncheol.create(HOST_ID, new BuncheolParams(10L, "T", null, "S", FUTURE_DUE, 3000, null), NOW);
+      ShippingAddress address = new ShippingAddress(200L, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "S", null, false);
 
+      given(clock.instant()).willReturn(NOW);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(any())).willReturn(buncheol);
+      given(participationShippingAddressResolver.resolve(any(), any(), any()))
+          .willReturn(address);
 
       assertThatThrownBy(
-              () -> buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID))
+              () -> buncheolCheckoutService.reportPayment(PARTICIPANT_ID, PARTICIPATION_ID, new ReportPaymentRequest(200L)))
           .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
+          .extracting(e -> ((BusinessException) e).getErrorCode())
           .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_DUE_PASSED);
     }
   }
@@ -232,6 +257,7 @@ class BuncheolCheckoutServiceTest {
       Participation participation = newParticipation();
       setId(participation, PARTICIPATION_ID);
 
+      given(clock.instant()).willReturn(Instant.parse("2026-03-11T12:00:00Z"));
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 

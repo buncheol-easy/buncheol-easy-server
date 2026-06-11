@@ -12,8 +12,10 @@ import java.time.Instant;
  * {@code AWAITING_PAYMENT / PAYMENT_REPORTED / CONFIRMED} 다. ACTIVE_BID 상태의 차순위 후보는 아직 결제 대상이 아니라 노출하지 않는다.
  *
  * <p>결제 필드({@code participationId}~{@code paymentConfirmedAt})는 라이브 상태값이며, {@code participationId} 는 개최자
- * 수동 입금확인 API 호출에 사용한다. 배송 필드({@code deliveryId}~{@code deliveryStatus})는 CONFIRMED 시점 스냅샷이라 그 전에는 모두
- * null 이고, 이후 낙찰자가 닉네임·배송지를 바꿔도 영향받지 않는다. 개최자 계좌 정보는 본 응답에 포함하지 않는다.
+ * 수동 입금확인 API 호출에 사용한다. {@code shippingAddress} 는 낙찰자가 입금 완료 신고 시 확정한 최종 배송지(라이브 값)로
+ * PAYMENT_REPORTED/CONFIRMED 에서만 채워지고 AWAITING_PAYMENT 에선 null 이다. 배송 필드({@code deliveryId}~{@code
+ * deliveryStatus})는 CONFIRMED 시점 스냅샷이라 그 전에는 모두 null 이고, 이후 낙찰자가 닉네임·배송지를 바꿔도 영향받지 않는다. 개최자 계좌 정보는 본
+ * 응답에 포함하지 않는다.
  *
  * @param participationId 낙찰자 참여 ID. 개최자 입금확인 API 의 대상 식별자
  * @param paymentStatus 결제 진행 상태 (AWAITING_PAYMENT / PAYMENT_REPORTED / CONFIRMED)
@@ -21,15 +23,19 @@ import java.time.Instant;
  * @param paymentDueAt 입금 기한. 미설정 시 null
  * @param paymentReportedAt 구매자 입금완료 신고 시각. 미신고 시 null
  * @param paymentConfirmedAt 개최자 입금확인 시각. 미확인 시 null
+ * @param shippingAddress 낙찰자가 신고 시 확정한 최종 배송지. AWAITING_PAYMENT 에선 null
+ * @param depositorName 입금 확인을 위한 이름. 현재는 유저의 닉네임을 반환하며, 추후 실명(카카오 이름 등)으로 대체될 수 있다.
  * @param trackingNumber 호스트가 등록한 운송장 번호. 미등록 시 null
  */
-public record WinnerDeliveryResponse(
+ public record WinnerDeliveryResponse(
     Long participationId,
     ParticipationStatus paymentStatus,
     Long bidAmount,
     Instant paymentDueAt,
     Instant paymentReportedAt,
     Instant paymentConfirmedAt,
+    WinnerShippingAddressResponse shippingAddress,
+    String depositorName,
     Long deliveryId,
     ShippingMethod shippingMethod,
     String storeName,

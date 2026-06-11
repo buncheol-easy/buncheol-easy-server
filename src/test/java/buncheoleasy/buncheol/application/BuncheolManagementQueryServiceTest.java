@@ -28,9 +28,15 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.Nickname;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -51,8 +57,10 @@ class BuncheolManagementQueryServiceTest {
   @Mock private BuncheolMemberRepository buncheolMemberRepository;
   @Mock private ParticipationRepository participationRepository;
   @Mock private DeliveryRepository deliveryRepository;
+  @Mock private ShippingAddressRepository shippingAddressRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private GroupMemberRepository groupMemberRepository;
+  @Mock private UserRepository userRepository;
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
@@ -117,6 +125,8 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "안유진", "yujin.png")));
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
+      given(shippingAddressRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -153,6 +163,8 @@ class BuncheolManagementQueryServiceTest {
                   activeBid(901L, 101L, OTHER_USER, 90_000L),
                   activeBid(701L, 101L, OTHER_USER, 70_000L)));
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
+      given(shippingAddressRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -178,6 +190,9 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(awaiting));
       // CONFIRMED 가 없으니 Delivery 조회는 빈 id 목록으로 들어간다.
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(WINNER_USER)))
+          .willReturn(List.of(user(WINNER_USER, "장원영")));
+      given(shippingAddressRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -192,6 +207,7 @@ class BuncheolManagementQueryServiceTest {
       assertThat(option.winner().paymentDueAt()).isEqualTo(DUE_AT);
       assertThat(option.winner().paymentReportedAt()).isNull();
       assertThat(option.winner().paymentConfirmedAt()).isNull();
+      assertThat(option.winner().depositorName()).isEqualTo("장원영");
       // 배송 스냅샷은 아직 없다.
       assertThat(option.winner().deliveryId()).isNull();
       assertThat(option.winner().shippingMethod()).isNull();
@@ -213,6 +229,10 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(reported));
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(WINNER_USER)))
+          .willReturn(List.of(user(WINNER_USER, "장원영")));
+      given(shippingAddressRepository.findAllByIds(List.of(200L)))
+          .willReturn(List.of(shippingAddress(200L, "GS25 강남역점")));
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -223,6 +243,8 @@ class BuncheolManagementQueryServiceTest {
       assertThat(option.winner().paymentStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
       assertThat(option.winner().paymentReportedAt()).isEqualTo(REPORTED_AT);
       assertThat(option.winner().paymentConfirmedAt()).isNull();
+      assertThat(option.winner().depositorName()).isEqualTo("장원영");
+      assertThat(option.winner().shippingAddress().storeName()).isEqualTo("GS25 강남역점");
       assertThat(option.winner().deliveryId()).isNull();
     }
 
@@ -244,6 +266,10 @@ class BuncheolManagementQueryServiceTest {
               5001L, 601L, "GS25 강남역점", "유진팬", "010-1234-5678", null, DeliveryStatus.SNAPSHOTTED);
       given(deliveryRepository.findAllByParticipationIds(List.of(601L)))
           .willReturn(List.of(delivery));
+      given(userRepository.findAllByIds(List.of(WINNER_USER)))
+          .willReturn(List.of(user(WINNER_USER, "장원영")));
+      given(shippingAddressRepository.findAllByIds(List.of(200L)))
+          .willReturn(List.of(shippingAddress(200L, "GS25 강남역점")));
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -258,6 +284,8 @@ class BuncheolManagementQueryServiceTest {
       assertThat(option.winner().bidAmount()).isEqualTo(90_000L);
       assertThat(option.winner().paymentReportedAt()).isEqualTo(REPORTED_AT);
       assertThat(option.winner().paymentConfirmedAt()).isEqualTo(CONFIRMED_AT);
+      assertThat(option.winner().depositorName()).isEqualTo("장원영");
+      assertThat(option.winner().shippingAddress().storeName()).isEqualTo("GS25 강남역점");
       // 배송 필드: CONFIRMED 스냅샷
       assertThat(option.winner().deliveryId()).isEqualTo(5001L);
       assertThat(option.winner().shippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
@@ -289,11 +317,18 @@ class BuncheolManagementQueryServiceTest {
               DeliveryStatus.SHIPPING);
       given(deliveryRepository.findAllByParticipationIds(List.of(601L)))
           .willReturn(List.of(delivery));
+      given(userRepository.findAllByIds(List.of(WINNER_USER)))
+          .willReturn(List.of(user(WINNER_USER, "장원영")));
+      given(shippingAddressRepository.findAllByIds(List.of(200L)))
+          .willReturn(List.of(shippingAddress(200L, "GS25 강남역점")));
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
 
       assertThat(response.options().get(0).winner().trackingNumber()).isEqualTo("1234567890");
+      assertThat(response.options().get(0).winner().depositorName()).isEqualTo("장원영");
+      assertThat(response.options().get(0).winner().shippingAddress().storeName())
+          .isEqualTo("GS25 강남역점");
       assertThat(response.options().get(0).winner().deliveryStatus())
           .isEqualTo(DeliveryStatus.SHIPPING);
     }
@@ -326,6 +361,10 @@ class BuncheolManagementQueryServiceTest {
           delivery(5001L, 601L, "GS25 잠실점", "유진팬", "010-0000-0000", null, DeliveryStatus.SNAPSHOTTED);
       given(deliveryRepository.findAllByParticipationIds(List.of(601L)))
           .willReturn(List.of(deliveryFor601));
+      given(userRepository.findAllByIds(List.of(WINNER_USER)))
+          .willReturn(List.of(user(WINNER_USER, "장원영")));
+      given(shippingAddressRepository.findAllByIds(List.of(200L)))
+          .willReturn(List.of(shippingAddress(200L, "GS25 잠실점")));
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -339,6 +378,8 @@ class BuncheolManagementQueryServiceTest {
       // 마감 후에도 미낙찰 활성 입찰(100,000)이 낙찰가(90,000)보다 높으면 currentHighestBid 로 노출된다.
       assertThat(yujin.currentHighestBid()).isEqualTo(100_000L);
       assertThat(yujin.winner()).isNotNull();
+      assertThat(yujin.winner().depositorName()).isEqualTo("장원영");
+      assertThat(yujin.winner().shippingAddress().storeName()).isEqualTo("GS25 잠실점");
       assertThat(yujin.winner().deliveryId()).isEqualTo(5001L);
 
       BuncheolManagementOptionResponse rei = response.options().get(1);
@@ -361,6 +402,8 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of());
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
+      given(shippingAddressRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
       BuncheolManagementResponse response =
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
@@ -417,6 +460,13 @@ class BuncheolManagementQueryServiceTest {
     return member;
   }
 
+  private User user(final Long id, final String nickname) {
+    User user = newInstance(User.class);
+    setField(user, "id", id);
+    setField(user, "nickname", Nickname.of(nickname));
+    return user;
+  }
+
   private Participation activeBid(
       final Long id, final Long buncheolMemberId, final Long participantId, final long bidAmount) {
     return participation(id, buncheolMemberId, participantId, bidAmount, ParticipationStatus.ACTIVE_BID);
@@ -444,6 +494,7 @@ class BuncheolManagementQueryServiceTest {
     setField(p, "buncheolId", BUNCHEOL_ID);
     setField(p, "buncheolMemberId", buncheolMemberId);
     setField(p, "participantId", participantId);
+    setField(p, "shippingAddressId", 200L);
     setField(p, "bidAmount", bidAmount);
     setField(p, "status", status);
     return p;
@@ -467,6 +518,14 @@ class BuncheolManagementQueryServiceTest {
     setField(delivery, "trackingNumber", trackingNumber);
     setField(delivery, "status", status);
     return delivery;
+  }
+
+  private ShippingAddress shippingAddress(final Long id, final String storeName) {
+    ShippingAddress address = newInstance(ShippingAddress.class);
+    setField(address, "id", id);
+    setField(address, "shippingMethod", ShippingMethod.GS25_HALF);
+    setField(address, "storeName", storeName);
+    return address;
   }
 
   private static <T> T newInstance(final Class<T> type) {

@@ -106,7 +106,7 @@ class ParticipationPaymentQueryServiceTest {
     @Test
     void PAYMENT_REPORTED_이면_개최자_계좌를_노출한다() {
       Participation participation = awaitingPaymentParticipation();
-      participation.reportPayment(NOW); // PAYMENT_REPORTED
+      participation.reportPayment(NOW, SHIPPING_ADDRESS_ID); // PAYMENT_REPORTED
       givenAmountLookups(participation);
       given(buncheol.getHostId()).willReturn(HOST_ID);
       given(userDomainService.getUser(HOST_ID)).willReturn(hostWithAccount());
@@ -121,7 +121,7 @@ class ParticipationPaymentQueryServiceTest {
     @Test
     void CONFIRMED_이면_개최자_계좌를_노출하지_않는다() {
       Participation participation = awaitingPaymentParticipation();
-      participation.reportPayment(NOW);
+      participation.reportPayment(NOW, SHIPPING_ADDRESS_ID);
       participation.confirmManualPayment(NOW); // CONFIRMED
       givenAmountLookups(participation);
 

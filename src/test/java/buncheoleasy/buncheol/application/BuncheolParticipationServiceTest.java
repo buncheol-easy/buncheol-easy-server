@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -45,6 +46,7 @@ class BuncheolParticipationServiceTest {
   @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private ShippingAddressDomainService shippingAddressDomainService;
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
@@ -74,6 +76,8 @@ class BuncheolParticipationServiceTest {
     given(address.getId()).willReturn(SHIPPING_ADDRESS_ID);
     given(address.isOwnedBy(PARTICIPANT_ID)).willReturn(true);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID)).willReturn(address);
+    given(participationShippingAddressResolver.resolve(eq(PARTICIPANT_ID), any(), eq(SHIPPING_ADDRESS_ID)))
+        .willReturn(address);
     return address;
   }
 
@@ -185,12 +189,11 @@ class BuncheolParticipationServiceTest {
 
     @Test
     void 배송지_소유자가_아니면_예외가_발생한다() {
-      mockBuncheol();
+      Buncheol buncheol = mockBuncheol();
       mockBuncheolMember();
-      ShippingAddress address = mock(ShippingAddress.class);
-      given(address.isOwnedBy(PARTICIPANT_ID)).willReturn(false);
-      given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
-          .willReturn(address);
+
+      given(participationShippingAddressResolver.resolve(eq(PARTICIPANT_ID), eq(buncheol), eq(SHIPPING_ADDRESS_ID)))
+          .willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN));
 
       assertThatThrownBy(
               () ->

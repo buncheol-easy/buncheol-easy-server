@@ -34,6 +34,7 @@ import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.buncheol.dto.response.WinnerDeliveryResponse;
+import buncheoleasy.buncheol.dto.response.WinnerShippingAddressResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
@@ -634,6 +635,8 @@ class BuncheolControllerDocsTest {
             Instant.parse("2026-05-28T00:00:00Z"),
             Instant.parse("2026-05-27T09:00:00Z"),
             Instant.parse("2026-05-27T10:00:00Z"),
+            new WinnerShippingAddressResponse(ShippingMethod.GS25_HALF, "GS25 강남역점"),
+            "유진팬",
             5001L,
             ShippingMethod.GS25_HALF,
             "GS25 강남역점",
@@ -799,6 +802,19 @@ class BuncheolControllerDocsTest {
                                 .optional(),
                             fieldWithPath("options[].winner.paymentConfirmedAt")
                                 .description("개최자 입금확인 시각. 미확인 시 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.shippingAddress")
+                                .description(
+                                    "낙찰자가 입금 완료 신고 시 확정한 최종 배송지 (라이브 값). AWAITING_PAYMENT 이면 null")
+                                .optional(),
+                            fieldWithPath("options[].winner.shippingAddress.shippingMethod")
+                                .description("배송방법 (GS25_HALF | CU_HALF)")
+                                .optional(),
+                            fieldWithPath("options[].winner.shippingAddress.storeName")
+                                .description("편의점 지점명")
+                                .optional(),
+                            fieldWithPath("options[].winner.depositorName")
+                                .description("입금 확인을 위한 이름 (현재는 닉네임, 추후 실명 대체 예정)")
                                 .optional(),
                             fieldWithPath("options[].winner.deliveryId")
                                 .description("배송 ID (운송장 등록 API 호출에 사용). CONFIRMED 전에는 null")

@@ -10,7 +10,6 @@ import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
-import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +22,7 @@ public class BuncheolParticipationService {
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
-  private final ShippingAddressDomainService shippingAddressDomainService;
+  private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final Clock clock;
 
   public Participation createParticipation(
@@ -34,7 +33,8 @@ public class BuncheolParticipationService {
         buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheolId);
     // 선택한 배송지 조회 & 해당 분철에서 지원하는 배송 방법인지 확인
     ShippingAddress shippingAddress =
-        getAndValidateShippingAddress(participantId, buncheol, request.shippingAddressId());
+        participationShippingAddressResolver.resolve(
+            participantId, buncheol, request.shippingAddressId());
 
     // 유저가 이미 같은 분철 멤버에 대해 참여중인지 확인
     validateNoActiveParticipation(buncheolMember.getId(), participantId);
@@ -64,17 +64,6 @@ public class BuncheolParticipationService {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }
     return buncheol;
-  }
-
-  private ShippingAddress getAndValidateShippingAddress(
-      final Long participantId, final Buncheol buncheol, final Long shippingAddressId) {
-    ShippingAddress shippingAddress =
-        shippingAddressDomainService.getShippingAddress(shippingAddressId);
-    if (!shippingAddress.isOwnedBy(participantId)) {
-      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
-    }
-    buncheol.validateShippingMethodSupported(shippingAddress.getShippingMethod());
-    return shippingAddress;
   }
 
   private void validateNoActiveParticipation(

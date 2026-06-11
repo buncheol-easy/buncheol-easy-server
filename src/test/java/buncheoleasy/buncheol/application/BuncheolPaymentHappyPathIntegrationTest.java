@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.request.ReportPaymentRequest;
 import buncheoleasy.buncheol.dto.response.ParticipationPaymentDetailResponse;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
@@ -53,6 +54,7 @@ class BuncheolPaymentHappyPathIntegrationTest {
   private Long participantId;
   private Long buncheolId;
   private Long participationId;
+  private Long shippingAddressId;
 
   @BeforeEach
   void setUp() {
@@ -65,7 +67,7 @@ class BuncheolPaymentHappyPathIntegrationTest {
 
     buncheolId = createBuncheol(hostId, groupId);
     Long buncheolMemberId = createBuncheolMember(buncheolId, groupMemberId);
-    Long shippingAddressId = insertShippingAddress(participantId, "GS25 강남점");
+    shippingAddressId = insertShippingAddress(participantId, "GS25 강남점");
     participationId = insertActiveBidParticipation(buncheolMemberId, shippingAddressId);
   }
 
@@ -92,7 +94,7 @@ class BuncheolPaymentHappyPathIntegrationTest {
     assertThat(awaiting.hostAccount().accountHolder()).isEqualTo(HOST_HOLDER);
 
     // 3) 구매자 입금완료 신고 → PAYMENT_REPORTED.
-    buncheolCheckoutService.reportPayment(participantId, participationId);
+    buncheolCheckoutService.reportPayment(participantId, participationId, new ReportPaymentRequest(shippingAddressId));
     em.flush();
 
     assertThat(status()).isEqualTo("PAYMENT_REPORTED");

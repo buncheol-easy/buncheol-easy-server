@@ -2,6 +2,7 @@ package buncheoleasy.delivery.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willDoNothing;
@@ -30,6 +31,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DeliveryService 단위 테스트")
@@ -40,6 +42,7 @@ class DeliveryServiceTest {
   @Mock private DeliveryDomainService deliveryDomainService;
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private BuncheolDomainService buncheolDomainService;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-23T12:00:00Z"), ZoneOffset.UTC);
 
@@ -84,6 +87,7 @@ class DeliveryServiceTest {
       then(deliveryDomainService)
           .should()
           .updateDeliveryStatus(delivery, DeliveryStatus.SNAPSHOTTED);
+      then(eventPublisher).should().publishEvent(any(TrackingRegisteredEvent.class));
     }
 
     @Test

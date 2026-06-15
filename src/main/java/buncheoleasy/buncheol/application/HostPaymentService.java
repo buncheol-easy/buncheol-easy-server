@@ -7,6 +7,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ public class HostPaymentService {
   private final ParticipationDomainService participationDomainService;
   private final BuncheolDomainService buncheolDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
+  private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
   /**
@@ -32,6 +34,7 @@ public class HostPaymentService {
 
     participation.confirmManualPayment(Instant.now(clock));
     deliverySnapshotCreator.create(participation);
+    eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
   }
 
   /**
@@ -44,6 +47,10 @@ public class HostPaymentService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(winner.getBuncheolId());
     buncheol.validateOwner(hostId);
 
-    participationDomainService.expireWinnerAndPromoteNext(winner, Instant.now(clock));
+    // 차순위가 승계되면 새 낙찰자에게 낙찰 알림을 보낸다(케이스1: 차순위 이양으로 새로 낙찰).
+    participationDomainService
+        .expireWinnerAndPromoteNext(winner, Instant.now(clock))
+        .ifPresent(
+            promoted -> eventPublisher.publishEvent(new ParticipationWonEvent(promoted.getId())));
   }
 }

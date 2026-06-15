@@ -12,6 +12,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,6 +22,7 @@ public class DeliveryService {
   private final DeliveryDomainService deliveryDomainService;
   private final ParticipationDomainService participationDomainService;
   private final BuncheolDomainService buncheolDomainService;
+  private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
   public void registerTracking(
@@ -36,6 +38,7 @@ public class DeliveryService {
     DeliveryStatus previousStatus = delivery.getStatus();
     delivery.registerTracking(trackingNumber, Instant.now(clock));
     deliveryDomainService.updateDeliveryStatus(delivery, previousStatus);
+    eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
   }
 
   public void confirmReceipt(final Long participantId, final Long deliveryId) {

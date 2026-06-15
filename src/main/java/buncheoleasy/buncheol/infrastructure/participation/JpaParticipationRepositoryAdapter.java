@@ -72,8 +72,8 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private static final String INSERT_IF_RECRUITING_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
           + " shipping_address_id, bid_amount, status, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, NOW(), NOW() "
-          + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > NOW()";
+          + "SELECT ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
+          + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
 
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
@@ -161,6 +161,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public boolean existsPaymentInProgressInSlot(final Long buncheolMemberId) {
     return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
         buncheolMemberId, PAYMENT_IN_PROGRESS_STATUSES);
+  }
+
+  @Override
+  public List<Participation> findAwaitingPaymentReminderTargets(
+      final Instant now, final Instant dueBefore) {
+    return jpaParticipationRepository.findByStatusAndDueAtWithin(
+        ParticipationStatus.AWAITING_PAYMENT, now, dueBefore);
   }
 
   @Override

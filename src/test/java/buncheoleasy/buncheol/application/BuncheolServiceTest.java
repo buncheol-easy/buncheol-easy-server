@@ -19,6 +19,7 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
@@ -386,6 +387,10 @@ class BuncheolServiceTest {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(50L);
+      given(participationDomainService.findBiddingByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(participation));
 
       // when
       buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
@@ -396,6 +401,7 @@ class BuncheolServiceTest {
       then(participationDomainService)
           .should()
           .cancelActiveByBuncheolId(BUNCHEOL_ID, Instant.now(clock));
+      then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
     }
 
     @Test
@@ -464,6 +470,12 @@ class BuncheolServiceTest {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      Participation winner = mock(Participation.class);
+      given(winner.getId()).willReturn(50L);
+      given(
+              participationDomainService.selectWinners(
+                  BUNCHEOL_ID, Instant.parse("2026-05-14T12:00:00Z")))
+          .willReturn(List.of(winner));
 
       // when
       buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID);
@@ -475,6 +487,7 @@ class BuncheolServiceTest {
       then(participationDomainService)
           .should()
           .selectWinners(BUNCHEOL_ID, Instant.parse("2026-05-14T12:00:00Z"));
+      then(eventPublisher).should().publishEvent(any(ParticipationWonEvent.class));
     }
 
     @Test

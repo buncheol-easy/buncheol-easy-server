@@ -96,6 +96,12 @@ app:
       cron: "${BUNCHEOL_AUTO_CLOSE_CRON:0 0 * * * *}"
       fallback-interval-ms: ${BUNCHEOL_AUTO_CLOSE_FALLBACK_INTERVAL_MS:300000}
       initial-delay-ms: ${BUNCHEOL_AUTO_CLOSE_INITIAL_DELAY_MS:10000}
+  notification:
+    # 입금 기한이 마감 3시간 이내로 임박한 낙찰자에게 입금 독려 알림을 보내는 스케줄러.
+    payment-due-reminder:
+      enabled: ${PAYMENT_DUE_REMINDER_ENABLED:true}
+      interval-ms: ${PAYMENT_DUE_REMINDER_INTERVAL_MS:600000}
+      initial-delay-ms: ${PAYMENT_DUE_REMINDER_INITIAL_DELAY_MS:30000}
 
 delivery:
   tracker:
@@ -113,6 +119,26 @@ toss:
     confirm-url: "https://api.tosspayments.com/v1/payments/confirm"
     connect-timeout: 3s
     read-timeout: 5s
+
+aligo:
+  alimtalk:
+    base-url: ${ALIGO_BASE_URL:https://kakaoapi.aligo.in}
+    api-key: ${ALIGO_API_KEY}
+    user-id: ${ALIGO_USER_ID}
+    sender-key: ${ALIGO_SENDER_KEY}
+    sender: ${ALIGO_SENDER}
+    failover: ${ALIGO_FAILOVER:false}
+    test-mode: ${ALIGO_TEST_MODE:true}
+    connect-timeout: 3s
+    read-timeout: 5s
+    template-codes:
+      PARTICIPATION_WON: ${ALIGO_TPL_PARTICIPATION_WON:}
+      BUNCHEOL_CANCELLED: ${ALIGO_TPL_BUNCHEOL_CANCELLED:}
+      TRACKING_CU: ${ALIGO_TPL_TRACKING_CU:}
+      TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
+      PAYMENT_CONFIRMED: ${ALIGO_TPL_PAYMENT_CONFIRMED:}
+      PAYMENT_DUE_IMMINENT: ${ALIGO_TPL_PAYMENT_DUE_IMMINENT:}
+      PAYMENT_REPORTED: ${ALIGO_TPL_PAYMENT_REPORTED:}
 
 management:
   endpoints:

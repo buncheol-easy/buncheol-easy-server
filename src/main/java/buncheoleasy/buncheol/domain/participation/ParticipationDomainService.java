@@ -4,6 +4,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,6 +53,17 @@ public class ParticipationDomainService {
     return participationRepository.cancelActiveByBuncheolId(buncheolId, now);
   }
 
+  /** 분철의 ACTIVE_BID 참여 전체 조회. 분철 취소 시 알림 대상(취소될 참여자) 선조회에 쓴다. */
+  public List<Participation> findBiddingByBuncheolId(final Long buncheolId) {
+    return participationRepository.findBiddingByBuncheolId(buncheolId);
+  }
+
+  /** 입금 기한 임박 참여 조회(기한 임박 알림 스케줄러용). */
+  public List<Participation> findAwaitingPaymentReminderTargets(
+      final Instant now, final Instant dueBefore) {
+    return participationRepository.findAwaitingPaymentReminderTargets(now, dueBefore);
+  }
+
   /**
    * 미입금 낙찰자를 만료(FAILED)시키고 같은 멤버 슬롯의 차순위 후보를 승계한다.
    *
@@ -90,22 +102,25 @@ public class ParticipationDomainService {
    * ACTIVE_BID 로 남으므로 이 메서드 자체는 멱등하지 않다 — 정확히 마감 1회만 실행되도록 호출 측의 Buncheol RECRUITING→CLOSED
    * 가드(Buncheol.close)에 의존한다 (수동 마감·자동 마감 스케줄러가 공유).
    */
-  public void selectWinners(final Long buncheolId, final Instant now) {
+  public List<Participation> selectWinners(final Long buncheolId, final Instant now) {
     List<Participation> bids = participationRepository.findBiddingByBuncheolId(buncheolId);
     Map<Long, List<Participation>> bidsByMember =
         bids.stream().collect(Collectors.groupingBy(Participation::getBuncheolMemberId));
 
     Instant dueAt = now.plus(PAYMENT_DUE_WINDOW);
+    List<Participation> winners = new ArrayList<>();
     for (List<Participation> memberBids : bidsByMember.values()) {
       // memberBids 는 조회 정렬(bidAmount DESC, id ASC = 높은 제시가 → 먼저 신청한 순)을 유지하므로 첫 원소가 멤버별 최고가 낙찰자다.
       for (int rankIndex = 0; rankIndex < memberBids.size(); rankIndex++) {
         Participation bid = memberBids.get(rankIndex);
         if (rankIndex == 0) {
           bid.awardAsWinner(dueAt); // closedRank=1 + AWAITING_PAYMENT + dueAt
+          winners.add(bid);
         } else {
           bid.assignClosedRank(rankIndex + 1); // ACTIVE_BID 유지, 차순위 승계 후보
         }
       }
     }
+    return winners;
   }
 }

@@ -216,7 +216,8 @@ class JpaInboxMessageRepositoryAdapterTest {
       persistNotice(false, Instant.parse("2026-06-14T08:00:00Z"));
       persistNotice(false, Instant.parse("2026-06-13T08:00:00Z"));
 
-      // hasNext 판별을 위한 size+1 fetch 동작 검증 (size=2 → limit=3 요청 시 3건 모두 반환)
+      // findFeed 는 limit 을 정확히 지킨다(3건 존재해도 limit=2 면 2건만). hasNext 판별용 size+1 은
+      // 서비스(InboxQueryService)가 limit=size+1 로 호출해 처리하고, 리포지토리는 limit 만 책임진다.
       List<InboxMessage> result =
           inboxMessageRepository.findFeed(userId, true, true, Cursor.firstPage(), 2);
 

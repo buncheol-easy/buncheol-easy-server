@@ -90,7 +90,8 @@ class NoticeControllerDocsTest {
                                 .description("참고(보조 텍스트, 200자 이하)")
                                 .optional(),
                             fieldWithPath("description").description("설명(본문, 필수)"),
-                            fieldWithPath("pinned").description("상단 고정 여부(기본 false)").optional(),
+                            // pinned 은 원시 boolean(non-null). 생략 시 false 지만 null 은 받지 않으므로 required 로 문서화.
+                            fieldWithPath("pinned").description("상단 고정 여부"),
                             fieldWithPath("linkPath")
                                 .description("연관 화면 in-app 경로(500자 이하)")
                                 .optional())

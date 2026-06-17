@@ -160,9 +160,35 @@ public class InboxMessage extends TimestampedEntity implements Cursorable {
     }
   }
 
+  // linkPath 는 in-app 화면으로 이동하는 상대 경로만 허용한다. 외부 URL(http://...)·`javascript:` 스킴·
+  // protocol-relative(`//host`)·백슬래시 변종(`/\host` — 브라우저가 `\`를 `/`로 해석)·제어문자를 막아,
+  // 응답으로 노출되는 경로가 open redirect/스킴 주입에 쓰이지 않게 한다.
   private static void validateLinkPath(final String value) {
-    if (value != null && value.length() > LINK_PATH_MAX_LENGTH) {
+    if (value == null) {
+      return;
+    }
+    if (value.length() > LINK_PATH_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.INBOX_MESSAGE_TEXT_LENGTH_INVALID);
     }
+    if (!isInAppPath(value)) {
+      throw new BusinessException(ErrorCode.INBOX_LINK_PATH_INVALID);
+    }
+  }
+
+  private static boolean isInAppPath(final String value) {
+    if (value.charAt(0) != '/') {
+      return false;
+    }
+    // 두 번째 문자가 '/'(//host) 나 '\'(/\host) 면 외부로 빠지는 변종이라 차단.
+    if (value.length() >= 2 && (value.charAt(1) == '/' || value.charAt(1) == '\\')) {
+      return false;
+    }
+    // 개행·탭 등 제어문자 주입 차단.
+    for (int i = 0; i < value.length(); i++) {
+      if (value.charAt(i) < 0x20) {
+        return false;
+      }
+    }
+    return true;
   }
 }

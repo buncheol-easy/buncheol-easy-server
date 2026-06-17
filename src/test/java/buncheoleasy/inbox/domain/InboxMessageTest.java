@@ -8,6 +8,8 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("InboxMessage 도메인 테스트")
 class InboxMessageTest {
@@ -50,6 +52,30 @@ class InboxMessageTest {
           .isInstanceOf(BusinessException.class)
           .hasFieldOrPropertyWithValue(
               "errorCode", ErrorCode.INBOX_MESSAGE_REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    void 상대_경로_linkPath는_허용된다() {
+      InboxMessage notice = InboxMessage.createNotice("제목", null, "설명", false, "/products/7/manage");
+
+      assertThat(notice.getLinkPath()).isEqualTo("/products/7/manage");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = {
+          "javascript:alert(1)",
+          "http://evil.example.com",
+          "https://evil.example.com",
+          "//evil.example.com",
+          "/\\evil.example.com",
+          "/path\ninjected",
+          "products/7/manage"
+        })
+    void 상대_경로가_아닌_linkPath는_예외가_발생한다(final String linkPath) {
+      assertThatThrownBy(() -> InboxMessage.createNotice("제목", null, "설명", false, linkPath))
+          .isInstanceOf(BusinessException.class)
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INBOX_LINK_PATH_INVALID);
     }
 
     @Test

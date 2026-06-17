@@ -41,6 +41,7 @@ class AlimtalkNotificationListenerTest {
 
   @Mock private NotificationAssembler assembler;
   @Mock private AlimtalkSender sender;
+  @Mock private NotificationInboxRecorder inboxRecorder;
   @Mock private DueReminderGuard dueReminderGuard;
 
   private static final Long PARTICIPATION_ID = 50L;
@@ -57,6 +58,7 @@ class AlimtalkNotificationListenerTest {
     given(buncheol.getTitle()).willReturn("아이브 앨범");
     given(buncheol.getId()).willReturn(7L);
     User host = mockUser("개최자닉", HOST_PHONE);
+    given(host.getId()).willReturn(3L);
     User participant = mockUserNickOnly("참여자닉");
     given(assembler.loadByParticipation(PARTICIPATION_ID))
         .willReturn(
@@ -73,6 +75,8 @@ class AlimtalkNotificationListenerTest {
         .containsEntry("입금금액", "32,000")
         .containsEntry("분철아이디", "7");
     assertThat(variables.get("신고시각")).isNotBlank();
+    // 입금 확인 요청은 개최자(host)에게 in-app 알림이 남는다.
+    verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.PAYMENT_REPORTED), any(), eq(7L));
   }
 
   @Test
@@ -81,6 +85,7 @@ class AlimtalkNotificationListenerTest {
     Buncheol buncheol = mock(Buncheol.class);
     given(buncheol.getTitle()).willReturn("엔믹스 앨범");
     User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+    given(participant.getId()).willReturn(11L);
     given(assembler.loadByParticipation(PARTICIPATION_ID))
         .willReturn(
             new ParticipationView(
@@ -95,6 +100,8 @@ class AlimtalkNotificationListenerTest {
         .containsEntry("분철명", "엔믹스 앨범")
         .containsEntry("멤버명", "설윤")
         .containsEntry("입금금액", "20,000");
+    verify(inboxRecorder)
+        .record(eq(11L), eq(AlimtalkTemplate.PAYMENT_CONFIRMED), any(), any());
   }
 
   @Test
@@ -104,7 +111,9 @@ class AlimtalkNotificationListenerTest {
     given(participation.getDueAt()).willReturn(Instant.parse("2026-03-12T03:00:00Z"));
     Buncheol buncheol = mock(Buncheol.class);
     given(buncheol.getTitle()).willReturn("아이브 앨범");
+    given(buncheol.getId()).willReturn(7L);
     User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+    given(participant.getId()).willReturn(11L);
     given(assembler.loadByParticipation(PARTICIPATION_ID))
         .willReturn(
             new ParticipationView(
@@ -120,6 +129,8 @@ class AlimtalkNotificationListenerTest {
         .containsEntry("멤버명", "장원영")
         .containsEntry("입금금액", "32,000");
     assertThat(variables.get("입금기한")).isNotBlank();
+    // 낙찰 알림은 참여자(participant)에게, 분철 id 와 함께 in-app 알림이 남는다.
+    verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.PARTICIPATION_WON), any(), eq(7L));
   }
 
   @Test
@@ -128,6 +139,7 @@ class AlimtalkNotificationListenerTest {
     Buncheol buncheol = mock(Buncheol.class);
     given(buncheol.getTitle()).willReturn("르세라핌 앨범");
     User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+    given(participant.getId()).willReturn(11L);
     given(assembler.loadByParticipation(PARTICIPATION_ID))
         .willReturn(
             new ParticipationView(
@@ -141,6 +153,8 @@ class AlimtalkNotificationListenerTest {
         .containsEntry("닉네임", "참여자닉")
         .containsEntry("분철명", "르세라핌 앨범")
         .containsEntry("멤버명", "카즈하");
+    verify(inboxRecorder)
+        .record(eq(11L), eq(AlimtalkTemplate.BUNCHEOL_CANCELLED), any(), any());
   }
 
   @Test
@@ -164,6 +178,7 @@ class AlimtalkNotificationListenerTest {
     Buncheol buncheol = mock(Buncheol.class);
     given(buncheol.getTitle()).willReturn("아이브 앨범");
     User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+    given(participant.getId()).willReturn(11L);
     given(assembler.loadByParticipation(PARTICIPATION_ID))
         .willReturn(
             new ParticipationView(
@@ -178,6 +193,8 @@ class AlimtalkNotificationListenerTest {
         .containsEntry("멤버명", "장원영")
         .containsEntry("입금금액", "32,000");
     assertThat(variables.get("입금기한")).isNotBlank();
+    verify(inboxRecorder)
+        .record(eq(11L), eq(AlimtalkTemplate.PAYMENT_DUE_IMMINENT), any(), any());
   }
 
   @Test
@@ -188,6 +205,8 @@ class AlimtalkNotificationListenerTest {
     listener.onPaymentDueImminent(new PaymentDueImminentEvent(PARTICIPATION_ID));
 
     verify(sender, never()).send(any(), any(), any());
+    // 가드 차단 시 in-app 알림도 중복 생성하지 않는다.
+    verify(inboxRecorder, never()).record(any(), any(), any(), any());
   }
 
   private void assertTrackingSends(
@@ -201,6 +220,7 @@ class AlimtalkNotificationListenerTest {
     Buncheol buncheol = mock(Buncheol.class);
     given(buncheol.getTitle()).willReturn("르세라핌 앨범");
     User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+    given(participant.getId()).willReturn(11L);
     given(assembler.loadByParticipation(PARTICIPATION_ID))
         .willReturn(
             new ParticipationView(
@@ -214,6 +234,7 @@ class AlimtalkNotificationListenerTest {
         .containsEntry("분철명", "르세라핌 앨범")
         .containsEntry("멤버명", "카즈하")
         .containsEntry("운송장번호", "CJ123456789");
+    verify(inboxRecorder).record(eq(11L), eq(expectedTemplate), any(), any());
   }
 
   private User mockUser(final String nickname, final String phone) {

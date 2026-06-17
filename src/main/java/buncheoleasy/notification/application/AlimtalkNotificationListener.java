@@ -20,6 +20,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * 도메인 이벤트를 받아 알림톡을 발송한다. 원 트랜잭션 커밋 후(AFTER_COMMIT) 비동기로 실행하며, 트랜잭션 없이 발행되는 운송장 등록도
  * {@code fallbackExecution} 으로 처리한다. 발송 실패는 로깅만 하고 비즈니스에 영향을 주지 않는다.
+ *
+ * <p>각 핸들러는 알림톡 발송 직전에 {@link NotificationInboxRecorder} 로 in-app 알림(수신함)을 1:1 로 남긴다. 카카오 발송
+ * 성공 여부와 무관하게 수신함에서 확인할 수 있도록 발송보다 먼저 기록하되, 기록 실패가 알림톡 발송까지 막지 않도록 {@link #recordSafely} 로
+ * 예외를 격리한다(두 채널은 서로 독립적으로 실패할 수 있어야 한다).
  */
 @Slf4j
 @Component
@@ -28,6 +32,7 @@ public class AlimtalkNotificationListener {
 
   private final NotificationAssembler assembler;
   private final AlimtalkSender sender;
+  private final NotificationInboxRecorder inboxRecorder;
   private final DueReminderGuard dueReminderGuard;
 
   /** (개최자) 참여자가 입금 확인 요청을 함. */
@@ -44,6 +49,11 @@ public class AlimtalkNotificationListener {
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
             "신고시각", AlimtalkFormats.dateTime(view.participation().getPaymentReportedAt()),
             "분철아이디", String.valueOf(view.buncheol().getId()));
+    recordSafely(
+        view.host().getId(),
+        AlimtalkTemplate.PAYMENT_REPORTED,
+        variables,
+        view.buncheol().getId());
     sender.send(AlimtalkTemplate.PAYMENT_REPORTED, view.host().getPhoneNumber().value(), variables);
   }
 
@@ -58,6 +68,11 @@ public class AlimtalkNotificationListener {
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()));
+    recordSafely(
+        view.participant().getId(),
+        AlimtalkTemplate.PAYMENT_CONFIRMED,
+        variables,
+        view.buncheol().getId());
     sender.send(
         AlimtalkTemplate.PAYMENT_CONFIRMED, view.participant().getPhoneNumber().value(), variables);
   }
@@ -79,6 +94,8 @@ public class AlimtalkNotificationListener {
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "운송장번호", delivery.getTrackingNumber());
+    recordSafely(
+        view.participant().getId(), template, variables, view.buncheol().getId());
     sender.send(template, view.participant().getPhoneNumber().value(), variables);
   }
 
@@ -94,6 +111,11 @@ public class AlimtalkNotificationListener {
             "멤버명", view.memberName(),
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
             "입금기한", AlimtalkFormats.dateTime(view.participation().getDueAt()));
+    recordSafely(
+        view.participant().getId(),
+        AlimtalkTemplate.PARTICIPATION_WON,
+        variables,
+        view.buncheol().getId());
     sender.send(
         AlimtalkTemplate.PARTICIPATION_WON, view.participant().getPhoneNumber().value(), variables);
   }
@@ -108,6 +130,11 @@ public class AlimtalkNotificationListener {
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName());
+    recordSafely(
+        view.participant().getId(),
+        AlimtalkTemplate.BUNCHEOL_CANCELLED,
+        variables,
+        view.buncheol().getId());
     sender.send(
         AlimtalkTemplate.BUNCHEOL_CANCELLED, view.participant().getPhoneNumber().value(), variables);
   }
@@ -127,9 +154,27 @@ public class AlimtalkNotificationListener {
             "멤버명", view.memberName(),
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
             "입금기한", AlimtalkFormats.dateTime(view.participation().getDueAt()));
+    recordSafely(
+        view.participant().getId(),
+        AlimtalkTemplate.PAYMENT_DUE_IMMINENT,
+        variables,
+        view.buncheol().getId());
     sender.send(
         AlimtalkTemplate.PAYMENT_DUE_IMMINENT,
         view.participant().getPhoneNumber().value(),
         variables);
+  }
+
+  // in-app 알림 기록 실패가 알림톡 발송을 막지 않도록 격리한다(로깅만). 발송 실패도 비즈니스에 영향을 주지 않는다는 정책과 동일.
+  private void recordSafely(
+      final Long recipientId,
+      final AlimtalkTemplate template,
+      final Map<String, String> variables,
+      final Long buncheolId) {
+    try {
+      inboxRecorder.record(recipientId, template, variables, buncheolId);
+    } catch (final RuntimeException e) {
+      log.error("수신함 알림 기록 실패 - template={}, recipientId={}", template, recipientId, e);
+    }
   }
 }

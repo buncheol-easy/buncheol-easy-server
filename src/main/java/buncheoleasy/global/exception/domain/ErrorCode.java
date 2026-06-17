@@ -137,6 +137,16 @@ public enum ErrorCode {
   FAVORITE_GROUP_NOT_FOUND("GRP-004", "최애로 등록하지 않은 그룹입니다.", HttpStatus.NOT_FOUND),
   FAVORITE_GROUP_LIMIT_EXCEEDED("GRP-005", "최애 그룹은 최대 5개까지 등록할 수 있습니다.", HttpStatus.CONFLICT),
 
+  /** INB - 수신함(공지/알림) 관련 에러 */
+  INBOX_MESSAGE_REQUIRED_FIELD_MISSING(
+      "INB-001", "수신함 메시지 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
+  INBOX_MESSAGE_TEXT_LENGTH_INVALID(
+      "INB-002", "수신함 메시지 텍스트 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
+  INBOX_MESSAGE_NOT_FOUND("INB-003", "존재하지 않는 수신함 메시지입니다.", HttpStatus.NOT_FOUND),
+  INBOX_PIN_NOT_ALLOWED("INB-004", "공지만 상단 고정할 수 있습니다.", HttpStatus.CONFLICT),
+  INBOX_LINK_PATH_INVALID(
+      "INB-005", "연결 경로는 '//' 로 시작하지 않는 상대 경로(/...)여야 합니다.", HttpStatus.BAD_REQUEST),
+
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
 

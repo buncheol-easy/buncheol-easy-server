@@ -380,3 +380,32 @@ CREATE TABLE IF NOT EXISTS user_recent_searches
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- inbox_messages 테이블 생성 (수신함 - 공지/알림 단일 관리)
+-- 공지(NOTICE)는 전체 대상이라 recipient_id NULL, 알림(NOTIFICATION)은 수신자별 1:1 생성.
+CREATE TABLE IF NOT EXISTS inbox_messages
+(
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    type         VARCHAR(20)  NOT NULL COMMENT 'NOTICE | NOTIFICATION',
+    recipient_id BIGINT       NULL COMMENT '알림 수신자 (공지는 NULL)',
+    title        VARCHAR(200) NOT NULL COMMENT '제목',
+    reference    VARCHAR(200) NULL COMMENT '보조 텍스트(참고)',
+    description  TEXT         NOT NULL COMMENT '설명(본문)',
+    pinned       BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '상단 고정 여부 (공지만 사용)',
+    link_path    VARCHAR(500) NULL COMMENT '연관 화면 in-app 경로',
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    -- 본인 알림 피드(recipient_id = userId, pinned = false) 커서 페이지네이션용
+    INDEX idx_inbox_recipient_created (recipient_id, created_at DESC, id DESC),
+    -- 공지 피드(pinned = false) 및 상단 고정 공지(pinned = true) 조회용
+    INDEX idx_inbox_type_pinned_created (type, pinned, created_at DESC, id DESC),
+
+    CONSTRAINT fk_inbox_messages_recipient
+        FOREIGN KEY (recipient_id)
+            REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

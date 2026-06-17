@@ -1,5 +1,6 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
+DROP TABLE IF EXISTS inbox_messages;
 DROP TABLE IF EXISTS deliveries;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS participations;
@@ -276,3 +277,23 @@ CREATE TABLE user_recent_searches
 );
 
 CREATE INDEX idx_user_recent_searches_user_created ON user_recent_searches (user_id, created_at DESC, id DESC);
+
+CREATE TABLE inbox_messages
+(
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    type         VARCHAR(20)  NOT NULL,
+    recipient_id BIGINT       NULL,
+    title        VARCHAR(200) NOT NULL,
+    reference    VARCHAR(200) NULL,
+    description  TEXT         NOT NULL,
+    pinned       BOOLEAN      NOT NULL DEFAULT FALSE,
+    link_path    VARCHAR(500) NULL,
+    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_inbox_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_inbox_recipient_created ON inbox_messages (recipient_id, created_at DESC, id DESC);
+CREATE INDEX idx_inbox_type_pinned_created ON inbox_messages (type, pinned, created_at DESC, id DESC);

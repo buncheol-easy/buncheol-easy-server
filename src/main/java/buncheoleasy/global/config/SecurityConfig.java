@@ -41,7 +41,9 @@ public class SecurityConfig {
     "/v1/groups/*/members",
     "/v1/buncheols",
     "/v1/buncheols/*",
-    "/v1/search-keywords/recent"
+    "/v1/search-keywords/recent",
+    "/v1/inbox",
+    "/v1/inbox/*"
   };
 
   /**

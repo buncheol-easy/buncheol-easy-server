@@ -9,10 +9,16 @@ public record CreateNoticeRequest(
     @NotBlank @Size(max = 200) String title,
     @Size(max = 200) String reference,
     @NotBlank @Size(max = 5000) String description,
-    boolean pinned,
+    // 선택 항목. 생략/null 이면 false(고정 안 함).
+    Boolean pinned,
     // in-app 상대 경로만 허용(`/`로 시작, 두 번째 문자로 `/`·`\` 금지). null 은 통과(연결 화면 없음).
     @Size(max = 500)
         @Pattern(
             regexp = "^/(?![/\\\\]).*",
             message = "연결 경로는 '//' 나 '/\\' 로 시작하지 않는 상대 경로(/...)여야 합니다.")
-        String linkPath) {}
+        String linkPath) {
+
+  public CreateNoticeRequest {
+    pinned = pinned != null && pinned;
+  }
+}

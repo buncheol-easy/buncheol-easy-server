@@ -48,6 +48,19 @@ class NoticeCommandServiceTest {
     assertThat(saved.getLinkPath()).isEqualTo("/notice");
   }
 
+  @Test
+  void pinned가_null이면_고정하지_않은_공지로_저장한다() {
+    CreateNoticeRequest request =
+        new CreateNoticeRequest("제목", null, "설명", null, null);
+    given(inboxMessageRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+    noticeCommandService.createNotice(request);
+
+    ArgumentCaptor<InboxMessage> captor = ArgumentCaptor.forClass(InboxMessage.class);
+    verify(inboxMessageRepository).save(captor.capture());
+    assertThat(captor.getValue().isPinned()).isFalse();
+  }
+
   @Nested
   @DisplayName("상단 고정(pin/unpin) 테스트")
   class PinTest {

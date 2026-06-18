@@ -13,6 +13,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: buncheoleasy-redis
+    restart: unless-stopped
+    volumes:
+      # 컨테이너 재생성/재배포 시 Redis 데이터(Refresh Token 등) 보존 — redis:7-alpine 기본 RDB 스냅샷이 /data 에 저장된다.
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -24,6 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: buncheoleasy-backend
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
@@ -34,6 +39,11 @@ services:
       - .env            # DB_URL(RDS), DB_USERNAME, DB_PASSWORD, OAuth, JWT 등 런타임 비밀값
     environment:
       TZ: UTC
+      # REDIS_HOST 는 .env 값과 무관하게 컨테이너 서비스명 'redis' 로 강제한다(내부 네트워크 연결).
       REDIS_HOST: redis
+      # REDIS_PORT 는 .env 값을 그대로 쓰되 미설정 시 6379 기본값(env_file 과 의도적 중복 — 기본값 보장용).
       REDIS_PORT: ${REDIS_PORT:-6379}
       # DB_URL 의도적으로 미설정 → .env 의 RDS endpoint 가 사용된다.
+
+volumes:
+  redis-data:

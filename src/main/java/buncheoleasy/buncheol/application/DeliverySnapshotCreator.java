@@ -11,8 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * 결제 확정 시점에 배송 정보를 스냅샷으로 생성한다. 참여·배송지·유저 정보를 그 시점 값으로 박제해 {@link Delivery} 로 보관하므로 이후 원본 변경에 영향받지
- * 않는다. PG 결제 완료(onPaymentCompleted) 와 개최자 수동 입금확인(HostPaymentService) 이 공유한다. 호출자 트랜잭션 안에서 실행된다.
+ * 분철 진행확정 시점에 입금확인된(CONFIRMED) 참여의 배송 정보를 스냅샷으로 생성한다. 참여·배송지·유저 정보를 그 시점 값으로 박제해 {@link Delivery} 로
+ * 보관하므로 이후 원본 변경에 영향받지 않는다. 호출자 트랜잭션({@link BuncheolAutoCloseService#finalizeExpired}) 안에서 실행된다.
  */
 @Component
 @RequiredArgsConstructor

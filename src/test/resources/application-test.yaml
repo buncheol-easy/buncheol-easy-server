@@ -42,9 +42,9 @@ app:
     # 테스트에서는 자동 마감 스케줄러를 비활성화 (의도치 않은 마감/낙찰 트리거 방지)
     auto-close:
       enabled: false
-  notification:
-    # 테스트에서는 기한 임박 알림 스케줄러를 비활성화
-    payment-due-reminder:
+  participation:
+    # 테스트에서는 입금 만료 자동취소 스케줄러를 비활성화
+    payment-expiry:
       enabled: false
 
 delivery:
@@ -55,11 +55,6 @@ delivery:
     callback-url: http://localhost:8080/v1/deliveries/webhook/callback
     connect-timeout: 3s
     read-timeout: 5s
-
-toss:
-  payments:
-    client-key: test_ck_test
-    secret-key: test_sk_test
 
 aligo:
   alimtalk:

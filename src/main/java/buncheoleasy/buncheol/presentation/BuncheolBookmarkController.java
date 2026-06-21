@@ -1,7 +1,7 @@
 package buncheoleasy.buncheol.presentation;
 
-import buncheoleasy.buncheol.application.BuncheolBookmarkService;
-import buncheoleasy.buncheol.application.MyBookmarkedBuncheolQueryService;
+import buncheoleasy.buncheol.application.bookmark.BuncheolBookmarkService;
+import buncheoleasy.buncheol.application.bookmark.MyBookmarkedBuncheolQueryService;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import java.util.List;

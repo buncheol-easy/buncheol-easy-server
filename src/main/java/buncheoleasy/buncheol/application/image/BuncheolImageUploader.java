@@ -1,4 +1,4 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.application.image;
 
 public interface BuncheolImageUploader {
 

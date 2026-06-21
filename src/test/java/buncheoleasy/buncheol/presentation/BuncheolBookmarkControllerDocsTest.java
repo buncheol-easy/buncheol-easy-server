@@ -13,8 +13,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
-import buncheoleasy.buncheol.application.BuncheolBookmarkService;
-import buncheoleasy.buncheol.application.MyBookmarkedBuncheolQueryService;
+import buncheoleasy.buncheol.application.bookmark.BuncheolBookmarkService;
+import buncheoleasy.buncheol.application.bookmark.MyBookmarkedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;

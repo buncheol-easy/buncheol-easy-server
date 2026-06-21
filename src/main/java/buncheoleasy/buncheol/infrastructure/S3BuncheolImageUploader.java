@@ -1,7 +1,7 @@
 package buncheoleasy.buncheol.infrastructure;
 
-import buncheoleasy.buncheol.application.BuncheolImageUploader;
-import buncheoleasy.buncheol.application.ImageFile;
+import buncheoleasy.buncheol.application.image.BuncheolImageUploader;
+import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.List;

@@ -1,4 +1,4 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.application.image;
 
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import java.util.List;

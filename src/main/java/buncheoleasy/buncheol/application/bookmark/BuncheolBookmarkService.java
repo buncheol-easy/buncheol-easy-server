@@ -1,4 +1,4 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.application.bookmark;
 
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;

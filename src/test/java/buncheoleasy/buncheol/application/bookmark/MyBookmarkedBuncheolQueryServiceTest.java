@@ -1,8 +1,9 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.application.bookmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
+import buncheoleasy.buncheol.application.BuncheolMemberNameResolver;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -69,7 +70,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
       Instant deadline1 = Instant.parse("2026-06-01T12:00:00Z");
       Instant deadline2 = Instant.parse("2026-06-15T12:00:00Z");
       Buncheol b1 = buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, deadline1);
-      Buncheol b2 = buncheol(20L, 200L, "분철 B", BuncheolStatus.CLOSED, deadline2);
+      Buncheol b2 = buncheol(20L, 200L, "분철 B", BuncheolStatus.CONFIRMED, deadline2);
       given(buncheolRepository.findAllByIds(List.of(10L, 20L))).willReturn(List.of(b1, b2));
 
       given(groupRepository.findAllByIds(List.of(100L, 200L)))
@@ -97,7 +98,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       assertThat(result.get(1).bookmarkId()).isEqualTo(501L);
       assertThat(result.get(1).buncheolId()).isEqualTo(20L);
-      assertThat(result.get(1).status()).isEqualTo(BuncheolStatus.CLOSED);
+      assertThat(result.get(1).status()).isEqualTo(BuncheolStatus.CONFIRMED);
       assertThat(result.get(1).thumbnailUrl()).isNull();
       assertThat(result.get(1).memberNames()).containsExactly("카리나");
     }
@@ -151,7 +152,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
       Buncheol b1 = buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, deadline);
-      Buncheol b2 = buncheol(20L, 100L, "분철 B", BuncheolStatus.CLOSED, deadline);
+      Buncheol b2 = buncheol(20L, 100L, "분철 B", BuncheolStatus.CONFIRMED, deadline);
       Buncheol b3 = buncheol(30L, 100L, "분철 C", BuncheolStatus.CANCELLED, deadline);
       given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L)))
           .willReturn(List.of(b1, b2, b3));
@@ -230,7 +231,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
           .willReturn(List.of(bm));
 
       Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
-      Buncheol closed = buncheol(10L, 100L, "분철", BuncheolStatus.CLOSED, deadline);
+      Buncheol closed = buncheol(10L, 100L, "분철", BuncheolStatus.CONFIRMED, deadline);
       given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(closed));
 
       List<MyBookmarkedBuncheolResponse> result =

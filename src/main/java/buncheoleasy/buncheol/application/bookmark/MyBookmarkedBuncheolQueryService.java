@@ -1,5 +1,6 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.application.bookmark;
 
+import buncheoleasy.buncheol.application.BuncheolMemberNameResolver;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;

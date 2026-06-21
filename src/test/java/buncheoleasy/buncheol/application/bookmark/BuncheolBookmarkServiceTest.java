@@ -1,4 +1,4 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.application.bookmark;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

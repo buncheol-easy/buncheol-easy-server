@@ -9,9 +9,10 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
-import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
-import buncheoleasy.buncheol.dto.response.MyBidResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -24,6 +25,7 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -33,8 +35,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class BuncheolDetailQueryService {
-
-  private static final int TOP_BIDS_LIMIT = 3;
 
   private final BuncheolRepository buncheolRepository;
   private final BuncheolImageRepository buncheolImageRepository;
@@ -75,22 +75,26 @@ public class BuncheolDetailQueryService {
 
     List<Participation> activeParticipations =
         participationRepository.findActiveByBuncheolId(buncheolId);
-    // bidAmount DESC, id ASC 정렬된 입력을 유지한 채 멤버별로 그룹핑한다.
-    Map<Long, List<Participation>> participationsByMember =
+    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 활성 참여가 존재하는 멤버 슬롯은 '마감'으로 표시한다.
+    Set<Long> takenMemberIds =
         activeParticipations.stream()
-            .collect(
-                Collectors.groupingBy(
-                    Participation::getBuncheolMemberId, Collectors.toUnmodifiableList()));
+            .map(Participation::getBuncheolMemberId)
+            .collect(Collectors.toSet());
+    int confirmedCount =
+        (int)
+            activeParticipations.stream()
+                .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
+                .count();
 
-    List<BuncheolMemberBidResponse> memberResponses =
+    List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberBid(bm, groupMemberByGroupMemberId, participationsByMember))
+            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, takenMemberIds))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
         toShippingOptions(buncheol.getShippingFeePolicy());
     MyParticipationSummaryResponse myParticipation =
-        userId == null ? null : toMyParticipation(userId, buncheolMembers, participationsByMember);
+        userId == null ? null : toMyParticipation(userId, activeParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
 
     return new BuncheolDetailResponse(
@@ -101,6 +105,8 @@ public class BuncheolDetailQueryService {
         buncheol.getDeadline(),
         buncheol.getDescription(),
         buncheol.getStatus(),
+        buncheol.getMinHeadcount(),
+        confirmedCount,
         imageUrls,
         shippingOptions,
         memberResponses,
@@ -108,23 +114,18 @@ public class BuncheolDetailQueryService {
         myParticipation);
   }
 
-  private BuncheolMemberBidResponse toMemberBid(
+  private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
-      final Map<Long, List<Participation>> participationsByMember) {
+      final Set<Long> takenMemberIds) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
-    List<Participation> bids =
-        participationsByMember.getOrDefault(buncheolMember.getId(), List.of());
-    List<Long> topBidAmounts =
-        bids.stream().limit(TOP_BIDS_LIMIT).map(Participation::getBidAmount).toList();
-    return new BuncheolMemberBidResponse(
+    return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
         groupMember == null ? null : groupMember.getName(),
         groupMember == null ? null : groupMember.getImage(),
-        buncheolMember.getBidMinPrice(),
-        topBidAmounts,
-        bids.size());
+        buncheolMember.getPrice(),
+        !takenMemberIds.contains(buncheolMember.getId()));
   }
 
   private List<ShippingOptionResponse> toShippingOptions(final ShippingFeePolicy policy) {
@@ -138,24 +139,16 @@ public class BuncheolDetailQueryService {
     return options;
   }
 
-  /**
-   * 슬롯 등록 순(buncheolMembers ASC) 으로 순회하며 내 입찰을 1건씩 수집한다. 도메인 규칙상 한 슬롯에 동일 유저의 활성 참여는 최대 1건이므로
-   * {@code participatedMemberCount == myBids.size()} 가 항상 성립한다.
-   */
   private MyParticipationSummaryResponse toMyParticipation(
-      final Long userId,
-      final List<BuncheolMember> buncheolMembers,
-      final Map<Long, List<Participation>> participationsByMember) {
-    List<MyBidResponse> myBids = new ArrayList<>();
-    for (BuncheolMember bm : buncheolMembers) {
-      List<Participation> bids = participationsByMember.getOrDefault(bm.getId(), List.of());
-      for (int i = 0; i < bids.size(); i++) {
-        Participation p = bids.get(i);
-        if (userId.equals(p.getParticipantId())) {
-          myBids.add(new MyBidResponse(p.getId(), bm.getId(), p.getBidAmount(), i + 1));
-        }
-      }
-    }
-    return new MyParticipationSummaryResponse(myBids.size(), myBids);
+      final Long userId, final List<Participation> activeParticipations) {
+    List<MyParticipationItemResponse> items =
+        activeParticipations.stream()
+            .filter(p -> userId.equals(p.getParticipantId()))
+            .map(
+                p ->
+                    new MyParticipationItemResponse(
+                        p.getId(), p.getBuncheolMemberId(), p.getStatus()))
+            .toList();
+    return new MyParticipationSummaryResponse(items.size(), items);
   }
 }

@@ -59,6 +59,8 @@ class SecurityConfigTest {
                   Instant.parse("2026-06-01T12:00:00Z"),
                   null,
                   null,
+                  0,
+                  0,
                   List.of(),
                   List.of(),
                   List.of(),

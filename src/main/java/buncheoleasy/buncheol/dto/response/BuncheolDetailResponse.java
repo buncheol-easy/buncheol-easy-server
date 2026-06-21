@@ -7,6 +7,8 @@ import java.util.List;
 /**
  * 분철 단건 상세 조회 응답.
  *
+ * @param minHeadcount 분철 진행 최소 인원
+ * @param confirmedCount 현재 입금확인된 참여자 수
  * @param hostedByMe 호출 유저가 이 분철의 개최자인지 여부. 비로그인 호출이면 항상 false
  * @param myParticipation 비로그인 호출 시 null
  */
@@ -18,8 +20,10 @@ public record BuncheolDetailResponse(
     Instant deadline,
     String description,
     BuncheolStatus status,
+    int minHeadcount,
+    int confirmedCount,
     List<String> imageUrls,
     List<ShippingOptionResponse> shippingOptions,
-    List<BuncheolMemberBidResponse> members,
+    List<BuncheolMemberDetailResponse> members,
     boolean hostedByMe,
     MyParticipationSummaryResponse myParticipation) {}

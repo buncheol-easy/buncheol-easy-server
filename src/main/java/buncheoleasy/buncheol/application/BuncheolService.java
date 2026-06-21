@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
+import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
@@ -83,31 +85,19 @@ public class BuncheolService {
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
-    // TODO: 추후 참여자 존재 시 패널티 부과
     final Instant now = Instant.now(clock);
-    // 취소될 활성 참여를 상태 전이 전에 선조회(알림 수신 대상). cancelActiveByBuncheolId 가 취소하는 ACTIVE_BID 집합과 동일하다.
-    // 선조회~취소 사이 신규 입찰/자가취소가 끼면 알림 대상과 실제 취소 집합이 미세하게 어긋날 수 있으나(host 단일 액터·짧은 tx) 영향은 경미하다.
+
+    // 모집 중일 때만 취소 (RECRUITING → CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
+    buncheolDomainService.cancelBuncheol(buncheolId, now);
+
+    // 취소 확정 후 같은 트랜잭션에서 활성 참여(입금확인중·입금확인됨)를 모두 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이한다.
+    // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 직전 active 참여로 수집한다.
     List<Participation> cancelledParticipations =
-        participationDomainService.findBiddingByBuncheolId(buncheolId);
-    buncheolDomainService.cancelBuncheol(buncheol);
-    // 분철과 같은 트랜잭션 안에서 활성 참여를 모두 자동 CANCELLED 로 전이.
-    // bulk UPDATE 의 flushAutomatically=true 가 위의 Buncheol dirty 변경도 함께 flush 한다.
+        participationDomainService.findActiveByBuncheolId(buncheolId);
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
     cancelledParticipations.forEach(
         participation ->
             eventPublisher.publishEvent(new BuncheolCancelledEvent(participation.getId())));
-  }
-
-  @Transactional
-  public void closeBuncheol(final Long hostId, final Long buncheolId) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    buncheol.validateOwner(hostId);
-    buncheolDomainService.closeBuncheol(buncheol);
-    // 마감 직후 같은 트랜잭션에서 낙찰자 선정: 멤버별 1순위만 AWAITING_PAYMENT(입금 대기), 2순위 이하는 ACTIVE_BID 유지(차순위 승계 후보).
-    // Buncheol RECRUITING→CLOSED 가드 덕에 정확히 1회만 실행된다 (자동 마감 스케줄러도 동일 경로 재사용).
-    List<Participation> winners =
-        participationDomainService.selectWinners(buncheolId, Instant.now(clock));
-    winners.forEach(winner -> eventPublisher.publishEvent(new ParticipationWonEvent(winner.getId())));
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

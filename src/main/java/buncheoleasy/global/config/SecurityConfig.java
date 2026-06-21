@@ -25,9 +25,6 @@ public class SecurityConfig {
     "/error",
     "/actuator/health",
     "/v1/auth/reissue-token",
-    "/v1/payments/success",
-    "/v1/payments/fail",
-    "/payment/**",
     "/v1/api-docs/**"
   };
 

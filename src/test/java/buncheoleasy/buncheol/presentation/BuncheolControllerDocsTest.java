@@ -11,7 +11,6 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,16 +24,16 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
-import buncheoleasy.buncheol.dto.response.BuncheolManagementOptionResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
-import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
-import buncheoleasy.buncheol.dto.response.MyBidResponse;
-import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
+import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
+import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
-import buncheoleasy.buncheol.dto.response.WinnerDeliveryResponse;
-import buncheoleasy.buncheol.dto.response.WinnerShippingAddressResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
@@ -123,10 +122,11 @@ class BuncheolControllerDocsTest {
           "description": "공식 스토어 단독 구성",
           "purchaseSite": "공식 스토어",
           "deadline": "%s",
+          "minHeadcount": 3,
           "gs25ShippingFee": 3000,
           "cuShippingFee": null,
           "buncheolMembers": [
-            {"memberId": 200, "bidMinPrice": 50000}
+            {"memberId": 200, "price": 50000}
           ]
         }
         """
@@ -177,12 +177,13 @@ class BuncheolControllerDocsTest {
                               "description": String?,         // 선택, 300자 이하
                               "purchaseSite": String,         // 1~200자
                               "deadline": Instant,            // 미래 시점 (UTC ISO-8601, 예: 2026-06-01T03:00:00Z)
+                              "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
                               "gs25ShippingFee": Integer?,    // 양수, gs25/cu 중 최소 1개 필수
                               "cuShippingFee": Integer?,      // 양수, gs25/cu 중 최소 1개 필수
                               "buncheolMembers": [
                                 {
                                   "memberId": Long,
-                                  "bidMinPrice": Long         // 양수
+                                  "price": Long               // 양수, 호스트 고정 금액
                                 }
                               ]
                             }
@@ -275,11 +276,11 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("[].title").description("분철 제목"),
                             fieldWithPath("[].groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("[].status")
-                                .description("분철 진행 상태 (RECRUITING | CLOSED | ...)"),
+                                .description("분철 진행 상태 (RECRUITING | CONFIRMED | CANCELLED)"),
                             fieldWithPath("[].deadline").description("분철 모집 마감일"),
                             fieldWithPath("[].memberSlotCount").description("분철에 포함된 멤버 슬롯 수"),
                             fieldWithPath("[].activeParticipationCount")
-                                .description("활성 참여자 수 (ACTIVE_BID/AWAITING_PAYMENT/CONFIRMED)"),
+                                .description("활성 참여자 수 (AWAITING_PAYMENT/CONFIRMED)"),
                             fieldWithPath("[].createdAt").description("분철 개최 일시"))
                         .build())));
   }
@@ -332,7 +333,7 @@ class BuncheolControllerDocsTest {
 
                             **응답 동작**
                             - 정렬: `createdAt DESC, id DESC` 고정
-                            - 노출 상태: `CANCELLED` 를 제외한 모든 status (`RECRUITING` / `CLOSED` / `PAID` / `SETTLING` / `FINISHED`)
+                            - 노출 상태: `CANCELLED` 를 제외한 모든 status (`RECRUITING` / `CONFIRMED`)
                             - 페이지: **커서 기반 무한스크롤**. 응답의 `nextCursor` 를 다음 요청의 `cursor` 로 그대로 전달
                             - `nextCursor` 형식: `<createdAt Instant ISO-8601>_<id>` (예: `2026-05-15T08:00:00Z_10`)
                             - `hasNext=false` 면 `nextCursor` 는 `null`
@@ -434,33 +435,23 @@ class BuncheolControllerDocsTest {
             deadline,
             "공식 스토어 단독 구성",
             BuncheolStatus.RECRUITING,
+            3,
+            1,
             List.of("https://cdn.example.com/img1.jpg"),
             List.of(
                 new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000),
                 new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
             List.of(
-                new BuncheolMemberBidResponse(
-                    101L,
-                    1001L,
-                    "민지",
-                    "https://cdn.example.com/minji.png",
-                    40_000L,
-                    List.of(90_000L, 70_000L, 50_000L),
-                    4),
-                new BuncheolMemberBidResponse(
-                    102L,
-                    1002L,
-                    "해린",
-                    "https://cdn.example.com/haerin.png",
-                    30_000L,
-                    List.of(35_000L),
-                    1)),
+                new BuncheolMemberDetailResponse(
+                    101L, 1001L, "민지", "https://cdn.example.com/minji.png", 40_000L, false),
+                new BuncheolMemberDetailResponse(
+                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", 30_000L, true)),
             true,
             new MyParticipationSummaryResponse(
-                2,
+                1,
                 List.of(
-                    new MyBidResponse(601L, 101L, 50_000L, 3),
-                    new MyBidResponse(351L, 102L, 35_000L, 1))));
+                    new MyParticipationItemResponse(
+                        601L, 101L, ParticipationStatus.AWAITING_PAYMENT))));
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -483,13 +474,13 @@ class BuncheolControllerDocsTest {
 
                             **응답 동작**
                             - `CANCELLED` 상태 분철도 200 으로 응답하며 `status` 로 구분
-                            - 멤버별 `bidMinPrice` 는 호스트가 설정한 해당 멤버 슬롯의 최소 제시 금액 (원, 양수)
-                            - 멤버별 `topBidAmounts` 는 활성 입찰 금액 DESC 상위 3개 (활성 = ACTIVE_BID / AWAITING_PAYMENT / CONFIRMED)
-                            - `activeParticipantCount` 는 해당 멤버 슬롯의 활성 참여자 수
+                            - `minHeadcount` 는 분철 진행 최소 인원, `confirmedCount` 는 현재 입금확인된 참여자 수
+                            - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, 양수)
+                            - 멤버별 `available` 은 현재 참여 가능 여부 (활성 참여가 없으면 true=판매중, 있으면 false=마감)
                             - `hostedByMe` 는 호출 유저가 개최자인지 여부 (비로그인 호출이면 항상 false)
-                            - 로그인 유저 한정: `myParticipation.bids[].rank` 는 해당 멤버 내 내 입찰 금액 순위 (1-base)
-                            - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 distinct 멤버 슬롯 수
-                            - `myParticipation.bids[].participationId` 는 입찰 철회 API 호출에 사용
+                            - 로그인 유저 한정: `myParticipation.participations[]` 는 내 활성 참여 목록 (멤버 슬롯별 1건)
+                            - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 멤버 슬롯 수
+                            - `myParticipation.participations[].participationId` 는 참여 취소·상세 조회 API 호출에 사용
 
                             **응답 예시**
                             ```json
@@ -501,6 +492,8 @@ class BuncheolControllerDocsTest {
                               "deadline": "2026-06-01T12:00:00Z",
                               "description": "공식 스토어 단독 구성",
                               "status": "RECRUITING",
+                              "minHeadcount": 3,
+                              "confirmedCount": 1,
                               "imageUrls": ["https://cdn.example.com/img1.jpg"],
                               "shippingOptions": [
                                 {"method": "GS25_HALF", "fee": 3000},
@@ -512,26 +505,23 @@ class BuncheolControllerDocsTest {
                                   "memberId": 1001,
                                   "memberName": "민지",
                                   "memberImage": "https://cdn.example.com/minji.png",
-                                  "bidMinPrice": 40000,
-                                  "topBidAmounts": [90000, 70000, 50000],
-                                  "activeParticipantCount": 4
+                                  "price": 40000,
+                                  "available": false
                                 },
                                 {
                                   "buncheolMemberId": 102,
                                   "memberId": 1002,
                                   "memberName": "해린",
                                   "memberImage": "https://cdn.example.com/haerin.png",
-                                  "bidMinPrice": 30000,
-                                  "topBidAmounts": [35000],
-                                  "activeParticipantCount": 1
+                                  "price": 30000,
+                                  "available": true
                                 }
                               ],
                               "hostedByMe": true,
                               "myParticipation": {
-                                "participatedMemberCount": 2,
-                                "bids": [
-                                  {"participationId": 601, "buncheolMemberId": 101, "bidAmount": 50000, "rank": 3},
-                                  {"participationId": 351, "buncheolMemberId": 102, "bidAmount": 35000, "rank": 1}
+                                "participatedMemberCount": 1,
+                                "participations": [
+                                  {"participationId": 601, "buncheolMemberId": 101, "status": "AWAITING_PAYMENT"}
                                 ]
                               }
                             }
@@ -556,7 +546,9 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("description").description("분철 설명").optional(),
                             fieldWithPath("status")
-                                .description("분철 진행 상태 (RECRUITING / CLOSED / CANCELLED / ...)"),
+                                .description("분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED)"),
+                            fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
+                            fieldWithPath("confirmedCount").description("현재 입금확인된 참여자 수"),
                             fieldWithPath("imageUrls").description("분철 이미지 URL 배열 (등록 순)"),
                             fieldWithPath("shippingOptions").description("지원 배송방법 + 배송비 배열"),
                             fieldWithPath("shippingOptions[].method")
@@ -570,34 +562,29 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("members[].memberImage")
                                 .description("멤버 이미지 URL")
                                 .optional(),
-                            fieldWithPath("members[].bidMinPrice")
-                                .description("호스트가 설정한 해당 멤버 슬롯의 최소 제시 금액 (원)"),
-                            fieldWithPath("members[].topBidAmounts")
-                                .description("실시간 활성 입찰 금액 DESC 상위 3개"),
-                            fieldWithPath("members[].activeParticipantCount")
-                                .description("해당 멤버 슬롯의 현재 활성 참여자 수"),
+                            fieldWithPath("members[].price")
+                                .description("호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원)"),
+                            fieldWithPath("members[].available")
+                                .description("현재 참여 가능 여부 (true=판매중 / false=마감)"),
                             fieldWithPath("hostedByMe")
                                 .description("호출 유저가 개최자인지 여부 (비로그인은 false)"),
                             fieldWithPath("myParticipation")
                                 .description("로그인 유저의 활성 참여 요약. 비로그인이면 null")
                                 .optional(),
                             fieldWithPath("myParticipation.participatedMemberCount")
-                                .description("이 분철에서 내가 활성 참여 중인 distinct 멤버 슬롯 수")
+                                .description("이 분철에서 내가 활성 참여 중인 멤버 슬롯 수")
                                 .optional(),
-                            fieldWithPath("myParticipation.bids")
-                                .description("내 활성 입찰 목록 (멤버별 1건)")
+                            fieldWithPath("myParticipation.participations")
+                                .description("내 활성 참여 목록 (멤버 슬롯별 1건)")
                                 .optional(),
-                            fieldWithPath("myParticipation.bids[].participationId")
-                                .description("참여 ID (입찰 철회 API에 사용)")
+                            fieldWithPath("myParticipation.participations[].participationId")
+                                .description("참여 ID (참여 취소·상세 조회 API에 사용)")
                                 .optional(),
-                            fieldWithPath("myParticipation.bids[].buncheolMemberId")
-                                .description("내가 입찰한 멤버 슬롯 ID")
+                            fieldWithPath("myParticipation.participations[].buncheolMemberId")
+                                .description("내가 참여한 멤버 슬롯 ID")
                                 .optional(),
-                            fieldWithPath("myParticipation.bids[].bidAmount")
-                                .description("내 입찰 금액")
-                                .optional(),
-                            fieldWithPath("myParticipation.bids[].rank")
-                                .description("해당 멤버 내 내 입찰 순위 (1-base)")
+                            fieldWithPath("myParticipation.participations[].status")
+                                .description("참여 상태 (AWAITING_PAYMENT | CONFIRMED)")
                                 .optional())
                         .build())));
   }
@@ -627,38 +614,49 @@ class BuncheolControllerDocsTest {
   @Test
   void 개최자_분철_관리_화면_조회() throws Exception {
     Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
-    WinnerDeliveryResponse winner =
-        new WinnerDeliveryResponse(
+    BuncheolManagementParticipantResponse confirmed =
+        new BuncheolManagementParticipantResponse(
             601L,
+            "유진팬",
+            101L,
+            "안유진",
+            93_000L,
             ParticipationStatus.CONFIRMED,
-            90_000L,
             Instant.parse("2026-05-28T00:00:00Z"),
-            Instant.parse("2026-05-27T09:00:00Z"),
             Instant.parse("2026-05-27T10:00:00Z"),
-            new WinnerShippingAddressResponse(ShippingMethod.GS25_HALF, "GS25 강남역점"),
-            "유진팬",
-            5001L,
-            ShippingMethod.GS25_HALF,
-            "GS25 강남역점",
-            "유진팬",
-            "010-1234-5678",
-            "1234567890",
-            DeliveryStatus.SHIPPING);
+            new RefundAccountResponse("국민은행", "12345678", "유진팬"),
+            new ManagementDeliveryResponse(
+                5001L,
+                ShippingMethod.GS25_HALF,
+                "GS25 강남역점",
+                "유진팬",
+                "010-1234-5678",
+                "1234567890",
+                DeliveryStatus.SHIPPING));
+    BuncheolManagementParticipantResponse awaiting =
+        new BuncheolManagementParticipantResponse(
+            602L,
+            "레이팬",
+            102L,
+            "레이",
+            53_000L,
+            ParticipationStatus.AWAITING_PAYMENT,
+            Instant.parse("2026-05-26T00:30:00Z"),
+            null,
+            new RefundAccountResponse("신한은행", "87654321", "레이팬"),
+            null);
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
             "호두 자랑",
             "IVE",
             "호두네",
-            BuncheolStatus.CLOSED,
+            BuncheolStatus.CONFIRMED,
             deadline,
             4,
+            4,
             1,
-            List.of(
-                new BuncheolManagementOptionResponse(
-                    101L, 1001L, "안유진", "https://cdn.example.com/yujin.png", 1, 90_000L, winner),
-                new BuncheolManagementOptionResponse(
-                    102L, 1002L, "레이", "https://cdn.example.com/rei.png", 0, null, null)));
+            List.of(confirmed, awaiting));
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -680,20 +678,13 @@ class BuncheolControllerDocsTest {
                             **호스트 본인만 호출 가능** — 그 외 호출은 403.
 
                             **응답 동작**
-                            - 분철 상태(`RECRUITING` / `CLOSED` / `PAID` / `SETTLING` / `FINISHED`) 무관하게 호출 가능
-                            - `optionCount` = 분철에 등록된 멤버 슬롯 수
-                            - `totalParticipationCount` = 분철 전체 참여 수 (ACTIVE_BID + AWAITING_PAYMENT + PAYMENT_REPORTED + CONFIRMED). 한 유저가 여러 슬롯에 입찰할 수 있어 distinct 참여자 수와 다를 수 있음
-                            - 옵션별 `participationCount` = 해당 옵션의 참여 수 (한 슬롯에 한 유저 활성 참여 최대 1건이라 사실상 참여자 수)
-                            - 옵션별 `currentHighestBid` = 해당 옵션의 최고 제시 금액 (상태 무관). 참여 없으면 null. 마감 후 미낙찰 활성 입찰가가 낙찰가보다 높으면 `winner` 금액과 다를 수 있음
-                            - 옵션별 `winner` = 현재 결제 대상(낙찰자)의 결제·배송 현황. 노출 상태는 `AWAITING_PAYMENT`(입금대기) / `PAYMENT_REPORTED`(입금신고) / `CONFIRMED`(입금확정). 낙찰 전(ACTIVE_BID 차순위 후보만 존재)이면 null (슬롯당 최대 1명이라 null 여부로 낙찰 여부 판단)
-                            - `winner.participationId` = 낙찰자 참여 ID. **개최자 수동 입금확인 API(`POST /v1/participations/{id}/payment/confirm`) 의 대상 식별자**
-                            - `winner.paymentStatus` = 결제 진행 상태 (`AWAITING_PAYMENT` / `PAYMENT_REPORTED` / `CONFIRMED`)
-                            - `winner.bidAmount` = 낙찰가 (원). 개최자가 실제 입금액 대조에 사용
-                            - `winner.paymentReportedAt` = 구매자 입금완료 신고 시각. 미신고 시 null
-                            - `winner.paymentConfirmedAt` = 개최자 입금확인 시각. 미확인 시 null
-                            - 배송 필드(`winner.deliveryId` ~ `winner.deliveryStatus`)는 입금확인(CONFIRMED) 시점 스냅샷이라 **그 전(AWAITING_PAYMENT / PAYMENT_REPORTED)에는 모두 null**
-                            - `winner.trackingNumber` = 호스트가 등록한 운송장 번호. 미등록 시 null
-                            - `winner.deliveryStatus` = `SNAPSHOTTED` (운송장 미등록) / `SHIPPING` / `DELIVERED` / `RECEIVED`
+                            - 분철 상태(`RECRUITING` / `CONFIRMED` / `CANCELLED`) 무관하게 호출 가능
+                            - `memberCount` = 분철에 등록된 멤버 슬롯 수
+                            - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
+                            - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
+                            - `participants[].refundAccount` = 참여자가 입력한 환불 계좌 (분철 취소 시 운영자가 환불)
+                            - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
+                            - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
 
                             **응답 예시**
                             ```json
@@ -702,42 +693,31 @@ class BuncheolControllerDocsTest {
                               "title": "호두 자랑",
                               "groupName": "IVE",
                               "purchaseSite": "호두네",
-                              "status": "CLOSED",
+                              "status": "CONFIRMED",
                               "deadline": "2026-05-27T00:00:00Z",
-                              "optionCount": 4,
-                              "totalParticipationCount": 1,
-                              "options": [
+                              "minHeadcount": 4,
+                              "memberCount": 4,
+                              "confirmedCount": 1,
+                              "participants": [
                                 {
+                                  "participationId": 601,
+                                  "participantNickname": "유진팬",
                                   "buncheolMemberId": 101,
-                                  "memberId": 1001,
                                   "memberName": "안유진",
-                                  "memberImage": "https://cdn.example.com/yujin.png",
-                                  "participationCount": 1,
-                                  "currentHighestBid": 90000,
-                                  "winner": {
-                                    "participationId": 601,
-                                    "paymentStatus": "CONFIRMED",
-                                    "bidAmount": 90000,
-                                    "paymentDueAt": "2026-05-28T00:00:00Z",
-                                    "paymentReportedAt": "2026-05-27T09:00:00Z",
-                                    "paymentConfirmedAt": "2026-05-27T10:00:00Z",
+                                  "amount": 93000,
+                                  "status": "CONFIRMED",
+                                  "dueAt": "2026-05-28T00:00:00Z",
+                                  "confirmedAt": "2026-05-27T10:00:00Z",
+                                  "refundAccount": {"bank": "국민은행", "account": "12345678", "holder": "유진팬"},
+                                  "delivery": {
                                     "deliveryId": 5001,
                                     "shippingMethod": "GS25_HALF",
                                     "storeName": "GS25 강남역점",
                                     "receiverNickname": "유진팬",
                                     "receiverPhoneNumber": "010-1234-5678",
                                     "trackingNumber": "1234567890",
-                                    "deliveryStatus": "SHIPPING"
+                                    "status": "SHIPPING"
                                   }
-                                },
-                                {
-                                  "buncheolMemberId": 102,
-                                  "memberId": 1002,
-                                  "memberName": "레이",
-                                  "memberImage": "https://cdn.example.com/rei.png",
-                                  "participationCount": 0,
-                                  "currentHighestBid": null,
-                                  "winner": null
                                 }
                               ]
                             }
@@ -759,122 +739,66 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("purchaseSite").description("구매처"),
                             fieldWithPath("status")
-                                .description(
-                                    "분철 진행 상태 (RECRUITING / CLOSED / PAID / SETTLING / FINISHED)"),
+                                .description("분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED)"),
                             fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
-                            fieldWithPath("optionCount").description("분철에 등록된 멤버 슬롯 수"),
-                            fieldWithPath("totalParticipationCount")
-                                .description("분철 전체 참여 수 (활성 입찰 + 결제 대기 + 입금 신고 + 낙찰 확정)"),
-                            fieldWithPath("options").description("옵션(멤버 슬롯) 배열 (등록 순)"),
-                            fieldWithPath("options[].buncheolMemberId")
+                            fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
+                            fieldWithPath("memberCount").description("분철에 등록된 멤버 슬롯 수"),
+                            fieldWithPath("confirmedCount").description("입금확인된 참여자 수"),
+                            fieldWithPath("participants")
+                                .description("활성 참여자 배열 (AWAITING_PAYMENT + CONFIRMED)"),
+                            fieldWithPath("participants[].participationId")
+                                .description("참여 ID (개최자 입금확인 API 호출에 사용)"),
+                            fieldWithPath("participants[].participantNickname")
+                                .description("참여자 닉네임. 조회 불가 시 null")
+                                .optional(),
+                            fieldWithPath("participants[].buncheolMemberId")
                                 .description("분철 멤버 슬롯 ID"),
-                            fieldWithPath("options[].memberId").description("그룹 멤버 ID"),
-                            fieldWithPath("options[].memberName")
+                            fieldWithPath("participants[].memberName")
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
-                            fieldWithPath("options[].memberImage")
-                                .description("멤버 이미지 URL. 멤버가 삭제·이동돼 조회되지 않으면 null")
+                            fieldWithPath("participants[].amount")
+                                .description("참여 금액 (멤버 가격 + 배송비, 원)"),
+                            fieldWithPath("participants[].status")
+                                .description("참여 상태 (AWAITING_PAYMENT / CONFIRMED)"),
+                            fieldWithPath("participants[].dueAt")
+                                .description("입금 기한 (UTC ISO-8601)")
                                 .optional(),
-                            fieldWithPath("options[].participationCount")
-                                .description("옵션별 참여 수 (활성/결제대기/입금신고/낙찰 합계)"),
-                            fieldWithPath("options[].currentHighestBid")
-                                .description("옵션별 최고 제시 금액 (원, 상태 무관). 참여 없으면 null")
+                            fieldWithPath("participants[].confirmedAt")
+                                .description("입금확인 시각. 미확인 시 null")
                                 .optional(),
-                            fieldWithPath("options[].winner")
-                                .description(
-                                    "현재 결제 대상(낙찰자) 결제·배송 현황. 노출 상태는 AWAITING_PAYMENT/PAYMENT_REPORTED/CONFIRMED. 낙찰 전이면 null")
+                            fieldWithPath("participants[].refundAccount")
+                                .description("참여자가 입력한 환불 계좌 (분철 취소 시 환불에 사용)"),
+                            fieldWithPath("participants[].refundAccount.bank")
+                                .description("환불 은행명"),
+                            fieldWithPath("participants[].refundAccount.account")
+                                .description("환불 계좌번호"),
+                            fieldWithPath("participants[].refundAccount.holder")
+                                .description("환불 예금주"),
+                            fieldWithPath("participants[].delivery")
+                                .description("배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전에는 null")
                                 .optional(),
-                            fieldWithPath("options[].winner.participationId")
-                                .description("낙찰자 참여 ID (개최자 입금확인 API 호출에 사용)")
+                            fieldWithPath("participants[].delivery.deliveryId")
+                                .description("배송 ID (운송장 등록 API 호출에 사용)")
                                 .optional(),
-                            fieldWithPath("options[].winner.paymentStatus")
-                                .description(
-                                    "결제 진행 상태 (AWAITING_PAYMENT / PAYMENT_REPORTED / CONFIRMED)")
-                                .optional(),
-                            fieldWithPath("options[].winner.bidAmount")
-                                .description("낙찰가 (원). 실제 입금액 대조에 사용")
-                                .optional(),
-                            fieldWithPath("options[].winner.paymentDueAt")
-                                .description("입금 기한 (UTC ISO-8601). 미설정 시 null")
-                                .optional(),
-                            fieldWithPath("options[].winner.paymentReportedAt")
-                                .description("구매자 입금완료 신고 시각. 미신고 시 null")
-                                .optional(),
-                            fieldWithPath("options[].winner.paymentConfirmedAt")
-                                .description("개최자 입금확인 시각. 미확인 시 null")
-                                .optional(),
-                            fieldWithPath("options[].winner.shippingAddress")
-                                .description(
-                                    "낙찰자가 입금 완료 신고 시 확정한 최종 배송지 (라이브 값). AWAITING_PAYMENT 이면 null")
-                                .optional(),
-                            fieldWithPath("options[].winner.shippingAddress.shippingMethod")
+                            fieldWithPath("participants[].delivery.shippingMethod")
                                 .description("배송방법 (GS25_HALF | CU_HALF)")
                                 .optional(),
-                            fieldWithPath("options[].winner.shippingAddress.storeName")
+                            fieldWithPath("participants[].delivery.storeName")
                                 .description("편의점 지점명")
                                 .optional(),
-                            fieldWithPath("options[].winner.depositorName")
-                                .description("입금 확인을 위한 이름 (현재는 닉네임, 추후 실명 대체 예정)")
-                                .optional(),
-                            fieldWithPath("options[].winner.deliveryId")
-                                .description("배송 ID (운송장 등록 API 호출에 사용). CONFIRMED 전에는 null")
-                                .optional(),
-                            fieldWithPath("options[].winner.shippingMethod")
-                                .description("배송방법 스냅샷 (GS25_HALF | CU_HALF)")
-                                .optional(),
-                            fieldWithPath("options[].winner.storeName")
-                                .description("편의점 지점명 스냅샷")
-                                .optional(),
-                            fieldWithPath("options[].winner.receiverNickname")
+                            fieldWithPath("participants[].delivery.receiverNickname")
                                 .description("수령인 닉네임 스냅샷")
                                 .optional(),
-                            fieldWithPath("options[].winner.receiverPhoneNumber")
+                            fieldWithPath("participants[].delivery.receiverPhoneNumber")
                                 .description("수령인 전화번호 스냅샷")
                                 .optional(),
-                            fieldWithPath("options[].winner.trackingNumber")
+                            fieldWithPath("participants[].delivery.trackingNumber")
                                 .description("호스트가 등록한 운송장 번호. 미등록 시 null")
                                 .optional(),
-                            fieldWithPath("options[].winner.deliveryStatus")
+                            fieldWithPath("participants[].delivery.status")
                                 .description(
                                     "배송 상태 (SNAPSHOTTED / SHIPPING / DELIVERED / RECEIVED)")
                                 .optional())
-                        .build())));
-  }
-
-  @Test
-  void 분철_수동_마감() throws Exception {
-    mockMvc
-        .perform(
-            post("/v1/buncheols/{id}/close", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
-        .andExpect(status().isNoContent())
-        .andDo(
-            document(
-                "buncheols-close",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Buncheol")
-                        .summary("분철 수동 마감")
-                        .description(
-                            """
-                            호스트가 `deadline` 도래 전 모집을 조기에 종료한다. 분철의 `status` 가 `CLOSED` 로
-                            전이되고 `closedAt` 에 호출 시각이 기록된다.
-
-                            **호출 가능 조건**
-                            - 호출 유저가 분철 개최자(host) 본인
-                            - 분철 상태가 `RECRUITING`
-
-                            **발생 가능한 에러**
-                            | HTTP | 코드 | 의미 |
-                            |------|------|------|
-                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
-                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 호스트가 아님 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 이미 `CLOSED`/`PAID`/`SETTLING`/`FINISHED`/`CANCELLED` 상태 |
-                            """)
-                        .pathParameters(parameterWithName("id").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 }

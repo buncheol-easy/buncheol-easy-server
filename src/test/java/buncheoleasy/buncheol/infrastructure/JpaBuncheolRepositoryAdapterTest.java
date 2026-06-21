@@ -47,7 +47,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
   private BuncheolParams validParams() {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 3000, null);
+    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null);
   }
 
   private Buncheol persistAndDetach(Buncheol buncheol) {
@@ -114,7 +114,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 2500, null);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -126,7 +126,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, null, 2000);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -169,17 +169,30 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void managed_엔티티에서_cancel_호출_시_더티체킹으로_DB에_CANCELLED가_반영된다() {
+    void finalizeIfRecruiting_으로_RECRUITING_분철을_CANCELLED_로_전이한다() {
       Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
-      // findById 로 managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
-      Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      managed.cancel();
-      em.flush();
+      int affected =
+          buncheolRepository.finalizeIfRecruiting(
+              buncheol.getId(), BuncheolStatus.CANCELLED, Instant.now());
       em.clear();
 
+      assertThat(affected).isEqualTo(1);
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+      assertThat(found.getFinalizedAt()).isNotNull();
+    }
+
+    @Test
+    void finalizeIfRecruiting_은_RECRUITING_이_아니면_전이하지_않는다() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(buncheol.getId(), BuncheolStatus.CONFIRMED);
+
+      int affected =
+          buncheolRepository.finalizeIfRecruiting(
+              buncheol.getId(), BuncheolStatus.CANCELLED, Instant.now());
+
+      assertThat(affected).isZero();
     }
   }
 
@@ -199,14 +212,14 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void FINISHED_분철은_포함되어_반환된다() {
+    void CONFIRMED_분철은_포함되어_반환된다() {
       Long recruiting = persistWithCreatedAt(hostId, Instant.parse("2026-05-15T08:00:00Z"));
-      Long finished = persistWithCreatedAt(hostId, Instant.parse("2026-05-10T08:00:00Z"));
-      forceStatus(finished, BuncheolStatus.FINISHED);
+      Long confirmed = persistWithCreatedAt(hostId, Instant.parse("2026-05-10T08:00:00Z"));
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
 
       List<Buncheol> result = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
 
-      assertThat(result).extracting(Buncheol::getId).containsExactly(recruiting, finished);
+      assertThat(result).extracting(Buncheol::getId).containsExactly(recruiting, confirmed);
     }
 
     @Test
@@ -238,13 +251,21 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void 호스트의_분철이_모두_FINISHED_또는_CANCELLED면_false를_반환한다() {
-      Buncheol finished = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      Buncheol cancelled = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      forceStatus(finished.getId(), BuncheolStatus.FINISHED);
-      forceStatus(cancelled.getId(), BuncheolStatus.CANCELLED);
+    void 호스트의_분철이_모두_CANCELLED면_false를_반환한다() {
+      Buncheol cancelledA = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      Buncheol cancelledB = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(cancelledA.getId(), BuncheolStatus.CANCELLED);
+      forceStatus(cancelledB.getId(), BuncheolStatus.CANCELLED);
 
       assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void 호스트의_CONFIRMED_분철이_있으면_true를_반환한다() {
+      Buncheol confirmed = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(confirmed.getId(), BuncheolStatus.CONFIRMED);
+
+      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isTrue();
     }
 
     @Test
@@ -263,13 +284,12 @@ class JpaBuncheolRepositoryAdapterTest {
     private BuncheolParams paramsWithTitleAndDescription(
         Long gId, String title, String description) {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 3000, null);
+      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null);
     }
 
     private void linkMember(Long buncheolId, Long memberId) {
       jdbcTemplate.update(
-          "INSERT INTO buncheol_members (buncheol_id, member_id, bid_min_price)"
-              + " VALUES (?, ?, ?)",
+          "INSERT INTO buncheol_members (buncheol_id, member_id, price)" + " VALUES (?, ?, ?)",
           buncheolId,
           memberId,
           10000L);

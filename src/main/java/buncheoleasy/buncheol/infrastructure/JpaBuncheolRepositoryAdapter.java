@@ -18,12 +18,9 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
 
+  // 호스트의 '진행 중인 분철' 집합 (회원탈퇴 가드용). 모집 중이거나 진행확정된 분철이 있으면 탈퇴할 수 없다.
   private static final Set<BuncheolStatus> ACTIVE_STATUSES =
-      EnumSet.of(
-          BuncheolStatus.RECRUITING,
-          BuncheolStatus.CLOSED,
-          BuncheolStatus.PAID,
-          BuncheolStatus.SETTLING);
+      EnumSet.of(BuncheolStatus.RECRUITING, BuncheolStatus.CONFIRMED);
 
   private final JpaBuncheolRepository jpaBuncheolRepository;
 
@@ -73,7 +70,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   @Override
   public List<Long> findGroupIdsByBuncheolCountSince(final Instant since, final int limit) {
     return jpaBuncheolRepository.findGroupIdsByBuncheolCountSince(
-        since, BuncheolStatus.activeOrFinished(), PageRequest.of(0, limit));
+        since, BuncheolStatus.notCancelled(), PageRequest.of(0, limit));
   }
 
   @Override
@@ -83,8 +80,9 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int closeIfRecruiting(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.closeIfRecruiting(
-        buncheolId, BuncheolStatus.CLOSED, BuncheolStatus.RECRUITING, now);
+  public int finalizeIfRecruiting(
+      final Long buncheolId, final BuncheolStatus newStatus, final Instant now) {
+    return jpaBuncheolRepository.finalizeIfRecruiting(
+        buncheolId, newStatus, BuncheolStatus.RECRUITING, now);
   }
 }

@@ -40,12 +40,12 @@ public interface BuncheolRepository {
   List<Long> findRecruitingIdsPastDeadline(Instant now, int limit);
 
   /**
-   * 분철이 RECRUITING 일 때만 CLOSED 로 전이하는 CAS UPDATE ({@code closed_at} 기록). 자동 마감 스케줄러가 다중 인스턴스
-   * 환경에서 중복 마감하지 않도록, 선점에 성공한 단일 인스턴스만 1 을 회수한다.
+   * 분철이 RECRUITING 일 때만 {@code newStatus}(CONFIRMED 또는 CANCELLED) 로 전이하는 CAS UPDATE ({@code
+   * finalized_at} 기록). 마감 판정·호스트 취소가 공용으로 쓰며, 다중 인스턴스 중복 마감과 마감/취소 경합 상황에서 선점에 성공한 한쪽만 1 을 회수한다.
    *
    * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션({@code @Transactional}) 이 필수다.
    *
    * @return 갱신된 행 수 (0 이면 이미 다른 인스턴스가 마감했거나 RECRUITING 이 아님)
    */
-  int closeIfRecruiting(Long buncheolId, Instant now);
+  int finalizeIfRecruiting(Long buncheolId, BuncheolStatus newStatus, Instant now);
 }

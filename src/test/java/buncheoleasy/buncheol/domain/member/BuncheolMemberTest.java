@@ -17,7 +17,7 @@ class BuncheolMemberTest {
 
   private static final Long BUNCHEOL_ID = 1L;
   private static final Long MEMBER_ID = 10L;
-  private static final long BID_MIN_PRICE = 10_000L;
+  private static final long PRICE = 10_000L;
 
   @Nested
   @DisplayName("BuncheolMember 생성 테스트")
@@ -25,16 +25,16 @@ class BuncheolMemberTest {
 
     @Test
     void 정상_생성에_성공한다() {
-      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, BID_MIN_PRICE);
+      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, PRICE);
 
       assertThat(member.getBuncheolId()).isEqualTo(BUNCHEOL_ID);
       assertThat(member.getMemberId()).isEqualTo(MEMBER_ID);
-      assertThat(member.getBidMinPrice()).isEqualTo(BID_MIN_PRICE);
+      assertThat(member.getPrice()).isEqualTo(PRICE);
     }
 
     @Test
     void buncheolId가_null이면_예외가_발생한다() {
-      assertThatThrownBy(() -> BuncheolMember.create(null, MEMBER_ID, BID_MIN_PRICE))
+      assertThatThrownBy(() -> BuncheolMember.create(null, MEMBER_ID, PRICE))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -42,7 +42,7 @@ class BuncheolMemberTest {
 
     @Test
     void memberId가_null이면_예외가_발생한다() {
-      assertThatThrownBy(() -> BuncheolMember.create(BUNCHEOL_ID, null, BID_MIN_PRICE))
+      assertThatThrownBy(() -> BuncheolMember.create(BUNCHEOL_ID, null, PRICE))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -50,71 +50,57 @@ class BuncheolMemberTest {
   }
 
   @Nested
-  @DisplayName("제시 최소 금액 검증 테스트")
-  class ValidateBidMinPriceTest {
+  @DisplayName("멤버 금액 검증 테스트")
+  class ValidatePriceTest {
 
     @ParameterizedTest
     @ValueSource(longs = {0L, -1L, -50_000L})
-    void 제시_최소_금액이_0_이하면_예외가_발생한다(long price) {
+    void 금액이_0_이하면_예외가_발생한다(long price) {
       assertThatThrownBy(() -> BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, price))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID);
-    }
-
-    @Test
-    void 제시_최소_금액이_양수면_유효하다() {
-      assertThatCode(() -> BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, 1L))
-          .doesNotThrowAnyException();
-    }
-  }
-
-  @Nested
-  @DisplayName("제시 최소 금액 수정 테스트")
-  class UpdateBidMinPriceTest {
-
-    @Test
-    void 정상_수정한다() {
-      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, BID_MIN_PRICE);
-
-      member.updateBidMinPrice(20_000L);
-
-      assertThat(member.getBidMinPrice()).isEqualTo(20_000L);
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
     }
 
     @ParameterizedTest
-    @ValueSource(longs = {0L, -1L})
-    void 수정_금액이_0_이하면_예외가_발생한다(long price) {
-      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, BID_MIN_PRICE);
-
-      assertThatThrownBy(() -> member.updateBidMinPrice(price))
+    @ValueSource(longs = {1L, 99L, 150L, 10_050L})
+    void 금액이_100원_단위가_아니면_예외가_발생한다(long price) {
+      assertThatThrownBy(() -> BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, price))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID);
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {100L, 10_000L, 31_900L})
+    void 금액이_100원_단위의_양수면_유효하다(long price) {
+      assertThatCode(() -> BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, price))
+          .doesNotThrowAnyException();
     }
   }
 
   @Nested
-  @DisplayName("제시 금액 검증 테스트")
-  class ValidateBidAmountTest {
+  @DisplayName("멤버 금액 수정 테스트")
+  class UpdatePriceTest {
 
     @Test
-    void 최소_금액보다_작으면_예외가_발생한다() {
-      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, BID_MIN_PRICE);
+    void 정상_수정한다() {
+      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, PRICE);
 
-      assertThatThrownBy(() -> member.validateBidAmount(BID_MIN_PRICE - 1))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_BID_AMOUNT_INVALID);
+      member.updatePrice(20_000L);
+
+      assertThat(member.getPrice()).isEqualTo(20_000L);
     }
 
-    @Test
-    void 최소_금액과_같거나_크면_유효하다() {
-      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, BID_MIN_PRICE);
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1L, 150L})
+    void 수정_금액이_유효하지_않으면_예외가_발생한다(long price) {
+      BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, PRICE);
 
-      assertThatCode(() -> member.validateBidAmount(BID_MIN_PRICE)).doesNotThrowAnyException();
-      assertThatCode(() -> member.validateBidAmount(BID_MIN_PRICE * 100))
-          .doesNotThrowAnyException();
+      assertThatThrownBy(() -> member.updatePrice(price))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
     }
   }
 }

@@ -20,7 +20,7 @@ public class BuncheolMemberDomainService {
 
     List<BuncheolMember> newBuncheolMembers =
         params.stream()
-            .map(param -> BuncheolMember.create(buncheolId, param.memberId(), param.bidMinPrice()))
+            .map(param -> BuncheolMember.create(buncheolId, param.memberId(), param.price()))
             .toList();
 
     buncheolMemberRepository.saveAll(newBuncheolMembers);

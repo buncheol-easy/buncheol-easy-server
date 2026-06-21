@@ -2,11 +2,12 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -14,25 +15,10 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaParticipationRepository extends JpaRepository<Participation, Long> {
 
-  /**
-   * active_participant_id (DB STORED 컬럼) 로 활성 참여 조회.
-   *
-   * <p>active_participant_id 는 schema.sql 의 participations 테이블에 정의된 STORED generated column 으로
-   * status 가 활성 상태일 때만 participant_id 값을 가지며 비활성 상태면 NULL. 코드 레벨에서 엔티티에 매핑하지 않고 이 native query 에서만
-   * 사용한다.
-   */
-  @Query(
-      value =
-          "SELECT * FROM participations "
-              + "WHERE buncheol_member_id = :buncheolMemberId "
-              + "AND active_participant_id = :participantId LIMIT 1",
-      nativeQuery = true)
-  Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
-      @Param("buncheolMemberId") Long buncheolMemberId, @Param("participantId") Long participantId);
-
   List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
 
-  boolean existsByParticipantIdAndStatusIn(Long participantId, List<ParticipationStatus> statuses);
+  boolean existsByParticipantIdAndStatusIn(
+      Long participantId, Collection<ParticipationStatus> statuses);
 
   @Query(
       "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount("
@@ -42,73 +28,63 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "GROUP BY p.buncheolId")
   List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(
       @Param("buncheolIds") List<Long> buncheolIds,
-      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
 
   @Query(
       "SELECT p FROM Participation p "
-          + "WHERE p.buncheolId = :buncheolId AND p.status IN :activeStatuses "
-          + "ORDER BY p.bidAmount DESC, p.id ASC")
-  List<Participation> findActiveByBuncheolId(
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses "
+          + "ORDER BY p.createdAt ASC, p.id ASC")
+  List<Participation> findByBuncheolIdAndStatusIn(
       @Param("buncheolId") Long buncheolId,
-      @Param("activeStatuses") List<ParticipationStatus> activeStatuses);
+      @Param("statuses") Collection<ParticipationStatus> statuses);
 
-  /** 차순위 승계 후보: ACTIVE_BID + closedRank IS NOT NULL 중 closedRank ASC, id ASC 첫 건. */
-  Optional<Participation>
-      findFirstByBuncheolMemberIdAndStatusAndClosedRankNotNullOrderByClosedRankAscIdAsc(
-          Long buncheolMemberId, ParticipationStatus status);
+  List<Participation> findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
+      Long buncheolId, ParticipationStatus status);
 
-  /** 슬롯 내 결제 진행 중 참여 존재 여부 (중복 승계 가드). */
-  boolean existsByBuncheolMemberIdAndStatusIn(
-      Long buncheolMemberId, List<ParticipationStatus> statuses);
+  int countByBuncheolIdAndStatus(Long buncheolId, ParticipationStatus status);
 
-  @Query(
-      "SELECT p FROM Participation p "
-          + "WHERE p.status = :status AND p.dueAt > :now AND p.dueAt <= :dueBefore")
-  List<Participation> findByStatusAndDueAtWithin(
-      @Param("status") ParticipationStatus status,
-      @Param("now") Instant now,
-      @Param("dueBefore") Instant dueBefore);
+  List<Participation> findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
+      ParticipationStatus status, Instant dueAt, Limit limit);
 
-  /** status 가 expectedStatus 인 경우에만 갱신 (compare-and-swap). */
+  /** AWAITING_PAYMENT 이고 입금 기한 내일 때만 CONFIRMED 로 전이 (호스트 수동 입금확인 CAS). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
-          + "SET p.dueAt = :dueAt, "
-          + "    p.closedRank = :closedRank, "
-          + "    p.failReason = :failReason, "
-          + "    p.finalizedAt = :finalizedAt, "
-          + "    p.status = :newStatus, "
-          + "    p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.status = :expectedStatus")
-  int updateStatusIfMatches(
+          + "SET p.status = :confirmedStatus, p.confirmedAt = :now, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.status = :awaitingStatus AND p.dueAt >= :now")
+  int confirmPaymentIfAwaiting(
       @Param("id") Long id,
-      @Param("dueAt") Instant dueAt,
-      @Param("closedRank") Integer closedRank,
-      @Param("failReason") String failReason,
-      @Param("finalizedAt") Instant finalizedAt,
-      @Param("newStatus") ParticipationStatus newStatus,
-      @Param("now") Instant now,
-      @Param("expectedStatus") ParticipationStatus expectedStatus);
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("now") Instant now);
 
-  /**
-   * 분철의 활성 참여를 모두 CANCELLED 로 일괄 전이. 호스트가 분철을 취소한 흐름에서 호출되어 좀비 참여가 남지 않도록 한다.
-   *
-   * <p>bulk UPDATE 는 {@link Participation#cancel(Instant)} 의 도메인 상태 가드를 우회한다. 호출자는 호스트가 분철을
-   * 취소할 때만 진입한다는 invariant 를 책임지며, 향후 도메인 이벤트({@code ParticipationCancelled} 등)가 도입되면
-   * {@code ApplicationEventPublisher} 로 cascade 발행하는 패턴으로 전환할 것.
-   *
-   * <p>또한 {@code @PreUpdate} 콜백이 발동되지 않으므로 {@code updatedAt} 을 직접 set 한다.
-   */
+  /** AWAITING_PAYMENT 일 때만 지정 사유로 CANCELLED 로 전이 (자발 취소 / 입금 만료 CAS). 만료는 dueExpired=true 로 기한 경과를 함께 가드한다. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
-          + "SET p.status = :cancelledStatus, "
-          + "    p.finalizedAt = :now, "
-          + "    p.updatedAt = :now "
-          + "WHERE p.buncheolId = :buncheolId AND p.status IN :activeStatuses")
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.status = :awaitingStatus "
+          + "AND (:dueExpired = FALSE OR p.dueAt <= :now)")
+  int cancelIfAwaiting(
+      @Param("id") Long id,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
+      @Param("dueExpired") boolean dueExpired,
+      @Param("now") Instant now);
+
+  /** 분철의 특정 상태 참여를 모두 지정 사유로 CANCELLED 로 일괄 전이 (분철 취소 cascade). */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :targetStatuses")
   int cancelByBuncheolIdAndStatusIn(
       @Param("buncheolId") Long buncheolId,
-      @Param("activeStatuses") Set<ParticipationStatus> activeStatuses,
+      @Param("targetStatuses") Collection<ParticipationStatus> targetStatuses,
       @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 }

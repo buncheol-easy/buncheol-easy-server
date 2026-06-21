@@ -71,15 +71,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Long> findIdsByStatusAndDeadlineBefore(
       @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
-  // RECRUITING → CLOSED CAS UPDATE. 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감을 막는다.
+  // RECRUITING → CONFIRMED/CANCELLED CAS UPDATE (마감 판정·호스트 취소 공용). 선점한 단일 인스턴스만 1 을 회수해
+  // 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Buncheol b "
-          + "SET b.status = :closedStatus, b.closedAt = :now, b.updatedAt = :now "
+          + "SET b.status = :newStatus, b.finalizedAt = :now, b.updatedAt = :now "
           + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus")
-  int closeIfRecruiting(
+  int finalizeIfRecruiting(
       @Param("buncheolId") Long buncheolId,
-      @Param("closedStatus") BuncheolStatus closedStatus,
+      @Param("newStatus") BuncheolStatus newStatus,
       @Param("recruitingStatus") BuncheolStatus recruitingStatus,
       @Param("now") Instant now);
 }

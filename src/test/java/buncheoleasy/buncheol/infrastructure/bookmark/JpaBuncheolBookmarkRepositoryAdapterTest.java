@@ -59,7 +59,7 @@ class JpaBuncheolBookmarkRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, title, null, "스토어명", deadline, 3000, null),
+            new BuncheolParams(groupId, title, null, "스토어명", deadline, 1, 3000, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();

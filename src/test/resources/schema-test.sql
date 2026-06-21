@@ -2,7 +2,6 @@
 -- FK 역순으로 DROP (자식 → 부모 순서)
 DROP TABLE IF EXISTS inbox_messages;
 DROP TABLE IF EXISTS deliveries;
-DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS participations;
 DROP TABLE IF EXISTS buncheol_images;
 DROP TABLE IF EXISTS buncheol_members;
@@ -101,10 +100,11 @@ CREATE TABLE buncheols
     description       TEXT         NULL,
     purchase_site     VARCHAR(200) NOT NULL,
     deadline          TIMESTAMP    NOT NULL,
+    min_headcount     INT          NOT NULL,
     gs25_shipping_fee INT          NULL,
     cu_shipping_fee   INT          NULL,
     status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING',
-    closed_at         TIMESTAMP    NULL,
+    finalized_at      TIMESTAMP    NULL,
     created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -122,12 +122,12 @@ CREATE INDEX idx_buncheols_status_deadline ON buncheols (status, deadline);
 
 CREATE TABLE buncheol_members
 (
-    id            BIGINT    NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT    NOT NULL,
-    member_id     BIGINT    NOT NULL,
-    bid_min_price BIGINT    NOT NULL,
-    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id          BIGINT    NOT NULL AUTO_INCREMENT,
+    buncheol_id BIGINT    NOT NULL,
+    member_id   BIGINT    NOT NULL,
+    price       BIGINT    NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -153,25 +153,24 @@ CREATE INDEX idx_buncheol_images_buncheol_id ON buncheol_images (buncheol_id);
 
 CREATE TABLE participations
 (
-    id                    BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id           BIGINT       NOT NULL,
-    buncheol_member_id    BIGINT       NOT NULL,
-    participant_id        BIGINT       NOT NULL,
-    shipping_address_id   BIGINT       NOT NULL,
-    bid_amount            BIGINT       NOT NULL,
-    due_at                TIMESTAMP    NULL,
-    closed_rank           INT          NULL,
-    fail_reason           VARCHAR(100) NULL,
-    finalized_at          TIMESTAMP    NULL,
-    payment_reported_at   TIMESTAMP    NULL,
-    payment_confirmed_at  TIMESTAMP    NULL,
-    status                VARCHAR(30)  NOT NULL,
-    version               BIGINT       NOT NULL DEFAULT 0,
-    -- H2 generated column 안정성 이슈로 테스트 스키마에서는 일반 컬럼으로 유지
-    confirmed_member_id   BIGINT       NULL,
-    active_participant_id BIGINT       NULL,
-    created_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                  BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id         BIGINT       NOT NULL,
+    buncheol_member_id  BIGINT       NOT NULL,
+    participant_id      BIGINT       NOT NULL,
+    shipping_address_id BIGINT       NOT NULL,
+    amount              BIGINT       NOT NULL,
+    refund_bank         VARCHAR(50)  NOT NULL,
+    refund_account      VARCHAR(50)  NOT NULL,
+    refund_holder       VARCHAR(50)  NOT NULL,
+    due_at              TIMESTAMP    NOT NULL,
+    confirmed_at        TIMESTAMP    NULL,
+    cancelled_at        TIMESTAMP    NULL,
+    cancel_reason       VARCHAR(30)  NULL,
+    status              VARCHAR(30)  NOT NULL,
+    -- 활성 상태일 때만 멤버 슬롯 id 값을 갖는 가상 컬럼 (선착순 유니크용). users 테이블과 동일하게 H2 computed column 사용.
+    active_member_id    BIGINT AS (CASE WHEN status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN buncheol_member_id END),
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -180,37 +179,10 @@ CREATE TABLE participations
     CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_participations_buncheol_id ON participations (buncheol_id);
-CREATE UNIQUE INDEX uq_participations_confirmed_member ON participations (confirmed_member_id);
-CREATE UNIQUE INDEX uq_participations_active_member_participant ON participations (buncheol_member_id, active_participant_id);
-CREATE INDEX idx_participations_member_status ON participations (buncheol_member_id, status);
+CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_member_id);
+CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
+CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);
-
-CREATE TABLE payments
-(
-    id                BIGINT       NOT NULL AUTO_INCREMENT,
-    participation_id  BIGINT       NOT NULL,
-    tx_type           VARCHAR(20)  NOT NULL,
-    order_id          VARCHAR(100) NOT NULL,
-    payment_key       VARCHAR(200) NULL,
-    parent_payment_id BIGINT       NULL,
-    amount            BIGINT       NOT NULL,
-    status            VARCHAR(20)  NOT NULL,
-    reason            VARCHAR(255) NULL,
-    requested_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    approved_at       TIMESTAMP    NULL,
-    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (id),
-    CONSTRAINT uq_payments_order_id UNIQUE (order_id),
-    CONSTRAINT uq_payments_payment_key UNIQUE (payment_key),
-    CONSTRAINT fk_payments_participation FOREIGN KEY (participation_id) REFERENCES participations (id) ON DELETE CASCADE,
-    CONSTRAINT fk_payments_parent FOREIGN KEY (parent_payment_id) REFERENCES payments (id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_payments_participation_id ON payments (participation_id);
-CREATE INDEX idx_payments_tx_type_status ON payments (tx_type, status);
 
 CREATE TABLE deliveries
 (

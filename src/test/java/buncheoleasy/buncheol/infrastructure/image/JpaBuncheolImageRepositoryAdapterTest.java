@@ -50,7 +50,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -178,6 +178,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
                   null,
                   "다른 스토어",
                   Instant.now().plus(7, ChronoUnit.DAYS),
+                  1,
                   3000,
                   null),
               Instant.now());

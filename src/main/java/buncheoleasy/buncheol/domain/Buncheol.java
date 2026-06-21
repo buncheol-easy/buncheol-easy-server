@@ -48,9 +48,13 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   @Column(name = "purchase_site", nullable = false, length = 200)
   private String purchaseSite;
 
-  // 참여(제시) 신청 마감 시각. 이 시각 이후엔 새 참여 불가.
+  // 참여 신청 마감 시각. 이 시각 이후엔 새 참여가 불가하고, 마감 판정(진행확정/취소)이 이뤄진다.
   @Column(nullable = false)
   private Instant deadline;
+
+  // 분철 진행 최소 인원. 마감 시점에 입금확인된(CONFIRMED) 참여자가 이 수 이상이면 진행확정, 미만이면 취소된다.
+  @Column(name = "min_headcount", nullable = false)
+  private int minHeadcount;
 
   @Embedded private ShippingFeePolicy shippingFeePolicy;
 
@@ -58,9 +62,9 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   @Column(nullable = false, length = 30)
   private BuncheolStatus status;
 
-  // 분철이 RECRUITING → CLOSED 로 실제 마감된 시각 (deadline 도달 또는 호스트 수동 마감).
-  @Column(name = "closed_at")
-  private Instant closedAt;
+  // 분철이 RECRUITING → CONFIRMED/CANCELLED 로 마감 판정된 시각 (호스트 취소 또는 마감 스케줄러).
+  @Column(name = "finalized_at")
+  private Instant finalizedAt;
 
   public static Buncheol create(final Long hostId, final BuncheolParams params, final Instant now) {
     return new Buncheol(hostId, params, now);
@@ -74,6 +78,7 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     this.description = params.description();
     this.purchaseSite = params.purchaseSite();
     this.deadline = params.deadline();
+    this.minHeadcount = params.minHeadcount();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
     this.status = BuncheolStatus.RECRUITING;
   }
@@ -111,31 +116,13 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     }
   }
 
-  // 참여자가 선택한 배송수단의 배송비. 낙찰자 결제 금액(제시가 + 배송비) 계산에 사용한다.
+  // 참여자가 선택한 배송수단의 배송비. 참여자가 입금할 총액(멤버 금액 + 배송비) 계산에 사용한다.
   public long shippingFeeFor(final ShippingMethod shippingMethod) {
     return shippingFeePolicy.feeFor(shippingMethod);
   }
 
   public boolean isHost(final Long userId) {
     return hostId.equals(userId);
-  }
-
-  public void cancel() {
-    if (!status.isCancellable()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
-    }
-    status = BuncheolStatus.CANCELLED;
-  }
-
-  // 호스트가 deadline 도래 전 모집을 조기에 종료. RECRUITING 일 때만 허용.
-  // deadline 경과 후에도 status 가 RECRUITING 인 잔류 케이스 (자동 마감 스케줄러 도입 전) 도 정리 대상이므로
-  // deadline 비교는 하지 않는다.
-  public void close(final Instant now) {
-    if (!status.isCloseable()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-    }
-    this.status = BuncheolStatus.CLOSED;
-    this.closedAt = now;
   }
 
   private void validate(final Long hostId, final BuncheolParams params, final Instant now) {
@@ -145,6 +132,7 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     validateDescription(params.description());
     validatePurchaseSite(params.purchaseSite());
     validateDeadline(params.deadline(), now);
+    validateMinHeadcount(params.minHeadcount());
   }
 
   private void validateHostAndParams(final Long hostId, final BuncheolParams params) {
@@ -186,6 +174,12 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   private void validateDeadline(final Instant deadline, final Instant now) {
     if (deadline == null || !deadline.isAfter(now)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
+    }
+  }
+
+  private void validateMinHeadcount(final int minHeadcount) {
+    if (minHeadcount < 1) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_INVALID);
     }
   }
 }

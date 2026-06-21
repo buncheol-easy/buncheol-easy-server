@@ -9,12 +9,15 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -35,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 @DisplayName("JpaParticipationRepositoryAdapter 테스트")
 class JpaParticipationRepositoryAdapterTest {
+
+  private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
 
   @Autowired private ParticipationRepository participationRepository;
   @Autowired private BuncheolRepository buncheolRepository;
@@ -61,24 +66,29 @@ class JpaParticipationRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
+    em.clear();
     return buncheol.getId();
   }
 
-  private Long createBuncheolMember(Long buncheolId) {
-    BuncheolMember member = BuncheolMember.create(buncheolId, groupMemberId, 30_000L);
+  private Long createBuncheolMember(final Long buncheolId) {
+    return createBuncheolMember(buncheolId, groupMemberId);
+  }
+
+  private Long createBuncheolMember(final Long buncheolId, final Long memberId) {
+    BuncheolMember member = BuncheolMember.create(buncheolId, memberId, 30_000L);
     buncheolMemberRepository.saveAll(List.of(member));
     em.flush();
+    em.clear();
     return member.getId();
   }
 
-  private Long insertShippingAddress(Long userId, String storeName) {
+  private Long insertShippingAddress(final Long userId, final String storeName) {
     jdbcTemplate.update(
-        "INSERT INTO shipping_addresses (user_id, shipping_method, store_name)"
-            + " VALUES (?, ?, ?)",
+        "INSERT INTO shipping_addresses (user_id, shipping_method, store_name)" + " VALUES (?, ?, ?)",
         userId,
         "GS25_HALF",
         storeName);
@@ -89,51 +99,87 @@ class JpaParticipationRepositoryAdapterTest {
         storeName);
   }
 
-  private void insertParticipation(
-      Long buncheolId,
-      Long buncheolMemberId,
-      Long shippingAddressId,
-      long bidAmount,
-      ParticipationStatus status) {
+  // 새 모델 컬럼(amount, refund_*, due_at, status, cancel_reason)으로 participation 한 건을 직접 삽입하고 id 를 반환한다.
+  private Long insertParticipation(
+      final Long buncheolId,
+      final Long buncheolMemberId,
+      final Long userId,
+      final Long shippingAddressId,
+      final long amount,
+      final Instant dueAt,
+      final ParticipationStatus status,
+      final ParticipationCancelReason cancelReason) {
     jdbcTemplate.update(
         "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-            + " shipping_address_id, bid_amount, status, active_participant_id) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            + " shipping_address_id, amount, refund_bank, refund_account, refund_holder,"
+            + " due_at, status, cancel_reason)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         buncheolId,
         buncheolMemberId,
-        participantId,
+        userId,
         shippingAddressId,
-        bidAmount,
+        amount,
+        REFUND_ACCOUNT.bank(),
+        REFUND_ACCOUNT.account(),
+        REFUND_ACCOUNT.holder(),
+        Timestamp.from(dueAt),
         status.name(),
-        status == ParticipationStatus.ACTIVE_BID
-                || status == ParticipationStatus.AWAITING_PAYMENT
-                || status == ParticipationStatus.PAYMENT_REPORTED
-                || status == ParticipationStatus.CONFIRMED
-            ? participantId
-            : null);
+        cancelReason == null ? null : cancelReason.name());
+    return jdbcTemplate.queryForObject(
+        "SELECT id FROM participations WHERE shipping_address_id = ? ORDER BY id DESC LIMIT 1",
+        Long.class,
+        shippingAddressId);
   }
+
+  private String statusOf(final Long participationId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT status FROM participations WHERE id = ?", String.class, participationId);
+  }
+
+  private String cancelReasonOf(final Long participationId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT cancel_reason FROM participations WHERE id = ?", String.class, participationId);
+  }
+
+  // saveIfRecruiting 은 운영(MySQL) 전용 raw JDBC 조건부 INSERT(UTC_TIMESTAMP() + RETURN_GENERATED_KEYS 단일키
+  // 가정)라 H2 어댑터 테스트로 직접 검증하지 않는다. 선착순 슬롯 가드(PARTICIPATION_ALREADY_EXISTS)·모집중 조건은
+  // active_member_id UNIQUE 제약과 도메인/서비스 레벨 테스트에서 다룬다. 아래 케이스들은 raw INSERT 픽스처로 조회·CAS 메서드를
+  // 검증한다.
 
   @Nested
   @DisplayName("findAllByParticipantIdOrderByCreatedAtDesc")
   class FindAllByParticipantIdTest {
 
     @Test
-    void 참여자_기준_최신_순으로_조회한다() {
+    void 참여자_기준으로_모든_참여를_조회한다() {
       Long buncheolId = createBuncheol();
       Long buncheolMemberId = createBuncheolMember(buncheolId);
       Long addrA = insertShippingAddress(participantId, "강남역점A");
       Long addrB = insertShippingAddress(participantId, "강남역점B");
-      // CANCELLED 후 ACTIVE_BID (active_participant_id UNIQUE 제약 회피)
+      // CANCELLED 후 AWAITING_PAYMENT (active_member_id UNIQUE 제약 회피)
       insertParticipation(
-          buncheolId, buncheolMemberId, addrA, 35_000L, ParticipationStatus.CANCELLED);
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addrA,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.SELF_CANCELLED);
       insertParticipation(
-          buncheolId, buncheolMemberId, addrB, 40_000L, ParticipationStatus.ACTIVE_BID);
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addrB,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
 
       List<Participation> result =
           participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(participantId);
 
       assertThat(result).hasSize(2);
-      // 두 row 모두 같은 사용자 / 최신 정렬이지만 동일 timestamp 가능하므로 size 와 set 으로 확인
       assertThat(result).allMatch(p -> p.getParticipantId().equals(participantId));
     }
 
@@ -147,25 +193,89 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("existsActiveByParticipantId — 탈퇴 가드용 활성 참여 존재 여부")
+  class ExistsActiveByParticipantIdTest {
+
+    @Test
+    void 활성_참여가_있으면_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "활성매장");
+      insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThat(participationRepository.existsActiveByParticipantId(participantId)).isTrue();
+    }
+
+    @Test
+    void 취소된_참여만_있으면_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "취소매장");
+      insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.SELF_CANCELLED);
+
+      assertThat(participationRepository.existsActiveByParticipantId(participantId)).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("countActiveByBuncheolIds — JPQL constructor expression 검증")
   class CountActiveByBuncheolIdsTest {
 
     @Test
-    void 활성_상태별로_분철_단위_카운트를_집계한다() {
+    void 활성_상태_참여를_분철_단위로_집계한다() {
       Long buncheolA = createBuncheol();
       Long buncheolB = createBuncheol();
       Long bmA = createBuncheolMember(buncheolA);
       Long bmB = createBuncheolMember(buncheolB);
       Long addrA = insertShippingAddress(participantId, "분철A_매장");
       Long addrB = insertShippingAddress(participantId, "분철B_매장");
-
-      // A: ACTIVE_BID 1건
-      insertParticipation(buncheolA, bmA, addrA, 35_000L, ParticipationStatus.ACTIVE_BID);
-      // B: CONFIRMED 1건 + CANCELLED 1건 → 활성은 1
-      insertParticipation(buncheolB, bmB, addrB, 50_000L, ParticipationStatus.CANCELLED);
-      // 같은 참여자가 같은 슬롯에 다시 입찰하려면 다른 배송지로
       Long addrB2 = insertShippingAddress(participantId, "분철B_매장2");
-      insertParticipation(buncheolB, bmB, addrB2, 60_000L, ParticipationStatus.CONFIRMED);
+
+      // A: AWAITING_PAYMENT 1건
+      insertParticipation(
+          buncheolA,
+          bmA,
+          participantId,
+          addrA,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      // B: CANCELLED 1건 + CONFIRMED 1건 → 활성은 1
+      insertParticipation(
+          buncheolB,
+          bmB,
+          participantId,
+          addrB,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.SELF_CANCELLED);
+      insertParticipation(
+          buncheolB,
+          bmB,
+          participantId,
+          addrB2,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
 
       List<BuncheolActiveParticipationCount> result =
           participationRepository.countActiveByBuncheolIds(List.of(buncheolA, buncheolB));
@@ -193,7 +303,15 @@ class JpaParticipationRepositoryAdapterTest {
       Long buncheolId = createBuncheol();
       Long bmId = createBuncheolMember(buncheolId);
       Long addr = insertShippingAddress(participantId, "단일매장");
-      insertParticipation(buncheolId, bmId, addr, 35_000L, ParticipationStatus.CANCELLED);
+      insertParticipation(
+          buncheolId,
+          bmId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.SELF_CANCELLED);
 
       List<BuncheolActiveParticipationCount> result =
           participationRepository.countActiveByBuncheolIds(List.of(buncheolId));
@@ -207,24 +325,51 @@ class JpaParticipationRepositoryAdapterTest {
   class FindActiveByBuncheolIdTest {
 
     @Test
-    void 활성_상태_참여를_bid_amount_DESC_id_ASC_로_조회한다() {
+    void AWAITING_PAYMENT_과_CONFIRMED_를_모두_포함하고_CANCELLED_는_제외한다() {
       Long buncheolId = createBuncheol();
       Long bmId = createBuncheolMember(buncheolId);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "다른멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
       Long otherParticipantId = TestUserFixture.insertUser(jdbcTemplate, "other_xx");
       Long addrA = insertShippingAddress(participantId, "주매장A");
       Long addrB = insertShippingAddress(otherParticipantId, "타매장B");
       Long addrC = insertShippingAddress(otherParticipantId, "타매장C");
 
-      insertParticipation(buncheolId, bmId, addrA, 50_000L, ParticipationStatus.ACTIVE_BID);
-      insertParticipationForUser(
-          buncheolId, bmId, otherParticipantId, addrB, 70_000L, ParticipationStatus.ACTIVE_BID);
-      // CANCELLED 는 제외돼야 한다
-      insertParticipationForUser(
-          buncheolId, bmId, otherParticipantId, addrC, 90_000L, ParticipationStatus.CANCELLED);
+      insertParticipation(
+          buncheolId,
+          bmId,
+          participantId,
+          addrA,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          buncheolId,
+          bmId2,
+          otherParticipantId,
+          addrB,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      // CANCELLED 는 제외돼야 한다 (같은 슬롯 bmId 에 비활성으로 추가)
+      insertParticipation(
+          buncheolId,
+          bmId,
+          otherParticipantId,
+          addrC,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.SELF_CANCELLED);
 
       List<Participation> result = participationRepository.findActiveByBuncheolId(buncheolId);
 
-      assertThat(result).extracting(Participation::getBidAmount).containsExactly(70_000L, 50_000L);
+      assertThat(result)
+          .extracting(Participation::getStatus)
+          .containsExactlyInAnyOrder(
+              ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.CONFIRMED);
     }
 
     @Test
@@ -237,15 +382,29 @@ class JpaParticipationRepositoryAdapterTest {
       Long addrOther = insertShippingAddress(participantId, "다른매장");
 
       insertParticipation(
-          targetId, targetMemberId, addrTarget, 40_000L, ParticipationStatus.ACTIVE_BID);
+          targetId,
+          targetMemberId,
+          participantId,
+          addrTarget,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
       insertParticipation(
-          otherId, otherMemberId, addrOther, 80_000L, ParticipationStatus.ACTIVE_BID);
+          otherId,
+          otherMemberId,
+          participantId,
+          addrOther,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
 
       List<Participation> result = participationRepository.findActiveByBuncheolId(targetId);
 
       assertThat(result)
           .singleElement()
-          .satisfies(p -> assertThat(p.getBidAmount()).isEqualTo(40_000L));
+          .satisfies(p -> assertThat(p.getBuncheolId()).isEqualTo(targetId));
     }
 
     @Test
@@ -256,66 +415,378 @@ class JpaParticipationRepositoryAdapterTest {
 
       assertThat(result).isEmpty();
     }
+  }
+
+  @Nested
+  @DisplayName("findConfirmedByBuncheolId / countConfirmedByBuncheolId — 입금확인 참여만")
+  class ConfirmedByBuncheolIdTest {
 
     @Test
-    void PAYMENT_REPORTED_참여도_활성_참여로_포함한다() {
-      // 입금신고(PAYMENT_REPORTED) 가 ACTIVE_STATUSES 에서 빠지면 관리/상세 화면에서 사라진다 — 회귀 방지.
+    void CONFIRMED_참여만_조회하고_AWAITING_PAYMENT_은_제외한다() {
       Long buncheolId = createBuncheol();
       Long bmId = createBuncheolMember(buncheolId);
-      Long addr = insertShippingAddress(participantId, "입금신고매장");
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "확정멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long addrConfirmed = insertShippingAddress(participantId, "확정매장");
+      Long addrAwaiting = insertShippingAddress(participantId, "대기매장");
+
       insertParticipation(
-          buncheolId, bmId, addr, 50_000L, ParticipationStatus.PAYMENT_REPORTED);
+          buncheolId,
+          bmId,
+          participantId,
+          addrConfirmed,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      insertParticipation(
+          buncheolId,
+          bmId2,
+          participantId,
+          addrAwaiting,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
 
-      List<Participation> result = participationRepository.findActiveByBuncheolId(buncheolId);
-
-      assertThat(result)
+      assertThat(participationRepository.findConfirmedByBuncheolId(buncheolId))
           .singleElement()
-          .satisfies(
-              p -> {
-                assertThat(p.getStatus()).isEqualTo(ParticipationStatus.PAYMENT_REPORTED);
-                assertThat(p.getBidAmount()).isEqualTo(50_000L);
-              });
+          .satisfies(p -> assertThat(p.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED));
+      assertThat(participationRepository.countConfirmedByBuncheolId(buncheolId)).isEqualTo(1);
+    }
+
+    @Test
+    void 확정_참여가_없으면_빈_리스트와_0_을_반환한다() {
+      Long buncheolId = createBuncheol();
+
+      assertThat(participationRepository.findConfirmedByBuncheolId(buncheolId)).isEmpty();
+      assertThat(participationRepository.countConfirmedByBuncheolId(buncheolId)).isZero();
     }
   }
 
   @Nested
-  @DisplayName("findBiddingByBuncheolId — 낙찰 선정용 ACTIVE_BID 참여만 조회")
-  class FindBiddingByBuncheolIdTest {
+  @DisplayName("findOverduePaymentTargets — 입금 만료 스케줄러 폴링")
+  class FindOverduePaymentTargetsTest {
 
     @Test
-    void ACTIVE_BID만_bid_amount_DESC로_조회하고_다른_상태는_제외한다() {
+    void AWAITING_PAYMENT_이고_기한이_지난_건만_조회한다() {
       Long buncheolId = createBuncheol();
       Long bmId = createBuncheolMember(buncheolId);
-      Long p1 = TestUserFixture.insertUser(jdbcTemplate, "bid_p1");
-      Long p2 = TestUserFixture.insertUser(jdbcTemplate, "bid_p2");
-      Long p3 = TestUserFixture.insertUser(jdbcTemplate, "bid_p3");
-      Long p4 = TestUserFixture.insertUser(jdbcTemplate, "bid_p4");
-      Long a1 = insertShippingAddress(p1, "매장1");
-      Long a2 = insertShippingAddress(p2, "매장2");
-      Long a3 = insertShippingAddress(p3, "매장3");
-      Long a4 = insertShippingAddress(p4, "매장4");
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "만료멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long addrOverdue = insertShippingAddress(participantId, "만료매장");
+      Long addrFuture = insertShippingAddress(participantId, "미래매장");
+      Instant now = Instant.now();
 
-      insertParticipationForUser(buncheolId, bmId, p1, a1, 50_000L, ParticipationStatus.ACTIVE_BID);
-      insertParticipationForUser(buncheolId, bmId, p2, a2, 30_000L, ParticipationStatus.ACTIVE_BID);
-      // 낙찰 후보가 아닌 상태들 — 결과에서 제외돼야 한다 (재실행 멱등성의 근거).
-      insertParticipationForUser(buncheolId, bmId, p3, a3, 70_000L, ParticipationStatus.CANCELLED);
-      insertParticipationForUser(
-          buncheolId, bmId, p4, a4, 90_000L, ParticipationStatus.AWAITING_PAYMENT);
+      Long overdueId =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addrOverdue,
+              30_000L,
+              now.minus(5, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+      // 기한이 아직 안 지난 건은 제외
+      insertParticipation(
+          buncheolId,
+          bmId2,
+          participantId,
+          addrFuture,
+          30_000L,
+          now.plus(20, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
 
-      List<Participation> result = participationRepository.findBiddingByBuncheolId(buncheolId);
+      List<Participation> result = participationRepository.findOverduePaymentTargets(now, 100);
 
-      assertThat(result)
-          .extracting(Participation::getBidAmount)
-          .containsExactly(50_000L, 30_000L);
+      assertThat(result).extracting(Participation::getId).containsExactly(overdueId);
     }
 
     @Test
-    void ACTIVE_BID_참여가_없으면_빈_리스트를_반환한다() {
+    void 확정된_건은_기한이_지나도_조회되지_않는다() {
       Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "확정만료매장");
+      Instant now = Instant.now();
+      insertParticipation(
+          buncheolId,
+          bmId,
+          participantId,
+          addr,
+          30_000L,
+          now.minus(5, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
 
-      List<Participation> result = participationRepository.findBiddingByBuncheolId(buncheolId);
+      assertThat(participationRepository.findOverduePaymentTargets(now, 100)).isEmpty();
+    }
 
-      assertThat(result).isEmpty();
+    @Test
+    void limit_을_초과하지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long m1 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "리밋멤버1");
+      Long m2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "리밋멤버2");
+      Long bm1 = createBuncheolMember(buncheolId, m1);
+      Long bm2 = createBuncheolMember(buncheolId, m2);
+      Instant now = Instant.now();
+      insertParticipation(
+          buncheolId,
+          bm1,
+          participantId,
+          insertShippingAddress(participantId, "리밋매장1"),
+          30_000L,
+          now.minus(5, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          buncheolId,
+          bm2,
+          participantId,
+          insertShippingAddress(participantId, "리밋매장2"),
+          30_000L,
+          now.minus(5, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThat(participationRepository.findOverduePaymentTargets(now, 1)).hasSize(1);
+    }
+  }
+
+  @Nested
+  @DisplayName("confirmPaymentIfAwaiting — 호스트 입금확인 CAS")
+  class ConfirmPaymentIfAwaitingTest {
+
+    @Test
+    void AWAITING_PAYMENT_이고_기한_내면_CONFIRMED_로_전이한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "입금확인매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      boolean confirmed = participationRepository.confirmPaymentIfAwaiting(pid, now);
+
+      assertThat(confirmed).isTrue();
+      assertThat(statusOf(pid)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 입금_기한과_정확히_같은_시각이면_확정된다() {
+      // dueAt == now 경계: 가드가 dueAt >= now 라 마지막 순간까지 확정을 허용한다.
+      // H2 TIMESTAMP/Instant 정밀도 차이로 인한 flaky 를 막으려 밀리초로 절삭한 동일 값을 양쪽에 쓴다.
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "기한경계매장");
+      Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now,
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      assertThat(participationRepository.confirmPaymentIfAwaiting(pid, now)).isTrue();
+      assertThat(statusOf(pid)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 입금_기한이_지났으면_전이하지_않고_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "기한경과매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.minus(1, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      boolean confirmed = participationRepository.confirmPaymentIfAwaiting(pid, now);
+
+      assertThat(confirmed).isFalse();
+      assertThat(statusOf(pid)).isEqualTo("AWAITING_PAYMENT");
+    }
+
+    @Test
+    void 이미_취소된_건은_전이하지_않고_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "취소된확인매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.CANCELLED,
+              ParticipationCancelReason.SELF_CANCELLED);
+
+      assertThat(participationRepository.confirmPaymentIfAwaiting(pid, now)).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("cancelByParticipantIfAwaiting — 참여자 자발 취소 CAS")
+  class CancelByParticipantIfAwaitingTest {
+
+    @Test
+    void AWAITING_PAYMENT_이면_SELF_CANCELLED_로_전이한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "자발취소매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      boolean cancelled = participationRepository.cancelByParticipantIfAwaiting(pid, now);
+
+      assertThat(cancelled).isTrue();
+      assertThat(statusOf(pid)).isEqualTo("CANCELLED");
+      assertThat(cancelReasonOf(pid)).isEqualTo("SELF_CANCELLED");
+    }
+
+    @Test
+    void 기한이_지났어도_AWAITING_PAYMENT_이면_취소된다() {
+      // 자발 취소는 dueAt 가드 없이 항상 허용된다.
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "기한경과자발취소");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.minus(5, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      assertThat(participationRepository.cancelByParticipantIfAwaiting(pid, now)).isTrue();
+      assertThat(cancelReasonOf(pid)).isEqualTo("SELF_CANCELLED");
+    }
+
+    @Test
+    void 이미_확정된_건은_취소하지_않고_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "확정자발취소");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+
+      assertThat(participationRepository.cancelByParticipantIfAwaiting(pid, now)).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("expireIfOverdue — 입금 만료 CAS")
+  class ExpireIfOverdueTest {
+
+    @Test
+    void AWAITING_PAYMENT_이고_기한이_지났으면_PAYMENT_TIMEOUT_으로_전이한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "만료처리매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.minus(1, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      boolean expired = participationRepository.expireIfOverdue(pid, now);
+
+      assertThat(expired).isTrue();
+      assertThat(statusOf(pid)).isEqualTo("CANCELLED");
+      assertThat(cancelReasonOf(pid)).isEqualTo("PAYMENT_TIMEOUT");
+    }
+
+    @Test
+    void 기한이_지나지_않았으면_전이하지_않고_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "기한전매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.plus(10, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      assertThat(participationRepository.expireIfOverdue(pid, now)).isFalse();
+      assertThat(statusOf(pid)).isEqualTo("AWAITING_PAYMENT");
+    }
+
+    @Test
+    void 호스트가_먼저_확정했으면_만료_전이는_실패한다() {
+      // 호스트 확인 vs 만료 스케줄러 race — 확정이 이긴 뒤 만료가 들어오면 CAS 실패.
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "race매장");
+      Instant now = Instant.now();
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addr,
+              30_000L,
+              now.minus(1, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+
+      assertThat(participationRepository.expireIfOverdue(pid, now)).isFalse();
     }
   }
 
@@ -324,88 +795,94 @@ class JpaParticipationRepositoryAdapterTest {
   class CancelActiveByBuncheolIdTest {
 
     @Test
-    void ACTIVE_BID_만_CANCELLED_로_전이된다() {
+    void 활성_참여_AWAITING_PAYMENT_과_CONFIRMED_모두_BUNCHEOL_CANCELLED_로_전이된다() {
       Long buncheolId = createBuncheol();
       Long bmId = createBuncheolMember(buncheolId);
-      Long addrActive = insertShippingAddress(participantId, "활성매장");
-      insertParticipation(buncheolId, bmId, addrActive, 35_000L, ParticipationStatus.ACTIVE_BID);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "일괄멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long addrAwaiting = insertShippingAddress(participantId, "대기일괄");
+      Long addrConfirmed = insertShippingAddress(participantId, "확정일괄");
+      Long awaitingId =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addrAwaiting,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+      Long confirmedId =
+          insertParticipation(
+              buncheolId,
+              bmId2,
+              participantId,
+              addrConfirmed,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
 
-      int affected =
-          participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
+      int affected = participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
 
-      assertThat(affected).isEqualTo(1);
-      List<Participation> all =
-          participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(participantId);
-      assertThat(all)
-          .singleElement()
-          .satisfies(
-              p -> {
-                assertThat(p.getStatus()).isEqualTo(ParticipationStatus.CANCELLED);
-                assertThat(p.getFinalizedAt()).isNotNull();
-              });
+      assertThat(affected).isEqualTo(2);
+      assertThat(statusOf(awaitingId)).isEqualTo("CANCELLED");
+      assertThat(statusOf(confirmedId)).isEqualTo("CANCELLED");
+      assertThat(cancelReasonOf(awaitingId)).isEqualTo("BUNCHEOL_CANCELLED");
+      assertThat(cancelReasonOf(confirmedId)).isEqualTo("BUNCHEOL_CANCELLED");
     }
 
     @Test
-    void ACTIVE_BID_이_아닌_상태는_영향받지_않는다() {
+    void 이미_취소된_참여는_영향받지_않는다() {
       Long buncheolId = createBuncheol();
       Long bmId = createBuncheolMember(buncheolId);
-      // 운영 MySQL 에선 active_participant_id (STORED generated column) + UNIQUE 제약 때문에
-      // 같은 (buncheolMemberId, participantId) 쌍의 활성 참여를 두 번 INSERT 하면 충돌한다.
-      // 그래서 비활성(CANCELLED/FAILED) 상태들만 섞어 둔다. (H2 스키마는 STORED 컬럼이 plain BIGINT 라
-      // 운영 제약이 실제로 무력하지만, 운영 환경 가정과 일치시키기 위해 동일 패턴을 유지한다.)
       Long addrCancelled = insertShippingAddress(participantId, "이미취소");
-      Long addrFailed = insertShippingAddress(participantId, "실패");
       insertParticipation(
-          buncheolId, bmId, addrCancelled, 30_000L, ParticipationStatus.CANCELLED);
-      insertParticipation(buncheolId, bmId, addrFailed, 40_000L, ParticipationStatus.FAILED);
+          buncheolId,
+          bmId,
+          participantId,
+          addrCancelled,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.SELF_CANCELLED);
 
-      int affected =
-          participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
+      int affected = participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
 
       assertThat(affected).isZero();
     }
 
     @Test
-    void 다른_분철의_ACTIVE_BID_는_영향받지_않는다() {
+    void 다른_분철의_활성_참여는_영향받지_않는다() {
       Long target = createBuncheol();
       Long other = createBuncheol();
       Long targetBmId = createBuncheolMember(target);
       Long otherBmId = createBuncheolMember(other);
-      Long addrTarget = insertShippingAddress(participantId, "타겟매장");
-      Long addrOther = insertShippingAddress(participantId, "다른매장");
+      Long addrTarget = insertShippingAddress(participantId, "타겟일괄");
+      Long addrOther = insertShippingAddress(participantId, "다른일괄");
       insertParticipation(
-          target, targetBmId, addrTarget, 35_000L, ParticipationStatus.ACTIVE_BID);
-      insertParticipation(other, otherBmId, addrOther, 50_000L, ParticipationStatus.ACTIVE_BID);
+          target,
+          targetBmId,
+          participantId,
+          addrTarget,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          other,
+          otherBmId,
+          participantId,
+          addrOther,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
 
       int affected = participationRepository.cancelActiveByBuncheolId(target, Instant.now());
 
       assertThat(affected).isEqualTo(1);
       assertThat(participationRepository.findActiveByBuncheolId(other)).hasSize(1);
     }
-  }
-
-  private void insertParticipationForUser(
-      Long buncheolId,
-      Long buncheolMemberId,
-      Long userId,
-      Long shippingAddressId,
-      long bidAmount,
-      ParticipationStatus status) {
-    jdbcTemplate.update(
-        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-            + " shipping_address_id, bid_amount, status, active_participant_id) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        buncheolId,
-        buncheolMemberId,
-        userId,
-        shippingAddressId,
-        bidAmount,
-        status.name(),
-        status == ParticipationStatus.ACTIVE_BID
-                || status == ParticipationStatus.AWAITING_PAYMENT
-                || status == ParticipationStatus.PAYMENT_REPORTED
-                || status == ParticipationStatus.CONFIRMED
-            ? userId
-            : null);
   }
 }

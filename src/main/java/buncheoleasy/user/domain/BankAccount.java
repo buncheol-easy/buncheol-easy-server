@@ -19,13 +19,18 @@ public record BankAccount(
   private static final Pattern ACCOUNT_PATTERN = Pattern.compile("^\\d+$");
 
   public BankAccount {
-    validateBank(bank);
-    validateAccount(account);
-    validateHolder(holder);
+    validate(bank, account, holder);
   }
 
   public static BankAccount of(final String bank, final String account, final String holder) {
     return new BankAccount(bank, account, holder);
+  }
+
+  /** 은행·계좌번호·예금주 형식·길이 검증. 환불 계좌({@code RefundAccount}) 등 동일 규칙을 쓰는 VO 에서 재사용한다. */
+  public static void validate(final String bank, final String account, final String holder) {
+    validateBank(bank);
+    validateAccount(account);
+    validateHolder(holder);
   }
 
   private static void validateBank(final String value) {

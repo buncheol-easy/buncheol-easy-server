@@ -48,9 +48,9 @@ public class NotificationInboxRecorder {
   // 알림톡 버튼 목적지(BuncheolUrls)와 동일한 화면의 in-app 상대 경로. 배송조회(TRACKING_*)는 외부 연결이라 경로 없음.
   private String resolveLinkPath(final AlimtalkTemplate template, final Long buncheolId) {
     return switch (template) {
-      case PARTICIPATION_WON, PAYMENT_CONFIRMED, PAYMENT_DUE_IMMINENT -> PATH_MY_BIDS;
-      case PAYMENT_REPORTED -> PATH_BUNCHEOL_MANAGE.formatted(buncheolId);
-      case BUNCHEOL_CANCELLED -> PATH_HOME;
+      case PAYMENT_CONFIRMED, BUNCHEOL_CONFIRMED -> PATH_MY_BIDS;
+      case PARTICIPATION_REQUESTED -> PATH_BUNCHEOL_MANAGE.formatted(buncheolId);
+      case BUNCHEOL_CANCELLED, PAYMENT_EXPIRED -> PATH_HOME;
       case TRACKING_CU, TRACKING_GS25 -> null;
     };
   }

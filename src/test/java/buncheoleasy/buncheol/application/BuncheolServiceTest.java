@@ -393,7 +393,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       Participation participation = mock(Participation.class);
       given(participation.getId()).willReturn(50L);
-      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID))
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(participation));
 
       // when

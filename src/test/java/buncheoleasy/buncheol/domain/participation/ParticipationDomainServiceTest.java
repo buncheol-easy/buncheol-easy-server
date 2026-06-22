@@ -200,33 +200,6 @@ class ParticipationDomainServiceTest {
   }
 
   @Nested
-  @DisplayName("참여자 자발 취소 테스트")
-  class CancelByParticipantTest {
-
-    @Test
-    void CAS_성공시_예외_없이_통과한다() {
-      given(participationRepository.cancelByParticipantIfAwaiting(PARTICIPATION_ID, NOW))
-          .willReturn(true);
-
-      participationDomainService.cancelByParticipant(PARTICIPATION_ID, NOW);
-
-      then(participationRepository).should().cancelByParticipantIfAwaiting(PARTICIPATION_ID, NOW);
-    }
-
-    @Test
-    void CAS_실패시_상태_위반_예외를_던진다() {
-      given(participationRepository.cancelByParticipantIfAwaiting(PARTICIPATION_ID, NOW))
-          .willReturn(false);
-
-      assertThatThrownBy(
-              () -> participationDomainService.cancelByParticipant(PARTICIPATION_ID, NOW))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-    }
-  }
-
-  @Nested
   @DisplayName("입금 만료 처리 테스트")
   class ExpireOverduePaymentTest {
 

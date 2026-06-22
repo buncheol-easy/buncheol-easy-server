@@ -65,19 +65,6 @@ public class ParticipationDomainService {
     throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
   }
 
-  /**
-   * 참여자 본인의 자발적 취소 (AWAITING_PAYMENT → CANCELLED CAS). 이미 확정/취소됐으면 상태 위반.
-   *
-   * <p>입금확인(confirmPayment)과 달리 dueAt 가드를 두지 않는다 — 입금확인은 30분 칼컷 대상이지만, 참여 포기는 시점과 무관하게 항상
-   * 허용한다. 만료 시각이 지났지만 스케줄러가 아직 안 돈 창에서 유저가 직접 취소하면 사유는 (만료가 아니라) 명시적 사용자 액션인 SELF_CANCELLED 로
-   * 기록되는 것이 정확하다.
-   */
-  public void cancelByParticipant(final Long participationId, final Instant now) {
-    if (!participationRepository.cancelByParticipantIfAwaiting(participationId, now)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-    }
-  }
-
   /** 입금 만료 처리 (입금 만료 스케줄러용). 멱등하며 실패 시(이미 확정/취소) 예외 없이 false 를 돌려준다. */
   public boolean expirePayment(final Long participationId, final Instant now) {
     return participationRepository.expirePaymentIfOverdue(participationId, now);
@@ -86,5 +73,10 @@ public class ParticipationDomainService {
   /** 분철 취소 시 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이. 호출 측 @Transactional 필수. */
   public int cancelActiveByBuncheolId(final Long buncheolId, final Instant now) {
     return participationRepository.cancelActiveByBuncheolId(buncheolId, now);
+  }
+
+  /** 분철 취소 cascade 로 실제 전이된 참여 조회 (취소 알림 대상). cancelActiveByBuncheolId 직후 같은 트랜잭션에서 호출. */
+  public List<Participation> findCascadeCancelledByBuncheolId(final Long buncheolId) {
+    return participationRepository.findCascadeCancelledByBuncheolId(buncheolId);
   }
 }

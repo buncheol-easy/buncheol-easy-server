@@ -91,15 +91,6 @@ public class ParticipationService {
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
   }
 
-  /** 참여자 본인의 참여 취소 (AWAITING_PAYMENT 단계에서만). */
-  @Transactional
-  public void cancelParticipation(final Long participantId, final Long participationId) {
-    Participation participation = participationDomainService.getParticipation(participationId);
-    participation.validateOwnedBy(participantId);
-
-    participationDomainService.cancelByParticipant(participationId, Instant.now(clock));
-  }
-
   private Instant paymentDueAt(final Instant now, final Instant deadline) {
     Instant windowEnd = now.plus(PAYMENT_WINDOW);
     return windowEnd.isBefore(deadline) ? windowEnd : deadline;

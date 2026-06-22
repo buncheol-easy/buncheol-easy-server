@@ -311,41 +311,6 @@ class ParticipationServiceTest {
     }
   }
 
-  @Nested
-  @DisplayName("참여자 자발 취소 테스트")
-  class CancelParticipationTest {
-
-    @Test
-    void 본인의_입금확인중_참여를_취소한다() {
-      Participation participation = mock(Participation.class);
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-
-      participationService.cancelParticipation(PARTICIPANT_ID, PARTICIPATION_ID);
-
-      then(participation).should().validateOwnedBy(PARTICIPANT_ID);
-      then(participationDomainService).should().cancelByParticipant(PARTICIPATION_ID, NOW);
-    }
-
-    @Test
-    void 본인_참여가_아니면_취소에_실패한다() {
-      Participation participation = mock(Participation.class);
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-      willThrow(new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION))
-          .given(participation)
-          .validateOwnedBy(PARTICIPANT_ID);
-
-      assertThatThrownBy(
-              () -> participationService.cancelParticipation(PARTICIPANT_ID, PARTICIPATION_ID))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
-
-      then(participationDomainService).should(never()).cancelByParticipant(anyLong(), any());
-    }
-  }
-
   private static <T> T newInstance(final Class<T> type) {
     try {
       var constructor = type.getDeclaredConstructor();

@@ -165,7 +165,7 @@ class JpaParticipationRepositoryAdapterTest {
           30_000L,
           Instant.now(),
           ParticipationStatus.CANCELLED,
-          ParticipationCancelReason.SELF_CANCELLED);
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
       insertParticipation(
           buncheolId,
           buncheolMemberId,
@@ -227,7 +227,7 @@ class JpaParticipationRepositoryAdapterTest {
           30_000L,
           Instant.now(),
           ParticipationStatus.CANCELLED,
-          ParticipationCancelReason.SELF_CANCELLED);
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
       assertThat(participationRepository.existsActiveByParticipantId(participantId)).isFalse();
     }
@@ -266,7 +266,7 @@ class JpaParticipationRepositoryAdapterTest {
           30_000L,
           Instant.now(),
           ParticipationStatus.CANCELLED,
-          ParticipationCancelReason.SELF_CANCELLED);
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
       insertParticipation(
           buncheolB,
           bmB,
@@ -311,7 +311,7 @@ class JpaParticipationRepositoryAdapterTest {
           30_000L,
           Instant.now(),
           ParticipationStatus.CANCELLED,
-          ParticipationCancelReason.SELF_CANCELLED);
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
       List<BuncheolActiveParticipationCount> result =
           participationRepository.countActiveByBuncheolIds(List.of(buncheolId));
@@ -362,7 +362,7 @@ class JpaParticipationRepositoryAdapterTest {
           30_000L,
           Instant.now(),
           ParticipationStatus.CANCELLED,
-          ParticipationCancelReason.SELF_CANCELLED);
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
       List<Participation> result = participationRepository.findActiveByBuncheolId(buncheolId);
 
@@ -642,80 +642,9 @@ class JpaParticipationRepositoryAdapterTest {
               30_000L,
               now.plus(20, ChronoUnit.MINUTES),
               ParticipationStatus.CANCELLED,
-              ParticipationCancelReason.SELF_CANCELLED);
+              ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
       assertThat(participationRepository.confirmPaymentIfAwaiting(pid, now)).isFalse();
-    }
-  }
-
-  @Nested
-  @DisplayName("cancelByParticipantIfAwaiting — 참여자 자발 취소 CAS")
-  class CancelByParticipantIfAwaitingTest {
-
-    @Test
-    void AWAITING_PAYMENT_이면_SELF_CANCELLED_로_전이한다() {
-      Long buncheolId = createBuncheol();
-      Long bmId = createBuncheolMember(buncheolId);
-      Long addr = insertShippingAddress(participantId, "자발취소매장");
-      Instant now = Instant.now();
-      Long pid =
-          insertParticipation(
-              buncheolId,
-              bmId,
-              participantId,
-              addr,
-              30_000L,
-              now.plus(20, ChronoUnit.MINUTES),
-              ParticipationStatus.AWAITING_PAYMENT,
-              null);
-
-      boolean cancelled = participationRepository.cancelByParticipantIfAwaiting(pid, now);
-
-      assertThat(cancelled).isTrue();
-      assertThat(statusOf(pid)).isEqualTo("CANCELLED");
-      assertThat(cancelReasonOf(pid)).isEqualTo("SELF_CANCELLED");
-    }
-
-    @Test
-    void 기한이_지났어도_AWAITING_PAYMENT_이면_취소된다() {
-      // 자발 취소는 dueAt 가드 없이 항상 허용된다.
-      Long buncheolId = createBuncheol();
-      Long bmId = createBuncheolMember(buncheolId);
-      Long addr = insertShippingAddress(participantId, "기한경과자발취소");
-      Instant now = Instant.now();
-      Long pid =
-          insertParticipation(
-              buncheolId,
-              bmId,
-              participantId,
-              addr,
-              30_000L,
-              now.minus(5, ChronoUnit.MINUTES),
-              ParticipationStatus.AWAITING_PAYMENT,
-              null);
-
-      assertThat(participationRepository.cancelByParticipantIfAwaiting(pid, now)).isTrue();
-      assertThat(cancelReasonOf(pid)).isEqualTo("SELF_CANCELLED");
-    }
-
-    @Test
-    void 이미_확정된_건은_취소하지_않고_false_를_반환한다() {
-      Long buncheolId = createBuncheol();
-      Long bmId = createBuncheolMember(buncheolId);
-      Long addr = insertShippingAddress(participantId, "확정자발취소");
-      Instant now = Instant.now();
-      Long pid =
-          insertParticipation(
-              buncheolId,
-              bmId,
-              participantId,
-              addr,
-              30_000L,
-              now.plus(20, ChronoUnit.MINUTES),
-              ParticipationStatus.CONFIRMED,
-              null);
-
-      assertThat(participationRepository.cancelByParticipantIfAwaiting(pid, now)).isFalse();
     }
   }
 
@@ -845,7 +774,7 @@ class JpaParticipationRepositoryAdapterTest {
           30_000L,
           Instant.now(),
           ParticipationStatus.CANCELLED,
-          ParticipationCancelReason.SELF_CANCELLED);
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
       int affected = participationRepository.cancelActiveByBuncheolId(buncheolId, Instant.now());
 

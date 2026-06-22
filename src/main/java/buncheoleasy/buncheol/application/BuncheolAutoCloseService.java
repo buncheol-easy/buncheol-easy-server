@@ -74,12 +74,14 @@ public class BuncheolAutoCloseService {
   // 최소 인원 미달 취소: 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 취소하고 참여자에게 취소 알림을 보낸다.
   // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다.
   private void finalizeAsCancelled(final Long buncheolId, final Instant now) {
-    List<Participation> active = participationDomainService.findActiveByBuncheolId(buncheolId);
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
-    active.forEach(
-        participation ->
-            eventPublisher.publishEvent(
-                new BuncheolCancelledEvent(
-                    participation.getId(), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET)));
+    // 스냅샷이 아니라 cascade 로 실제 전이된 참여만 재조회해 발행 — 그 사이 자발취소·만료된 참여에 중복 알림이 가지 않도록.
+    participationDomainService
+        .findCascadeCancelledByBuncheolId(buncheolId)
+        .forEach(
+            participation ->
+                eventPublisher.publishEvent(
+                    new BuncheolCancelledEvent(
+                        participation.getId(), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET)));
   }
 }

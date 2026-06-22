@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS participations
     due_at              DATETIME     NOT NULL COMMENT '입금 만료 시각 = min(점유+30분, deadline)',
     confirmed_at        DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at        DATETIME     NULL COMMENT '참여 취소 시각',
-    cancel_reason       VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | SELF_CANCELLED | BUNCHEOL_CANCELLED',
+    cancel_reason       VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED',
     status              VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED',
     -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용 가상 컬럼: 활성 상태일 때만 멤버 슬롯 id 값을 갖고, 취소/만료되면 NULL 이 되어 슬롯이 다시 열린다.
     active_member_id    BIGINT GENERATED ALWAYS AS (

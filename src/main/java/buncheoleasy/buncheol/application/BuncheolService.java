@@ -91,15 +91,16 @@ public class BuncheolService {
     buncheolDomainService.cancelBuncheol(buncheolId, now);
 
     // 취소 확정 후 같은 트랜잭션에서 활성 참여(입금확인중·입금확인됨)를 모두 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이한다.
-    // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 직전 active 참여로 수집한다.
-    List<Participation> cancelledParticipations =
-        participationDomainService.findActiveByBuncheolId(buncheolId);
+    // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이
+    // 자발취소·만료된 참여에 중복 알림이 가지 않도록).
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
-    cancelledParticipations.forEach(
-        participation ->
-            eventPublisher.publishEvent(
-                new BuncheolCancelledEvent(
-                    participation.getId(), BuncheolCancelReason.HOST_CANCELLED)));
+    participationDomainService
+        .findCascadeCancelledByBuncheolId(buncheolId)
+        .forEach(
+            participation ->
+                eventPublisher.publishEvent(
+                    new BuncheolCancelledEvent(
+                        participation.getId(), BuncheolCancelReason.HOST_CANCELLED)));
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

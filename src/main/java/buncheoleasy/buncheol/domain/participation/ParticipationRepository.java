@@ -45,14 +45,6 @@ public interface ParticipationRepository {
   boolean confirmPaymentIfAwaiting(Long participationId, Instant now);
 
   /**
-   * 참여자 본인의 자발적 취소. AWAITING_PAYMENT 일 때만 CANCELLED({@link
-   * ParticipationCancelReason#SELF_CANCELLED}) 로 전이하는 CAS.
-   *
-   * @return 전이에 성공하면 true, 이미 확정/취소됐으면 false
-   */
-  boolean cancelByParticipantIfAwaiting(Long participationId, Instant now);
-
-  /**
    * 입금 만료 처리. AWAITING_PAYMENT 이고 기한이 지났을 때만 CANCELLED({@link
    * ParticipationCancelReason#PAYMENT_TIMEOUT}) 로 전이하는 CAS (입금 만료 스케줄러용).
    *
@@ -69,4 +61,11 @@ public interface ParticipationRepository {
    * @return 취소된 참여 행 수
    */
   int cancelActiveByBuncheolId(Long buncheolId, Instant now);
+
+  /**
+   * 분철 취소 cascade({@link ParticipationCancelReason#BUNCHEOL_CANCELLED})로 전이된 참여를 조회한다. {@link
+   * #cancelActiveByBuncheolId} 직후 같은 트랜잭션에서 호출해, 그 사이 자발취소·만료된 참여(다른 cancelReason)를 제외한 "실제로 이번에
+   * 취소된" 참여에만 알림을 발행하는 데 쓴다.
+   */
+  List<Participation> findCascadeCancelledByBuncheolId(Long buncheolId);
 }

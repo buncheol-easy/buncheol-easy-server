@@ -169,27 +169,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public boolean cancelByParticipantIfAwaiting(final Long participationId, final Instant now) {
-    int updated =
-        jpaParticipationRepository.cancelIfAwaiting(
-            participationId,
-            ParticipationStatus.AWAITING_PAYMENT,
-            ParticipationStatus.CANCELLED,
-            ParticipationCancelReason.SELF_CANCELLED,
-            false,
-            now);
-    return updated > 0;
-  }
-
-  @Override
   public boolean expirePaymentIfOverdue(final Long participationId, final Instant now) {
     int updated =
-        jpaParticipationRepository.cancelIfAwaiting(
+        jpaParticipationRepository.cancelIfAwaitingAndOverdue(
             participationId,
             ParticipationStatus.AWAITING_PAYMENT,
             ParticipationStatus.CANCELLED,
             ParticipationCancelReason.PAYMENT_TIMEOUT,
-            true,
             now);
     return updated > 0;
   }
@@ -202,5 +188,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
         ParticipationStatus.CANCELLED,
         ParticipationCancelReason.BUNCHEOL_CANCELLED,
         now);
+  }
+
+  @Override
+  public List<Participation> findCascadeCancelledByBuncheolId(final Long buncheolId) {
+    return jpaParticipationRepository.findByBuncheolIdAndStatusAndCancelReason(
+        buncheolId, ParticipationStatus.CANCELLED, ParticipationCancelReason.BUNCHEOL_CANCELLED);
   }
 }

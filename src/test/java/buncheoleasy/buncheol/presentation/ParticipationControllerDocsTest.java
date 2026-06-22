@@ -9,7 +9,6 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -219,7 +218,7 @@ class ParticipationControllerDocsTest {
                                     "내 참여 상태 (AWAITING_PAYMENT | CONFIRMED | CANCELLED)"),
                             fieldWithPath("[].cancelReason")
                                 .description(
-                                    "취소 사유 (PAYMENT_TIMEOUT | SELF_CANCELLED | BUNCHEOL_CANCELLED). 취소가 아니면 null")
+                                    "취소 사유 (PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED). 취소가 아니면 null")
                                 .optional(),
                             fieldWithPath("[].buncheolStatus")
                                 .description("분철 진행 상태 (RECRUITING | CONFIRMED | CANCELLED)"),
@@ -322,26 +321,4 @@ class ParticipationControllerDocsTest {
                         .build())));
   }
 
-  @Test
-  void 분철_참여_취소() throws Exception {
-    // when & then
-    mockMvc
-        .perform(
-            delete("/v1/participations/{participationId}", 500L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
-        .andExpect(status().isNoContent())
-        .andDo(
-            document(
-                "participations-cancel",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Participation")
-                        .summary("분철 참여 취소")
-                        .description("참여자 본인이 분철 참여를 취소한다. 입금확인중(AWAITING_PAYMENT) 단계에서만 취소가 가능하다.")
-                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
-                        .build())));
-  }
 }

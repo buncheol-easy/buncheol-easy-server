@@ -116,10 +116,10 @@ class BuncheolAutoCloseServiceTest {
       given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(1);
       given(buncheolDomainService.finalizeBuncheol(BUNCHEOL_ID, BuncheolStatus.CANCELLED, NOW))
           .willReturn(true);
-      Participation active = mock(Participation.class);
-      given(active.getId()).willReturn(701L);
-      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(active));
+      Participation cancelled = mock(Participation.class);
+      given(cancelled.getId()).willReturn(701L);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
 
       boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
 

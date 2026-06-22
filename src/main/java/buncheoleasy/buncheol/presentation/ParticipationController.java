@@ -9,7 +9,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,14 +44,6 @@ public class ParticipationController {
   public ResponseEntity<Void> confirmPayment(
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
     participationService.confirmPayment(hostId, participationId);
-    return ResponseEntity.noContent().build();
-  }
-
-  /** 참여자 본인의 참여 취소 API. 입금확인중(AWAITING_PAYMENT) 단계에서만 취소가 가능하다. */
-  @DeleteMapping("/{participationId}")
-  public ResponseEntity<Void> cancelParticipation(
-      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
-    participationService.cancelParticipation(participantId, participationId);
     return ResponseEntity.noContent().build();
   }
 }

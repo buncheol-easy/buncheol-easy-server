@@ -41,6 +41,9 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   List<Participation> findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
       Long buncheolId, ParticipationStatus status);
 
+  List<Participation> findByBuncheolIdAndStatusAndCancelReason(
+      Long buncheolId, ParticipationStatus status, ParticipationCancelReason cancelReason);
+
   int countByBuncheolIdAndStatus(Long buncheolId, ParticipationStatus status);
 
   List<Participation> findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
@@ -58,20 +61,18 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
       @Param("now") Instant now);
 
-  /** AWAITING_PAYMENT 일 때만 지정 사유로 CANCELLED 로 전이 (자발 취소 / 입금 만료 CAS). 만료는 dueExpired=true 로 기한 경과를 함께 가드한다. */
+  /** AWAITING_PAYMENT 이고 입금 기한(dueAt)이 지났을 때만 지정 사유로 CANCELLED 로 전이 (입금 만료 CAS). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
           + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
           + "    p.cancelledAt = :now, p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.status = :awaitingStatus "
-          + "AND (:dueExpired = FALSE OR p.dueAt <= :now)")
-  int cancelIfAwaiting(
+          + "WHERE p.id = :id AND p.status = :awaitingStatus AND p.dueAt <= :now")
+  int cancelIfAwaitingAndOverdue(
       @Param("id") Long id,
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
       @Param("cancelledStatus") ParticipationStatus cancelledStatus,
       @Param("reason") ParticipationCancelReason reason,
-      @Param("dueExpired") boolean dueExpired,
       @Param("now") Instant now);
 
   /** 분철의 특정 상태 참여를 모두 지정 사유로 CANCELLED 로 일괄 전이 (분철 취소 cascade). */

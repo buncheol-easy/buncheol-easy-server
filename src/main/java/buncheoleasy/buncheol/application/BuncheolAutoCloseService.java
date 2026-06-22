@@ -78,6 +78,8 @@ public class BuncheolAutoCloseService {
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
     active.forEach(
         participation ->
-            eventPublisher.publishEvent(new BuncheolCancelledEvent(participation.getId())));
+            eventPublisher.publishEvent(
+                new BuncheolCancelledEvent(
+                    participation.getId(), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET)));
   }
 }

@@ -2,7 +2,6 @@ package buncheoleasy.notification.application;
 
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
-import buncheoleasy.buncheol.application.participation.ParticipationRequestedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
@@ -33,29 +32,6 @@ public class AlimtalkNotificationListener {
   private final AlimtalkSender sender;
   private final NotificationInboxRecorder inboxRecorder;
 
-  /** (개최자) 참여자가 참여(입금확인중)함. 입금 확인을 요청한다. */
-  @Async
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onParticipationRequested(final ParticipationRequestedEvent event) {
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    Map<String, String> variables =
-        Map.of(
-            "닉네임", view.host().getNickname().value(),
-            "분철명", view.buncheol().getTitle(),
-            "참여자닉네임", view.participant().getNickname().value(),
-            "멤버명", view.memberName(),
-            "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
-            "입금기한", AlimtalkFormats.dateTime(view.participation().getDueAt()),
-            "분철아이디", String.valueOf(view.buncheol().getId()));
-    recordSafely(
-        view.host().getId(),
-        AlimtalkTemplate.PARTICIPATION_REQUESTED,
-        variables,
-        view.buncheol().getId());
-    sender.send(
-        AlimtalkTemplate.PARTICIPATION_REQUESTED, view.host().getPhoneNumber().value(), variables);
-  }
-
   /** (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -67,11 +43,7 @@ public class AlimtalkNotificationListener {
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()));
-    recordSafely(
-        view.participant().getId(),
-        AlimtalkTemplate.PAYMENT_CONFIRMED,
-        variables,
-        view.buncheol().getId());
+    recordSafely(view.participant().getId(), AlimtalkTemplate.PAYMENT_CONFIRMED, variables);
     sender.send(
         AlimtalkTemplate.PAYMENT_CONFIRMED, view.participant().getPhoneNumber().value(), variables);
   }
@@ -86,11 +58,7 @@ public class AlimtalkNotificationListener {
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName());
-    recordSafely(
-        view.participant().getId(),
-        AlimtalkTemplate.PAYMENT_EXPIRED,
-        variables,
-        view.buncheol().getId());
+    recordSafely(view.participant().getId(), AlimtalkTemplate.PAYMENT_EXPIRED, variables);
     sender.send(
         AlimtalkTemplate.PAYMENT_EXPIRED, view.participant().getPhoneNumber().value(), variables);
   }
@@ -105,11 +73,7 @@ public class AlimtalkNotificationListener {
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName());
-    recordSafely(
-        view.participant().getId(),
-        AlimtalkTemplate.BUNCHEOL_CONFIRMED,
-        variables,
-        view.buncheol().getId());
+    recordSafely(view.participant().getId(), AlimtalkTemplate.BUNCHEOL_CONFIRMED, variables);
     sender.send(
         AlimtalkTemplate.BUNCHEOL_CONFIRMED,
         view.participant().getPhoneNumber().value(),
@@ -125,12 +89,9 @@ public class AlimtalkNotificationListener {
         Map.of(
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
-            "멤버명", view.memberName());
-    recordSafely(
-        view.participant().getId(),
-        AlimtalkTemplate.BUNCHEOL_CANCELLED,
-        variables,
-        view.buncheol().getId());
+            "멤버명", view.memberName(),
+            "취소사유", event.reason().getDescription());
+    recordSafely(view.participant().getId(), AlimtalkTemplate.BUNCHEOL_CANCELLED, variables);
     sender.send(
         AlimtalkTemplate.BUNCHEOL_CANCELLED,
         view.participant().getPhoneNumber().value(),
@@ -154,18 +115,15 @@ public class AlimtalkNotificationListener {
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "운송장번호", delivery.getTrackingNumber());
-    recordSafely(view.participant().getId(), template, variables, view.buncheol().getId());
+    recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);
   }
 
   // in-app 알림 기록 실패가 알림톡 발송을 막지 않도록 격리한다(로깅만). 발송 실패도 비즈니스에 영향을 주지 않는다는 정책과 동일.
   private void recordSafely(
-      final Long recipientId,
-      final AlimtalkTemplate template,
-      final Map<String, String> variables,
-      final Long buncheolId) {
+      final Long recipientId, final AlimtalkTemplate template, final Map<String, String> variables) {
     try {
-      inboxRecorder.record(recipientId, template, variables, buncheolId);
+      inboxRecorder.record(recipientId, template, variables);
     } catch (final RuntimeException e) {
       log.error("수신함 알림 기록 실패 - template={}, recipientId={}", template, recipientId, e);
     }

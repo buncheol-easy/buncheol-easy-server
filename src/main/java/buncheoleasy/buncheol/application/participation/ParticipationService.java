@@ -75,8 +75,7 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    eventPublisher.publishEvent(new ParticipationRequestedEvent(participation.getId()));
-
+    // 개최자(MVP 운영자)는 관리 화면으로 직접 확인하므로 참여 발생 시 별도 알림을 보내지 않는다.
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
     return new ParticipateResult(participation.getId(), amount, dueAt, hostAccount);
   }

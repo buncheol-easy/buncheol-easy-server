@@ -17,7 +17,7 @@ public class RefreshTokenCookieFactory {
 
   public RefreshTokenCookieFactory(
       @Value("${jwt.refresh-token-expiration-seconds}") final long maxAgeSeconds,
-      @Value("${app.cookie.secure:false}") final boolean secure) {
+      @Value("${app.cookie.secure}") final boolean secure) {
     this.maxAgeSeconds = maxAgeSeconds;
     this.secure = secure;
   }

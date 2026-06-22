@@ -7,24 +7,6 @@ import java.util.Map;
  * 택배사 문구가 본문에 고정돼 있어 CU/GS25 로 분리한다.
  */
 public enum AlimtalkTemplate {
-  PARTICIPATION_REQUESTED(
-      "입금 확인 요청 안내",
-      """
-      #{닉네임}님, 새로운 참여가 들어왔어요.
-
-      참여자가 입금 후 확인을 기다리고 있어요.
-      입금 내역을 확인하고 입금확인을 눌러주세요.
-      기한이 지나면 참여가 자동 취소돼요.
-
-      ▪ 분철명
-      #{분철명}
-      ▪ 참여자 : #{참여자닉네임}
-      ▪ 참여 멤버 : #{멤버명}
-      ▪ 입금 금액 : #{입금금액}원
-      ▪ 입금 기한 : #{입금기한}\
-      """,
-      AlimtalkButton.webLink("입금 확인하러 가기", BuncheolUrls.BUNCHEOL_MANAGE)),
-
   PAYMENT_CONFIRMED(
       "입금 확인 안내",
       """
@@ -38,7 +20,7 @@ public enum AlimtalkTemplate {
       ▪ 참여 멤버 : #{멤버명}
       ▪ 입금 금액 : #{입금금액}원\
       """,
-      AlimtalkButton.webLink("참여 내역 보기", BuncheolUrls.MY_BIDS)),
+      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
 
   PAYMENT_EXPIRED(
       "참여 자동 취소 안내",
@@ -52,7 +34,23 @@ public enum AlimtalkTemplate {
       #{분철명}
       ▪ 참여 멤버 : #{멤버명}\
       """,
-      AlimtalkButton.webLink("확인하기", BuncheolUrls.HOME)),
+      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
+
+  BUNCHEOL_CANCELLED(
+      "분철 취소 안내",
+      """
+      #{닉네임}님, 참여하신 분철이 아래 사유로 취소되었어요.
+
+      취소 사유: #{취소사유}
+
+      입금하신 금액은 입력해주신 환불 계좌로 환불돼요.
+      아직 입금 전이라면 따로 처리하실 내용은 없어요.
+
+      ▪ 분철명
+      #{분철명}
+      ▪ 참여 멤버 : #{멤버명}\
+      """,
+      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
 
   BUNCHEOL_CONFIRMED(
       "분철 진행 확정 안내",
@@ -66,21 +64,7 @@ public enum AlimtalkTemplate {
       #{분철명}
       ▪ 참여 멤버 : #{멤버명}\
       """,
-      AlimtalkButton.webLink("참여 내역 보기", BuncheolUrls.MY_BIDS)),
-
-  BUNCHEOL_CANCELLED(
-      "분철 취소 안내",
-      """
-      #{닉네임}님, 참여하신 분철이 취소되었어요.
-
-      입금하신 금액은 입력해주신 환불 계좌로 환불돼요.
-      아직 입금 전이라면 따로 처리하실 내용은 없어요.
-
-      ▪ 분철명
-      #{분철명}
-      ▪ 참여 멤버 : #{멤버명}\
-      """,
-      AlimtalkButton.webLink("확인하기", BuncheolUrls.HOME)),
+      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
 
   TRACKING_CU(
       "운송장 등록 안내",
@@ -108,6 +92,7 @@ public enum AlimtalkTemplate {
       """,
       AlimtalkButton.deliveryTracking("배송조회"));
 
+  // Aligo 알림톡 제목(subject_1, 필수 파라미터)이자 in-app 수신함 알림 제목. 카카오 기본형이라 본문 위 강조 타이틀(emtitle_1)은 쓰지 않는다.
   private final String subject;
   private final String body;
   private final AlimtalkButton button;

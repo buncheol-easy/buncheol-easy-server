@@ -25,11 +25,8 @@ class NotificationInboxRecorderTest {
   @InjectMocks private NotificationInboxRecorder recorder;
 
   private InboxMessage record(
-      final Long recipientId,
-      final AlimtalkTemplate template,
-      final Map<String, String> variables,
-      final Long buncheolId) {
-    recorder.record(recipientId, template, variables, buncheolId);
+      final Long recipientId, final AlimtalkTemplate template, final Map<String, String> variables) {
+    recorder.record(recipientId, template, variables);
 
     ArgumentCaptor<InboxMessage> captor = ArgumentCaptor.forClass(InboxMessage.class);
     verify(inboxMessageRepository).save(captor.capture());
@@ -45,7 +42,7 @@ class NotificationInboxRecorderTest {
             "멤버명", "장원영",
             "입금금액", "32,000");
 
-    InboxMessage saved = record(7L, AlimtalkTemplate.PAYMENT_CONFIRMED, variables, 5L);
+    InboxMessage saved = record(7L, AlimtalkTemplate.PAYMENT_CONFIRMED, variables);
 
     assertThat(saved.getType()).isEqualTo(InboxMessageType.NOTIFICATION);
     assertThat(saved.getRecipientId()).isEqualTo(7L);
@@ -61,36 +58,19 @@ class NotificationInboxRecorderTest {
     Map<String, String> variables =
         Map.of("닉네임", "참여자", "분철명", "엔믹스 앨범", "멤버명", "설윤");
 
-    InboxMessage saved = record(7L, AlimtalkTemplate.BUNCHEOL_CONFIRMED, variables, 5L);
+    InboxMessage saved = record(7L, AlimtalkTemplate.BUNCHEOL_CONFIRMED, variables);
 
     assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
   }
 
   @Test
-  void 참여요청_알림의_경로는_분철_관리_화면을_가리킨다() {
+  void 분철취소_알림의_경로는_참여_내역_화면을_가리킨다() {
     Map<String, String> variables =
-        Map.of(
-            "닉네임", "개최자",
-            "분철명", "엔믹스 앨범",
-            "참여자닉네임", "참여자",
-            "멤버명", "설윤",
-            "입금금액", "20,000",
-            "입금기한", "3/11(화) 12:00",
-            "분철아이디", "5");
+        Map.of("닉네임", "참여자", "분철명", "르세라핌 앨범", "멤버명", "카즈하", "취소사유", "개최자 취소");
 
-    InboxMessage saved = record(3L, AlimtalkTemplate.PARTICIPATION_REQUESTED, variables, 5L);
+    InboxMessage saved = record(9L, AlimtalkTemplate.BUNCHEOL_CANCELLED, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/products/5/manage");
-  }
-
-  @Test
-  void 분철취소_알림의_경로는_홈을_가리킨다() {
-    Map<String, String> variables =
-        Map.of("닉네임", "참여자", "분철명", "르세라핌 앨범", "멤버명", "카즈하");
-
-    InboxMessage saved = record(9L, AlimtalkTemplate.BUNCHEOL_CANCELLED, variables, 5L);
-
-    assertThat(saved.getLinkPath()).isEqualTo("/");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
   }
 
   @Test
@@ -98,7 +78,7 @@ class NotificationInboxRecorderTest {
     Map<String, String> variables =
         Map.of("닉네임", "참여자", "분철명", "아이브 앨범", "멤버명", "안유진", "운송장번호", "123456789");
 
-    InboxMessage saved = record(4L, AlimtalkTemplate.TRACKING_CU, variables, 5L);
+    InboxMessage saved = record(4L, AlimtalkTemplate.TRACKING_CU, variables);
 
     assertThat(saved.getLinkPath()).isNull();
   }

@@ -18,6 +18,9 @@ import org.mockito.ArgumentCaptor;
 
 class AlimtalkSenderTest {
 
+  // 테스트용 가짜 프론트 base (example.com 은 RFC 2606 테스트 예약 도메인). 실제 발송은 없고(클라이언트 mock) 렌더링 문자열만 검증한다.
+  private static final String BASE_URL = "https://test.example.com";
+
   private final AligoAlimtalkClient client = mock(AligoAlimtalkClient.class);
 
   private AlimtalkSender senderWith(final Map<AlimtalkTemplate, String> codes) {
@@ -33,7 +36,7 @@ class AlimtalkSenderTest {
             Duration.ofSeconds(3),
             Duration.ofSeconds(5),
             codes);
-    return new AlimtalkSender(properties, client);
+    return new AlimtalkSender(properties, client, BASE_URL);
   }
 
   @Test
@@ -56,32 +59,7 @@ class AlimtalkSenderTest {
     assertThat(request.receiverPhone()).isEqualTo("01011112222");
     assertThat(request.subject()).isEqualTo("입금 확인 안내");
     assertThat(request.message()).startsWith("철수님, 입금이 확인되었어요!").doesNotContain("#{");
-    assertThat(request.button().mobileUrl()).isEqualTo("https://buncheoleasy.com/profile/bids");
-  }
-
-  @Test
-  @DisplayName("버튼 URL 의 #{분철아이디} 변수도 치환해 발송한다")
-  void rendersButtonUrlVariables() {
-    AlimtalkSender sender = senderWith(Map.of(AlimtalkTemplate.PARTICIPATION_REQUESTED, "TPL_002"));
-    Map<String, String> variables =
-        Map.of(
-            "닉네임", "개최자",
-            "분철명", "엔믹스 앨범",
-            "참여자닉네임", "참여자",
-            "멤버명", "설윤",
-            "입금금액", "20,000",
-            "입금기한", "6/10(화) 15:00",
-            "분철아이디", "7");
-
-    sender.send(AlimtalkTemplate.PARTICIPATION_REQUESTED, "01011112222", variables);
-
-    ArgumentCaptor<AlimtalkSendRequest> captor = ArgumentCaptor.forClass(AlimtalkSendRequest.class);
-    verify(client).send(captor.capture());
-    AlimtalkSendRequest request = captor.getValue();
-    assertThat(request.subject()).isEqualTo("입금 확인 요청 안내");
-    assertThat(request.message()).startsWith("개최자님, 새로운 참여가 들어왔어요.").doesNotContain("#{");
-    assertThat(request.button().mobileUrl())
-        .isEqualTo("https://buncheoleasy.com/products/7/manage");
+    assertThat(request.button().mobileUrl()).isEqualTo(BASE_URL + "/profile/bids");
   }
 
   @Test

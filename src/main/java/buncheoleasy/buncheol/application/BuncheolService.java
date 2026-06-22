@@ -97,7 +97,9 @@ public class BuncheolService {
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
     cancelledParticipations.forEach(
         participation ->
-            eventPublisher.publishEvent(new BuncheolCancelledEvent(participation.getId())));
+            eventPublisher.publishEvent(
+                new BuncheolCancelledEvent(
+                    participation.getId(), BuncheolCancelReason.HOST_CANCELLED)));
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

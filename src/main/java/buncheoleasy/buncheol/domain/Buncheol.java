@@ -28,7 +28,6 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 300;
   private static final int PURCHASE_SITE_MAX_LENGTH = 200;
-  private static final long SECONDS_PER_HOUR = 3600;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -178,7 +177,7 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     }
     // 마감은 정각(매시 0분 0초)만 허용 — 매시 정각 cron 으로 정밀 마감하기 위함. KST(+9, 정시 오프셋)라 UTC 시각경계와
     // KST 시각경계가 일치하므로, epochSecond 가 3600 으로 나눠떨어지고 나노초가 0인지로 검증한다.
-    if (deadline.getEpochSecond() % SECONDS_PER_HOUR != 0 || deadline.getNano() != 0) {
+    if (deadline.getEpochSecond() % 3600 != 0 || deadline.getNano() != 0) {
       throw new BusinessException(ErrorCode.BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR);
     }
   }

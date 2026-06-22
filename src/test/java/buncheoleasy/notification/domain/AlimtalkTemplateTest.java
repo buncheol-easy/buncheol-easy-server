@@ -11,35 +11,6 @@ import org.junit.jupiter.api.Test;
 class AlimtalkTemplateTest {
 
   @Nested
-  @DisplayName("입금 확인 요청(PARTICIPATION_REQUESTED)")
-  class ParticipationRequested {
-
-    @Test
-    @DisplayName("변수를 모두 치환하고 미치환 토큰을 남기지 않는다")
-    void render() {
-      Map<String, String> variables =
-          Map.of(
-              "닉네임", "개최자닉",
-              "분철명", "아이브 미니 4집",
-              "참여자닉네임", "참여자닉",
-              "멤버명", "장원영",
-              "입금금액", "12,000",
-              "입금기한", "6/10(화) 15:00");
-
-      String rendered = AlimtalkTemplate.PARTICIPATION_REQUESTED.render(variables);
-
-      assertThat(rendered)
-          .startsWith("개최자닉님, 새로운 참여가 들어왔어요.")
-          .contains("아이브 미니 4집")
-          .contains("▪ 참여자 : 참여자닉")
-          .contains("▪ 참여 멤버 : 장원영")
-          .contains("▪ 입금 금액 : 12,000원")
-          .contains("▪ 입금 기한 : 6/10(화) 15:00")
-          .doesNotContain("#{");
-    }
-  }
-
-  @Nested
   @DisplayName("입금 확인(PAYMENT_CONFIRMED)")
   class PaymentConfirmed {
 
@@ -92,12 +63,14 @@ class AlimtalkTemplateTest {
     @DisplayName("닉네임·분철명·멤버명을 치환하고 미치환 토큰을 남기지 않는다")
     void render() {
       Map<String, String> variables =
-          Map.of("닉네임", "참여자닉", "분철명", "아이브 앨범", "멤버명", "안유진");
+          Map.of(
+              "닉네임", "참여자닉", "분철명", "아이브 앨범", "멤버명", "안유진", "취소사유", "최소 진행 인원 미달");
 
       String rendered = AlimtalkTemplate.BUNCHEOL_CANCELLED.render(variables);
 
       assertThat(rendered)
-          .startsWith("참여자닉님, 참여하신 분철이 취소되었어요.")
+          .startsWith("참여자닉님, 참여하신 분철이 아래 사유로 취소되었어요.")
+          .contains("취소 사유: 최소 진행 인원 미달")
           .contains("아이브 앨범")
           .contains("▪ 참여 멤버 : 안유진")
           .doesNotContain("#{");

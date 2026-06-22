@@ -31,8 +31,8 @@ public class ParticipationPaymentExpiryScheduler {
   private final Clock clock;
 
   @Scheduled(
-      fixedDelayString = "${app.participation.payment-expiry.interval-ms:60000}",
-      initialDelayString = "${app.participation.payment-expiry.initial-delay-ms:10000}")
+      fixedDelayString = "${app.participation.payment-expiry.interval-ms}",
+      initialDelayString = "${app.participation.payment-expiry.initial-delay-ms}")
   public void expireOverduePayments() {
     Instant now = Instant.now(clock);
     List<Participation> targets = participationPaymentExpiryService.findOverdueTargets(now);

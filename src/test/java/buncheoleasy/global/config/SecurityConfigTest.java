@@ -9,10 +9,10 @@ import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
-import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import java.time.Instant;
 import java.util.List;
@@ -74,7 +74,10 @@ class SecurityConfigTest {
     void 분철_목록_조회는_비로그인이어도_401이_아니다() throws Exception {
       given(
               buncheolListQueryService.search(
-                  null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20))
+                  null,
+                  new BuncheolSearchCondition(null, null, null),
+                  BuncheolListCursor.firstPage(),
+                  20))
           .willReturn(new CursorResponse<BuncheolSummaryResponse>(List.of(), null, false));
 
       mockMvc.perform(get("/v1/buncheols")).andExpect(status().isOk());

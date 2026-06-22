@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -15,7 +16,6 @@ import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -68,7 +68,7 @@ public class BuncheolController {
         buncheolListQueryService.search(
             userId,
             new BuncheolSearchCondition(groupId, memberId, keyword),
-            Cursor.parse(cursor),
+            BuncheolListCursor.parse(cursor),
             size));
   }
 

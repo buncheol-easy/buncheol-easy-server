@@ -20,6 +20,7 @@ import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
@@ -35,7 +36,6 @@ import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
-import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -298,13 +298,13 @@ class BuncheolControllerDocsTest {
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             List.of("민지", "혜인"));
     CursorResponse<BuncheolSummaryResponse> response =
-        new CursorResponse<>(List.of(item), "2026-05-15T08:00:00Z_10", true);
+        new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
     given(
             buncheolListQueryService.search(
                 HOST_ID,
                 new BuncheolSearchCondition(100L, 200L, "뉴진스"),
-                Cursor.parse("2026-05-15T08:00:00Z_15"),
+                BuncheolListCursor.parse("0_2026-05-15T08:00:00Z_15"),
                 20))
         .willReturn(response);
 
@@ -314,7 +314,7 @@ class BuncheolControllerDocsTest {
                 .queryParam("groupId", "100")
                 .queryParam("memberId", "200")
                 .queryParam("keyword", "뉴진스")
-                .queryParam("cursor", "2026-05-15T08:00:00Z_15")
+                .queryParam("cursor", "0_2026-05-15T08:00:00Z_15")
                 .queryParam("size", "20")
                 .header("Authorization", "Bearer {accessToken}")
                 .with(mockAuth()))
@@ -332,10 +332,10 @@ class BuncheolControllerDocsTest {
                             모든 항목의 `bookmarked` 가 `false`. 토큰을 주면 본인 찜 여부가 채워진다.
 
                             **응답 동작**
-                            - 정렬: `createdAt DESC, id DESC` 고정
+                            - 정렬: **모집중(`RECRUITING`) 을 최신 개최순(`createdAt DESC`) 으로 먼저**, 그 뒤에 **마감(`CONFIRMED`) 을 마감 임박순(`deadline DESC`, 현재와 가까운 마감일 우선)** 으로 잇는다. 두 그룹 모두 동일 시각은 `id DESC` 로 끊는다
                             - 노출 상태: `CANCELLED` 를 제외한 모든 status (`RECRUITING` / `CONFIRMED`)
-                            - 페이지: **커서 기반 무한스크롤**. 응답의 `nextCursor` 를 다음 요청의 `cursor` 로 그대로 전달
-                            - `nextCursor` 형식: `<createdAt Instant ISO-8601>_<id>` (예: `2026-05-15T08:00:00Z_10`)
+                            - 페이지: **커서 기반 무한스크롤**. 응답의 `nextCursor` 를 다음 요청의 `cursor` 로 그대로 전달 (불투명 토큰 — 형식에 의존하지 말 것)
+                            - `nextCursor` 형식: `<groupRank>_<sortAt Instant ISO-8601>_<id>` (groupRank 0=모집중·sortAt=createdAt, 1=마감·sortAt=deadline. 예: `0_2026-05-15T08:00:00Z_10`)
                             - `hasNext=false` 면 `nextCursor` 는 `null`
 
                             **쿼리 파라미터 (모두 선택)**
@@ -362,7 +362,7 @@ class BuncheolControllerDocsTest {
                                 .description("title/description 부분 일치 키워드")
                                 .optional(),
                             parameterWithName("cursor")
-                                .description("`<createdAt>_<id>` 형식, 첫 페이지는 생략")
+                                .description("직전 응답의 `nextCursor` 를 그대로 전달하는 불투명 토큰. 첫 페이지는 생략")
                                 .optional(),
                             parameterWithName("size")
                                 .description("페이지 크기 (기본 20, 1~50)")
@@ -384,7 +384,7 @@ class BuncheolControllerDocsTest {
                                 .description("분철에 포함된 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("nextCursor")
                                 .description(
-                                    "다음 페이지 커서 — `<createdAt>_<id>`. `hasNext=false` 면 null")
+                                    "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
                                 .optional(),
                             fieldWithPath("hasNext").description("다음 페이지 존재 여부"))
                         .build())));
@@ -412,7 +412,7 @@ class BuncheolControllerDocsTest {
 
     given(
             buncheolListQueryService.search(
-                null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20))
+                null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20))
         .willReturn(response);
 
     mockMvc

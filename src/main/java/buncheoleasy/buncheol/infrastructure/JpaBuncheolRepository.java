@@ -17,15 +17,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       Long hostId, BuncheolStatus excludedStatus);
 
   /**
-   * {@code excludedStatus} 와 일치하지 않는 분철을 검색한다. 어댑터에서 {@link BuncheolStatus#CANCELLED} 를 전달해 취소된 분철을
-   * 목록에서 제외하는 용도로 사용한다.
+   * 공개 목록의 <b>모집중(RECRUITING) 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
+   * BuncheolStatus#RECRUITING} 을 전달한다.
    *
-   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 정렬은 {@code createdAt DESC, id DESC}, 페이지 사이즈는 {@link
-   * Pageable} 로 제어한다.
+   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다. {@code
+   * idx_buncheols_status_created (status, created_at DESC, id DESC)}(groupId 동반 시 {@code
+   * idx_buncheols_group_created}) 인덱스로 정렬을 커버한다.
    */
   @Query(
       "SELECT b FROM Buncheol b "
-          + "WHERE b.status <> :excludedStatus "
+          + "WHERE b.status = :status "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
@@ -36,12 +37,42 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR b.createdAt < :cursorCreatedAt "
           + "        OR (b.createdAt = :cursorCreatedAt AND b.id < :cursorId)) "
           + "ORDER BY b.createdAt DESC, b.id DESC")
-  List<Buncheol> search(
-      @Param("excludedStatus") BuncheolStatus excludedStatus,
+  List<Buncheol> searchRecruiting(
+      @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,
       @Param("cursorCreatedAt") Instant cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  /**
+   * 공개 목록의 <b>마감(CONFIRMED) 그룹</b>을 {@code deadline DESC, id DESC}(현재와 가까운 마감순) 로 검색한다. 어댑터에서 {@link
+   * BuncheolStatus#CONFIRMED} 를 전달한다.
+   *
+   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (deadline, id)} 미만으로 keyset 페이지네이션한다. {@code
+   * idx_buncheols_status_deadline (status, deadline, id)} 인덱스를 역방향 스캔해 {@code deadline DESC, id DESC} 정렬을
+   * 커버한다.
+   */
+  @Query(
+      "SELECT b FROM Buncheol b "
+          + "WHERE b.status = :status "
+          + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
+          + "  AND (:memberId IS NULL OR b.id IN "
+          + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
+          + "  AND (:keyword IS NULL "
+          + "        OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\' "
+          + "        OR LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\') "
+          + "  AND (:cursorDeadline IS NULL "
+          + "        OR b.deadline < :cursorDeadline "
+          + "        OR (b.deadline = :cursorDeadline AND b.id < :cursorId)) "
+          + "ORDER BY b.deadline DESC, b.id DESC")
+  List<Buncheol> searchConfirmed(
+      @Param("status") BuncheolStatus status,
+      @Param("groupId") Long groupId,
+      @Param("memberId") Long memberId,
+      @Param("keyword") String keyword,
+      @Param("cursorDeadline") Instant cursorDeadline,
       @Param("cursorId") Long cursorId,
       Pageable pageable);
 

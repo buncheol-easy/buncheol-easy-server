@@ -1,7 +1,6 @@
 package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
-import buncheoleasy.global.page.Cursor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -21,12 +20,15 @@ public interface BuncheolRepository {
   List<Buncheol> findVisibleByHostIdOrderByCreatedAtDesc(Long hostId);
 
   /**
-   * 활성 분철(CANCELLED 제외) 중 검색 조건에 부합하는 항목을 {@code createdAt DESC, id DESC} 정렬로 최대 {@code limit} 개
-   * 조회한다.
+   * 활성 분철(CANCELLED 제외) 중 검색 조건에 부합하는 항목을 공개 목록 정렬로 최대 {@code limit} 개 조회한다.
    *
-   * <p>hasNext 판별을 위해 호출 측은 보통 {@code size + 1} 을 {@code limit} 으로 넘긴다.
+   * <p>정렬은 두 그룹을 이어 붙인다: 먼저 모집중(RECRUITING) 을 {@code createdAt DESC}(최신 개최순) 로, 그 뒤에 마감(CONFIRMED) 을 {@code
+   * deadline DESC}(현재와 가까운 마감순) 로 잇는다. 두 그룹 모두 동일 시각은 {@code id DESC} 로 끊는다.
+   *
+   * <p>커서는 {@link BuncheolListCursor} 로, 마지막으로 본 그룹·정렬 시각·id 를 담는다. hasNext 판별을 위해 호출 측은 보통 {@code size +
+   * 1} 을 {@code limit} 으로 넘긴다.
    */
-  List<Buncheol> search(BuncheolSearchCondition condition, Cursor cursor, int limit);
+  List<Buncheol> search(BuncheolSearchCondition condition, BuncheolListCursor cursor, int limit);
 
   boolean existsActiveByHostId(Long hostId);
 

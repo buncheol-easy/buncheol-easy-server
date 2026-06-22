@@ -113,12 +113,15 @@ CREATE TABLE IF NOT EXISTS buncheols
     INDEX idx_buncheols_group_id (group_id),
     INDEX idx_buncheols_title (title),
     INDEX idx_buncheols_host_created (host_id, created_at DESC),
-    -- 공개 목록 조회 (CANCELLED 제외, createdAt DESC 정렬) 의 커서 페이지네이션용
+    -- 공개 목록 '모집중' 그룹 조회 (status='RECRUITING', createdAt DESC, id DESC) 의 커서 페이지네이션용
     INDEX idx_buncheols_status_created (status, created_at DESC, id DESC),
     -- groupId 필터 + 커서 조합용 (idx_buncheols_group_id 만으로는 정렬을 인덱스로 커버 불가)
     INDEX idx_buncheols_group_created (group_id, created_at DESC, id DESC),
-    -- 자동 마감 스케줄러 폴링 (status = 'RECRUITING' AND deadline <= now) 용
-    INDEX idx_buncheols_status_deadline (status, deadline),
+    -- 두 용도 겸용: (1) 자동 마감 스케줄러 폴링 (status='RECRUITING' AND deadline <= now, 앞 두 컬럼 prefix),
+    -- (2) 공개 목록 '마감' 그룹 조회 (status='CONFIRMED', deadline DESC, id DESC) 의 커서 페이지네이션 — 역방향 인덱스 스캔으로 정렬 커버.
+    -- 단 groupId 필터 + '마감' 그룹 조합은 (group_id, deadline, id) 인덱스가 없어 정렬이 filesort 로 떨어진다 (그룹별 마감분이 적어 현재는 수용,
+    -- 특정 그룹 마감분이 많아지면 (group_id, deadline DESC, id DESC) 추가 검토).
+    INDEX idx_buncheols_status_deadline (status, deadline, id),
 
     CONSTRAINT fk_buncheols_host
         FOREIGN KEY (host_id)

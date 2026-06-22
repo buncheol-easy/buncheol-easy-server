@@ -12,13 +12,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
-import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
@@ -69,7 +70,7 @@ class BuncheolListQueryServiceTest {
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
-              1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
 
       assertThat(result.items()).hasSize(2);
       assertThat(result.items().get(0).id()).isEqualTo(10L);
@@ -103,7 +104,7 @@ class BuncheolListQueryServiceTest {
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
-              1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 2);
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 2);
 
       ArgumentCaptor<Integer> limitCaptor = ArgumentCaptor.forClass(Integer.class);
       verify(buncheolRepository).search(any(), any(), limitCaptor.capture());
@@ -113,7 +114,33 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items().get(0).id()).isEqualTo(10L);
       assertThat(result.items().get(1).id()).isEqualTo(11L);
       assertThat(result.hasNext()).isTrue();
-      assertThat(result.nextCursor()).isEqualTo(t2.toString() + "_11");
+      // RECRUITING 그룹(rank 0) → nextCursor = "0_<createdAt>_<id>"
+      assertThat(result.nextCursor()).isEqualTo("0_" + t2 + "_11");
+    }
+
+    @Test
+    void 마지막_visible_이_마감_분철이면_nextCursor_는_rank1_과_deadline_으로_인코딩된다() {
+      Instant deadline1 = Instant.parse("2026-06-20T00:00:00Z");
+      Instant deadline2 = Instant.parse("2026-06-10T00:00:00Z");
+      Instant deadline3 = Instant.parse("2026-06-05T00:00:00Z"); // drop 대상
+      Buncheol c1 = confirmedBuncheol(20L, 100L, "마감 A", deadline1);
+      Buncheol c2 = confirmedBuncheol(21L, 100L, "마감 B", deadline2);
+      Buncheol dropped = confirmedBuncheol(22L, 100L, "마감 C", deadline3);
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(c1, c2, dropped));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L, 21L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(20L, 21L)))
+          .willReturn(Map.of());
+      given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(20L, 21L)))
+          .willReturn(Set.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 2);
+
+      assertThat(result.hasNext()).isTrue();
+      // CONFIRMED 그룹(rank 1) → nextCursor = "1_<deadline>_<id>"
+      assertThat(result.nextCursor()).isEqualTo("1_" + deadline2 + "_21");
     }
 
     @Test
@@ -122,7 +149,7 @@ class BuncheolListQueryServiceTest {
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
-              1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
 
       assertThat(result.items()).isEmpty();
       assertThat(result.hasNext()).isFalse();
@@ -149,7 +176,7 @@ class BuncheolListQueryServiceTest {
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
-              null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+              null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
 
       assertThat(result.items()).hasSize(1);
       assertThat(result.items().get(0).bookmarked()).isFalse();
@@ -175,7 +202,7 @@ class BuncheolListQueryServiceTest {
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
-              null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+              null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
 
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
       assertThat(result.items().get(1).thumbnailUrl()).isNull();
@@ -197,7 +224,7 @@ class BuncheolListQueryServiceTest {
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
-              null, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+              null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
 
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
       assertThat(result.items().get(1).thumbnailUrl()).isEqualTo("https://cdn.example.com/b.jpg");
@@ -213,9 +240,9 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 0);
+          1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 0);
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 999);
+          1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 999);
 
       ArgumentCaptor<Integer> limitCaptor = ArgumentCaptor.forClass(Integer.class);
       verify(buncheolRepository, times(2)).search(any(), any(), limitCaptor.capture());
@@ -227,7 +254,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, "   "), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, null, "   "), BuncheolListCursor.firstPage(), 20);
 
       ArgumentCaptor<BuncheolSearchCondition> captor =
           ArgumentCaptor.forClass(BuncheolSearchCondition.class);
@@ -240,7 +267,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, "  뉴진스  "), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, null, "  뉴진스  "), BuncheolListCursor.firstPage(), 20);
 
       ArgumentCaptor<BuncheolSearchCondition> captor =
           ArgumentCaptor.forClass(BuncheolSearchCondition.class);
@@ -258,7 +285,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          null, new BuncheolSearchCondition(null, null, "ive원영"), Cursor.firstPage(), 20);
+          null, new BuncheolSearchCondition(null, null, "ive원영"), BuncheolListCursor.firstPage(), 20);
 
       verifyNoInteractions(eventPublisher);
     }
@@ -268,7 +295,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
 
       verifyNoInteractions(eventPublisher);
     }
@@ -278,7 +305,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, "   "), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, null, "   "), BuncheolListCursor.firstPage(), 20);
 
       verifyNoInteractions(eventPublisher);
     }
@@ -288,7 +315,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(100L, null, null), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(100L, null, null), BuncheolListCursor.firstPage(), 20);
 
       verifyNoInteractions(eventPublisher);
     }
@@ -298,7 +325,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, 200L, null), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, 200L, null), BuncheolListCursor.firstPage(), 20);
 
       verifyNoInteractions(eventPublisher);
     }
@@ -308,7 +335,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, "  ive원영  "), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, null, "  ive원영  "), BuncheolListCursor.firstPage(), 20);
 
       ArgumentCaptor<BuncheolSearchedEvent> captor =
           ArgumentCaptor.forClass(BuncheolSearchedEvent.class);
@@ -322,7 +349,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
       buncheolListQueryService.search(
-          1L, new BuncheolSearchCondition(null, null, "100%"), Cursor.firstPage(), 20);
+          1L, new BuncheolSearchCondition(null, null, "100%"), BuncheolListCursor.firstPage(), 20);
 
       ArgumentCaptor<BuncheolSearchCondition> repoCaptor =
           ArgumentCaptor.forClass(BuncheolSearchCondition.class);
@@ -336,14 +363,29 @@ class BuncheolListQueryServiceTest {
     }
   }
 
+  // 공개 목록 정렬에서 RECRUITING 그룹은 createdAt 기준이므로, 픽스처는 RECRUITING 으로 둔다.
+  // (BuncheolListCursor.from 이 status 로 그룹 순위·정렬 시각을 정한다 → nextCursor 형식 검증과 직결)
   private Buncheol buncheol(Long id, Long groupId, String title, Instant createdAt) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
     setField(buncheol, "groupId", groupId);
     setField(buncheol, "title", title);
     setField(buncheol, "deadline", Instant.parse("2026-06-01T12:00:00Z"));
+    setField(buncheol, "status", BuncheolStatus.RECRUITING);
     // CreatedAtEntity#createdAt 은 부모 필드. setField 가 super 까지 탐색.
     setField(buncheol, "createdAt", createdAt);
+    return buncheol;
+  }
+
+  // 마감(CONFIRMED) 그룹 픽스처. 정렬·커서가 deadline 기준이므로 deadline 을 주입한다.
+  private Buncheol confirmedBuncheol(Long id, Long groupId, String title, Instant deadline) {
+    Buncheol buncheol = newInstance(Buncheol.class);
+    setField(buncheol, "id", id);
+    setField(buncheol, "groupId", groupId);
+    setField(buncheol, "title", title);
+    setField(buncheol, "deadline", deadline);
+    setField(buncheol, "status", BuncheolStatus.CONFIRMED);
+    setField(buncheol, "createdAt", Instant.parse("2026-05-01T00:00:00Z"));
     return buncheol;
   }
 

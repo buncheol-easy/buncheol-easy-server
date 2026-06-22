@@ -720,7 +720,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("expireIfOverdue — 입금 만료 CAS")
+  @DisplayName("expirePaymentIfOverdue — 입금 만료 CAS")
   class ExpireIfOverdueTest {
 
     @Test
@@ -740,7 +740,7 @@ class JpaParticipationRepositoryAdapterTest {
               ParticipationStatus.AWAITING_PAYMENT,
               null);
 
-      boolean expired = participationRepository.expireIfOverdue(pid, now);
+      boolean expired = participationRepository.expirePaymentIfOverdue(pid, now);
 
       assertThat(expired).isTrue();
       assertThat(statusOf(pid)).isEqualTo("CANCELLED");
@@ -764,7 +764,7 @@ class JpaParticipationRepositoryAdapterTest {
               ParticipationStatus.AWAITING_PAYMENT,
               null);
 
-      assertThat(participationRepository.expireIfOverdue(pid, now)).isFalse();
+      assertThat(participationRepository.expirePaymentIfOverdue(pid, now)).isFalse();
       assertThat(statusOf(pid)).isEqualTo("AWAITING_PAYMENT");
     }
 
@@ -786,7 +786,7 @@ class JpaParticipationRepositoryAdapterTest {
               ParticipationStatus.CONFIRMED,
               null);
 
-      assertThat(participationRepository.expireIfOverdue(pid, now)).isFalse();
+      assertThat(participationRepository.expirePaymentIfOverdue(pid, now)).isFalse();
     }
   }
 

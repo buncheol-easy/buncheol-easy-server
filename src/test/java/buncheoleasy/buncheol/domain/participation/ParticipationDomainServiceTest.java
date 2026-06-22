@@ -232,16 +232,16 @@ class ParticipationDomainServiceTest {
 
     @Test
     void CAS_성공시_true를_반환한다() {
-      given(participationRepository.expireIfOverdue(PARTICIPATION_ID, NOW)).willReturn(true);
+      given(participationRepository.expirePaymentIfOverdue(PARTICIPATION_ID, NOW)).willReturn(true);
 
-      assertThat(participationDomainService.expireOverduePayment(PARTICIPATION_ID, NOW)).isTrue();
+      assertThat(participationDomainService.expirePayment(PARTICIPATION_ID, NOW)).isTrue();
     }
 
     @Test
     void CAS_실패시_예외_없이_false를_반환한다() {
-      given(participationRepository.expireIfOverdue(PARTICIPATION_ID, NOW)).willReturn(false);
+      given(participationRepository.expirePaymentIfOverdue(PARTICIPATION_ID, NOW)).willReturn(false);
 
-      assertThat(participationDomainService.expireOverduePayment(PARTICIPATION_ID, NOW)).isFalse();
+      assertThat(participationDomainService.expirePayment(PARTICIPATION_ID, NOW)).isFalse();
     }
   }
 

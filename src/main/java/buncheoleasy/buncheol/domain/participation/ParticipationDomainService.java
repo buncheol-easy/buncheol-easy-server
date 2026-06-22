@@ -79,8 +79,8 @@ public class ParticipationDomainService {
   }
 
   /** 입금 만료 처리 (입금 만료 스케줄러용). 멱등하며 실패 시(이미 확정/취소) 예외 없이 false 를 돌려준다. */
-  public boolean expireOverduePayment(final Long participationId, final Instant now) {
-    return participationRepository.expireIfOverdue(participationId, now);
+  public boolean expirePayment(final Long participationId, final Instant now) {
+    return participationRepository.expirePaymentIfOverdue(participationId, now);
   }
 
   /** 분철 취소 시 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이. 호출 측 @Transactional 필수. */

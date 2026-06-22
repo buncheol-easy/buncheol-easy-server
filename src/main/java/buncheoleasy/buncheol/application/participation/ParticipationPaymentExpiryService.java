@@ -31,7 +31,7 @@ public class ParticipationPaymentExpiryService {
    */
   @Transactional
   public boolean expire(final Long participationId, final Instant now) {
-    boolean expired = participationDomainService.expireOverduePayment(participationId, now);
+    boolean expired = participationDomainService.expirePayment(participationId, now);
     if (expired) {
       eventPublisher.publishEvent(new PaymentExpiredEvent(participationId));
     }

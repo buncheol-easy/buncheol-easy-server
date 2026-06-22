@@ -58,7 +58,7 @@ public interface ParticipationRepository {
    *
    * @return 전이에 성공하면 true
    */
-  boolean expireIfOverdue(Long participationId, Instant now);
+  boolean expirePaymentIfOverdue(Long participationId, Instant now);
 
   /**
    * 분철의 활성 참여를 모두 CANCELLED({@link ParticipationCancelReason#BUNCHEOL_CANCELLED}) 로 일괄 전이한다. 호스트

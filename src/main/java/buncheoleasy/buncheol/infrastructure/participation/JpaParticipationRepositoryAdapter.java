@@ -182,7 +182,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public boolean expireIfOverdue(final Long participationId, final Instant now) {
+  public boolean expirePaymentIfOverdue(final Long participationId, final Instant now) {
     int updated =
         jpaParticipationRepository.cancelIfAwaiting(
             participationId,

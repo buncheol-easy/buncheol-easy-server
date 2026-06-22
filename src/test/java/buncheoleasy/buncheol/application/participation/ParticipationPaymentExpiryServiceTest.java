@@ -56,19 +56,19 @@ class ParticipationPaymentExpiryServiceTest {
 
     @Test
     void 만료_처리를_도메인_서비스에_위임하고_성공하면_자동취소_이벤트를_발행하며_true를_반환한다() {
-      given(participationDomainService.expireOverduePayment(PARTICIPATION_ID, NOW))
+      given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW))
           .willReturn(true);
 
       boolean result = participationPaymentExpiryService.expire(PARTICIPATION_ID, NOW);
 
       assertThat(result).isTrue();
-      then(participationDomainService).should().expireOverduePayment(PARTICIPATION_ID, NOW);
+      then(participationDomainService).should().expirePayment(PARTICIPATION_ID, NOW);
       then(eventPublisher).should().publishEvent(new PaymentExpiredEvent(PARTICIPATION_ID));
     }
 
     @Test
     void 이미_확인_취소된_참여는_CAS에_막혀_false를_반환하고_이벤트를_발행하지_않는다_멱등() {
-      given(participationDomainService.expireOverduePayment(PARTICIPATION_ID, NOW))
+      given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW))
           .willReturn(false);
 
       boolean result = participationPaymentExpiryService.expire(PARTICIPATION_ID, NOW);

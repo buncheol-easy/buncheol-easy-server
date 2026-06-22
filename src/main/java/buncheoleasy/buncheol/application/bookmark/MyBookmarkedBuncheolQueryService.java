@@ -15,7 +15,6 @@ import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,10 +69,9 @@ public class MyBookmarkedBuncheolQueryService {
     }
 
     if (sort == BookmarkSortOption.DEADLINE) {
-      filtered.sort(
-          Comparator.comparing(
-                  (BuncheolBookmark bm) -> buncheolById.get(bm.getBuncheolId()).getDeadline())
-              .thenComparing(Comparator.comparing(BuncheolBookmark::getId).reversed()));
+      // 마감 임박순: 모집중 분철을 마감 임박(deadline ASC)으로 먼저 보여주고, 그 뒤에 마감(CONFIRMED) 분철을
+      // 마감일 내림차순(현재와 가까운 순, deadline DESC)으로 잇는다. 동일 키는 찜 id DESC.
+      filtered.sort((a, b) -> compareByDeadlineGroup(a, b, buncheolById));
     }
 
     List<Long> groupIds =
@@ -104,6 +102,29 @@ public class MyBookmarkedBuncheolQueryService {
                     thumbnailByBuncheolId,
                     memberNamesByBuncheolId))
         .toList();
+  }
+
+  // 마감 임박순 정렬 비교자: 모집중(RECRUITING) 우선 → 모집중은 deadline ASC, 마감(CONFIRMED)은 deadline DESC, 동일 키는 찜 id DESC.
+  // 전제: CANCELLED 는 isVisible 에서 제거됨 → RECRUITING/CONFIRMED 두 상태만 진입한다.
+  private int compareByDeadlineGroup(
+      final BuncheolBookmark a,
+      final BuncheolBookmark b,
+      final Map<Long, Buncheol> buncheolById) {
+    Buncheol ba = buncheolById.get(a.getBuncheolId());
+    Buncheol bb = buncheolById.get(b.getBuncheolId());
+    boolean aRecruiting = ba.getStatus() == BuncheolStatus.RECRUITING;
+    boolean bRecruiting = bb.getStatus() == BuncheolStatus.RECRUITING;
+    if (aRecruiting != bRecruiting) {
+      return aRecruiting ? -1 : 1;
+    }
+    int byDeadline =
+        aRecruiting
+            ? ba.getDeadline().compareTo(bb.getDeadline())
+            : bb.getDeadline().compareTo(ba.getDeadline());
+    if (byDeadline != 0) {
+      return byDeadline;
+    }
+    return Long.compare(b.getId(), a.getId());
   }
 
   private boolean isVisible(

@@ -104,13 +104,16 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
-    void DEADLINE_정렬은_분철_마감_임박순으로_재정렬된다() {
-      // 찜 등록 순: bm1(분철 늦은 마감) → bm2(분철 빠른 마감) → bm3(분철 가장 빠른 마감)
+    void DEADLINE_정렬은_모집중을_마감임박순으로_먼저_보여주고_마감분은_마감일_내림차순으로_잇는다() {
+      // 찜 등록 순과 무관하게, 모집중(RECRUITING) 을 deadline ASC 로 먼저,
+      // 그 뒤에 마감(CONFIRMED) 을 deadline DESC 로 잇는다.
       BuncheolBookmark bm1 = bookmark(500L, USER_ID, 10L);
       BuncheolBookmark bm2 = bookmark(501L, USER_ID, 20L);
       BuncheolBookmark bm3 = bookmark(502L, USER_ID, 30L);
+      BuncheolBookmark bm4 = bookmark(503L, USER_ID, 40L);
+      BuncheolBookmark bm5 = bookmark(504L, USER_ID, 50L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
-          .willReturn(List.of(bm1, bm2, bm3));
+          .willReturn(List.of(bm1, bm2, bm3, bm4, bm5));
 
       Buncheol b1 =
           buncheol(
@@ -121,24 +124,35 @@ class MyBookmarkedBuncheolQueryServiceTest {
       Buncheol b3 =
           buncheol(
               30L, 100L, "분철 C", BuncheolStatus.RECRUITING, Instant.parse("2026-06-01T00:00:00Z"));
-      given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L)))
-          .willReturn(List.of(b1, b2, b3));
+      // 마감(CONFIRMED) — deadline DESC 로 정렬 (06-20 > 06-10), now 와 무관한 순수 deadline 내림차순
+      Buncheol b4 =
+          buncheol(
+              40L, 100L, "분철 D", BuncheolStatus.CONFIRMED, Instant.parse("2026-06-10T00:00:00Z"));
+      Buncheol b5 =
+          buncheol(
+              50L, 100L, "분철 E", BuncheolStatus.CONFIRMED, Instant.parse("2026-06-20T00:00:00Z"));
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L, 40L, 50L)))
+          .willReturn(List.of(b1, b2, b3, b4, b5));
 
+      // 최종 정렬: 모집중 deadline ASC [30, 20, 10] → 마감 deadline DESC [50, 40]
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(30L, 20L, 10L)))
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
           .willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(30L, 20L, 10L)))
+      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
           .willReturn(Map.of());
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
               USER_ID, BookmarkSortOption.DEADLINE, false, false);
 
-      assertThat(result).hasSize(3);
-      // deadline ASC: C(06-01) → B(06-15) → A(07-01)
+      assertThat(result).hasSize(5);
+      // 모집중 마감 임박순: C(06-01) → B(06-15) → A(07-01)
       assertThat(result.get(0).buncheolId()).isEqualTo(30L);
       assertThat(result.get(1).buncheolId()).isEqualTo(20L);
       assertThat(result.get(2).buncheolId()).isEqualTo(10L);
+      // 그 뒤 마감분 마감일 내림차순: E(06-20) → D(06-10)
+      assertThat(result.get(3).buncheolId()).isEqualTo(50L);
+      assertThat(result.get(4).buncheolId()).isEqualTo(40L);
       assertThat(result.get(0).memberNames()).isEmpty();
     }
 

@@ -46,7 +46,7 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   private BuncheolParams validParams() {
-    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null);
   }
 
@@ -113,7 +113,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
       BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
@@ -125,7 +125,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
       BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
@@ -283,7 +283,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
     private BuncheolParams paramsWithTitleAndDescription(
         Long gId, String title, String description) {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
       return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null);
     }
 

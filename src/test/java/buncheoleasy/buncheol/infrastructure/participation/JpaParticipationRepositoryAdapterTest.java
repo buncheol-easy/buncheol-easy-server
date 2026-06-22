@@ -62,7 +62,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   private Long createBuncheol() {
-    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,

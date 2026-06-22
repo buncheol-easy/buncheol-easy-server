@@ -72,6 +72,8 @@ public enum ErrorCode {
   BUNCHEOL_REQUIRED_FIELD_MISSING("BCH-001", "분철 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_TEXT_LENGTH_INVALID("BCH-002", "분철 텍스트 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_DEADLINE_INVALID("BCH-003", "분철 마감일은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR(
+      "BCH-004", "분철 마감 시간은 정각(매시 0분 0초)이어야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MIN_HEADCOUNT_INVALID("BCH-008", "분철 진행 최소 인원은 1명 이상이어야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_REQUIRED("BCH-006", "배송비는 최소 1개 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),

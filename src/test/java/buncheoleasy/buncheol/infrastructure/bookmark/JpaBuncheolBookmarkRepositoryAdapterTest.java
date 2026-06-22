@@ -55,7 +55,7 @@ class JpaBuncheolBookmarkRepositoryAdapterTest {
   }
 
   private Long createBuncheol(Long hostId, Long groupId, String title) {
-    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,

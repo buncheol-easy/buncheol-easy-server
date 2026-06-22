@@ -46,7 +46,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
     Long hostId = TestUserFixture.insertUser(jdbcTemplate, "host123");
     Long groupId = TestGroupFixture.insertGroup(jdbcTemplate, "테스트 그룹");
 
-    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,
@@ -177,7 +177,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
                   "다른 제목",
                   null,
                   "다른 스토어",
-                  Instant.now().plus(7, ChronoUnit.DAYS),
+                  Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS),
                   1,
                   3000,
                   null),

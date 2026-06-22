@@ -22,7 +22,7 @@ class BuncheolTest {
 
   private static final Long HOST_ID = 1L;
   private static final int MIN_HEADCOUNT = 5;
-  private static final Instant FUTURE_DEADLINE = Instant.now().plus(7, ChronoUnit.DAYS);
+  private static final Instant FUTURE_DEADLINE = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
 
   private BuncheolParams validParams() {
     return new BuncheolParams(
@@ -177,15 +177,29 @@ class BuncheolTest {
     }
 
     @Test
-    void 마감일이_현재보다_미래면_유효하다() {
+    void 마감일이_현재보다_미래이고_정각이면_유효하다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(
-              1L, "제목", null, "스토어명", Instant.now().plusSeconds(1), MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
           .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 마감일이_정각이_아니면_예외가_발생한다() {
+      // given - 미래이지만 분·초가 0이 아닌 마감(정각 아님)
+      Instant notOnTheHour =
+          Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS).plusSeconds(1);
+      BuncheolParams params =
+          new BuncheolParams(1L, "제목", null, "스토어명", notOnTheHour, MIN_HEADCOUNT, 3000, null);
+
+      // when & then
+      assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR);
     }
   }
 

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -113,5 +114,27 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("buncheolId") Long buncheolId,
       @Param("newStatus") BuncheolStatus newStatus,
       @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("now") Instant now);
+
+  // 마감 판정 전용 CAS: 입금확인된(CONFIRMED) 참여 수를 서브쿼리로 세어 minHeadcount 충족 여부에 따라 CONFIRMED/CANCELLED 로
+  // 한 UPDATE 안에서 전이한다. count 를 별도 SELECT 로 먼저 읽으면(REPEATABLE READ 스냅샷) 그 사이 입금확인이 커밋돼 stale count 로
+  // 오판(충족인데 CANCELLED)할 수 있어, 카운트·비교·전이를 한 UPDATE 로 묶는다.
+  // 단, 이 원자성은 InnoDB 가 UPDATE 평가 시 서브쿼리를 current read(최신 커밋) 로 보는 동작에 의존한다(SQL 표준 보장 아님).
+  // H2 통합 테스트는 단일 스레드 기능(CONFIRMED/CANCELLED/이미마감 분기)만 검증하며 동시성 레이스 자체를 재현하지는 않는다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = CASE WHEN ("
+          + "      SELECT COUNT(p) FROM Participation p "
+          + "      WHERE p.buncheolId = b.id AND p.status = :confirmedParticipationStatus"
+          + "    ) >= b.minHeadcount THEN :confirmedStatus ELSE :cancelledStatus END, "
+          + "  b.finalizedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus")
+  int finalizeExpiredByConfirmedHeadcount(
+      @Param("buncheolId") Long buncheolId,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 }

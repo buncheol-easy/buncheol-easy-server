@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -123,5 +124,16 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
       final Long buncheolId, final BuncheolStatus newStatus, final Instant now) {
     return jpaBuncheolRepository.finalizeIfRecruiting(
         buncheolId, newStatus, BuncheolStatus.RECRUITING, now);
+  }
+
+  @Override
+  public int finalizeExpiredByConfirmedHeadcount(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.finalizeExpiredByConfirmedHeadcount(
+        buncheolId,
+        BuncheolStatus.RECRUITING,
+        ParticipationStatus.CONFIRMED,
+        BuncheolStatus.CONFIRMED,
+        BuncheolStatus.CANCELLED,
+        now);
   }
 }

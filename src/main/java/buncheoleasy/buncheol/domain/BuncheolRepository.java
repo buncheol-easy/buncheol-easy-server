@@ -50,4 +50,15 @@ public interface BuncheolRepository {
    * @return 갱신된 행 수 (0 이면 이미 다른 인스턴스가 마감했거나 RECRUITING 이 아님)
    */
   int finalizeIfRecruiting(Long buncheolId, BuncheolStatus newStatus, Instant now);
+
+  /**
+   * 마감 판정 전용 CAS. 입금확인된(CONFIRMED) 참여 수가 {@code minHeadcount} 이상이면 CONFIRMED, 미만이면 CANCELLED 로 {@code
+   * RECRUITING} 인 분철을 단일 UPDATE 로 원자 전이한다(카운트·비교·전이를 한 current-read 쿼리로 묶어 stale count 오판을 방지).
+   *
+   * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다. 전이된 실제 상태(CONFIRMED/CANCELLED)는 반환하지 않으므로
+   * 후속 분기는 재조회로 판별한다.
+   *
+   * @return 갱신된 행 수 (0 이면 이미 마감됐거나 RECRUITING 이 아님)
+   */
+  int finalizeExpiredByConfirmedHeadcount(Long buncheolId, Instant now);
 }

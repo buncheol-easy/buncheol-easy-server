@@ -40,6 +40,16 @@ public class BuncheolDomainService {
     return buncheolRepository.finalizeIfRecruiting(buncheolId, newStatus, now) > 0;
   }
 
+  /**
+   * 마감 판정(진행확정/취소)을 단일 CAS 로 원자 전이한다. 입금확인 인원이 최소 인원 이상이면 CONFIRMED, 미만이면 CANCELLED. 카운트·비교·전이를 한
+   * UPDATE 로 묶어, 카운트 조회와 전이 사이에 입금확인이 커밋돼 발생하는 오판(stale count)을 방지한다.
+   *
+   * @return 전이에 성공하면 true, 이미 마감 판정됐거나 RECRUITING 이 아니면 false (실제 전이 상태는 호출 측이 재조회로 판별)
+   */
+  public boolean finalizeExpiredByConfirmedHeadcount(final Long buncheolId, final Instant now) {
+    return buncheolRepository.finalizeExpiredByConfirmedHeadcount(buncheolId, now) > 0;
+  }
+
   /** 호스트의 분철 취소 (RECRUITING → CANCELLED CAS). 모집 중이 아니면 상태 위반으로 막는다. */
   public void cancelBuncheol(final Long buncheolId, final Instant now) {
     if (!finalizeBuncheol(buncheolId, BuncheolStatus.CANCELLED, now)) {

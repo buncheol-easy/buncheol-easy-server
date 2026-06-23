@@ -33,7 +33,8 @@ public class ParticipationDomainService {
     return participationRepository.findConfirmedByBuncheolId(buncheolId);
   }
 
-  /** 분철의 입금확인된 참여자 수. 마감 시 최소 인원 판정용. */
+  // 분철의 입금확인된 참여자 수. 마감 판정은 finalizeExpiredByConfirmedHeadcount CAS 가 서브쿼리로 직접 세도록 바뀌어
+  // 현재 production 호출처는 없지만, 관리 화면의 확정 인원 표시 등 재사용 여지가 있어 보존한다.
   public int countConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.countConfirmedByBuncheolId(buncheolId);
   }

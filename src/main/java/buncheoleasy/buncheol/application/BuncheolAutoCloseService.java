@@ -40,17 +40,16 @@ public class BuncheolAutoCloseService {
    */
   @Transactional
   public boolean finalizeExpired(final Long buncheolId, final Instant now) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    int confirmedCount = participationDomainService.countConfirmedByBuncheolId(buncheolId);
-    boolean proceed = confirmedCount >= buncheol.getMinHeadcount();
-    BuncheolStatus target = proceed ? BuncheolStatus.CONFIRMED : BuncheolStatus.CANCELLED;
-
-    if (!buncheolDomainService.finalizeBuncheol(buncheolId, target, now)) {
+    // 입금확인 인원 카운트·최소 인원 비교·상태 전이를 단일 CAS(CASE+서브쿼리)로 원자화한다. 카운트를 별도 SELECT 로 먼저 읽으면
+    // 그 사이 호스트의 입금확인 커밋으로 stale count 가 되어 충족인데 CANCELLED 로 오판할 수 있다.
+    if (!buncheolDomainService.finalizeExpiredByConfirmedHeadcount(buncheolId, now)) {
       // 다른 인스턴스가 이미 마감했거나 그 사이 상태가 RECRUITING 이 아니게 됨.
       return false;
     }
 
-    if (proceed) {
+    // CAS 가 확정한 실제 상태를 재조회해 후속 처리를 분기한다 (@Modifying clearAutomatically 로 1차 캐시가 비워진 뒤의 fresh read).
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    if (buncheol.getStatus() == BuncheolStatus.CONFIRMED) {
       finalizeAsConfirmed(buncheolId);
     } else {
       finalizeAsCancelled(buncheolId, now);

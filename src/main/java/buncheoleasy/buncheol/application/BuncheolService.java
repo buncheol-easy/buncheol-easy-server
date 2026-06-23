@@ -71,7 +71,8 @@ public class BuncheolService {
     buncheol.validateOwner(hostId);
     buncheol.validateRecruiting(Instant.now(clock));
 
-    buncheolImageDomainService.validateImageCount(request.keepImageIds().size() + images.size());
+    buncheolImageDomainService.validateModifyImageCount(
+        buncheolId, request.keepImageIds(), images.size());
 
     buncheolDomainService.updateBuncheolContent(buncheol, request.title(), request.description());
 

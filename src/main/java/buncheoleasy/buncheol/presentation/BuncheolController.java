@@ -4,8 +4,8 @@ import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
-import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
@@ -100,7 +100,7 @@ public class BuncheolController {
   public ResponseEntity<Void> holdBuncheol(
       @AuthenticationPrincipal final Long hostId,
       @Valid @RequestPart("request") final HoldBuncheolRequest request,
-      @RequestPart(value = "images", required = false) final List<MultipartFile> images) {
+      @RequestPart(value = "images") final List<MultipartFile> images) {
     buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
     return ResponseEntity.status(HttpStatus.CREATED).build();
   }

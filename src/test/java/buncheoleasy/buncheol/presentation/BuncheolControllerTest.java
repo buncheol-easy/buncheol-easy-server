@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -131,23 +132,30 @@ class BuncheolControllerTest {
             });
   }
 
+  // 분철 개최는 이미지가 필수(@RequestPart required=true)라, request 검증/서비스 동작을 보려면 유효한 images 파트가 함께 와야 한다.
+  private MockMultipartFile validImagePart() {
+    return new MockMultipartFile(
+        "images", "album-cover.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {1, 2, 3});
+  }
+
   @Nested
   @DisplayName("분철 개최 테스트")
   class HoldBuncheolTest {
 
     @Test
-    void 분철_개최에_성공하면_201을_반환한다() throws Exception {
-      // given
+    void 이미지_파트가_없으면_400을_반환한다() throws Exception {
+      // given — 이미지는 필수(@RequestPart required=true). images 파트가 아예 없으면 400.
       MockMultipartFile requestPart =
           new MockMultipartFile(
               "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
 
-      // when & then
+      // when & then — images 파트를 일부러 빼고 호출한다.
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
-          .andExpect(status().isCreated());
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value("C-001"));
 
-      then(buncheolService).should().holdBuncheol(eq(HOST_ID), any(), any());
+      then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
     }
 
     @Test
@@ -191,7 +199,7 @@ class BuncheolControllerTest {
 
       // when & then
       mockMvc
-          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isBadRequest())
           .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
@@ -221,7 +229,7 @@ class BuncheolControllerTest {
 
       // when & then
       mockMvc
-          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isBadRequest())
           .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
@@ -255,7 +263,7 @@ class BuncheolControllerTest {
 
       // when & then
       mockMvc
-          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isBadRequest())
           .andExpect(
               content().string(containsString(ErrorCode.BUNCHEOL_SHIPPING_FEE_REQUIRED.getCode())));
@@ -286,7 +294,7 @@ class BuncheolControllerTest {
 
       // when & then
       mockMvc
-          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isBadRequest())
           .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
@@ -317,7 +325,7 @@ class BuncheolControllerTest {
 
       // when & then
       mockMvc
-          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isBadRequest())
           .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
@@ -335,7 +343,7 @@ class BuncheolControllerTest {
 
       // when & then
       mockMvc
-          .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }

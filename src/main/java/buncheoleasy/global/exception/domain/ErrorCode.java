@@ -86,6 +86,9 @@ public enum ErrorCode {
   BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 5개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_REQUIRED("BCH-041", "이미지 URL은 필수입니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_LENGTH_INVALID("BCH-042", "이미지 URL은 500자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_IMAGE_REQUIRED("BCH-045", "이미지는 최소 1장 이상 등록해야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_KEEP_IMAGE_INVALID(
+      "BCH-046", "유지할 이미지 중 해당 분철의 이미지가 아닌 항목이 있습니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),

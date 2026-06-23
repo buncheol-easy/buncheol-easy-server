@@ -148,11 +148,15 @@ class BuncheolControllerDocsTest {
     MockMultipartFile requestPart =
         new MockMultipartFile(
             "request", "", MediaType.APPLICATION_JSON_VALUE, holdRequestJson().getBytes());
+    MockMultipartFile imagePart =
+        new MockMultipartFile(
+            "images", "album-cover.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {1, 2, 3});
 
     mockMvc
         .perform(
             multipart("/v1/buncheols")
                 .file(requestPart)
+                .file(imagePart)
                 .header("Authorization", "Bearer {accessToken}")
                 .with(mockAuth()))
         .andExpect(status().isCreated())
@@ -189,7 +193,15 @@ class BuncheolControllerDocsTest {
                             }
                             ```
 
-                            **images 파트** (선택): 이미지 파일 목록, **최대 5장**
+                            **images 파트** (**필수**): 이미지 파일 목록, **최소 1장 ~ 최대 5장**. 파트 자체가 누락되면 `400 C-001`,
+                            0장이면 `400 BCH-045`
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `request` 검증 실패 또는 `images` 파트 누락 |
+                            | 400 | `BCH-045` (`BUNCHEOL_IMAGE_REQUIRED`) | 이미지가 0장 |
+                            | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             """)
                         .build())));
   }
@@ -234,12 +246,20 @@ class BuncheolControllerDocsTest {
                             {
                               "title": String,                // 1~200자
                               "description": String?,         // 선택, 300자 이하
-                              "keepImageIds": [Long]          // 유지할 기존 이미지 ID (비어있으면 모두 제거)
+                              "keepImageIds": [Long]          // 유지할 기존 이미지 ID
                             }
                             ```
 
                             **images 파트** (선택): 새로 업로드할 이미지 파일 목록.
-                            `keepImageIds.size + images.size` 가 **최대 5장** 이어야 함
+                            `keepImageIds`(해당 분철의 실제 이미지여야 함) + 새 이미지 합이 **최소 1장 ~ 최대 5장** 이어야 한다. 즉 수정 후에도
+                            이미지가 0장이 되도록 둘 다 비울 수 없다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `BCH-045` (`BUNCHEOL_IMAGE_REQUIRED`) | 수정 후 남는 이미지가 0장 |
+                            | 400 | `BCH-046` (`BUNCHEOL_KEEP_IMAGE_INVALID`) | `keepImageIds` 에 해당 분철의 이미지가 아닌 ID 포함 |
+                            | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             """)
                         .pathParameters(parameterWithName("id").description("분철 ID"))
                         .build())));

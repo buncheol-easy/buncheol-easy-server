@@ -111,20 +111,22 @@ class BuncheolServiceTest {
 
     @Test
     void 분철_개최에_성공하고_분철_및_분철_멤버가_저장된다() {
-      // given
+      // given — 분철은 이미지 최소 1장이 필수이므로 정상 개최는 이미지 1장 이상으로 호출된다.
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(MEMBER_ID)));
 
       HoldBuncheolRequest request =
           holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
 
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
+      willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
 
       // when
-      buncheolService.holdBuncheol(HOST_ID, request, List.of());
+      buncheolService.holdBuncheol(HOST_ID, request, images);
 
       // then
       then(groupDomainService).should().validateGroupExists(GROUP_ID);
@@ -134,7 +136,6 @@ class BuncheolServiceTest {
       then(buncheolMemberDomainService)
           .should()
           .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
-      then(eventPublisher).should(never()).publishEvent(any());
 
       BuncheolParams buncheolParams = buncheolParamsCaptor.getValue();
       assertThat(buncheolParams.groupId()).isEqualTo(GROUP_ID);
@@ -143,6 +144,25 @@ class BuncheolServiceTest {
       assertThat(memberParams).hasSize(1);
       assertThat(memberParams.getFirst().memberId()).isEqualTo(MEMBER_ID);
       assertThat(memberParams.getFirst().price()).isEqualTo(50_000L);
+    }
+
+    @Test
+    void 이미지가_0장이면_BUNCHEOL_IMAGE_REQUIRED_예외가_발생하고_분철이_저장되지_않는다() {
+      // given — 이미지 개수 검증이 가장 먼저 수행되어 0장이면 즉시 차단된다.
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_REQUIRED))
+          .given(buncheolImageDomainService)
+          .validateImageCount(0);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_REQUIRED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(eventPublisher).should(never()).publishEvent(any());
     }
 
     @Test
@@ -260,7 +280,9 @@ class BuncheolServiceTest {
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(2);
+      willDoNothing()
+          .given(buncheolImageDomainService)
+          .validateModifyImageCount(BUNCHEOL_ID, List.of(1L, 2L), 0);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
@@ -284,7 +306,9 @@ class BuncheolServiceTest {
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
+      willDoNothing()
+          .given(buncheolImageDomainService)
+          .validateModifyImageCount(BUNCHEOL_ID, List.of(), 1);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images);
@@ -310,7 +334,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED))
           .given(buncheolImageDomainService)
-          .validateImageCount(6);
+          .validateModifyImageCount(BUNCHEOL_ID, List.of(), 6);
 
       // when & then
       assertThatThrownBy(

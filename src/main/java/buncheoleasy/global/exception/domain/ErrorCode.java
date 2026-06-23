@@ -72,16 +72,23 @@ public enum ErrorCode {
   BUNCHEOL_REQUIRED_FIELD_MISSING("BCH-001", "분철 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_TEXT_LENGTH_INVALID("BCH-002", "분철 텍스트 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_DEADLINE_INVALID("BCH-003", "분철 마감일은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR(
+      "BCH-004", "분철 마감 시간은 정각(매시 0분 0초)이어야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_MIN_HEADCOUNT_INVALID("BCH-008", "분철 진행 최소 인원은 1명 이상이어야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_REQUIRED("BCH-006", "배송비는 최소 1개 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_MEMBER_BID_MIN_PRICE_INVALID("BCH-027", "제시 최소 금액은 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_MEMBER_PRICE_INVALID(
+      "BCH-027", "멤버 금액은 100원 단위의 0보다 큰 값이어야 합니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 5개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_REQUIRED("BCH-041", "이미지 URL은 필수입니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_LENGTH_INVALID("BCH-042", "이미지 URL은 500자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_IMAGE_REQUIRED("BCH-045", "이미지는 최소 1장 이상 등록해야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_KEEP_IMAGE_INVALID(
+      "BCH-046", "유지할 이미지 중 해당 분철의 이미지가 아닌 항목이 있습니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
@@ -89,7 +96,7 @@ public enum ErrorCode {
 
   BUNCHEOL_NOT_RECRUITING("BCH-060", "모집 중인 분철이 아닙니다.", HttpStatus.CONFLICT),
   PARTICIPATION_MEMBER_NOT_FOUND("BCH-061", "해당 분철에 존재하지 않는 멤버입니다.", HttpStatus.NOT_FOUND),
-  PARTICIPATION_BID_AMOUNT_INVALID("BCH-064", "제시 금액이 최소 금액보다 작습니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_REQUIRED_FIELD_MISSING("BCH-062", "참여 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED(
       "BCH-065", "해당 배송 방법은 이 분철에서 지원하지 않습니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_HOST_CANNOT_PARTICIPATE(
@@ -100,24 +107,9 @@ public enum ErrorCode {
   PARTICIPATION_NO_PERMISSION("BCH-069", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   PARTICIPATION_ALREADY_EXISTS("BCH-070", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
   PARTICIPATION_PAYMENT_DUE_PASSED("BCH-073", "입금 기한이 지났습니다.", HttpStatus.CONFLICT),
-  PARTICIPATION_PAYMENT_NOT_DUE_YET(
-      "BCH-074", "아직 입금 기한이 지나지 않았습니다.", HttpStatus.CONFLICT),
 
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),
-
-  /** PAY - 결제 관련 에러 */
-  PAYMENT_NOT_FOUND("PAY-001", "존재하지 않는 결제입니다.", HttpStatus.NOT_FOUND),
-  PAYMENT_STATE_TRANSITION_INVALID(
-      "PAY-002", "현재 결제 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
-  PAYMENT_AMOUNT_MISMATCH("PAY-003", "결제 금액이 일치하지 않습니다.", HttpStatus.BAD_REQUEST),
-  PAYMENT_ALREADY_APPROVED("PAY-004", "이미 승인된 결제입니다.", HttpStatus.CONFLICT),
-  PAYMENT_TOSS_CONFIRM_REJECTED("PAY-005", "결제 승인이 거절되었습니다.", HttpStatus.BAD_GATEWAY),
-  PAYMENT_TOSS_CONFIRM_UNAVAILABLE(
-      "PAY-008", "결제 처리 중 오류가 발생했습니다.", HttpStatus.SERVICE_UNAVAILABLE),
-  PAYMENT_ORDER_CREATION_NOT_ALLOWED(
-      "PAY-006", "현재 참여 상태에서는 결제 주문을 생성할 수 없습니다.", HttpStatus.CONFLICT),
-  PAYMENT_NO_PERMISSION("PAY-007", "해당 결제에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

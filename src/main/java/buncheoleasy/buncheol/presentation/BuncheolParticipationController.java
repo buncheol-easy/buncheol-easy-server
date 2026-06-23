@@ -1,9 +1,9 @@
 package buncheoleasy.buncheol.presentation;
 
-import buncheoleasy.buncheol.application.BuncheolCheckoutService;
-import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.application.participation.ParticipateResult;
+import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
-import buncheoleasy.buncheol.dto.response.ParticipationCheckoutResponse;
+import buncheoleasy.buncheol.dto.response.ParticipateResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,17 +20,19 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class BuncheolParticipationController {
 
-  private final BuncheolCheckoutService buncheolCheckoutService;
+  private final ParticipationService participationService;
 
-  /** 분철 참여 신청 API. 참여 즉시 ACTIVE_BID 상태로 등록되며, 결제는 마감 후 낙찰자에 한해 진행한다. */
+  /**
+   * 분철 참여(멤버 슬롯 선착순 점유) API. 점유에 성공하면 입금확인중(AWAITING_PAYMENT) 상태로 등록되고, 응답으로 개최자 계좌·입금 총액·입금 만료
+   * 시각을 받는다. 참여와 동시에 환불 계좌를 입력한다.
+   */
   @PostMapping
-  public ResponseEntity<ParticipationCheckoutResponse> participate(
+  public ResponseEntity<ParticipateResponse> participate(
       @AuthenticationPrincipal final Long participantId,
       @PathVariable final Long buncheolId,
       @Valid @RequestBody final ParticipateRequest request) {
-    final Participation participation =
-        buncheolCheckoutService.participate(buncheolId, participantId, request);
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .body(ParticipationCheckoutResponse.from(participation));
+    final ParticipateResult result =
+        participationService.participate(buncheolId, participantId, request);
+    return ResponseEntity.status(HttpStatus.CREATED).body(ParticipateResponse.from(result));
   }
 }

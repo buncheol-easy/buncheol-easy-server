@@ -29,19 +29,32 @@ public class BuncheolDomainService {
     buncheol.updateContent(title, description);
   }
 
-  public void cancelBuncheol(final Buncheol buncheol) {
-    // 호스트 본인만 자신의 분철을 취소할 수 있어 다중 동시 요청이 의미 있는 경합을 만들지 않는다.
-    // 따라서 CAS 없이 도메인 메서드로 상태 위반(BUNCHEOL_CANCEL_NOT_ALLOWED) 만 검증하고
-    // managed 엔티티의 in-memory 전이를 JPA dirty checking 으로 커밋 시점에 반영한다.
-    buncheol.cancel();
+  /**
+   * 분철을 RECRUITING 일 때만 {@code newStatus}(CONFIRMED 또는 CANCELLED) 로 전이하는 CAS. 마감 스케줄러가 다중 인스턴스 환경에서
+   * 중복 판정하지 않도록, 선점에 성공한 한쪽만 true 를 받는다.
+   *
+   * @return 전이에 성공하면 true, 이미 마감 판정됐거나 RECRUITING 이 아니면 false
+   */
+  public boolean finalizeBuncheol(
+      final Long buncheolId, final BuncheolStatus newStatus, final Instant now) {
+    return buncheolRepository.finalizeIfRecruiting(buncheolId, newStatus, now) > 0;
   }
 
-  public void closeBuncheol(final Buncheol buncheol) {
-    // 호스트 본인만 호출 가능해 close 자체의 동시 경합은 사실상 없다 — CAS 없이 도메인 가드 + dirty checking 으로 처리.
-    // 단, close flush 전에 들어온 새 입찰(JpaParticipationRepositoryAdapter.saveIfRecruiting) 은 status=RECRUITING
-    // 가드를 통과해 INSERT 될 수 있다. 이런 잔류 입찰은 후속 closedRank 결정 단계에서 closedAt 이전 입찰만
-    // 인정하는 정책으로 자연스럽게 무효화된다 (별도 PR).
-    buncheol.close(Instant.now(clock));
+  /**
+   * 마감 판정(진행확정/취소)을 단일 CAS 로 원자 전이한다. 입금확인 인원이 최소 인원 이상이면 CONFIRMED, 미만이면 CANCELLED. 카운트·비교·전이를 한
+   * UPDATE 로 묶어, 카운트 조회와 전이 사이에 입금확인이 커밋돼 발생하는 오판(stale count)을 방지한다.
+   *
+   * @return 전이에 성공하면 true, 이미 마감 판정됐거나 RECRUITING 이 아니면 false (실제 전이 상태는 호출 측이 재조회로 판별)
+   */
+  public boolean finalizeExpiredByConfirmedHeadcount(final Long buncheolId, final Instant now) {
+    return buncheolRepository.finalizeExpiredByConfirmedHeadcount(buncheolId, now) > 0;
+  }
+
+  /** 호스트의 분철 취소 (RECRUITING → CANCELLED CAS). 모집 중이 아니면 상태 위반으로 막는다. */
+  public void cancelBuncheol(final Long buncheolId, final Instant now) {
+    if (!finalizeBuncheol(buncheolId, BuncheolStatus.CANCELLED, now)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+    }
   }
 
   public boolean hasActiveBuncheolHostedBy(final Long hostId) {

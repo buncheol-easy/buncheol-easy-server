@@ -6,49 +6,66 @@ import java.util.Optional;
 
 public interface ParticipationRepository {
 
+  /**
+   * 분철이 모집중이고 마감 전일 때만 참여를 INSERT 한다 (원자적). 멤버 슬롯이 이미 점유돼 있으면(활성 참여 존재) DB unique 제약에 걸려 {@link
+   * buncheoleasy.global.exception.domain.ErrorCode#PARTICIPATION_ALREADY_EXISTS} 로 분기한다.
+   *
+   * @return 모집중이라 INSERT 된 경우 true, 분철이 모집중이 아니거나 마감돼 INSERT 되지 않으면 false
+   */
   boolean saveIfRecruiting(Participation participation);
 
   Optional<Participation> findById(Long id);
 
+  /** 내 참여 목록 (참여자별 최신순). */
   List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
 
-  Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
-      Long buncheolMemberId, Long participantId);
-
+  /** 참여자에게 활성({@link ParticipationStatus#active()}) 참여가 하나라도 있는지 (회원탈퇴 가드용). */
   boolean existsActiveByParticipantId(Long participantId);
 
+  /** 여러 분철의 활성 참여 수 집계 (공개 목록의 참여자 수 표시용). */
   List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(List<Long> buncheolIds);
 
-  /** 단일 분철의 활성 참여 전체를 {@code bidAmount DESC, id ASC} 정렬로 조회. 멤버별 그룹핑·top N·순위 계산을 위한 단일 조회 진입점. */
+  /** 단일 분철의 활성 참여 전체 (호스트 관리 화면 + 분철 취소 시 알림 대상). */
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
-  /** 단일 분철의 ACTIVE_BID 참여만 {@code bidAmount DESC, id ASC} 정렬로 조회. 마감 시 멤버별 낙찰자 선정용. */
-  List<Participation> findBiddingByBuncheolId(Long buncheolId);
+  /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */
+  List<Participation> findConfirmedByBuncheolId(Long buncheolId);
+
+  /** 단일 분철의 입금확인(CONFIRMED) 참여 수 (마감 시 최소 인원 판정용). */
+  int countConfirmedByBuncheolId(Long buncheolId);
+
+  /** 입금 만료가 임박/도과한 참여 폴링 (입금 만료 스케줄러용). status=AWAITING_PAYMENT, due_at <= now. */
+  List<Participation> findOverduePaymentTargets(Instant now, int limit);
 
   /**
-   * 한 멤버 슬롯의 차순위 승계 후보를 1건 조회. ACTIVE_BID 이면서 closedRank 가 부여된(마감을 거친) 참여만 대상으로 하며 {@code
-   * closedRank ASC, id ASC} 정렬의 첫 건(다음 순위)을 반환한다. 후보가 없으면 empty.
-   */
-  Optional<Participation> findTopActiveBidInSlot(Long buncheolMemberId);
-
-  /**
-   * 한 멤버 슬롯에 결제 진행 중(AWAITING_PAYMENT / PAYMENT_REPORTED / CONFIRMED) 참여가 존재하는지. 차순위 승계 전 중복 결제 대상이
-   * 생기지 않도록 가드하는 용도다. 만료된 낙찰자를 FAILED 로 전이한 뒤 호출하면(영속성 컨텍스트 auto-flush) 해당 낙찰자는 집계에서 제외된다.
-   */
-  boolean existsPaymentInProgressInSlot(Long buncheolMemberId);
-
-  /** 입금 기한 임박(AWAITING_PAYMENT, due_at ∈ (now, dueBefore]) 참여 조회. 기한 임박 알림 스케줄러용. */
-  List<Participation> findAwaitingPaymentReminderTargets(Instant now, Instant dueBefore);
-
-  boolean updateStatus(Participation participation, ParticipationStatus expectedStatus);
-
-  /**
-   * 분철의 활성 참여({@link ParticipationStatus#activeUnderRecruiting()})를 모두 {@link
-   * ParticipationStatus#CANCELLED} 로 일괄 전이한다. 호스트가 분철을 취소했을 때 자동 호출되어, 좀비 참여가 남지 않도록 보장한다.
+   * 호스트의 수동 입금확인. AWAITING_PAYMENT 이고 입금 기한(dueAt) 내일 때만 CONFIRMED 로 전이하는 CAS.
    *
-   * <p>구현체는 {@code @Modifying} bulk UPDATE 로 동작하므로 호출 측 트랜잭션({@code @Transactional}) 이 필수다.
+   * @return 전이에 성공하면 true, 이미 취소/확정됐거나 기한이 지났으면 false
+   */
+  boolean confirmPaymentIfAwaiting(Long participationId, Instant now);
+
+  /**
+   * 입금 만료 처리. AWAITING_PAYMENT 이고 기한이 지났을 때만 CANCELLED({@link
+   * ParticipationCancelReason#PAYMENT_TIMEOUT}) 로 전이하는 CAS (입금 만료 스케줄러용).
    *
-   * @return 갱신된 참여 행 수
+   * @return 전이에 성공하면 true
+   */
+  boolean expirePaymentIfOverdue(Long participationId, Instant now);
+
+  /**
+   * 분철의 활성 참여를 모두 CANCELLED({@link ParticipationCancelReason#BUNCHEOL_CANCELLED}) 로 일괄 전이한다. 호스트
+   * 취소·최소 인원 미달로 분철이 취소될 때 호출된다. 입금확인된 참여도 함께 취소되며 환불은 운영자가 오프라인으로 처리한다.
+   *
+   * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션({@code @Transactional}) 이 필수다.
+   *
+   * @return 취소된 참여 행 수
    */
   int cancelActiveByBuncheolId(Long buncheolId, Instant now);
+
+  /**
+   * 분철 취소 cascade({@link ParticipationCancelReason#BUNCHEOL_CANCELLED})로 전이된 참여를 조회한다. {@link
+   * #cancelActiveByBuncheolId} 직후 같은 트랜잭션에서 호출해, 그 사이 자발취소·만료된 참여(다른 cancelReason)를 제외한 "실제로 이번에
+   * 취소된" 참여에만 알림을 발행하는 데 쓴다.
+   */
+  List<Participation> findCascadeCancelledByBuncheolId(Long buncheolId);
 }

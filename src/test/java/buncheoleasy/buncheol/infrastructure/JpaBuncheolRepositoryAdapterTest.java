@@ -3,11 +3,11 @@ package buncheoleasy.buncheol.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
-import buncheoleasy.global.page.Cursor;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
@@ -46,8 +46,8 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   private BuncheolParams validParams() {
-    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 3000, null);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null);
   }
 
   private Buncheol persistAndDetach(Buncheol buncheol) {
@@ -69,6 +69,12 @@ class JpaBuncheolRepositoryAdapterTest {
         "UPDATE buncheols SET created_at = ? WHERE id = ?",
         Timestamp.from(createdAt),
         buncheolId);
+    em.clear();
+  }
+
+  private void forceDeadline(Long buncheolId, Instant deadline) {
+    jdbcTemplate.update(
+        "UPDATE buncheols SET deadline = ? WHERE id = ?", Timestamp.from(deadline), buncheolId);
     em.clear();
   }
 
@@ -113,8 +119,8 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 2500, null);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -125,8 +131,8 @@ class JpaBuncheolRepositoryAdapterTest {
 
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, null, 2000);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -169,17 +175,30 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void managed_엔티티에서_cancel_호출_시_더티체킹으로_DB에_CANCELLED가_반영된다() {
+    void finalizeIfRecruiting_으로_RECRUITING_분철을_CANCELLED_로_전이한다() {
       Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
-      // findById 로 managed 상태로 다시 로드 후 도메인 메서드만 호출 → flush 시 dirty UPDATE 가 발생해야 한다
-      Buncheol managed = buncheolRepository.findById(buncheol.getId()).orElseThrow();
-      managed.cancel();
-      em.flush();
+      int affected =
+          buncheolRepository.finalizeIfRecruiting(
+              buncheol.getId(), BuncheolStatus.CANCELLED, Instant.now());
       em.clear();
 
+      assertThat(affected).isEqualTo(1);
       Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
       assertThat(found.getStatus()).isEqualTo(BuncheolStatus.CANCELLED);
+      assertThat(found.getFinalizedAt()).isNotNull();
+    }
+
+    @Test
+    void finalizeIfRecruiting_은_RECRUITING_이_아니면_전이하지_않는다() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(buncheol.getId(), BuncheolStatus.CONFIRMED);
+
+      int affected =
+          buncheolRepository.finalizeIfRecruiting(
+              buncheol.getId(), BuncheolStatus.CANCELLED, Instant.now());
+
+      assertThat(affected).isZero();
     }
   }
 
@@ -199,14 +218,14 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void FINISHED_분철은_포함되어_반환된다() {
+    void CONFIRMED_분철은_포함되어_반환된다() {
       Long recruiting = persistWithCreatedAt(hostId, Instant.parse("2026-05-15T08:00:00Z"));
-      Long finished = persistWithCreatedAt(hostId, Instant.parse("2026-05-10T08:00:00Z"));
-      forceStatus(finished, BuncheolStatus.FINISHED);
+      Long confirmed = persistWithCreatedAt(hostId, Instant.parse("2026-05-10T08:00:00Z"));
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
 
       List<Buncheol> result = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
 
-      assertThat(result).extracting(Buncheol::getId).containsExactly(recruiting, finished);
+      assertThat(result).extracting(Buncheol::getId).containsExactly(recruiting, confirmed);
     }
 
     @Test
@@ -238,13 +257,21 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void 호스트의_분철이_모두_FINISHED_또는_CANCELLED면_false를_반환한다() {
-      Buncheol finished = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      Buncheol cancelled = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      forceStatus(finished.getId(), BuncheolStatus.FINISHED);
-      forceStatus(cancelled.getId(), BuncheolStatus.CANCELLED);
+    void 호스트의_분철이_모두_CANCELLED면_false를_반환한다() {
+      Buncheol cancelledA = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      Buncheol cancelledB = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(cancelledA.getId(), BuncheolStatus.CANCELLED);
+      forceStatus(cancelledB.getId(), BuncheolStatus.CANCELLED);
 
       assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void 호스트의_CONFIRMED_분철이_있으면_true를_반환한다() {
+      Buncheol confirmed = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(confirmed.getId(), BuncheolStatus.CONFIRMED);
+
+      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isTrue();
     }
 
     @Test
@@ -262,14 +289,13 @@ class JpaBuncheolRepositoryAdapterTest {
 
     private BuncheolParams paramsWithTitleAndDescription(
         Long gId, String title, String description) {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
-      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 3000, null);
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null);
     }
 
     private void linkMember(Long buncheolId, Long memberId) {
       jdbcTemplate.update(
-          "INSERT INTO buncheol_members (buncheol_id, member_id, bid_min_price)"
-              + " VALUES (?, ?, ?)",
+          "INSERT INTO buncheol_members (buncheol_id, member_id, price)" + " VALUES (?, ?, ?)",
           buncheolId,
           memberId,
           10000L);
@@ -284,7 +310,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 10);
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(b1);
     }
@@ -301,7 +327,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(groupId, null, null), Cursor.firstPage(), 10);
+              new BuncheolSearchCondition(groupId, null, null), BuncheolListCursor.firstPage(), 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(target);
     }
@@ -317,7 +343,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, memberA, null), Cursor.firstPage(), 10);
+              new BuncheolSearchCondition(null, memberA, null), BuncheolListCursor.firstPage(), 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(b1);
     }
@@ -341,13 +367,13 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, null, "newjeans"), Cursor.firstPage(), 10);
+              new BuncheolSearchCondition(null, null, "newjeans"), BuncheolListCursor.firstPage(), 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(titleMatch, descMatch);
     }
 
     @Test
-    void 정렬은_createdAt_DESC_그리고_id_DESC_tie_break() {
+    void 모집중_그룹은_createdAt_DESC_그리고_id_DESC_tie_break_로_정렬된다() {
       Instant same = Instant.parse("2026-05-15T08:00:00Z");
       Long b1 = persistWithCreatedAt(hostId, validParams(), same);
       Long b2 = persistWithCreatedAt(hostId, validParams(), same);
@@ -355,26 +381,27 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 10);
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
 
       // 같은 시각 b1, b2 → id 큰 것이 먼저 (b2). 그 다음 b1. 마지막에 더 이른 b3.
       assertThat(result).extracting(Buncheol::getId).containsExactly(b2, b1, b3);
     }
 
     @Test
-    void 커서를_주면_그_이전_분철만_반환되고_중복_누락이_없다() {
+    void 모집중_커서를_주면_그_이전_분철만_반환되고_중복_누락이_없다() {
       Long b1 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
       Long b2 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
       Long b3 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-13T08:00:00Z"));
 
-      // 첫 페이지: size 2 → b1, b2 노출, 다음 cursor 는 b2 의 (createdAt, id)
       List<Buncheol> firstPage =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, null, null), Cursor.firstPage(), 3);
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 3);
       assertThat(firstPage).extracting(Buncheol::getId).containsExactly(b1, b2, b3);
 
-      // size 2 + 1 패턴: cursor=b2 로 다음 페이지 조회 시 b3 만 남는다
-      Cursor cursor = new Cursor(Instant.parse("2026-05-14T08:00:00Z"), b2);
+      // 모집중 그룹(rank 0) 커서 = b2 의 (createdAt, id) → 다음 페이지는 b3 만
+      BuncheolListCursor cursor =
+          new BuncheolListCursor(
+              BuncheolListCursor.RANK_RECRUITING, Instant.parse("2026-05-14T08:00:00Z"), b2);
       List<Buncheol> secondPage =
           buncheolRepository.search(new BuncheolSearchCondition(null, null, null), cursor, 3);
 
@@ -382,17 +409,109 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void 동일_createdAt_에서_커서의_id_보다_작은_id_만_반환된다() {
+    void 모집중_동일_createdAt_에서_커서의_id_보다_작은_id_만_반환된다() {
       Instant same = Instant.parse("2026-05-15T08:00:00Z");
       Long b1 = persistWithCreatedAt(hostId, validParams(), same);
       Long b2 = persistWithCreatedAt(hostId, validParams(), same);
       // 정렬 시 큰 id 먼저: 첫 페이지 b2, 두 번째 페이지에선 b1 만 나와야.
-      Cursor cursor = new Cursor(same, b2);
+      BuncheolListCursor cursor =
+          new BuncheolListCursor(BuncheolListCursor.RANK_RECRUITING, same, b2);
 
       List<Buncheol> result =
           buncheolRepository.search(new BuncheolSearchCondition(null, null, null), cursor, 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(b1);
+    }
+
+    @Test
+    void 모집중을_먼저_그_뒤에_마감을_이어_보여준다() {
+      // 모집중 2건 (createdAt DESC: rec1 → rec2), 마감 2건 (deadline DESC: conf1 → conf2)
+      Long rec1 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long rec2 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      Long conf1 = persistConfirmed(Instant.parse("2026-05-10T00:00:00Z"));
+      Long conf2 = persistConfirmed(Instant.parse("2026-05-01T00:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
+
+      // 모집중(최신순) → 마감(마감일 내림차순)
+      assertThat(result).extracting(Buncheol::getId).containsExactly(rec1, rec2, conf1, conf2);
+    }
+
+    @Test
+    void 마감_그룹은_deadline_DESC_그리고_id_DESC_tie_break_로_정렬된다() {
+      Instant sameDeadline = Instant.parse("2026-05-10T00:00:00Z");
+      Long c1 = persistConfirmed(sameDeadline);
+      Long c2 = persistConfirmed(sameDeadline);
+      Long c3 = persistConfirmed(Instant.parse("2026-05-09T00:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
+
+      // 같은 deadline c1, c2 → id 큰 것이 먼저 (c2). 그 다음 c1. 마지막에 더 이른 c3.
+      assertThat(result).extracting(Buncheol::getId).containsExactly(c2, c1, c3);
+    }
+
+    @Test
+    void 마감_그룹_커서를_주면_그_이전_마감_분철만_반환된다() {
+      Long c1 = persistConfirmed(Instant.parse("2026-05-10T00:00:00Z"));
+      Long c2 = persistConfirmed(Instant.parse("2026-05-08T00:00:00Z"));
+      Long c3 = persistConfirmed(Instant.parse("2026-05-06T00:00:00Z"));
+
+      // 마감 그룹(rank 1) 커서 = c1 의 (deadline, id) → c2, c3 만
+      BuncheolListCursor cursor =
+          new BuncheolListCursor(
+              BuncheolListCursor.RANK_CONFIRMED, Instant.parse("2026-05-10T00:00:00Z"), c1);
+      List<Buncheol> result =
+          buncheolRepository.search(new BuncheolSearchCondition(null, null, null), cursor, 10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(c2, c3);
+    }
+
+    @Test
+    void 그룹_경계를_걸친_페이지는_모집중을_채우고_남은_자리를_마감_첫구간으로_잇는다() {
+      Long rec1 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long rec2 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      Long conf1 = persistConfirmed(Instant.parse("2026-05-10T00:00:00Z"));
+      Long conf2 = persistConfirmed(Instant.parse("2026-05-01T00:00:00Z"));
+
+      // limit 3: 모집중 2건을 다 채우고 모집중 소진 → 마감 첫구간(conf1) 1건을 이어 채운다
+      List<Buncheol> page =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 3);
+
+      assertThat(page).extracting(Buncheol::getId).containsExactly(rec1, rec2, conf1);
+
+      // 다음 페이지: 마지막으로 본 모집중(rec2) 커서 → 모집중 소진 후 마감 첫구간부터 다시 → conf1, conf2
+      BuncheolListCursor afterRec2 =
+          new BuncheolListCursor(
+              BuncheolListCursor.RANK_RECRUITING, Instant.parse("2026-05-14T08:00:00Z"), rec2);
+      List<Buncheol> next =
+          buncheolRepository.search(new BuncheolSearchCondition(null, null, null), afterRec2, 3);
+
+      assertThat(next).extracting(Buncheol::getId).containsExactly(conf1, conf2);
+    }
+
+    @Test
+    void 마감만_존재하면_첫_페이지부터_마감_그룹을_반환한다() {
+      Long c1 = persistConfirmed(Instant.parse("2026-05-10T00:00:00Z"));
+      Long c2 = persistConfirmed(Instant.parse("2026-05-05T00:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(c1, c2);
+    }
+
+    // 모집중으로 저장한 뒤 status=CONFIRMED, deadline 을 강제 주입한다 (Buncheol.create 는 과거 deadline 을 거부하므로).
+    private Long persistConfirmed(Instant deadline) {
+      Long id = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-01T00:00:00Z"));
+      forceStatus(id, BuncheolStatus.CONFIRMED);
+      forceDeadline(id, deadline);
+      return id;
     }
   }
 }

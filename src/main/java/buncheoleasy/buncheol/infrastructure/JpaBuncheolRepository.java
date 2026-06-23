@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -17,15 +18,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       Long hostId, BuncheolStatus excludedStatus);
 
   /**
-   * {@code excludedStatus} 와 일치하지 않는 분철을 검색한다. 어댑터에서 {@link BuncheolStatus#CANCELLED} 를 전달해 취소된 분철을
-   * 목록에서 제외하는 용도로 사용한다.
+   * 공개 목록의 <b>모집중(RECRUITING) 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
+   * BuncheolStatus#RECRUITING} 을 전달한다.
    *
-   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 정렬은 {@code createdAt DESC, id DESC}, 페이지 사이즈는 {@link
-   * Pageable} 로 제어한다.
+   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다. {@code
+   * idx_buncheols_status_created (status, created_at DESC, id DESC)}(groupId 동반 시 {@code
+   * idx_buncheols_group_created}) 인덱스로 정렬을 커버한다.
    */
   @Query(
       "SELECT b FROM Buncheol b "
-          + "WHERE b.status <> :excludedStatus "
+          + "WHERE b.status = :status "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
@@ -36,12 +38,42 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR b.createdAt < :cursorCreatedAt "
           + "        OR (b.createdAt = :cursorCreatedAt AND b.id < :cursorId)) "
           + "ORDER BY b.createdAt DESC, b.id DESC")
-  List<Buncheol> search(
-      @Param("excludedStatus") BuncheolStatus excludedStatus,
+  List<Buncheol> searchRecruiting(
+      @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,
       @Param("cursorCreatedAt") Instant cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  /**
+   * 공개 목록의 <b>마감(CONFIRMED) 그룹</b>을 {@code deadline DESC, id DESC}(현재와 가까운 마감순) 로 검색한다. 어댑터에서 {@link
+   * BuncheolStatus#CONFIRMED} 를 전달한다.
+   *
+   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (deadline, id)} 미만으로 keyset 페이지네이션한다. {@code
+   * idx_buncheols_status_deadline (status, deadline, id)} 인덱스를 역방향 스캔해 {@code deadline DESC, id DESC} 정렬을
+   * 커버한다.
+   */
+  @Query(
+      "SELECT b FROM Buncheol b "
+          + "WHERE b.status = :status "
+          + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
+          + "  AND (:memberId IS NULL OR b.id IN "
+          + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
+          + "  AND (:keyword IS NULL "
+          + "        OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\' "
+          + "        OR LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\') "
+          + "  AND (:cursorDeadline IS NULL "
+          + "        OR b.deadline < :cursorDeadline "
+          + "        OR (b.deadline = :cursorDeadline AND b.id < :cursorId)) "
+          + "ORDER BY b.deadline DESC, b.id DESC")
+  List<Buncheol> searchConfirmed(
+      @Param("status") BuncheolStatus status,
+      @Param("groupId") Long groupId,
+      @Param("memberId") Long memberId,
+      @Param("keyword") String keyword,
+      @Param("cursorDeadline") Instant cursorDeadline,
       @Param("cursorId") Long cursorId,
       Pageable pageable);
 
@@ -71,15 +103,38 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Long> findIdsByStatusAndDeadlineBefore(
       @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
-  // RECRUITING → CLOSED CAS UPDATE. 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감을 막는다.
+  // RECRUITING → CONFIRMED/CANCELLED CAS UPDATE (마감 판정·호스트 취소 공용). 선점한 단일 인스턴스만 1 을 회수해
+  // 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Buncheol b "
-          + "SET b.status = :closedStatus, b.closedAt = :now, b.updatedAt = :now "
+          + "SET b.status = :newStatus, b.finalizedAt = :now, b.updatedAt = :now "
           + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus")
-  int closeIfRecruiting(
+  int finalizeIfRecruiting(
       @Param("buncheolId") Long buncheolId,
-      @Param("closedStatus") BuncheolStatus closedStatus,
+      @Param("newStatus") BuncheolStatus newStatus,
       @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("now") Instant now);
+
+  // 마감 판정 전용 CAS: 입금확인된(CONFIRMED) 참여 수를 서브쿼리로 세어 minHeadcount 충족 여부에 따라 CONFIRMED/CANCELLED 로
+  // 한 UPDATE 안에서 전이한다. count 를 별도 SELECT 로 먼저 읽으면(REPEATABLE READ 스냅샷) 그 사이 입금확인이 커밋돼 stale count 로
+  // 오판(충족인데 CANCELLED)할 수 있어, 카운트·비교·전이를 한 UPDATE 로 묶는다.
+  // 단, 이 원자성은 InnoDB 가 UPDATE 평가 시 서브쿼리를 current read(최신 커밋) 로 보는 동작에 의존한다(SQL 표준 보장 아님).
+  // H2 통합 테스트는 단일 스레드 기능(CONFIRMED/CANCELLED/이미마감 분기)만 검증하며 동시성 레이스 자체를 재현하지는 않는다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = CASE WHEN ("
+          + "      SELECT COUNT(p) FROM Participation p "
+          + "      WHERE p.buncheolId = b.id AND p.status = :confirmedParticipationStatus"
+          + "    ) >= b.minHeadcount THEN :confirmedStatus ELSE :cancelledStatus END, "
+          + "  b.finalizedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus")
+  int finalizeExpiredByConfirmedHeadcount(
+      @Param("buncheolId") Long buncheolId,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 }

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -9,13 +10,15 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
-import java.time.Clock;
+import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
+import java.util.TimeZone;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Limit;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -26,53 +29,43 @@ import org.springframework.util.ReflectionUtils;
  * Participation 리포지토리 어댑터. JPA 와 raw JdbcTemplate 을 의도적으로 혼용한다:
  *
  * <ul>
- *   <li>일반 CRUD·쿼리는 {@link JpaParticipationRepository} (Spring Data JPA) 로 처리한다.
+ *   <li>일반 조회·CAS 전이는 {@link JpaParticipationRepository} (Spring Data JPA) 로 처리한다.
  *   <li>원자 조건 INSERT (`INSERT ... SELECT FROM buncheols WHERE status='RECRUITING' ...`) 는 JPA save
- *       로 표현 불가하므로 {@link JdbcTemplate} + {@link KeyHolder} 로 직접 수행하고 generated PK 를 회수해 엔티티에
- *       리플렉션으로 주입한다.
+ *       로 표현 불가하므로 {@link JdbcTemplate} + {@link KeyHolder} 로 직접 수행하고 generated PK 를 엔티티에 리플렉션으로
+ *       주입한다.
  * </ul>
+ *
+ * <p>상태 전이는 모두 status 를 WHERE 조건으로 둔 {@code @Modifying} CAS 다 — 입금 만료 스케줄러와 호스트 입금확인이 경합해도 정확히 한쪽만
+ * 성공한다. 엔티티를 in-memory 로 변경한 뒤 dirty-checking 으로 커밋하지 않으므로 flush 선행으로 CAS WHERE 가 무력화되는 문제가 없다.
  */
 @Repository
 @RequiredArgsConstructor
 public class JpaParticipationRepositoryAdapter implements ParticipationRepository {
 
-  private static final List<ParticipationStatus> ACTIVE_STATUSES =
-      List.of(
-          ParticipationStatus.ACTIVE_BID,
-          ParticipationStatus.AWAITING_PAYMENT,
-          ParticipationStatus.PAYMENT_REPORTED,
-          ParticipationStatus.CONFIRMED);
-
-  private static final List<ParticipationStatus> BIDDING_STATUSES =
-      List.of(ParticipationStatus.ACTIVE_BID);
-
-  // 슬롯당 1명만 존재해야 하는 결제 진행 상태들 (차순위 승계 중복 가드용).
-  private static final List<ParticipationStatus> PAYMENT_IN_PROGRESS_STATUSES =
-      List.of(
-          ParticipationStatus.AWAITING_PAYMENT,
-          ParticipationStatus.PAYMENT_REPORTED,
-          ParticipationStatus.CONFIRMED);
+  // due_at(Instant, UTC) 을 raw JDBC 로 바인딩할 때 사용. 엔티티 읽기(hibernate.jdbc.time_zone=UTC)와
+  // created_at/updated_at(DB UTC_TIMESTAMP())의 UTC 저장 규약을 그대로 맞춘다.
+  private static final Calendar UTC = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
 
   private static final Field ID_FIELD;
 
   static {
-    Field f = ReflectionUtils.findField(Participation.class, "id");
-    if (f == null) {
+    Field field = ReflectionUtils.findField(Participation.class, "id");
+    if (field == null) {
       throw new IllegalStateException("Participation.id field not found");
     }
-    ReflectionUtils.makeAccessible(f);
-    ID_FIELD = f;
+    ReflectionUtils.makeAccessible(field);
+    ID_FIELD = field;
   }
 
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
-  private final Clock clock;
 
   /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
   private static final String INSERT_IF_RECRUITING_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-          + " shipping_address_id, bid_amount, status, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
+          + " shipping_address_id, amount, refund_bank, refund_account, refund_holder,"
+          + " due_at, status, created_at, updated_at) "
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
 
   @Override
@@ -90,13 +83,18 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(2, participation.getBuncheolMemberId());
                 ps.setLong(3, participation.getParticipantId());
                 ps.setLong(4, participation.getShippingAddressId());
-                ps.setLong(5, participation.getBidAmount());
-                ps.setString(6, participation.getStatus().name());
-                ps.setLong(7, participation.getBuncheolId()); // WHERE id = ?
+                ps.setLong(5, participation.getAmount());
+                ps.setString(6, participation.getRefundAccount().bank());
+                ps.setString(7, participation.getRefundAccount().account());
+                ps.setString(8, participation.getRefundAccount().holder());
+                ps.setTimestamp(9, Timestamp.from(participation.getDueAt()), UTC);
+                ps.setString(10, participation.getStatus().name());
+                ps.setLong(11, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
               },
               keyHolder);
     } catch (DuplicateKeyException ex) {
+      // 멤버 슬롯에 이미 활성 참여가 존재(선착순 마감). uq_participations_active_member 위반.
       throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_EXISTS);
     }
     if (affected == 0) {
@@ -115,20 +113,14 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public Optional<Participation> findActiveByBuncheolMemberIdAndParticipantId(
-      final Long buncheolMemberId, final Long participantId) {
-    return jpaParticipationRepository.findActiveByBuncheolMemberIdAndParticipantId(
-        buncheolMemberId, participantId);
-  }
-
-  @Override
   public List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(final Long participantId) {
     return jpaParticipationRepository.findAllByParticipantIdOrderByCreatedAtDesc(participantId);
   }
 
   @Override
   public boolean existsActiveByParticipantId(final Long participantId) {
-    return jpaParticipationRepository.existsByParticipantIdAndStatusIn(participantId, ACTIVE_STATUSES);
+    return jpaParticipationRepository.existsByParticipantIdAndStatusIn(
+        participantId, ParticipationStatus.active());
   }
 
   @Override
@@ -137,63 +129,70 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
     if (buncheolIds.isEmpty()) {
       return List.of();
     }
-    return jpaParticipationRepository.countActiveByBuncheolIds(buncheolIds, ACTIVE_STATUSES);
+    return jpaParticipationRepository.countActiveByBuncheolIds(
+        buncheolIds, ParticipationStatus.active());
   }
 
   @Override
   public List<Participation> findActiveByBuncheolId(final Long buncheolId) {
-    return jpaParticipationRepository.findActiveByBuncheolId(buncheolId, ACTIVE_STATUSES);
+    return jpaParticipationRepository.findByBuncheolIdAndStatusIn(
+        buncheolId, ParticipationStatus.active());
   }
 
   @Override
-  public List<Participation> findBiddingByBuncheolId(final Long buncheolId) {
-    return jpaParticipationRepository.findActiveByBuncheolId(buncheolId, BIDDING_STATUSES);
+  public List<Participation> findConfirmedByBuncheolId(final Long buncheolId) {
+    return jpaParticipationRepository.findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
+        buncheolId, ParticipationStatus.CONFIRMED);
   }
 
   @Override
-  public Optional<Participation> findTopActiveBidInSlot(final Long buncheolMemberId) {
-    return jpaParticipationRepository
-        .findFirstByBuncheolMemberIdAndStatusAndClosedRankNotNullOrderByClosedRankAscIdAsc(
-            buncheolMemberId, ParticipationStatus.ACTIVE_BID);
+  public int countConfirmedByBuncheolId(final Long buncheolId) {
+    return jpaParticipationRepository.countByBuncheolIdAndStatus(
+        buncheolId, ParticipationStatus.CONFIRMED);
   }
 
   @Override
-  public boolean existsPaymentInProgressInSlot(final Long buncheolMemberId) {
-    return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
-        buncheolMemberId, PAYMENT_IN_PROGRESS_STATUSES);
+  public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
+    return jpaParticipationRepository.findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
+        ParticipationStatus.AWAITING_PAYMENT, now, Limit.of(limit));
   }
 
   @Override
-  public List<Participation> findAwaitingPaymentReminderTargets(
-      final Instant now, final Instant dueBefore) {
-    return jpaParticipationRepository.findByStatusAndDueAtWithin(
-        ParticipationStatus.AWAITING_PAYMENT, now, dueBefore);
-  }
-
-  @Override
-  public boolean updateStatus(
-      final Participation participation, final ParticipationStatus expectedStatus) {
+  public boolean confirmPaymentIfAwaiting(final Long participationId, final Instant now) {
     int updated =
-        jpaParticipationRepository.updateStatusIfMatches(
-            participation.getId(),
-            participation.getDueAt(),
-            participation.getClosedRank(),
-            participation.getFailReason(),
-            participation.getFinalizedAt(),
-            participation.getStatus(),
-            Instant.now(clock),
-            expectedStatus);
+        jpaParticipationRepository.confirmPaymentIfAwaiting(
+            participationId,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.CONFIRMED,
+            now);
+    return updated > 0;
+  }
+
+  @Override
+  public boolean expirePaymentIfOverdue(final Long participationId, final Instant now) {
+    int updated =
+        jpaParticipationRepository.cancelIfAwaitingAndOverdue(
+            participationId,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.CANCELLED,
+            ParticipationCancelReason.PAYMENT_TIMEOUT,
+            now);
     return updated > 0;
   }
 
   @Override
   public int cancelActiveByBuncheolId(final Long buncheolId, final Instant now) {
-    Set<ParticipationStatus> activeStatuses = ParticipationStatus.activeUnderRecruiting();
-    if (activeStatuses.isEmpty()) {
-      // JPQL `IN ()` 는 DB 에 따라 SQL syntax 에러를 던지므로 사전 가드.
-      return 0;
-    }
     return jpaParticipationRepository.cancelByBuncheolIdAndStatusIn(
-        buncheolId, activeStatuses, ParticipationStatus.CANCELLED, now);
+        buncheolId,
+        ParticipationStatus.active(),
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.BUNCHEOL_CANCELLED,
+        now);
+  }
+
+  @Override
+  public List<Participation> findCascadeCancelledByBuncheolId(final Long buncheolId) {
+    return jpaParticipationRepository.findByBuncheolIdAndStatusAndCancelReason(
+        buncheolId, ParticipationStatus.CANCELLED, ParticipationCancelReason.BUNCHEOL_CANCELLED);
   }
 }

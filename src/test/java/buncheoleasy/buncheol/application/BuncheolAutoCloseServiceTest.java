@@ -2,11 +2,16 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import java.time.Instant;
@@ -31,9 +36,20 @@ class BuncheolAutoCloseServiceTest {
 
   @Mock private BuncheolRepository buncheolRepository;
 
+  @Mock private BuncheolDomainService buncheolDomainService;
+
   @Mock private ParticipationDomainService participationDomainService;
 
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+
   @Mock private ApplicationEventPublisher eventPublisher;
+
+  // 마감 판정 CAS 후 재조회한 분철의 상태로 후속 처리를 분기하므로, 상태만 stub 한 mock 으로 충분하다.
+  private Buncheol buncheolWithStatus(final BuncheolStatus status) {
+    Buncheol buncheol = mock(Buncheol.class);
+    given(buncheol.getStatus()).willReturn(status);
+    return buncheol;
+  }
 
   @Nested
   @DisplayName("만료 분철 조회 테스트")
@@ -47,35 +63,64 @@ class BuncheolAutoCloseServiceTest {
       List<Long> result = buncheolAutoCloseService.findExpiredBuncheolIds(NOW);
 
       assertThat(result).containsExactly(1L, 2L, 3L);
+      then(buncheolRepository).should().findRecruitingIdsPastDeadline(NOW, 100);
     }
   }
 
   @Nested
-  @DisplayName("단일 분철 자동 마감 테스트")
-  class CloseExpiredTest {
+  @DisplayName("단일 분철 마감 판정 테스트")
+  class FinalizeExpiredTest {
 
     @Test
-    void CAS_마감에_성공하면_낙찰자를_선정하고_true를_반환한다() {
-      given(buncheolRepository.closeIfRecruiting(BUNCHEOL_ID, NOW)).willReturn(1);
-      Participation winner = mock(Participation.class);
-      given(winner.getId()).willReturn(50L);
-      given(participationDomainService.selectWinners(BUNCHEOL_ID, NOW)).willReturn(List.of(winner));
+    void CAS_가_진행확정으로_전이하면_배송_스냅샷과_확정_이벤트를_발행한다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      // 중첩 stubbing(UnfinishedStubbingException) 회피를 위해 mock 을 별도 문장에서 먼저 만든다.
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CONFIRMED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      Participation confirmed = mock(Participation.class);
+      given(confirmed.getId()).willReturn(601L);
+      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(confirmed));
 
-      boolean result = buncheolAutoCloseService.closeExpired(BUNCHEOL_ID, NOW);
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
 
       assertThat(result).isTrue();
-      then(participationDomainService).should().selectWinners(BUNCHEOL_ID, NOW);
-      then(eventPublisher).should().publishEvent(any(ParticipationWonEvent.class));
+      then(deliverySnapshotCreator).should().create(confirmed);
+      then(eventPublisher).should().publishEvent(any(BuncheolConfirmedEvent.class));
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
 
     @Test
-    void CAS_마감에_실패하면_낙찰자를_선정하지_않고_false를_반환한다() {
-      given(buncheolRepository.closeIfRecruiting(BUNCHEOL_ID, NOW)).willReturn(0);
+    void CAS_가_취소로_전이하면_활성_참여를_일괄_취소하며_취소_이벤트를_발행한다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      // 중첩 stubbing(UnfinishedStubbingException) 회피를 위해 mock 을 별도 문장에서 먼저 만든다.
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CANCELLED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      Participation cancelled = mock(Participation.class);
+      given(cancelled.getId()).willReturn(701L);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
 
-      boolean result = buncheolAutoCloseService.closeExpired(BUNCHEOL_ID, NOW);
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isTrue();
+      then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
+      then(deliverySnapshotCreator).should(never()).create(any());
+    }
+
+    @Test
+    void CAS_마감에_실패하면_재조회없이_후속_처리_없이_false를_반환한다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(false);
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
 
       assertThat(result).isFalse();
-      then(participationDomainService).shouldHaveNoInteractions();
+      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+      then(participationDomainService).should(never()).findConfirmedByBuncheolId(anyLong());
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+      then(deliverySnapshotCreator).should(never()).create(any());
+      then(eventPublisher).should(never()).publishEvent(any());
     }
   }
 }

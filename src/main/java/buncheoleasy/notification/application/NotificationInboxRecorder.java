@@ -23,34 +23,28 @@ public class NotificationInboxRecorder {
 
   private static final String VARIABLE_BUNCHEOL_NAME = "분철명";
 
-  private static final String PATH_MY_BIDS = "/profile/bids";
-  private static final String PATH_HOME = "/";
-  private static final String PATH_BUNCHEOL_MANAGE = "/products/%d/manage";
+  private static final String PATH_MY_PARTICIPATIONS = "/profile/bids";
 
   private final InboxMessageRepository inboxMessageRepository;
 
   @Transactional
   public void record(
-      final Long recipientId,
-      final AlimtalkTemplate template,
-      final Map<String, String> variables,
-      final Long buncheolId) {
+      final Long recipientId, final AlimtalkTemplate template, final Map<String, String> variables) {
     final InboxMessage notification =
         InboxMessage.createNotification(
             recipientId,
             template.subject(),
             variables.get(VARIABLE_BUNCHEOL_NAME),
             template.render(variables),
-            resolveLinkPath(template, buncheolId));
+            resolveLinkPath(template));
     inboxMessageRepository.save(notification);
   }
 
   // 알림톡 버튼 목적지(BuncheolUrls)와 동일한 화면의 in-app 상대 경로. 배송조회(TRACKING_*)는 외부 연결이라 경로 없음.
-  private String resolveLinkPath(final AlimtalkTemplate template, final Long buncheolId) {
+  private String resolveLinkPath(final AlimtalkTemplate template) {
     return switch (template) {
-      case PARTICIPATION_WON, PAYMENT_CONFIRMED, PAYMENT_DUE_IMMINENT -> PATH_MY_BIDS;
-      case PAYMENT_REPORTED -> PATH_BUNCHEOL_MANAGE.formatted(buncheolId);
-      case BUNCHEOL_CANCELLED -> PATH_HOME;
+      case PAYMENT_CONFIRMED, PAYMENT_EXPIRED, BUNCHEOL_CONFIRMED, BUNCHEOL_CANCELLED ->
+          PATH_MY_PARTICIPATIONS;
       case TRACKING_CU, TRACKING_GS25 -> null;
     };
   }

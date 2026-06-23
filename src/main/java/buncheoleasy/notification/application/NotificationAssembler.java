@@ -1,6 +1,5 @@
 package buncheoleasy.notification.application;
 
-import buncheoleasy.buncheol.application.ParticipationPaymentAmountResolver;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -27,7 +26,6 @@ public class NotificationAssembler {
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
   private final DeliveryDomainService deliveryDomainService;
-  private final ParticipationPaymentAmountResolver paymentAmountResolver;
 
   public ParticipationView loadByParticipation(final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
@@ -38,9 +36,9 @@ public class NotificationAssembler {
     String memberName = resolveMemberName(buncheol.getGroupId(), buncheolMember.getMemberId());
     User participant = userDomainService.getUser(participation.getParticipantId());
     User host = userDomainService.getUser(buncheol.getHostId());
-    long paymentAmount = paymentAmountResolver.resolve(participation);
+    // 입금 총액(멤버 금액 + 배송비)은 참여 생성 시 산정·스냅샷된 값을 그대로 쓴다.
     return new ParticipationView(
-        participation, buncheol, memberName, participant, host, paymentAmount);
+        participation, buncheol, memberName, participant, host, participation.getAmount());
   }
 
   public Delivery loadDelivery(final Long deliveryId) {

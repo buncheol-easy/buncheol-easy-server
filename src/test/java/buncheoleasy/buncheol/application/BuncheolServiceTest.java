@@ -13,6 +13,8 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
+import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
@@ -56,6 +58,7 @@ class BuncheolServiceTest {
   private static final Long MEMBER_ID = 200L;
   private static final String MEMBER_NAME = "멤버A";
   private static final String MEMBER_IMAGE = "https://cdn.example.com/members/200.jpg";
+  private static final Instant NOW = Instant.parse("2026-05-14T12:00:00Z");
 
   @InjectMocks private BuncheolService buncheolService;
 
@@ -73,7 +76,7 @@ class BuncheolServiceTest {
 
   @Mock private ApplicationEventPublisher eventPublisher;
 
-  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
+  @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
   @Captor private ArgumentCaptor<BuncheolParams> buncheolParamsCaptor;
 
@@ -92,6 +95,7 @@ class BuncheolServiceTest {
         "분철 설명입니다.",
         "공식 스토어",
         Instant.now().plus(7, ChronoUnit.DAYS),
+        3,
         3000,
         null,
         members);
@@ -107,20 +111,22 @@ class BuncheolServiceTest {
 
     @Test
     void 분철_개최에_성공하고_분철_및_분철_멤버가_저장된다() {
-      // given
+      // given — 분철은 이미지 최소 1장이 필수이므로 정상 개최는 이미지 1장 이상으로 호출된다.
       given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
           .willReturn(List.of(groupMember(MEMBER_ID)));
 
       HoldBuncheolRequest request =
           holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
 
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(0);
+      willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
 
       // when
-      buncheolService.holdBuncheol(HOST_ID, request, List.of());
+      buncheolService.holdBuncheol(HOST_ID, request, images);
 
       // then
       then(groupDomainService).should().validateGroupExists(GROUP_ID);
@@ -130,7 +136,6 @@ class BuncheolServiceTest {
       then(buncheolMemberDomainService)
           .should()
           .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
-      then(eventPublisher).should(never()).publishEvent(any());
 
       BuncheolParams buncheolParams = buncheolParamsCaptor.getValue();
       assertThat(buncheolParams.groupId()).isEqualTo(GROUP_ID);
@@ -138,7 +143,26 @@ class BuncheolServiceTest {
       List<BuncheolMemberParams> memberParams = buncheolMemberParamsCaptor.getValue();
       assertThat(memberParams).hasSize(1);
       assertThat(memberParams.getFirst().memberId()).isEqualTo(MEMBER_ID);
-      assertThat(memberParams.getFirst().bidMinPrice()).isEqualTo(50_000L);
+      assertThat(memberParams.getFirst().price()).isEqualTo(50_000L);
+    }
+
+    @Test
+    void 이미지가_0장이면_BUNCHEOL_IMAGE_REQUIRED_예외가_발생하고_분철이_저장되지_않는다() {
+      // given — 이미지 개수 검증이 가장 먼저 수행되어 0장이면 즉시 차단된다.
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_REQUIRED))
+          .given(buncheolImageDomainService)
+          .validateImageCount(0);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_REQUIRED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(eventPublisher).should(never()).publishEvent(any());
     }
 
     @Test
@@ -256,7 +280,9 @@ class BuncheolServiceTest {
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(2);
+      willDoNothing()
+          .given(buncheolImageDomainService)
+          .validateModifyImageCount(BUNCHEOL_ID, List.of(1L, 2L), 0);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
@@ -280,7 +306,9 @@ class BuncheolServiceTest {
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
+      willDoNothing()
+          .given(buncheolImageDomainService)
+          .validateModifyImageCount(BUNCHEOL_ID, List.of(), 1);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images);
@@ -306,7 +334,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED))
           .given(buncheolImageDomainService)
-          .validateImageCount(6);
+          .validateModifyImageCount(BUNCHEOL_ID, List.of(), 6);
 
       // when & then
       assertThatThrownBy(
@@ -383,13 +411,13 @@ class BuncheolServiceTest {
   class CancelBuncheolTest {
 
     @Test
-    void 분철_취소에_성공하고_해당_분철의_ACTIVE_참여도_일괄_CANCELLED_된다() {
+    void 분철_취소에_성공하고_활성_참여도_일괄_CANCELLED_되며_알림_이벤트가_발행된다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       Participation participation = mock(Participation.class);
       given(participation.getId()).willReturn(50L);
-      given(participationDomainService.findBiddingByBuncheolId(BUNCHEOL_ID))
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(participation));
 
       // when
@@ -397,10 +425,8 @@ class BuncheolServiceTest {
 
       // then
       then(buncheol).should().validateOwner(HOST_ID);
-      then(buncheolDomainService).should().cancelBuncheol(buncheol);
-      then(participationDomainService)
-          .should()
-          .cancelActiveByBuncheolId(BUNCHEOL_ID, Instant.now(clock));
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
+      then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
     }
 
@@ -419,7 +445,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
 
-      then(buncheolDomainService).should(never()).cancelBuncheol(any());
+      then(buncheolDomainService).should(never()).cancelBuncheol(anyLong(), any());
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
 
@@ -436,7 +462,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
 
-      then(buncheolDomainService).should(never()).cancelBuncheol(any());
+      then(buncheolDomainService).should(never()).cancelBuncheol(anyLong(), any());
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
 
@@ -447,7 +473,7 @@ class BuncheolServiceTest {
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED))
           .given(buncheolDomainService)
-          .cancelBuncheol(buncheol);
+          .cancelBuncheol(BUNCHEOL_ID, NOW);
 
       // when & then
       assertThatThrownBy(() -> buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID))
@@ -456,88 +482,8 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
 
       then(buncheol).should().validateOwner(HOST_ID);
-      then(buncheolDomainService).should().cancelBuncheol(buncheol);
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
-    }
-  }
-
-  @Nested
-  @DisplayName("분철 수동 마감 테스트")
-  class CloseBuncheolTest {
-
-    @Test
-    void 분철_수동_마감에_성공한다() {
-      // given
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      Participation winner = mock(Participation.class);
-      given(winner.getId()).willReturn(50L);
-      given(
-              participationDomainService.selectWinners(
-                  BUNCHEOL_ID, Instant.parse("2026-05-14T12:00:00Z")))
-          .willReturn(List.of(winner));
-
-      // when
-      buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID);
-
-      // then
-      then(buncheol).should().validateOwner(HOST_ID);
-      then(buncheolDomainService).should().closeBuncheol(buncheol);
-      // 마감 직후 낙찰자 선정 후속 처리가 같은 트랜잭션에서 트리거된다.
-      then(participationDomainService)
-          .should()
-          .selectWinners(BUNCHEOL_ID, Instant.parse("2026-05-14T12:00:00Z"));
-      then(eventPublisher).should().publishEvent(any(ParticipationWonEvent.class));
-    }
-
-    @Test
-    void 소유자가_아니면_마감에_실패한다() {
-      // given
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
-          .given(buncheol)
-          .validateOwner(HOST_ID);
-
-      // when & then
-      assertThatThrownBy(() -> buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
-
-      then(buncheolDomainService).should(never()).closeBuncheol(any());
-    }
-
-    @Test
-    void 분철이_없으면_마감에_실패한다() {
-      // given
-      Long buncheolId = 999L;
-      given(buncheolDomainService.getBuncheol(buncheolId))
-          .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
-
-      // when & then
-      assertThatThrownBy(() -> buncheolService.closeBuncheol(HOST_ID, buncheolId))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
-
-      then(buncheolDomainService).should(never()).closeBuncheol(any());
-    }
-
-    @Test
-    void RECRUITING이_아닌_상태면_마감에_실패한다() {
-      // given
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
-          .given(buncheolDomainService)
-          .closeBuncheol(buncheol);
-
-      // when & then
-      assertThatThrownBy(() -> buncheolService.closeBuncheol(HOST_ID, BUNCHEOL_ID))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
   }
 }

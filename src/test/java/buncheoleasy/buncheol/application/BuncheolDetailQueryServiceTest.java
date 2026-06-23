@@ -17,8 +17,8 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
-import buncheoleasy.buncheol.dto.response.BuncheolMemberBidResponse;
-import buncheoleasy.buncheol.dto.response.MyBidResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.Group;
@@ -149,18 +149,22 @@ class BuncheolDetailQueryServiceTest {
           .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+      // 다른 유저가 슬롯 101 을 점유 중 (활성 참여 1건).
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(activeBid(501L, 101L, OTHER_USER, 50_000L)));
+          .willReturn(
+              List.of(active(501L, 101L, OTHER_USER, ParticipationStatus.AWAITING_PAYMENT)));
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
       assertThat(response.myParticipation()).isNotNull();
       assertThat(response.myParticipation().participatedMemberCount()).isZero();
-      assertThat(response.myParticipation().bids()).isEmpty();
+      assertThat(response.myParticipation().participations()).isEmpty();
+      // 활성 참여가 있는 멤버 슬롯은 '마감(available=false)' 으로 표시된다.
+      assertThat(response.members().get(0).available()).isFalse();
     }
 
     @Test
-    void 멤버별_top3_와_count_와_rank_를_계산한다() {
+    void 멤버별_가격과_점유_여부_그리고_내_참여_요약을_계산한다() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
@@ -168,75 +172,67 @@ class BuncheolDetailQueryServiceTest {
           .willReturn(
               List.of(
                   buncheolMember(101L, BUNCHEOL_ID, 1001L, 40_000L),
-                  buncheolMember(102L, BUNCHEOL_ID, 1002L, 30_000L)));
-      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+                  buncheolMember(102L, BUNCHEOL_ID, 1002L, 30_000L),
+                  buncheolMember(103L, BUNCHEOL_ID, 1003L, 20_000L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L, 1003L)))
           .willReturn(
               List.of(
-                  groupMember(1001L, "민지", "minji.png"), groupMember(1002L, "해린", "haerin.png")));
-      // 슬롯 101 활성 입찰 4건 (DESC 정렬된 상태로 들어옴): 90, 70, 50(me), 40
-      // 슬롯 102 활성 입찰 1건: 35(me)
+                  groupMember(1001L, "민지", "minji.png"),
+                  groupMember(1002L, "해린", "haerin.png"),
+                  groupMember(1003L, "혜인", "hyein.png")));
+      // 슬롯 101: 내가 입금확인중 점유, 슬롯 102: 내가 확정 점유, 슬롯 103: 다른 유저 점유
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(
               List.of(
-                  activeBid(901L, 101L, OTHER_USER, 90_000L),
-                  activeBid(701L, 101L, OTHER_USER, 70_000L),
-                  activeBid(601L, 101L, ME, 50_000L),
-                  activeBid(401L, 101L, OTHER_USER, 40_000L),
-                  activeBid(351L, 102L, ME, 35_000L)));
+                  active(601L, 101L, ME, ParticipationStatus.AWAITING_PAYMENT),
+                  active(602L, 102L, ME, ParticipationStatus.CONFIRMED),
+                  active(603L, 103L, OTHER_USER, ParticipationStatus.AWAITING_PAYMENT)));
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
-      assertThat(response.members()).hasSize(2);
-      BuncheolMemberBidResponse minji = response.members().get(0);
-      assertThat(minji.buncheolMemberId()).isEqualTo(101L);
-      assertThat(minji.memberName()).isEqualTo("민지");
-      assertThat(minji.bidMinPrice()).isEqualTo(40_000L);
-      assertThat(minji.topBidAmounts()).containsExactly(90_000L, 70_000L, 50_000L);
-      assertThat(minji.activeParticipantCount()).isEqualTo(4);
-      BuncheolMemberBidResponse haerin = response.members().get(1);
-      assertThat(haerin.buncheolMemberId()).isEqualTo(102L);
-      assertThat(haerin.bidMinPrice()).isEqualTo(30_000L);
-      assertThat(haerin.topBidAmounts()).containsExactly(35_000L);
-      assertThat(haerin.activeParticipantCount()).isEqualTo(1);
+      assertThat(response.confirmedCount()).isEqualTo(1);
+      assertThat(response.members())
+          .extracting(
+              BuncheolMemberDetailResponse::buncheolMemberId,
+              BuncheolMemberDetailResponse::memberName,
+              BuncheolMemberDetailResponse::price,
+              BuncheolMemberDetailResponse::available)
+          .containsExactly(
+              tuple(101L, "민지", 40_000L, false),
+              tuple(102L, "해린", 30_000L, false),
+              tuple(103L, "혜인", 20_000L, false));
 
       assertThat(response.myParticipation().participatedMemberCount()).isEqualTo(2);
-      assertThat(response.myParticipation().bids())
+      assertThat(response.myParticipation().participations())
           .extracting(
-              MyBidResponse::participationId,
-              MyBidResponse::buncheolMemberId,
-              MyBidResponse::bidAmount,
-              MyBidResponse::rank)
-          .containsExactly(tuple(601L, 101L, 50_000L, 3), tuple(351L, 102L, 35_000L, 1));
+              MyParticipationItemResponse::participationId,
+              MyParticipationItemResponse::buncheolMemberId,
+              MyParticipationItemResponse::status)
+          .containsExactly(
+              tuple(601L, 101L, ParticipationStatus.AWAITING_PAYMENT),
+              tuple(602L, 102L, ParticipationStatus.CONFIRMED));
     }
 
     @Test
-    void 활성_참여_4건_이상이어도_topBidAmounts_는_3개로_제한된다() {
+    void 활성_참여가_없는_멤버_슬롯은_available_true() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
+          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L, 40_000L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
-      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(
-              List.of(
-                  activeBid(901L, 101L, OTHER_USER, 90_000L),
-                  activeBid(801L, 101L, OTHER_USER, 80_000L),
-                  activeBid(701L, 101L, OTHER_USER, 70_000L),
-                  activeBid(601L, 101L, OTHER_USER, 60_000L),
-                  activeBid(501L, 101L, OTHER_USER, 50_000L)));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
-      assertThat(response.members().get(0).topBidAmounts())
-          .containsExactly(90_000L, 80_000L, 70_000L);
-      assertThat(response.members().get(0).activeParticipantCount()).isEqualTo(5);
+      assertThat(response.members().get(0).available()).isTrue();
+      assertThat(response.confirmedCount()).isZero();
     }
 
     @Test
     void 멤버_슬롯이_없는_분철도_정상_응답한다() {
-      stubBasicBuncheol(BuncheolStatus.CLOSED, ShippingFeePolicy.of(null, 4000));
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, ShippingFeePolicy.of(null, 4000));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
@@ -252,7 +248,7 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
-    void CANCELLED_분철도_200_으로_status_를_포함해_반환한다() {
+    void CANCELLED_분철도_200_으로_status_와_minHeadcount_를_포함해_반환한다() {
       stubBasicBuncheol(BuncheolStatus.CANCELLED, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
@@ -263,36 +259,7 @@ class BuncheolDetailQueryServiceTest {
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
 
       assertThat(response.status()).isEqualTo(BuncheolStatus.CANCELLED);
-    }
-
-    @Test
-    void 동일_금액_입찰이_들어와도_입력_순서_기준으로_rank_가_결정적이다() {
-      // 도메인 규칙상 동일 (member, bid_amount) 입찰은 불가하지만, 어댑터 정렬 (bidAmount DESC, id ASC) 가
-      // 깨졌을 때 서비스 단의 rank 계산이 입력 순서를 그대로 따라가는지 확인한다.
-      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
-      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
-          .willReturn(List.of());
-      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
-      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
-          .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
-      // 어댑터가 보장하는 (bidAmount DESC, id ASC) 순서를 stub 으로 모사한다.
-      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(
-              List.of(
-                  activeBid(901L, 101L, OTHER_USER, 80_000L),
-                  activeBid(902L, 101L, ME, 80_000L),
-                  activeBid(903L, 101L, OTHER_USER, 70_000L)));
-
-      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
-
-      assertThat(response.myParticipation().bids())
-          .singleElement()
-          .satisfies(
-              bid -> {
-                assertThat(bid.participationId()).isEqualTo(902L);
-                assertThat(bid.rank()).isEqualTo(2);
-              });
+      assertThat(response.minHeadcount()).isEqualTo(3);
     }
   }
 
@@ -316,6 +283,7 @@ class BuncheolDetailQueryServiceTest {
     setField(buncheol, "description", "분철 설명");
     setField(buncheol, "purchaseSite", "https://store.example.com");
     setField(buncheol, "deadline", DEADLINE);
+    setField(buncheol, "minHeadcount", 3);
     setField(buncheol, "status", status);
     setField(buncheol, "shippingFeePolicy", shippingFeePolicy);
     return buncheol;
@@ -325,13 +293,12 @@ class BuncheolDetailQueryServiceTest {
     return buncheolMember(id, buncheolId, memberId, 50_000L);
   }
 
-  private BuncheolMember buncheolMember(
-      Long id, Long buncheolId, Long memberId, long bidMinPrice) {
+  private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId, long price) {
     BuncheolMember member = newInstance(BuncheolMember.class);
     setField(member, "id", id);
     setField(member, "buncheolId", buncheolId);
     setField(member, "memberId", memberId);
-    setField(member, "bidMinPrice", bidMinPrice);
+    setField(member, "price", price);
     return member;
   }
 
@@ -357,15 +324,14 @@ class BuncheolDetailQueryServiceTest {
     return member;
   }
 
-  private Participation activeBid(
-      Long id, Long buncheolMemberId, Long participantId, long bidAmount) {
+  private Participation active(
+      Long id, Long buncheolMemberId, Long participantId, ParticipationStatus status) {
     Participation p = newInstance(Participation.class);
     setField(p, "id", id);
     setField(p, "buncheolId", BUNCHEOL_ID);
     setField(p, "buncheolMemberId", buncheolMemberId);
     setField(p, "participantId", participantId);
-    setField(p, "bidAmount", bidAmount);
-    setField(p, "status", ParticipationStatus.ACTIVE_BID);
+    setField(p, "status", status);
     return p;
   }
 

@@ -84,24 +84,25 @@ cloud:
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   frontend:
+    # 사용자 웹앱(프론트) origin. 알림톡 버튼·인앱 링크의 절대 URL base 로 사용한다(환경별로 다름).
+    base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
     login-callback-url: ${FRONTEND_LOGIN_CALLBACK_URL:http://localhost:3000/login/callback}
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
+  cookie:
+    # 리프레시 토큰 쿠키의 Secure 속성 (HTTPS 전용). 로컬은 false, 운영은 true.
+    secure: ${APP_COOKIE_SECURE:false}
   buncheol:
-    # 마감시간이 지난 분철을 자동 마감(CLOSED)하고 낙찰자를 선정하는 스케줄러.
-    # 분철 마감시간이 '시' 단위라 매시 정각 cron 으로 정밀 마감(통지 지연 최소화)하고,
-    # 저빈도 폴링(fallback)을 안전망으로 둬 cron 누락(다운타임)·동시각 대량 마감(배치 초과)을 복구한다.
-    auto-close:
+    auto-close: # 마감시간이 지난 분철의 마감을 판정(진행확정/취소)하는 스케줄러
       enabled: ${BUNCHEOL_AUTO_CLOSE_ENABLED:true}
-      cron: "${BUNCHEOL_AUTO_CLOSE_CRON:0 0 * * * *}"
-      fallback-interval-ms: ${BUNCHEOL_AUTO_CLOSE_FALLBACK_INTERVAL_MS:300000}
-      initial-delay-ms: ${BUNCHEOL_AUTO_CLOSE_INITIAL_DELAY_MS:10000}
-  notification:
-    # 입금 기한이 마감 3시간 이내로 임박한 낙찰자에게 입금 독려 알림을 보내는 스케줄러.
-    payment-due-reminder:
-      enabled: ${PAYMENT_DUE_REMINDER_ENABLED:true}
-      interval-ms: ${PAYMENT_DUE_REMINDER_INTERVAL_MS:600000}
-      initial-delay-ms: ${PAYMENT_DUE_REMINDER_INITIAL_DELAY_MS:30000}
+      cron: ${BUNCHEOL_AUTO_CLOSE_CRON:0 0 * * * *} # 매 정각
+      fallback-interval-ms: ${BUNCHEOL_AUTO_CLOSE_FALLBACK_INTERVAL_MS:600000} # 10분
+      initial-delay-ms: ${BUNCHEOL_AUTO_CLOSE_INITIAL_DELAY_MS:10000} # 10초
+  participation:
+    payment-expiry: # 입금 기한 초과 입금확인중 참여를 자동 취소 및 알림하는 스케줄러
+      enabled: ${PAYMENT_EXPIRY_ENABLED:true}
+      interval-ms: ${PAYMENT_EXPIRY_INTERVAL_MS:60000} # 1분
+      initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:10000} # 10초
 
 delivery:
   tracker:
@@ -109,14 +110,6 @@ delivery:
     client-id: ${DELIVERY_TRACKER_CLIENT_ID}
     client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET}
     callback-url: ${DELIVERY_TRACKER_CALLBACK_URL:http://localhost:8080/v1/deliveries/webhook/callback}
-    connect-timeout: 3s
-    read-timeout: 5s
-
-toss:
-  payments:
-    client-key: ${TOSS_CLIENT_KEY}
-    secret-key: ${TOSS_SECRET_KEY}
-    confirm-url: "https://api.tosspayments.com/v1/payments/confirm"
     connect-timeout: 3s
     read-timeout: 5s
 
@@ -132,13 +125,12 @@ aligo:
     connect-timeout: 3s
     read-timeout: 5s
     template-codes:
-      PARTICIPATION_WON: ${ALIGO_TPL_PARTICIPATION_WON:}
+      PAYMENT_CONFIRMED: ${ALIGO_TPL_PAYMENT_CONFIRMED:}
+      PAYMENT_EXPIRED: ${ALIGO_TPL_PAYMENT_EXPIRED:}
+      BUNCHEOL_CONFIRMED: ${ALIGO_TPL_BUNCHEOL_CONFIRMED:}
       BUNCHEOL_CANCELLED: ${ALIGO_TPL_BUNCHEOL_CANCELLED:}
       TRACKING_CU: ${ALIGO_TPL_TRACKING_CU:}
       TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
-      PAYMENT_CONFIRMED: ${ALIGO_TPL_PAYMENT_CONFIRMED:}
-      PAYMENT_DUE_IMMINENT: ${ALIGO_TPL_PAYMENT_DUE_IMMINENT:}
-      PAYMENT_REPORTED: ${ALIGO_TPL_PAYMENT_REPORTED:}
 
 management:
   endpoints:

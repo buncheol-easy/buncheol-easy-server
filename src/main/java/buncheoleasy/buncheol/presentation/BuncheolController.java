@@ -4,8 +4,9 @@ import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
-import buncheoleasy.buncheol.application.ImageFile;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.application.image.ImageFile;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -15,7 +16,6 @@ import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -68,7 +68,7 @@ public class BuncheolController {
         buncheolListQueryService.search(
             userId,
             new BuncheolSearchCondition(groupId, memberId, keyword),
-            Cursor.parse(cursor),
+            BuncheolListCursor.parse(cursor),
             size));
   }
 
@@ -79,7 +79,7 @@ public class BuncheolController {
     return ResponseEntity.ok(myHostedBuncheolQueryService.getMyHostedBuncheols(hostId));
   }
 
-  /** 분철 단건 상세 조회 (비로그인 허용). 멤버별 실시간 top 3 입찰·활성 참여자 수와 로그인 유저의 내 입찰 현황(rank 포함)을 포함한다. */
+  /** 분철 단건 상세 조회 (비로그인 허용). 멤버별 가격·참여 가능 여부, 최소 진행 인원·현재 확정 인원, 로그인 유저의 내 참여 현황을 포함한다. */
   @GetMapping("/{id}")
   public ResponseEntity<BuncheolDetailResponse> getBuncheolDetail(
       @AuthenticationPrincipal final Long userId, @PathVariable final Long id) {
@@ -87,9 +87,8 @@ public class BuncheolController {
   }
 
   /**
-   * 개최자 분철 관리 화면 조회 API. 호스트 본인만 호출 가능 (그 외 {@code BUNCHEOL_NO_PERMISSION}). 분철 기본 정보와 함께 옵션별
-   * 현 최고가·낙찰자 배송지(닉네임·전화번호 포함)·운송장 등록 상태를 모두 노출한다. 분철 상태(RECRUITING/CLOSED/...)에 관계없이
-   * 호출 가능하며, 옵션별 {@code winner} 필드는 결제 완료 전에는 null 로 내려간다.
+   * 개최자(운영자) 분철 관리 화면 조회 API. 호스트 본인만 호출 가능 (그 외 {@code BUNCHEOL_NO_PERMISSION}). 분철 기본 정보와 함께
+   * 입금확인 대상(입금확인중)·확정 참여자 목록을 환불 계좌·배송 스냅샷(확정 후 생성)과 함께 노출한다. 운영자는 이 화면에서 입금확인·환불을 처리한다.
    */
   @GetMapping("/{id}/management")
   public ResponseEntity<BuncheolManagementResponse> getBuncheolManagement(
@@ -101,7 +100,7 @@ public class BuncheolController {
   public ResponseEntity<Void> holdBuncheol(
       @AuthenticationPrincipal final Long hostId,
       @Valid @RequestPart("request") final HoldBuncheolRequest request,
-      @RequestPart(value = "images", required = false) final List<MultipartFile> images) {
+      @RequestPart(value = "images") final List<MultipartFile> images) {
     buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
     return ResponseEntity.status(HttpStatus.CREATED).build();
   }
@@ -120,14 +119,6 @@ public class BuncheolController {
   public ResponseEntity<Void> cancelBuncheol(
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
     buncheolService.cancelBuncheol(hostId, id);
-    return ResponseEntity.noContent().build();
-  }
-
-  /** 분철 수동 마감 API. 호스트가 deadline 도래 전 모집을 조기에 종료한다. */
-  @PostMapping("/{id}/close")
-  public ResponseEntity<Void> closeBuncheol(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
-    buncheolService.closeBuncheol(hostId, id);
     return ResponseEntity.noContent().build();
   }
 

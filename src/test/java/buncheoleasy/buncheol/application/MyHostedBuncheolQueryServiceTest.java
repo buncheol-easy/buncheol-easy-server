@@ -118,7 +118,7 @@ class MyHostedBuncheolQueryServiceTest {
               10L,
               100L,
               "분철 OLD",
-              BuncheolStatus.CLOSED,
+              BuncheolStatus.CONFIRMED,
               now.minus(1, ChronoUnit.DAYS),
               now.minus(30, ChronoUnit.DAYS));
 

@@ -1,7 +1,6 @@
 package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
-import buncheoleasy.global.page.Cursor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -21,12 +20,15 @@ public interface BuncheolRepository {
   List<Buncheol> findVisibleByHostIdOrderByCreatedAtDesc(Long hostId);
 
   /**
-   * 활성 분철(CANCELLED 제외) 중 검색 조건에 부합하는 항목을 {@code createdAt DESC, id DESC} 정렬로 최대 {@code limit} 개
-   * 조회한다.
+   * 활성 분철(CANCELLED 제외) 중 검색 조건에 부합하는 항목을 공개 목록 정렬로 최대 {@code limit} 개 조회한다.
    *
-   * <p>hasNext 판별을 위해 호출 측은 보통 {@code size + 1} 을 {@code limit} 으로 넘긴다.
+   * <p>정렬은 두 그룹을 이어 붙인다: 먼저 모집중(RECRUITING) 을 {@code createdAt DESC}(최신 개최순) 로, 그 뒤에 마감(CONFIRMED) 을 {@code
+   * deadline DESC}(현재와 가까운 마감순) 로 잇는다. 두 그룹 모두 동일 시각은 {@code id DESC} 로 끊는다.
+   *
+   * <p>커서는 {@link BuncheolListCursor} 로, 마지막으로 본 그룹·정렬 시각·id 를 담는다. hasNext 판별을 위해 호출 측은 보통 {@code size +
+   * 1} 을 {@code limit} 으로 넘긴다.
    */
-  List<Buncheol> search(BuncheolSearchCondition condition, Cursor cursor, int limit);
+  List<Buncheol> search(BuncheolSearchCondition condition, BuncheolListCursor cursor, int limit);
 
   boolean existsActiveByHostId(Long hostId);
 
@@ -40,12 +42,23 @@ public interface BuncheolRepository {
   List<Long> findRecruitingIdsPastDeadline(Instant now, int limit);
 
   /**
-   * 분철이 RECRUITING 일 때만 CLOSED 로 전이하는 CAS UPDATE ({@code closed_at} 기록). 자동 마감 스케줄러가 다중 인스턴스
-   * 환경에서 중복 마감하지 않도록, 선점에 성공한 단일 인스턴스만 1 을 회수한다.
+   * 분철이 RECRUITING 일 때만 {@code newStatus}(CONFIRMED 또는 CANCELLED) 로 전이하는 CAS UPDATE ({@code
+   * finalized_at} 기록). 마감 판정·호스트 취소가 공용으로 쓰며, 다중 인스턴스 중복 마감과 마감/취소 경합 상황에서 선점에 성공한 한쪽만 1 을 회수한다.
    *
    * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션({@code @Transactional}) 이 필수다.
    *
    * @return 갱신된 행 수 (0 이면 이미 다른 인스턴스가 마감했거나 RECRUITING 이 아님)
    */
-  int closeIfRecruiting(Long buncheolId, Instant now);
+  int finalizeIfRecruiting(Long buncheolId, BuncheolStatus newStatus, Instant now);
+
+  /**
+   * 마감 판정 전용 CAS. 입금확인된(CONFIRMED) 참여 수가 {@code minHeadcount} 이상이면 CONFIRMED, 미만이면 CANCELLED 로 {@code
+   * RECRUITING} 인 분철을 단일 UPDATE 로 원자 전이한다(카운트·비교·전이를 한 current-read 쿼리로 묶어 stale count 오판을 방지).
+   *
+   * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다. 전이된 실제 상태(CONFIRMED/CANCELLED)는 반환하지 않으므로
+   * 후속 분기는 재조회로 판별한다.
+   *
+   * @return 갱신된 행 수 (0 이면 이미 마감됐거나 RECRUITING 이 아님)
+   */
+  int finalizeExpiredByConfirmedHeadcount(Long buncheolId, Instant now);
 }

@@ -15,6 +15,7 @@ import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -101,11 +102,11 @@ class JpaDeliveryRepositoryAdapterTest {
   }
 
   private Long createBuncheol() {
-    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -113,27 +114,40 @@ class JpaDeliveryRepositoryAdapterTest {
   }
 
   private Long createBuncheolMember(final Long buncheolId) {
-    BuncheolMember member = BuncheolMember.create(buncheolId, groupMemberId, 30_000L);
+    return createBuncheolMember(buncheolId, groupMemberId);
+  }
+
+  private Long createBuncheolMember(final Long buncheolId, final Long memberId) {
+    BuncheolMember member = BuncheolMember.create(buncheolId, memberId, 30_000L);
     buncheolMemberRepository.saveAll(List.of(member));
     em.flush();
     return member.getId();
   }
 
-  /** 서로 다른 참여자/배송지로 CONFIRMED 참여를 만들고 그 id 를 반환한다. */
-  private Long createConfirmedParticipation(final String userSuffix, final long bidAmount) {
+  /**
+   * 서로 다른 참여자/멤버 슬롯/배송지로 CONFIRMED 참여를 만들고 그 id 를 반환한다. 한 멤버 슬롯엔 활성 참여가 1건만 가능(active_member_id
+   * UNIQUE)하므로 참여마다 별도 멤버 슬롯을 생성한다.
+   */
+  private Long createConfirmedParticipation(final String userSuffix, final long amount) {
     Long participantId = TestUserFixture.insertUser(jdbcTemplate, userSuffix);
+    Long memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, userSuffix + "_멤버");
+    Long slotId = createBuncheolMember(buncheolId, memberId);
     Long shippingAddressId = insertShippingAddress(participantId, userSuffix + "_매장");
     jdbcTemplate.update(
         "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-            + " shipping_address_id, bid_amount, status, active_participant_id) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            + " shipping_address_id, amount, refund_bank, refund_account, refund_holder,"
+            + " due_at, status) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         buncheolId,
-        buncheolMemberId,
+        slotId,
         participantId,
         shippingAddressId,
-        bidAmount,
-        ParticipationStatus.CONFIRMED.name(),
-        participantId);
+        amount,
+        "국민",
+        "12345678",
+        "홍길동",
+        Timestamp.from(Instant.now().plus(30, ChronoUnit.MINUTES)),
+        ParticipationStatus.CONFIRMED.name());
     return jdbcTemplate.queryForObject(
         "SELECT id FROM participations WHERE shipping_address_id = ?", Long.class, shippingAddressId);
   }

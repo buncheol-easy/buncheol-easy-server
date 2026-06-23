@@ -8,6 +8,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -41,6 +42,14 @@ public class GlobalExceptionHandler {
    */
   @ExceptionHandler(MissingServletRequestParameterException.class)
   public ProblemDetail handle(final MissingServletRequestParameterException exception) {
+    return ErrorCode.INVALID_INPUT_VALUE.toProblemDetail();
+  }
+
+  /*
+  required = true 인 @RequestPart(멀티파트 파트) 자체가 누락된 요청 처리 (예: 분철 개최 시 images 파트 누락)
+   */
+  @ExceptionHandler(MissingServletRequestPartException.class)
+  public ProblemDetail handle(final MissingServletRequestPartException exception) {
     return ErrorCode.INVALID_INPUT_VALUE.toProblemDetail();
   }
 }

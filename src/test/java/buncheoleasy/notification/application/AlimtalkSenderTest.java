@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import buncheoleasy.notification.domain.AlimtalkButtonType;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
 import buncheoleasy.notification.infrastructure.AligoAlimtalkClient;
 import buncheoleasy.notification.infrastructure.AligoProperties;
@@ -59,7 +60,12 @@ class AlimtalkSenderTest {
     assertThat(request.receiverPhone()).isEqualTo("01011112222");
     assertThat(request.subject()).isEqualTo("입금 확인 안내");
     assertThat(request.message()).startsWith("철수님, 입금이 확인되었어요!").doesNotContain("#{");
-    assertThat(request.button().mobileUrl()).isEqualTo(BASE_URL + "/profile/bids");
+    // 등록본(광고추가형)과 동일하게 1번 채널 추가(AC) + 2번 웹링크(WL) 순서로 실린다.
+    assertThat(request.buttons()).hasSize(2);
+    assertThat(request.buttons().get(0).type()).isEqualTo(AlimtalkButtonType.AC);
+    assertThat(request.buttons().get(0).name()).isEqualTo("채널 추가");
+    assertThat(request.buttons().get(1).type()).isEqualTo(AlimtalkButtonType.WL);
+    assertThat(request.buttons().get(1).mobileUrl()).isEqualTo(BASE_URL + "/profile/bids");
   }
 
   @Test

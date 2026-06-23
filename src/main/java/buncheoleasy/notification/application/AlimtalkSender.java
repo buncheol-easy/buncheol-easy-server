@@ -6,6 +6,7 @@ import buncheoleasy.notification.infrastructure.AligoAlimtalkClient;
 import buncheoleasy.notification.infrastructure.AligoProperties;
 import buncheoleasy.notification.infrastructure.AlimtalkSendRequest;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,17 +50,19 @@ public class AlimtalkSender {
     renderVariables.put(VARIABLE_BASE_URL, frontendBaseUrl);
 
     String message = template.render(renderVariables);
-    AlimtalkButton button =
-        template.button() == null ? null : template.button().render(renderVariables);
+    List<AlimtalkButton> buttons =
+        template.buttons().stream().map(button -> button.render(renderVariables)).toList();
 
-    // 변수 누락으로 #{...} 토큰이 남으면 깨진 본문이 나가지 않도록 발송을 거른다.
-    if (hasUnresolvedToken(message) || (button != null && hasUnresolvedToken(button.mobileUrl()))) {
+    // 변수 누락으로 #{...} 토큰이 남으면 깨진 본문·버튼이 나가지 않도록 발송을 거른다.
+    // (webLink 는 mobileUrl==pcUrl, AC 는 링크가 없으므로 mobileUrl 검사만으로 모든 버튼 링크를 커버한다.)
+    if (hasUnresolvedToken(message)
+        || buttons.stream().anyMatch(button -> hasUnresolvedToken(button.mobileUrl()))) {
       log.error("알림톡 미치환 변수가 남아 발송 건너뜀 - template={}", template);
       return;
     }
 
     client.send(
-        new AlimtalkSendRequest(tplCode, receiverPhone, template.subject(), message, button));
+        new AlimtalkSendRequest(tplCode, receiverPhone, template.subject(), message, buttons));
   }
 
   private boolean hasUnresolvedToken(final String text) {

@@ -98,4 +98,21 @@ class AlimtalkTemplateTest {
           .doesNotContain("#{");
     }
   }
+
+  @Nested
+  @DisplayName("버튼 구성")
+  class Buttons {
+
+    // 발신 채널이 광고추가형(AD)이라 등록본의 1번 버튼이 항상 채널 추가다. 새 템플릿이 이를 빠뜨리면 버튼 불일치로 전량 미발송되므로 정적으로 고정한다.
+    @Test
+    @DisplayName("모든 템플릿의 1번 버튼은 채널 추가(AC)다")
+    void firstButtonIsChannelAdd() {
+      for (final AlimtalkTemplate template : AlimtalkTemplate.values()) {
+        assertThat(template.buttons()).as("%s 의 버튼", template).isNotEmpty();
+        assertThat(template.buttons().get(0).type())
+            .as("%s 의 1번 버튼 타입", template)
+            .isEqualTo(AlimtalkButtonType.AC);
+      }
+    }
+  }
 }

@@ -159,7 +159,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
     @Test
     void hideClosed_true_면_RECRUITING_이_아닌_분철은_제외된다() {
       BuncheolBookmark bm1 = bookmark(500L, USER_ID, 10L); // RECRUITING
-      BuncheolBookmark bm2 = bookmark(501L, USER_ID, 20L); // CLOSED
+      BuncheolBookmark bm2 = bookmark(501L, USER_ID, 20L); // CONFIRMED
       BuncheolBookmark bm3 = bookmark(502L, USER_ID, 30L); // CANCELLED
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
           .willReturn(List.of(bm1, bm2, bm3));

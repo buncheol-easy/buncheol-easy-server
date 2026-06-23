@@ -78,8 +78,8 @@ cloud:
       access-key: ${AWS_ACCESS_KEY}
       secret-key: ${AWS_SECRET_KEY}
     s3:
-      bucket: buncheol-easy
-      origin: https://buncheol-easy.s3.ap-northeast-2.amazonaws.com
+      bucket: ${S3_BUCKET:buncheol-easy-bucket}
+      origin: https://${cloud.aws.s3.bucket}.s3.${cloud.aws.region.static}.amazonaws.com
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}

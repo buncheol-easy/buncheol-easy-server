@@ -74,6 +74,7 @@ class BuncheolListQueryServiceTest {
 
       assertThat(result.items()).hasSize(2);
       assertThat(result.items().get(0).id()).isEqualTo(10L);
+      assertThat(result.items().get(0).status()).isEqualTo(BuncheolStatus.RECRUITING);
       assertThat(result.items().get(0).bookmarked()).isTrue();
       assertThat(result.items().get(0).groupName()).isEqualTo("뉴진스");
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
@@ -138,6 +139,7 @@ class BuncheolListQueryServiceTest {
           buncheolListQueryService.search(
               1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 2);
 
+      assertThat(result.items().get(0).status()).isEqualTo(BuncheolStatus.CONFIRMED);
       assertThat(result.hasNext()).isTrue();
       // CONFIRMED 그룹(rank 1) → nextCursor = "1_<deadline>_<id>"
       assertThat(result.nextCursor()).isEqualTo("1_" + deadline2 + "_21");

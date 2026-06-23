@@ -292,6 +292,7 @@ class BuncheolControllerDocsTest {
         new BuncheolSummaryResponse(
             10L,
             "뉴진스 1집 분철",
+            BuncheolStatus.RECRUITING,
             deadline,
             true,
             "뉴진스",
@@ -332,7 +333,7 @@ class BuncheolControllerDocsTest {
                             모든 항목의 `bookmarked` 가 `false`. 토큰을 주면 본인 찜 여부가 채워진다.
 
                             **응답 동작**
-                            - 정렬: **모집중(`RECRUITING`) 을 최신 개최순(`createdAt DESC`) 으로 먼저**, 그 뒤에 **마감(`CONFIRMED`) 을 마감 임박순(`deadline DESC`, 현재와 가까운 마감일 우선)** 으로 잇는다. 두 그룹 모두 동일 시각은 `id DESC` 로 끊는다
+                            - 정렬: **모집중(`RECRUITING`) 을 최신 개최순(`createdAt DESC`) 으로 먼저**, 그 뒤에 **마감(`CONFIRMED`) 을 마감 임박순(`deadline DESC`, 현재와 가까운 마감일 우선)** 으로 잇는다. 두 그룹 모두 동일 시각은 `id DESC` 로 끊는다. 카드별 `items[].status` 로 모집중/마감을 구분(마감 배지·섹션)할 수 있다
                             - 노출 상태: `CANCELLED` 를 제외한 모든 status (`RECRUITING` / `CONFIRMED`)
                             - 페이지: **커서 기반 무한스크롤**. 응답의 `nextCursor` 를 다음 요청의 `cursor` 로 그대로 전달 (불투명 토큰 — 형식에 의존하지 말 것)
                             - `nextCursor` 형식: `<groupRank>_<sortAt Instant ISO-8601>_<id>` (groupRank 0=모집중·sortAt=createdAt, 1=마감·sortAt=deadline. 예: `0_2026-05-15T08:00:00Z_10`)
@@ -372,6 +373,9 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("items").description("분철 카드 배열"),
                             fieldWithPath("items[].id").description("분철 ID"),
                             fieldWithPath("items[].title").description("분철 제목"),
+                            fieldWithPath("items[].status")
+                                .description(
+                                    "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감). 목록은 `CANCELLED` 를 제외하므로 이 둘만 내려간다"),
                             fieldWithPath("items[].deadline")
                                 .description("분철 모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("items[].bookmarked")
@@ -406,7 +410,8 @@ class BuncheolControllerDocsTest {
   void 분철_목록_조회_비로그인_호출은_userId_null_로_전달되고_bookmarked_가_false_로_내려간다() throws Exception {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     BuncheolSummaryResponse item =
-        new BuncheolSummaryResponse(10L, "뉴진스 1집 분철", deadline, false, "뉴진스", null, List.of("민지"));
+        new BuncheolSummaryResponse(
+            10L, "뉴진스 1집 분철", BuncheolStatus.RECRUITING, deadline, false, "뉴진스", null, List.of("민지"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), null, false);
 

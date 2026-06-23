@@ -90,6 +90,7 @@ public class BuncheolListQueryService {
                     new BuncheolSummaryResponse(
                         b.getId(),
                         b.getTitle(),
+                        b.getStatus(),
                         b.getDeadline(),
                         bookmarkedBuncheolIds.contains(b.getId()),
                         groupNameById.get(b.getGroupId()),

@@ -50,9 +50,12 @@ public class BuncheolDomainService {
     return buncheolRepository.finalizeExpiredByConfirmedHeadcount(buncheolId, now) > 0;
   }
 
-  /** 호스트의 분철 취소 (RECRUITING → CANCELLED CAS). 모집 중이 아니면 상태 위반으로 막는다. */
+  /**
+   * 호스트의 분철 취소 (RECRUITING → HOST_CANCELLED CAS). 모집 중이 아니면 상태 위반으로 막는다. 인원 미달 자동취소(CANCELLED)와 달리 목록·상세에서
+   * 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측에서 동일하게 처리한다.
+   */
   public void cancelBuncheol(final Long buncheolId, final Instant now) {
-    if (!finalizeBuncheol(buncheolId, BuncheolStatus.CANCELLED, now)) {
+    if (!finalizeBuncheol(buncheolId, BuncheolStatus.HOST_CANCELLED, now)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
     }
   }

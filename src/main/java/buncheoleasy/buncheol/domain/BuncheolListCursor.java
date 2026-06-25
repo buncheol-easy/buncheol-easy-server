@@ -10,9 +10,10 @@ import java.time.Instant;
  * <p>정렬 키는 {@code (그룹 순위, 그룹 내 정렬 시각, id)} 3-튜플이다.
  *
  * <ul>
- *   <li>그룹 순위: RECRUITING = {@value #RANK_RECRUITING}, CONFIRMED = {@value #RANK_CONFIRMED}. 오름차순이라 모집중이
- *       먼저 노출되고 마감분이 뒤를 잇는다.
- *   <li>그룹 내 정렬 시각: 모집중은 {@code createdAt}(최신 개최순), 마감분은 {@code deadline}(현재와 가까운 마감순). 두 그룹 모두 내림차순.
+ *   <li>그룹 순위: RECRUITING = {@value #RANK_RECRUITING}, CONFIRMED = {@value #RANK_CONFIRMED}, CANCELLED(인원
+ *       미달) = {@value #RANK_CANCELLED}. 오름차순이라 모집중 → 진행확정 → 인원미달취소 순으로 노출된다. (HOST_CANCELLED 는
+ *       목록 비노출이라 커서에 등장하지 않는다.)
+ *   <li>그룹 내 정렬 시각: 모집중은 {@code createdAt}(최신 개최순), 마감·취소분은 {@code deadline}(현재와 가까운 마감순). 모두 내림차순.
  *   <li>id: 동일 시각 tie-break (내림차순).
  * </ul>
  *
@@ -32,8 +33,11 @@ public record BuncheolListCursor(Integer groupRank, Instant sortAt, Long id) {
   /** 모집중(RECRUITING) 그룹 순위 — 항상 마감 그룹보다 먼저 노출된다. */
   public static final int RANK_RECRUITING = 0;
 
-  /** 마감(CONFIRMED) 그룹 순위. */
+  /** 진행확정(CONFIRMED) 그룹 순위. */
   public static final int RANK_CONFIRMED = 1;
+
+  /** 인원 미달 취소(CANCELLED) 그룹 순위 — 맨 뒤. */
+  public static final int RANK_CANCELLED = 2;
 
   private static final String DELIMITER = "_";
   private static final int EXPECTED_PARTS = 3;
@@ -64,14 +68,17 @@ public record BuncheolListCursor(Integer groupRank, Instant sortAt, Long id) {
   }
 
   /**
-   * 직전 페이지의 마지막 분철로부터 다음 커서를 만든다. 분철의 현재 상태로 그룹 순위와 정렬 시각을 결정하므로, 상태가 RECRUITING 이면 createdAt 을, 그 외(마감)면
-   * deadline 을 정렬 시각으로 싣는다.
+   * 직전 페이지의 마지막 분철로부터 다음 커서를 만든다. 분철의 현재 상태로 그룹 순위와 정렬 시각을 결정한다: RECRUITING 은 (rank0, createdAt),
+   * CONFIRMED 는 (rank1, deadline), CANCELLED 는 (rank2, deadline). 목록은 이 세 상태만 노출하므로 다른 상태는 들어오지 않는다.
    */
   public static BuncheolListCursor from(final Buncheol buncheol) {
-    if (buncheol.getStatus() == BuncheolStatus.RECRUITING) {
-      return new BuncheolListCursor(RANK_RECRUITING, buncheol.getCreatedAt(), buncheol.getId());
-    }
-    return new BuncheolListCursor(RANK_CONFIRMED, buncheol.getDeadline(), buncheol.getId());
+    return switch (buncheol.getStatus()) {
+      case RECRUITING ->
+          new BuncheolListCursor(RANK_RECRUITING, buncheol.getCreatedAt(), buncheol.getId());
+      case CONFIRMED ->
+          new BuncheolListCursor(RANK_CONFIRMED, buncheol.getDeadline(), buncheol.getId());
+      default -> new BuncheolListCursor(RANK_CANCELLED, buncheol.getDeadline(), buncheol.getId());
+    };
   }
 
   public boolean isFirstPage() {

@@ -48,8 +48,9 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       Pageable pageable);
 
   /**
-   * 공개 목록의 <b>마감(CONFIRMED) 그룹</b>을 {@code deadline DESC, id DESC}(현재와 가까운 마감순) 로 검색한다. 어댑터에서 {@link
-   * BuncheolStatus#CONFIRMED} 를 전달한다.
+   * 공개 목록의 <b>deadline 기준 그룹</b>(진행확정 {@link BuncheolStatus#CONFIRMED} 또는 인원미달취소 {@link
+   * BuncheolStatus#CANCELLED})을 {@code deadline DESC, id DESC}(현재와 가까운 마감순) 로 검색한다. 어댑터에서 그룹별 status 를
+   * 전달해 두 그룹이 같은 쿼리를 공유한다.
    *
    * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (deadline, id)} 미만으로 keyset 페이지네이션한다. {@code
    * idx_buncheols_status_deadline (status, deadline, id)} 인덱스를 역방향 스캔해 {@code deadline DESC, id DESC} 정렬을
@@ -68,7 +69,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR b.deadline < :cursorDeadline "
           + "        OR (b.deadline = :cursorDeadline AND b.id < :cursorId)) "
           + "ORDER BY b.deadline DESC, b.id DESC")
-  List<Buncheol> searchConfirmed(
+  List<Buncheol> searchByDeadline(
       @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
       @Param("memberId") Long memberId,

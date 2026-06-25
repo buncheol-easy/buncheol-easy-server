@@ -1,10 +1,12 @@
 package buncheoleasy.notification.domain;
 
+import java.util.List;
 import java.util.Map;
 
 /**
  * 카카오 알림톡 템플릿. {@code body} 는 알리고에 등록·승인된 본문과 개행까지 동일해야 하며, 발송 전 모든 {@code #{변수}} 가 치환돼야 한다. 운송장은
- * 택배사 문구가 본문에 고정돼 있어 CU/GS25 로 분리한다.
+ * 택배사 문구가 본문에 고정돼 있어 CU/GS25 로 분리한다. 발신 채널이 광고추가형(AD)이라 등록본 1번 버튼이 채널 추가이므로 모든 템플릿에 {@link
+ * AlimtalkButton#channelAdd()} 를 앞에 둔다(발송 버튼이 등록본과 일치하지 않으면 카카오가 미발송 처리).
  */
 public enum AlimtalkTemplate {
   PAYMENT_CONFIRMED(
@@ -20,7 +22,9 @@ public enum AlimtalkTemplate {
       ▪ 참여 멤버 : #{멤버명}
       ▪ 입금 금액 : #{입금금액}원\
       """,
-      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
   PAYMENT_EXPIRED(
       "참여 자동 취소 안내",
@@ -34,7 +38,9 @@ public enum AlimtalkTemplate {
       #{분철명}
       ▪ 참여 멤버 : #{멤버명}\
       """,
-      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
   BUNCHEOL_CANCELLED(
       "분철 취소 안내",
@@ -50,7 +56,9 @@ public enum AlimtalkTemplate {
       #{분철명}
       ▪ 참여 멤버 : #{멤버명}\
       """,
-      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
   BUNCHEOL_CONFIRMED(
       "분철 진행 확정 안내",
@@ -64,7 +72,9 @@ public enum AlimtalkTemplate {
       #{분철명}
       ▪ 참여 멤버 : #{멤버명}\
       """,
-      AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)),
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
   TRACKING_CU(
       "운송장 등록 안내",
@@ -77,7 +87,7 @@ public enum AlimtalkTemplate {
       ▪ 택배사 : CU 편의점 택배
       ▪ 운송장 번호 : #{운송장번호}\
       """,
-      AlimtalkButton.deliveryTracking("배송조회")),
+      List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.CU))),
 
   TRACKING_GS25(
       "운송장 등록 안내",
@@ -90,25 +100,25 @@ public enum AlimtalkTemplate {
       ▪ 택배사 : GS25 편의점 택배
       ▪ 운송장 번호 : #{운송장번호}\
       """,
-      AlimtalkButton.deliveryTracking("배송조회"));
+      List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.GS25)));
 
   // Aligo 알림톡 제목(subject_1, 필수 파라미터)이자 in-app 수신함 알림 제목. 카카오 기본형이라 본문 위 강조 타이틀(emtitle_1)은 쓰지 않는다.
   private final String subject;
   private final String body;
-  private final AlimtalkButton button;
+  private final List<AlimtalkButton> buttons;
 
-  AlimtalkTemplate(final String subject, final String body, final AlimtalkButton button) {
+  AlimtalkTemplate(final String subject, final String body, final List<AlimtalkButton> buttons) {
     this.subject = subject;
     this.body = body;
-    this.button = button;
+    this.buttons = buttons;
   }
 
   public String subject() {
     return subject;
   }
 
-  public AlimtalkButton button() {
-    return button;
+  public List<AlimtalkButton> buttons() {
+    return buttons;
   }
 
   /** {@code #{변수}} 를 주어진 값으로 치환한다. 호출자가 모든 변수를 채워야 하며, 미치환 토큰이 남으면 발송 단계에서 거른다. */

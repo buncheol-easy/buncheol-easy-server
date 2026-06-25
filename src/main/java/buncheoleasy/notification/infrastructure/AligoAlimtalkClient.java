@@ -64,8 +64,8 @@ public class AligoAlimtalkClient {
     form.add("receiver_1", request.receiverPhone());
     form.add("subject_1", request.subject());
     form.add("message_1", request.message());
-    if (request.button() != null) {
-      form.add("button_1", buttonJsonWriter.toJson(request.button()));
+    if (request.buttons() != null && !request.buttons().isEmpty()) {
+      form.add("button_1", buttonJsonWriter.toJson(request.buttons()));
     }
     form.add("failover", properties.failover() ? FLAG_YES : FLAG_NO);
     form.add("testMode", properties.testMode() ? FLAG_YES : FLAG_NO);

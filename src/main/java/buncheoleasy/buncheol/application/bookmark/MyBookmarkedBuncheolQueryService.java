@@ -104,8 +104,8 @@ public class MyBookmarkedBuncheolQueryService {
         .toList();
   }
 
-  // 마감 임박순 정렬 비교자: 모집중(RECRUITING) 우선 → 모집중은 deadline ASC, 마감(CONFIRMED)은 deadline DESC, 동일 키는 찜 id DESC.
-  // 전제: CANCELLED 는 isVisible 에서 제거됨 → RECRUITING/CONFIRMED 두 상태만 진입한다.
+  // 마감 임박순 정렬 비교자: 모집중(RECRUITING) 우선 → 모집중은 deadline ASC, 비모집중(CONFIRMED/CANCELLED)은 deadline DESC, 동일 키는 찜 id DESC.
+  // 전제: HOST_CANCELLED 는 isVisible 에서 제거됨 → RECRUITING/CONFIRMED/CANCELLED 만 진입(CANCELLED 도 비모집중으로 묶여 마감군과 함께 정렬).
   private int compareByDeadlineGroup(
       final BuncheolBookmark a,
       final BuncheolBookmark b,
@@ -138,9 +138,8 @@ public class MyBookmarkedBuncheolQueryService {
       // 분철이 hard delete 된 비정상 케이스 (FK CASCADE 가 막아주므로 정상 흐름엔 없음).
       return false;
     }
-    // 호스트가 취소한 분철은 사용자 옵션과 무관하게 항상 숨긴다 — 마이페이지 모든 진입점에서
-    // 취소된 분철을 노출하지 않는 정책(KAN-88).
-    if (buncheol.getStatus() == BuncheolStatus.CANCELLED) {
+    // 개최자가 직접 취소한(HOST_CANCELLED) 분철만 항상 숨긴다. 인원 미달 자동취소(CANCELLED)는 찜 목록에도 노출한다.
+    if (buncheol.getStatus() == BuncheolStatus.HOST_CANCELLED) {
       return false;
     }
     if (hideClosed && buncheol.getStatus() != BuncheolStatus.RECRUITING) {

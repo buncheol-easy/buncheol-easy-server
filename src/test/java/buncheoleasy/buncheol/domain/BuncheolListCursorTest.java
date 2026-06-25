@@ -140,6 +140,21 @@ class BuncheolListCursorTest {
       assertThat(cursor.encode()).isEqualTo("1_2026-06-01T12:00:00Z_7");
       assertThat(BuncheolListCursor.parse(cursor.encode())).isEqualTo(cursor);
     }
+
+    @Test
+    void 인원미달_취소_분철은_rank2_와_deadline_으로_인코딩되고_라운드트립된다() {
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Buncheol buncheol =
+          buncheol(9L, BuncheolStatus.CANCELLED, Instant.parse("2026-05-01T00:00:00Z"), deadline);
+
+      BuncheolListCursor cursor = BuncheolListCursor.from(buncheol);
+
+      assertThat(cursor.groupRank()).isEqualTo(BuncheolListCursor.RANK_CANCELLED);
+      assertThat(cursor.sortAt()).isEqualTo(deadline);
+      assertThat(cursor.id()).isEqualTo(9L);
+      assertThat(cursor.encode()).isEqualTo("2_2026-06-01T12:00:00Z_9");
+      assertThat(BuncheolListCursor.parse(cursor.encode())).isEqualTo(cursor);
+    }
   }
 
   private Buncheol buncheol(Long id, BuncheolStatus status, Instant createdAt, Instant deadline) {

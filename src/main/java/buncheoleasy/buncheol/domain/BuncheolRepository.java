@@ -14,16 +14,17 @@ public interface BuncheolRepository {
   List<Buncheol> findAllByIds(List<Long> ids);
 
   /**
-   * 호스트의 분철 중 사용자에게 노출 가능한 항목을 {@code createdAt DESC} 정렬로 조회한다. 취소된({@link
-   * BuncheolStatus#CANCELLED}) 분철은 결과에서 제외한다.
+   * 호스트의 분철 중 사용자에게 노출 가능한 항목을 {@code createdAt DESC} 정렬로 조회한다. 개최자 취소({@link
+   * BuncheolStatus#HOST_CANCELLED}) 분철만 제외하고, 인원 미달 자동취소({@link BuncheolStatus#CANCELLED})는 개최 이력으로 포함한다.
    */
   List<Buncheol> findVisibleByHostIdOrderByCreatedAtDesc(Long hostId);
 
   /**
-   * 활성 분철(CANCELLED 제외) 중 검색 조건에 부합하는 항목을 공개 목록 정렬로 최대 {@code limit} 개 조회한다.
+   * 공개 목록에 노출 가능한 분철(개최자 취소 {@link BuncheolStatus#HOST_CANCELLED} 만 제외)을 공개 목록 정렬로 최대 {@code limit} 개 조회한다.
    *
-   * <p>정렬은 두 그룹을 이어 붙인다: 먼저 모집중(RECRUITING) 을 {@code createdAt DESC}(최신 개최순) 로, 그 뒤에 마감(CONFIRMED) 을 {@code
-   * deadline DESC}(현재와 가까운 마감순) 로 잇는다. 두 그룹 모두 동일 시각은 {@code id DESC} 로 끊는다.
+   * <p>정렬은 세 그룹을 이어 붙인다: 모집중(RECRUITING) 을 {@code createdAt DESC}(최신 개최순) → 진행확정(CONFIRMED) 을 {@code
+   * deadline DESC}(현재와 가까운 마감순) → 인원미달취소(CANCELLED) 를 {@code deadline DESC} 로 잇는다. 모든 그룹 동일 시각은 {@code id
+   * DESC} 로 끊는다.
    *
    * <p>커서는 {@link BuncheolListCursor} 로, 마지막으로 본 그룹·정렬 시각·id 를 담는다. hasNext 판별을 위해 호출 측은 보통 {@code size +
    * 1} 을 {@code limit} 으로 넘긴다.

@@ -261,6 +261,20 @@ class BuncheolDetailQueryServiceTest {
       assertThat(response.status()).isEqualTo(BuncheolStatus.CANCELLED);
       assertThat(response.minHeadcount()).isEqualTo(3);
     }
+
+    @Test
+    void 개최자가_취소한_HOST_CANCELLED_분철은_BUNCHEOL_NOT_FOUND() {
+      Buncheol hostCancelled =
+          buncheol(
+              BUNCHEOL_ID, GROUP_ID, "개최자 취소 분철",
+              BuncheolStatus.HOST_CANCELLED, ShippingFeePolicy.of(3000, null));
+      given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(hostCancelled));
+
+      assertThatThrownBy(() -> buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
+    }
   }
 
   private void stubBasicBuncheol(final BuncheolStatus status, final ShippingFeePolicy policy) {

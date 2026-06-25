@@ -207,14 +207,17 @@ class JpaBuncheolRepositoryAdapterTest {
   class FindVisibleByHostIdOrderByCreatedAtDescTest {
 
     @Test
-    void 호스트의_CANCELLED_분철은_제외된다() {
+    void 호스트의_HOST_CANCELLED_분철만_제외되고_인원미달_CANCELLED_는_포함된다() {
       Long active = persistWithCreatedAt(hostId, Instant.parse("2026-05-15T08:00:00Z"));
       Long cancelled = persistWithCreatedAt(hostId, Instant.parse("2026-05-14T08:00:00Z"));
+      Long hostCancelled = persistWithCreatedAt(hostId, Instant.parse("2026-05-13T08:00:00Z"));
       forceStatus(cancelled, BuncheolStatus.CANCELLED);
+      forceStatus(hostCancelled, BuncheolStatus.HOST_CANCELLED);
 
       List<Buncheol> result = buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(hostId);
 
-      assertThat(result).extracting(Buncheol::getId).containsExactly(active);
+      // createdAt DESC: active(05-15) → cancelled(05-14). HOST_CANCELLED 만 제외.
+      assertThat(result).extracting(Buncheol::getId).containsExactly(active, cancelled);
     }
 
     @Test
@@ -303,16 +306,22 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void CANCELLED_상태의_분철은_검색_결과에서_제외된다() {
-      Long b1 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
-      Long b2 = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
-      forceStatus(b2, BuncheolStatus.CANCELLED);
+    void HOST_CANCELLED_는_검색에서_제외되고_인원미달_CANCELLED_는_맨_뒤에_포함된다() {
+      Long recruiting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long cancelled =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      Long hostCancelled =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-13T08:00:00Z"));
+      forceStatus(cancelled, BuncheolStatus.CANCELLED);
+      forceStatus(hostCancelled, BuncheolStatus.HOST_CANCELLED);
 
       List<Buncheol> result =
           buncheolRepository.search(
               new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
 
-      assertThat(result).extracting(Buncheol::getId).containsExactly(b1);
+      // 모집중(rank0) → 인원미달취소(rank2) 순. HOST_CANCELLED 는 어느 그룹에도 없어 제외.
+      assertThat(result).extracting(Buncheol::getId).containsExactly(recruiting, cancelled);
     }
 
     @Test
@@ -440,6 +449,24 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
+    void 모집중_진행확정_인원미달취소_순으로_세_그룹을_이어_보여준다() {
+      Long rec = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long conf1 = persistConfirmed(Instant.parse("2026-05-10T00:00:00Z"));
+      Long conf2 = persistConfirmed(Instant.parse("2026-05-01T00:00:00Z"));
+      Long canc1 = persistCancelled(Instant.parse("2026-05-09T00:00:00Z"));
+      Long canc2 = persistCancelled(Instant.parse("2026-05-02T00:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
+
+      // 모집중 → 진행확정(deadline DESC) → 인원미달취소(deadline DESC)
+      assertThat(result)
+          .extracting(Buncheol::getId)
+          .containsExactly(rec, conf1, conf2, canc1, canc2);
+    }
+
+    @Test
     void 마감_그룹은_deadline_DESC_그리고_id_DESC_tie_break_로_정렬된다() {
       Instant sameDeadline = Instant.parse("2026-05-10T00:00:00Z");
       Long c1 = persistConfirmed(sameDeadline);
@@ -510,6 +537,14 @@ class JpaBuncheolRepositoryAdapterTest {
     private Long persistConfirmed(Instant deadline) {
       Long id = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-01T00:00:00Z"));
       forceStatus(id, BuncheolStatus.CONFIRMED);
+      forceDeadline(id, deadline);
+      return id;
+    }
+
+    // 인원 미달 자동취소(CANCELLED) 분철. 공개 목록 맨 뒤 그룹(rank2, deadline DESC) 검증용.
+    private Long persistCancelled(Instant deadline) {
+      Long id = persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-01T00:00:00Z"));
+      forceStatus(id, BuncheolStatus.CANCELLED);
       forceDeadline(id, deadline);
       return id;
     }

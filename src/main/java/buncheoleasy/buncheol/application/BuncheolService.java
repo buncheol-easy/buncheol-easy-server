@@ -88,7 +88,7 @@ public class BuncheolService {
     buncheol.validateOwner(hostId);
     final Instant now = Instant.now(clock);
 
-    // 모집 중일 때만 취소 (RECRUITING → CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
+    // 모집 중일 때만 취소 (RECRUITING → HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
     buncheolDomainService.cancelBuncheol(buncheolId, now);
 
     // 취소 확정 후 같은 트랜잭션에서 활성 참여(입금확인중·입금확인됨)를 모두 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이한다.

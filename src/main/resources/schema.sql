@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS buncheols
     min_headcount     INT          NOT NULL COMMENT '분철 진행 최소 인원',
     gs25_shipping_fee INT          NULL COMMENT 'GS25반값택배 배송비',
     cu_shipping_fee   INT          NULL COMMENT 'CU반값택배 배송비',
-    status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CONFIRMED | CANCELLED',
+    status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CONFIRMED | CANCELLED(인원미달 자동취소) | HOST_CANCELLED(개최자 취소, 목록·상세 비노출)',
     finalized_at      DATETIME     NULL COMMENT '마감 판정(진행확정/취소) 시각',
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -46,59 +46,79 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
 
   @Override
   public List<Buncheol> findVisibleByHostIdOrderByCreatedAtDesc(Long hostId) {
+    // 개최자 본인이 취소한(HOST_CANCELLED) 분철만 숨기고, 인원 미달 자동취소(CANCELLED)는 개최 이력으로 노출한다.
     return jpaBuncheolRepository.findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
-        hostId, BuncheolStatus.CANCELLED);
+        hostId, BuncheolStatus.HOST_CANCELLED);
   }
 
   /**
-   * 공개 목록을 모집중(createdAt DESC) → 마감(deadline DESC) 두 그룹을 이어 붙여 조회한다.
+   * 공개 목록을 모집중(createdAt DESC) → 진행확정(deadline DESC) → 인원미달취소(deadline DESC) 세 그룹을 순서대로 이어 붙여 조회한다.
+   * HOST_CANCELLED(개최자 취소)는 어느 그룹에도 포함하지 않아 목록에서 빠진다.
    *
-   * <p>두 그룹은 정렬 컬럼이 달라 단일 {@code ORDER BY} 로는 어떤 인덱스도 정렬을 커버하지 못하고 매 페이지 filesort 가 발생한다. 그룹별 전용 인덱스(모집중
-   * {@code idx_buncheols_status_created}, 마감 {@code idx_buncheols_status_deadline}) 를 각각 타도록 쿼리를 분리하고,
-   * 한 페이지가 그룹 경계를 걸칠 때만(모집중이 limit 을 못 채울 때) 마감 그룹 첫 구간을 이어 채운다 — 경계 페이지만 쿼리 2회, 그 외엔 1회.
+   * <p>모집중은 createdAt, 마감·취소는 deadline 으로 정렬 컬럼이 달라 단일 {@code ORDER BY} 로는 인덱스가 정렬을 커버하지 못한다. 그룹별 전용
+   * 인덱스({@code idx_buncheols_status_created} / {@code idx_buncheols_status_deadline})를 각각 타도록 쿼리를 분리하고,
+   * 커서 그룹부터 시작해 limit 이 찰 때까지 다음 그룹 첫 구간을 이어 채운다 — 경계를 걸친 페이지만 쿼리가 늘고, 그 외엔 1회.
    */
   @Override
   public List<Buncheol> search(
       BuncheolSearchCondition condition, BuncheolListCursor cursor, int limit) {
-    // 커서가 이미 마감 그룹에 진입한 경우: 마감 그룹만 deadline keyset 으로 이어 조회한다.
-    if (!cursor.isFirstPage() && !cursor.isRecruitingGroup()) {
-      return searchConfirmed(condition, cursor.sortAt(), cursor.id(), limit);
+    int startRank =
+        cursor.isFirstPage() ? BuncheolListCursor.RANK_RECRUITING : cursor.groupRank();
+    List<Buncheol> result = new ArrayList<>(limit);
+
+    // rank0: 모집중(RECRUITING) — createdAt keyset. 첫 페이지이거나 커서가 모집중 그룹일 때만 시작점이 된다.
+    if (startRank == BuncheolListCursor.RANK_RECRUITING) {
+      Instant cursorCreatedAt = cursor.isFirstPage() ? null : cursor.sortAt();
+      Long cursorId = cursor.isFirstPage() ? null : cursor.id();
+      result.addAll(searchRecruiting(condition, cursorCreatedAt, cursorId, limit));
+      if (result.size() >= limit) {
+        return result;
+      }
     }
 
-    // 첫 페이지이거나 모집중 그룹을 진행 중인 경우: 모집중을 createdAt keyset 으로 먼저 채운다.
-    Instant recruitingCursorCreatedAt = cursor.isFirstPage() ? null : cursor.sortAt();
-    Long recruitingCursorId = cursor.isFirstPage() ? null : cursor.id();
-    List<Buncheol> recruiting =
-        jpaBuncheolRepository.searchRecruiting(
-            BuncheolStatus.RECRUITING,
-            condition.groupId(),
-            condition.memberId(),
-            condition.keyword(),
-            recruitingCursorCreatedAt,
-            recruitingCursorId,
-            PageRequest.of(0, limit));
-    if (recruiting.size() >= limit) {
-      return recruiting;
+    // rank1: 진행확정(CONFIRMED) — deadline keyset. 커서가 이 그룹이면 커서부터, 모집중에서 넘어왔으면 첫 구간부터.
+    if (startRank <= BuncheolListCursor.RANK_CONFIRMED) {
+      result.addAll(searchByDeadlineFromGroup(condition, BuncheolStatus.CONFIRMED, cursor,
+          startRank == BuncheolListCursor.RANK_CONFIRMED, limit - result.size()));
+      if (result.size() >= limit) {
+        return result;
+      }
     }
 
-    // 모집중이 limit 을 못 채움 = 모집중 소진 → 남은 자리를 마감 그룹 첫 구간으로 잇는다.
-    List<Buncheol> confirmed =
-        searchConfirmed(condition, null, null, limit - recruiting.size());
-    List<Buncheol> combined = new ArrayList<>(recruiting.size() + confirmed.size());
-    combined.addAll(recruiting);
-    combined.addAll(confirmed);
-    return combined;
+    // rank2: 인원미달 취소(CANCELLED) — deadline keyset. 맨 뒤 그룹.
+    if (startRank <= BuncheolListCursor.RANK_CANCELLED) {
+      result.addAll(searchByDeadlineFromGroup(condition, BuncheolStatus.CANCELLED, cursor,
+          startRank == BuncheolListCursor.RANK_CANCELLED, limit - result.size()));
+    }
+    return result;
   }
 
-  private List<Buncheol> searchConfirmed(
-      BuncheolSearchCondition condition, Instant cursorDeadline, Long cursorId, int limit) {
-    return jpaBuncheolRepository.searchConfirmed(
-        BuncheolStatus.CONFIRMED,
+  private List<Buncheol> searchRecruiting(
+      BuncheolSearchCondition condition, Instant cursorCreatedAt, Long cursorId, int limit) {
+    return jpaBuncheolRepository.searchRecruiting(
+        BuncheolStatus.RECRUITING,
         condition.groupId(),
         condition.memberId(),
         condition.keyword(),
-        cursorDeadline,
+        cursorCreatedAt,
         cursorId,
+        PageRequest.of(0, limit));
+  }
+
+  // deadline 정렬 그룹(CONFIRMED/CANCELLED) 조회. fromCursor 면 커서 (deadline,id) 부터, 아니면 그룹 첫 구간부터.
+  private List<Buncheol> searchByDeadlineFromGroup(
+      BuncheolSearchCondition condition,
+      BuncheolStatus status,
+      BuncheolListCursor cursor,
+      boolean fromCursor,
+      int limit) {
+    return jpaBuncheolRepository.searchByDeadline(
+        status,
+        condition.groupId(),
+        condition.memberId(),
+        condition.keyword(),
+        fromCursor ? cursor.sortAt() : null,
+        fromCursor ? cursor.id() : null,
         PageRequest.of(0, limit));
   }
 
@@ -110,7 +130,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   @Override
   public List<Long> findGroupIdsByBuncheolCountSince(final Instant since, final int limit) {
     return jpaBuncheolRepository.findGroupIdsByBuncheolCountSince(
-        since, BuncheolStatus.notCancelled(), PageRequest.of(0, limit));
+        since, BuncheolStatus.active(), PageRequest.of(0, limit));
   }
 
   @Override

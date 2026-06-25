@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
@@ -49,6 +50,11 @@ public class BuncheolDetailQueryService {
         buncheolRepository
             .findById(buncheolId)
             .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+
+    // 개최자가 취소한(HOST_CANCELLED) 분철은 목록뿐 아니라 상세에서도 숨긴다(존재하지 않는 것처럼 404).
+    if (buncheol.getStatus() == BuncheolStatus.HOST_CANCELLED) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND);
+    }
 
     Group group =
         groupRepository

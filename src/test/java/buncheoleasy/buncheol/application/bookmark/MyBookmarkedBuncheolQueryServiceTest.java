@@ -214,28 +214,33 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
-    void hideClosed_false_여도_CANCELLED_분철은_항상_제외된다() {
+    void 인원미달_취소_CANCELLED_는_노출되고_개최자_취소_HOST_CANCELLED_만_항상_제외된다() {
       BuncheolBookmark bmRecruiting = bookmark(500L, USER_ID, 10L);
       BuncheolBookmark bmCancelled = bookmark(501L, USER_ID, 20L);
+      BuncheolBookmark bmHostCancelled = bookmark(502L, USER_ID, 30L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
-          .willReturn(List.of(bmRecruiting, bmCancelled));
+          .willReturn(List.of(bmRecruiting, bmCancelled, bmHostCancelled));
 
       Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
       Buncheol recruiting = buncheol(10L, 100L, "모집중 분철", BuncheolStatus.RECRUITING, deadline);
-      Buncheol cancelled = buncheol(20L, 100L, "취소된 분철", BuncheolStatus.CANCELLED, deadline);
-      given(buncheolRepository.findAllByIds(List.of(10L, 20L)))
-          .willReturn(List.of(recruiting, cancelled));
+      Buncheol cancelled = buncheol(20L, 100L, "인원미달 취소", BuncheolStatus.CANCELLED, deadline);
+      Buncheol hostCancelled = buncheol(30L, 100L, "개최자 취소", BuncheolStatus.HOST_CANCELLED, deadline);
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L)))
+          .willReturn(List.of(recruiting, cancelled, hostCancelled));
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 20L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(Map.of());
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
               USER_ID, BookmarkSortOption.LATEST, false, false);
 
-      assertThat(result).hasSize(1);
-      assertThat(result.get(0).buncheolId()).isEqualTo(10L);
+      // HOST_CANCELLED(30) 만 제외, RECRUITING(10)·CANCELLED(20) 는 노출 (LATEST = 찜 등록 순)
+      assertThat(result)
+          .extracting(MyBookmarkedBuncheolResponse::buncheolId)
+          .containsExactly(10L, 20L);
     }
 
     @Test

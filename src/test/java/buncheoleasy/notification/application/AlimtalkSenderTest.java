@@ -69,6 +69,31 @@ class AlimtalkSenderTest {
   }
 
   @Test
+  @DisplayName("TRACKING_CU 는 #{운송장번호}가 치환된 배송조회 URL 로 발송한다 (AC + WL 순)")
+  void sendsTrackingCuWithResolvedButtonUrl() {
+    AlimtalkSender sender = senderWith(Map.of(AlimtalkTemplate.TRACKING_CU, "TPL_CU"));
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "영희",
+            "분철명", "엔믹스 앨범",
+            "멤버명", "설윤",
+            "운송장번호", "123456789");
+
+    sender.send(AlimtalkTemplate.TRACKING_CU, "01011112222", variables);
+
+    ArgumentCaptor<AlimtalkSendRequest> captor = ArgumentCaptor.forClass(AlimtalkSendRequest.class);
+    verify(client).send(captor.capture());
+    AlimtalkSendRequest request = captor.getValue();
+    // 등록본과 동일하게 1번 채널 추가(AC) + 2번 배송조회 웹링크(WL). WL 링크의 #{운송장번호}가 발송 시 치환된다.
+    assertThat(request.buttons()).hasSize(2);
+    assertThat(request.buttons().get(0).type()).isEqualTo(AlimtalkButtonType.AC);
+    assertThat(request.buttons().get(1).type()).isEqualTo(AlimtalkButtonType.WL);
+    assertThat(request.buttons().get(1).mobileUrl())
+        .endsWith("invoice_no=123456789")
+        .doesNotContain("#{");
+  }
+
+  @Test
   @DisplayName("템플릿 코드가 미설정이면 발송하지 않는다")
   void skipsWhenCodeMissing() {
     AlimtalkSender sender = senderWith(Map.of());

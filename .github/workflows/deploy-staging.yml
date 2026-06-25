@@ -1,0 +1,53 @@
+name: Deploy Backend Staging
+
+# dev 브랜치 push -> staging EC2 의 self-hosted runner 에서 직접 배포.
+# runner 가 박스 안에서 docker 를 돌리므로 SSH 키가 필요 없다.
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+concurrency:
+  group: backend-staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, staging]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Sync source to deploy dir (preserve .env)
+        run: |
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.gradle' \
+            --exclude='build' \
+            --exclude='.env*' \
+            "${GITHUB_WORKSPACE}/" /home/ubuntu/buncheol-easy-server/
+
+      - name: Build and run backend container (RDS compose)
+        run: |
+          set -e
+          cd /home/ubuntu/buncheol-easy-server
+          docker compose -f docker-compose.staging.yml up -d --build
+
+          echo "Waiting for backend health check..."
+          MAX_RETRY=40
+          count=0
+          until curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; do
+            count=$((count + 1))
+            if [ "$count" -ge "$MAX_RETRY" ]; then
+              echo "Backend health check failed after ${MAX_RETRY} retries"
+              docker logs buncheoleasy-backend --tail=100
+              exit 1
+            fi
+            echo "Backend is not ready yet... retry $count"
+            sleep 5
+          done
+          echo "Backend health check passed"
+
+          docker image prune -f

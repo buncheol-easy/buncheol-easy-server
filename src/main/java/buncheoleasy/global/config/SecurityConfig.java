@@ -40,7 +40,8 @@ public class SecurityConfig {
     "/v1/buncheols/*",
     "/v1/search-keywords/recent",
     "/v1/inbox",
-    "/v1/inbox/*"
+    "/v1/inbox/*",
+    "/v1/banners"
   };
 
   /**

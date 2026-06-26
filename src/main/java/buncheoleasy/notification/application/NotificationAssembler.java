@@ -38,7 +38,7 @@ public class NotificationAssembler {
     User host = userDomainService.getUser(buncheol.getHostId());
     // 입금 총액(멤버 금액 + 배송비)은 참여 생성 시 산정·스냅샷된 값을 그대로 쓴다.
     return new ParticipationView(
-        participation, buncheol, memberName, participant, host, participation.getAmount());
+        participation, buncheol, memberName, participant, host, participation.getTotalAmount());
   }
 
   public Delivery loadDelivery(final Long deliveryId) {

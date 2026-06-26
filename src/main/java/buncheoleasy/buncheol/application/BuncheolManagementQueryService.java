@@ -130,7 +130,7 @@ public class BuncheolManagementQueryService {
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
-        participation.getAmount(),
+        participation.getTotalAmount(),
         participation.getStatus(),
         participation.getDueAt(),
         participation.getConfirmedAt(),

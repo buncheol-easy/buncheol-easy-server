@@ -55,7 +55,7 @@ public class ParticipationDetailQueryService {
         buncheol.getId(),
         buncheol.getTitle(),
         memberName,
-        participation.getAmount(),
+        participation.getTotalAmount(),
         participation.getStatus(),
         participation.getCancelReason(),
         participation.getDueAt(),

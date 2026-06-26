@@ -18,6 +18,7 @@ class ParticipationTest {
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long SHIPPING_ADDRESS_ID = 200L;
   private static final long AMOUNT = 31_900L;
+  private static final long SHIPPING_FEE = 3_000L;
   private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
   private static final Instant DUE_AT = Instant.parse("2026-03-11T15:30:00Z");
 
@@ -34,6 +35,8 @@ class ParticipationTest {
       assertThat(participation.getParticipantId()).isEqualTo(PARTICIPANT_ID);
       assertThat(participation.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
       assertThat(participation.getAmount()).isEqualTo(AMOUNT);
+      assertThat(participation.getShippingFee()).isEqualTo(SHIPPING_FEE);
+      assertThat(participation.getTotalAmount()).isEqualTo(AMOUNT + SHIPPING_FEE);
       assertThat(participation.getRefundAccount()).isEqualTo(REFUND_ACCOUNT);
       assertThat(participation.getDueAt()).isEqualTo(DUE_AT);
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
@@ -52,6 +55,7 @@ class ParticipationTest {
                       PARTICIPANT_ID,
                       SHIPPING_ADDRESS_ID,
                       AMOUNT,
+                      SHIPPING_FEE,
                       null,
                       DUE_AT))
           .isInstanceOf(BusinessException.class)
@@ -69,6 +73,7 @@ class ParticipationTest {
                       PARTICIPANT_ID,
                       SHIPPING_ADDRESS_ID,
                       AMOUNT,
+                      SHIPPING_FEE,
                       REFUND_ACCOUNT,
                       null))
           .isInstanceOf(BusinessException.class)
@@ -107,6 +112,7 @@ class ParticipationTest {
         PARTICIPANT_ID,
         SHIPPING_ADDRESS_ID,
         AMOUNT,
+        SHIPPING_FEE,
         REFUND_ACCOUNT,
         DUE_AT);
   }

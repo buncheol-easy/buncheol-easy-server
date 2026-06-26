@@ -49,6 +49,7 @@ class DeliverySnapshotCreatorTest {
             PARTICIPANT_ID,
             SHIPPING_ADDRESS_ID,
             30_000L,
+            0L,
             RefundAccount.of("국민", "12345678", "홍길동"),
             Instant.parse("2026-03-11T15:30:00Z"));
     setFieldValue(participation, "id", PARTICIPATION_ID);

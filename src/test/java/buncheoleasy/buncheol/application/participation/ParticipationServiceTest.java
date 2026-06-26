@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
@@ -30,6 +31,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -71,8 +73,12 @@ class ParticipationServiceTest {
   @Captor private ArgumentCaptor<Participation> participationCaptor;
 
   private ParticipateRequest participateRequest() {
+    return participateRequest(BUNCHEOL_MEMBER_ID);
+  }
+
+  private ParticipateRequest participateRequest(final Long... buncheolMemberIds) {
     return new ParticipateRequest(
-        BUNCHEOL_MEMBER_ID,
+        List.of(buncheolMemberIds),
         SHIPPING_ADDRESS_ID,
         new RefundAccountRequest("국민", "12345678", "홍길동"));
   }
@@ -83,11 +89,15 @@ class ParticipationServiceTest {
   }
 
   private BuncheolMember buncheolMember() {
+    return buncheolMember(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+  }
+
+  private BuncheolMember buncheolMember(final Long id, final long price) {
     BuncheolMember member = newInstance(BuncheolMember.class);
-    setField(member, "id", BUNCHEOL_MEMBER_ID);
+    setField(member, "id", id);
     setField(member, "buncheolId", BUNCHEOL_ID);
     setField(member, "memberId", 1001L);
-    setField(member, "price", MEMBER_PRICE);
+    setField(member, "price", price);
     return member;
   }
 
@@ -120,7 +130,7 @@ class ParticipationServiceTest {
 
       // 30분 창이 deadline 보다 빠르므로 dueAt = now + 30분.
       Instant expectedDueAt = NOW.plus(Duration.ofMinutes(30));
-      assertThat(result.amount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(result.dueAt()).isEqualTo(expectedDueAt);
       assertThat(result.hostAccount()).isEqualTo(HOST_ACCOUNT);
 
@@ -133,8 +143,111 @@ class ParticipationServiceTest {
       assertThat(saved.getBuncheolMemberId()).isEqualTo(BUNCHEOL_MEMBER_ID);
       assertThat(saved.getParticipantId()).isEqualTo(PARTICIPANT_ID);
       assertThat(saved.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
-      assertThat(saved.getAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      // 멤버 금액과 배송비는 분리 저장되고, 총액(getTotalAmount)에만 합산된다.
+      assertThat(saved.getAmount()).isEqualTo(MEMBER_PRICE);
+      assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
+      assertThat(saved.getTotalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(saved.getDueAt()).isEqualTo(expectedDueAt);
+    }
+
+    @Test
+    void 여러_멤버를_한_번에_점유하면_배송비는_1회만_부과되고_각_참여가_생성된다() {
+      Long secondMemberId = 102L;
+      long secondPrice = 40_000L;
+      Instant deadline = NOW.plus(Duration.ofDays(7));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getDeadline()).willReturn(deadline);
+      given(buncheol.getHostId()).willReturn(HOST_ID);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(buncheolMemberDomainService.getBuncheolMember(secondMemberId, BUNCHEOL_ID))
+          .willReturn(buncheolMember(secondMemberId, secondPrice));
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(true);
+      User host = mock(User.class);
+      given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
+      given(userDomainService.getUser(HOST_ID)).willReturn(host);
+
+      // 데드락 예방을 위해 슬롯 점유는 멤버 ID 오름차순으로 고정된다 — 요청을 역순(102, 101)으로 넣어도 101 부터 INSERT 된다.
+      ParticipateResult result =
+          participationService.participate(
+              BUNCHEOL_ID, PARTICIPANT_ID, participateRequest(secondMemberId, BUNCHEOL_MEMBER_ID));
+
+      // 총액 = 두 멤버 금액 합 + 배송비 1회.
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + secondPrice + SHIPPING_FEE);
+
+      then(participationDomainService)
+          .should(times(2))
+          .createParticipationIfRecruiting(participationCaptor.capture());
+      List<Participation> saved = participationCaptor.getAllValues();
+      // 멤버 ID 오름차순(101→102)으로 처리되고, 멤버 금액(amount)은 각 슬롯의 굿즈 가격,
+      // 배송비(shippingFee)는 첫 슬롯(가장 작은 ID)에만 얹힌다.
+      assertThat(saved.get(0).getBuncheolMemberId()).isEqualTo(BUNCHEOL_MEMBER_ID);
+      assertThat(saved.get(0).getAmount()).isEqualTo(MEMBER_PRICE);
+      assertThat(saved.get(0).getShippingFee()).isEqualTo(SHIPPING_FEE);
+      assertThat(saved.get(1).getBuncheolMemberId()).isEqualTo(secondMemberId);
+      assertThat(saved.get(1).getAmount()).isEqualTo(secondPrice);
+      assertThat(saved.get(1).getShippingFee()).isZero();
+    }
+
+    @Test
+    void 묶음_중_한_슬롯이라도_점유에_실패하면_예외가_발생한다() {
+      Long secondMemberId = 102L;
+      Instant deadline = NOW.plus(Duration.ofDays(7));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getDeadline()).willReturn(deadline);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(buncheolMemberDomainService.getBuncheolMember(secondMemberId, BUNCHEOL_ID))
+          .willReturn(buncheolMember(secondMemberId, 40_000L));
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      // 첫 슬롯은 성공, 둘째 슬롯은 모집 마감 → 전체 트랜잭션 롤백 의도.
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willReturn(true, false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID,
+                      PARTICIPANT_ID,
+                      participateRequest(BUNCHEOL_MEMBER_ID, secondMemberId)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      // 호스트 계좌 조회까지 가지 않고 둘째 슬롯에서 끊긴다.
+      then(userDomainService).should(never()).getUser(anyLong());
+    }
+
+    @Test
+    void 같은_멤버를_중복으로_선택하면_저장하지_않고_예외가_발생한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID,
+                      PARTICIPANT_ID,
+                      participateRequest(BUNCHEOL_MEMBER_ID, BUNCHEOL_MEMBER_ID)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_DUPLICATE_MEMBER);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
     @Test

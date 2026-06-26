@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.inbox.application.NoticeCommandService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -96,5 +99,21 @@ class NoticeImageEventListenerTest {
     then(noticeCommandService)
         .should()
         .attachNoticeAssets(NOTICE_ID, "https://cdn.example.com/n.jpg", "여름 이벤트", null);
+  }
+
+  @Test
+  void DB_반영이_실패해도_예외를_전파하지_않는다() {
+    ImageFile image = imageFile("notice.jpg");
+    given(imageUploader.uploadNoticeImageAndGetUrl(NOTICE_ID, image))
+        .willReturn("https://cdn.example.com/n.jpg");
+    willThrow(new BusinessException(ErrorCode.INBOX_MESSAGE_NOT_FOUND))
+        .given(noticeCommandService)
+        .attachNoticeAssets(any(), any(), any(), any());
+
+    assertThatCode(
+            () ->
+                listener.handleNoticeImageUpload(
+                    new NoticeImageUploadEvent(NOTICE_ID, image, null, null)))
+        .doesNotThrowAnyException();
   }
 }

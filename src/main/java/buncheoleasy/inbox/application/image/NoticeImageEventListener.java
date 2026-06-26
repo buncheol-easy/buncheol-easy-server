@@ -39,8 +39,19 @@ public class NoticeImageEventListener {
                 () -> imageUploader.uploadBannerImageAndGetUrl(noticeId, event.bannerImage()));
 
     if (imageUrl != null || bannerImageUrl != null) {
-      noticeCommandService.attachNoticeAssets(
-          noticeId, imageUrl, event.bannerTitle(), bannerImageUrl);
+      try {
+        noticeCommandService.attachNoticeAssets(
+            noticeId, imageUrl, event.bannerTitle(), bannerImageUrl);
+      } catch (RuntimeException e) {
+        // DB 반영 실패(공지 삭제·일시 오류 등) 시 업로드된 S3 객체는 고아가 되지만, 리스너는 best-effort 라
+        // 예외를 전파하지 않고 식별 정보와 함께 로깅만 한다(업로드 단계와 동일 정책).
+        log.error(
+            "공지 자산 반영 실패. noticeId={}, imageUrl={}, bannerImageUrl={}",
+            noticeId,
+            imageUrl,
+            bannerImageUrl,
+            e);
+      }
     }
   }
 

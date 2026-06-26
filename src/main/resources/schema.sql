@@ -356,16 +356,19 @@ CREATE TABLE IF NOT EXISTS user_recent_searches
 -- 공지(NOTICE)는 전체 대상이라 recipient_id NULL, 알림(NOTIFICATION)은 수신자별 1:1 생성.
 CREATE TABLE IF NOT EXISTS inbox_messages
 (
-    id           BIGINT       NOT NULL AUTO_INCREMENT,
-    type         VARCHAR(20)  NOT NULL COMMENT 'NOTICE | NOTIFICATION',
-    recipient_id BIGINT       NULL COMMENT '알림 수신자 (공지는 NULL)',
-    title        VARCHAR(200) NOT NULL COMMENT '제목',
-    reference    VARCHAR(200) NULL COMMENT '보조 텍스트(참고)',
-    description  TEXT         NOT NULL COMMENT '설명(본문)',
-    pinned       BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '상단 고정 여부 (공지만 사용)',
-    link_path    VARCHAR(500) NULL COMMENT '연관 화면 in-app 경로',
-    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id               BIGINT       NOT NULL AUTO_INCREMENT,
+    type             VARCHAR(20)  NOT NULL COMMENT 'NOTICE | NOTIFICATION',
+    recipient_id     BIGINT       NULL COMMENT '알림 수신자 (공지는 NULL)',
+    title            VARCHAR(200) NOT NULL COMMENT '제목',
+    reference        VARCHAR(200) NULL COMMENT '보조 텍스트(참고)',
+    description      TEXT         NOT NULL COMMENT '설명(본문)',
+    pinned           BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '상단 고정 여부 (공지만 사용)',
+    link_path        VARCHAR(500) NULL COMMENT '연관 화면 in-app 경로',
+    image_url        VARCHAR(500) NULL COMMENT '공지 본문 이미지 URL (공지만 사용)',
+    banner_title     VARCHAR(200) NULL COMMENT '홈 배너 제목 (공지만 사용)',
+    banner_image_url VARCHAR(500) NULL COMMENT '홈 배너 이미지 URL (공지만 사용)',
+    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -373,6 +376,8 @@ CREATE TABLE IF NOT EXISTS inbox_messages
     INDEX idx_inbox_recipient_created (recipient_id, created_at DESC, id DESC),
     -- 공지 피드(pinned = false) 및 상단 고정 공지(pinned = true) 조회용
     INDEX idx_inbox_type_pinned_created (type, pinned, created_at DESC, id DESC),
+    -- 홈 배너 조회용 (배너 등록 공지 = banner_image_url IS NOT NULL 시크)
+    INDEX idx_inbox_banner (banner_image_url),
 
     CONSTRAINT fk_inbox_messages_recipient
         FOREIGN KEY (recipient_id)

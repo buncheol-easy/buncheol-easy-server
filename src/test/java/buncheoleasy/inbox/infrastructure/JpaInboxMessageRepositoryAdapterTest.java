@@ -303,4 +303,78 @@ class JpaInboxMessageRepositoryAdapterTest {
       assertThat(result).extracting(InboxMessage::getId).containsExactly(notice);
     }
   }
+
+  @Nested
+  @DisplayName("이미지/배너 더티체킹 영속화 테스트")
+  class AttachPersistenceTest {
+
+    @Test
+    void managed_공지에_attachImage하면_DB에_반영된다() {
+      Long noticeId = persistNotice(false, Instant.parse("2026-06-15T08:00:00Z"));
+
+      InboxMessage managed = inboxMessageRepository.findById(noticeId).orElseThrow();
+      managed.attachImage("https://cdn.example.com/n.jpg");
+      em.flush();
+      em.clear();
+
+      assertThat(inboxMessageRepository.findById(noticeId).orElseThrow().getImageUrl())
+          .isEqualTo("https://cdn.example.com/n.jpg");
+    }
+
+    @Test
+    void managed_공지에_attachBanner하면_제목과_이미지가_DB에_반영된다() {
+      Long noticeId = persistNotice(false, Instant.parse("2026-06-15T08:00:00Z"));
+
+      InboxMessage managed = inboxMessageRepository.findById(noticeId).orElseThrow();
+      managed.attachBanner("여름 이벤트", "https://cdn.example.com/b.jpg");
+      em.flush();
+      em.clear();
+
+      InboxMessage reloaded = inboxMessageRepository.findById(noticeId).orElseThrow();
+      assertThat(reloaded.getBannerTitle()).isEqualTo("여름 이벤트");
+      assertThat(reloaded.getBannerImageUrl()).isEqualTo("https://cdn.example.com/b.jpg");
+    }
+  }
+
+  @Nested
+  @DisplayName("홈 배너 조회(findBanners) 테스트")
+  class FindBannersTest {
+
+    private Long persistNoticeWithBanner(final String bannerTitle, final Instant createdAt) {
+      InboxMessage notice = InboxMessage.createNotice("공지 제목", "참고", "공지 설명", false, "/notice");
+      inboxMessageRepository.save(notice);
+      notice.attachBanner(bannerTitle, "https://cdn.example.com/banner-" + bannerTitle + ".jpg");
+      em.flush();
+      jdbcTemplate.update(
+          "UPDATE inbox_messages SET created_at = ? WHERE id = ?",
+          Timestamp.from(createdAt),
+          notice.getId());
+      em.clear();
+      return notice.getId();
+    }
+
+    @Test
+    void 배너가_등록된_공지만_id_DESC로_반환한다() {
+      // id 순서와 created_at 순서를 일부러 반대로 둬서 'id DESC' 정렬을 실제로 검증한다.
+      // firstSaved: 낮은 id + 더 최신 created_at, secondSaved: 높은 id + 더 과거 created_at.
+      Long firstSaved = persistNoticeWithBanner("배너1", Instant.parse("2026-06-20T08:00:00Z"));
+      Long secondSaved = persistNoticeWithBanner("배너2", Instant.parse("2026-06-10T08:00:00Z"));
+      persistNotice(false, Instant.parse("2026-06-15T08:00:00Z")); // 배너 없는 공지 → 제외
+
+      List<InboxMessage> result = inboxMessageRepository.findBanners();
+
+      // id DESC 라면 높은 id 인 secondSaved 가 먼저다. created_at DESC 였다면 firstSaved 가 먼저였을 것.
+      assertThat(result)
+          .extracting(InboxMessage::getId)
+          .containsExactly(secondSaved, firstSaved);
+    }
+
+    @Test
+    void 배너가_없는_공지와_알림은_제외된다() {
+      persistNotice(false, Instant.parse("2026-06-15T08:00:00Z"));
+      persistNotification(userId, Instant.parse("2026-06-14T08:00:00Z"));
+
+      assertThat(inboxMessageRepository.findBanners()).isEmpty();
+    }
+  }
 }

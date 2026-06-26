@@ -259,10 +259,13 @@ CREATE TABLE inbox_messages
     title        VARCHAR(200) NOT NULL,
     reference    VARCHAR(200) NULL,
     description  TEXT         NOT NULL,
-    pinned       BOOLEAN      NOT NULL DEFAULT FALSE,
-    link_path    VARCHAR(500) NULL,
-    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    pinned           BOOLEAN      NOT NULL DEFAULT FALSE,
+    link_path        VARCHAR(500) NULL,
+    image_url        VARCHAR(500) NULL,
+    banner_title     VARCHAR(200) NULL,
+    banner_image_url VARCHAR(500) NULL,
+    created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_inbox_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users (id) ON DELETE CASCADE
@@ -270,3 +273,4 @@ CREATE TABLE inbox_messages
 
 CREATE INDEX idx_inbox_recipient_created ON inbox_messages (recipient_id, created_at DESC, id DESC);
 CREATE INDEX idx_inbox_type_pinned_created ON inbox_messages (type, pinned, created_at DESC, id DESC);
+CREATE INDEX idx_inbox_banner ON inbox_messages (banner_image_url);

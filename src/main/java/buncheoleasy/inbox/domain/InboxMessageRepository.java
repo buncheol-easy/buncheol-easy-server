@@ -22,4 +22,7 @@ public interface InboxMessageRepository {
 
   /** {@code userId} 가 볼 수 있는(공지이거나 본인 알림) 메시지만 단건 조회한다. */
   Optional<InboxMessage> findVisibleById(Long id, Long userId);
+
+  /** 홈 배너가 등록된(banner_image_url 채워진) 공지를 전체 조회한다. {@code id DESC}(최신순), 개수 제한 없음. */
+  List<InboxMessage> findBanners();
 }

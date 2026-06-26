@@ -59,4 +59,9 @@ public class JpaInboxMessageRepositoryAdapter implements InboxMessageRepository 
   public Optional<InboxMessage> findVisibleById(final Long id, final Long userId) {
     return jpaInboxMessageRepository.findVisibleById(id, userId, InboxMessageType.NOTICE);
   }
+
+  @Override
+  public List<InboxMessage> findBanners() {
+    return jpaInboxMessageRepository.findBanners(InboxMessageType.NOTICE);
+  }
 }

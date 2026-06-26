@@ -130,7 +130,7 @@ class ParticipationServiceTest {
 
       // 30분 창이 deadline 보다 빠르므로 dueAt = now + 30분.
       Instant expectedDueAt = NOW.plus(Duration.ofMinutes(30));
-      assertThat(result.amount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(result.dueAt()).isEqualTo(expectedDueAt);
       assertThat(result.hostAccount()).isEqualTo(HOST_ACCOUNT);
 
@@ -174,20 +174,24 @@ class ParticipationServiceTest {
       given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
       given(userDomainService.getUser(HOST_ID)).willReturn(host);
 
+      // 데드락 예방을 위해 슬롯 점유는 멤버 ID 오름차순으로 고정된다 — 요청을 역순(102, 101)으로 넣어도 101 부터 INSERT 된다.
       ParticipateResult result =
           participationService.participate(
-              BUNCHEOL_ID, PARTICIPANT_ID, participateRequest(BUNCHEOL_MEMBER_ID, secondMemberId));
+              BUNCHEOL_ID, PARTICIPANT_ID, participateRequest(secondMemberId, BUNCHEOL_MEMBER_ID));
 
       // 총액 = 두 멤버 금액 합 + 배송비 1회.
-      assertThat(result.amount()).isEqualTo(MEMBER_PRICE + secondPrice + SHIPPING_FEE);
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + secondPrice + SHIPPING_FEE);
 
       then(participationDomainService)
           .should(times(2))
           .createParticipationIfRecruiting(participationCaptor.capture());
       List<Participation> saved = participationCaptor.getAllValues();
-      // 멤버 금액(amount)은 각 슬롯의 굿즈 가격, 배송비(shippingFee)는 첫 슬롯에만 얹힌다.
+      // 멤버 ID 오름차순(101→102)으로 처리되고, 멤버 금액(amount)은 각 슬롯의 굿즈 가격,
+      // 배송비(shippingFee)는 첫 슬롯(가장 작은 ID)에만 얹힌다.
+      assertThat(saved.get(0).getBuncheolMemberId()).isEqualTo(BUNCHEOL_MEMBER_ID);
       assertThat(saved.get(0).getAmount()).isEqualTo(MEMBER_PRICE);
       assertThat(saved.get(0).getShippingFee()).isEqualTo(SHIPPING_FEE);
+      assertThat(saved.get(1).getBuncheolMemberId()).isEqualTo(secondMemberId);
       assertThat(saved.get(1).getAmount()).isEqualTo(secondPrice);
       assertThat(saved.get(1).getShippingFee()).isZero();
     }

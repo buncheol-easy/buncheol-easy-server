@@ -65,8 +65,11 @@ public class ParticipationService {
 
     List<Long> memberIds = request.buncheolMemberIds();
     validateNoDuplicateMembers(memberIds);
+    // 멤버 슬롯 INSERT 는 슬롯별 유니크 인덱스(uq_participations_active_member)에 X-lock 을 잡는다. 동시 요청이
+    // 서로 다른 순서로 같은 슬롯들을 점유하면 InnoDB 데드락이 날 수 있으므로, 정렬해 잠금 획득 순서를 항상 오름차순으로 고정한다.
+    List<Long> orderedMemberIds = memberIds.stream().sorted().toList();
     List<BuncheolMember> members =
-        memberIds.stream()
+        orderedMemberIds.stream()
             .map(memberId -> buncheolMemberDomainService.getBuncheolMember(memberId, buncheolId))
             .toList();
 

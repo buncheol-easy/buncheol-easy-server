@@ -13,7 +13,7 @@ public record ParticipateResponse(
   public static ParticipateResponse from(final ParticipateResult result) {
     return new ParticipateResponse(
         result.participationIds(),
-        result.amount(),
+        result.totalAmount(),
         result.dueAt(),
         HostAccountResponse.from(result.hostAccount()));
   }

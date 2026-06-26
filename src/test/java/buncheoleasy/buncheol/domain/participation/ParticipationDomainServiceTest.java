@@ -34,7 +34,7 @@ class ParticipationDomainServiceTest {
   @Mock private ParticipationRepository participationRepository;
 
   private static Participation newParticipation() {
-    return Participation.create(1L, 10L, 100L, 200L, 30_000L, REFUND_ACCOUNT, DUE_AT);
+    return Participation.create(1L, 10L, 100L, 200L, 30_000L, 0L, REFUND_ACCOUNT, DUE_AT);
   }
 
   @Nested

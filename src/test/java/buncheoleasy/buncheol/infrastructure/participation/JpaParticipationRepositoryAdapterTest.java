@@ -100,6 +100,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   // 새 모델 컬럼(amount, refund_*, due_at, status, cancel_reason)으로 participation 한 건을 직접 삽입하고 id 를 반환한다.
+  // shipping_fee 는 명시하지 않아 스키마 DEFAULT 0 으로 들어간다 (이 헬퍼는 배송비 시나리오를 다루지 않는다).
   private Long insertParticipation(
       final Long buncheolId,
       final Long buncheolMemberId,

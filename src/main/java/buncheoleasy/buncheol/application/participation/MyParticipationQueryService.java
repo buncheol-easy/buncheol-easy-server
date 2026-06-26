@@ -84,7 +84,7 @@ public class MyParticipationQueryService {
         buncheol.getTitle(),
         slotCount,
         groupMemberNameById.get(buncheolMember.getMemberId()),
-        participation.getAmount(),
+        participation.getTotalAmount(),
         participation.getStatus(),
         participation.getCancelReason(),
         buncheol.getStatus(),

@@ -63,9 +63,9 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
   private static final String INSERT_IF_RECRUITING_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-          + " shipping_address_id, amount, refund_bank, refund_account, refund_holder,"
+          + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account, refund_holder,"
           + " due_at, status, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
 
   @Override
@@ -84,12 +84,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(3, participation.getParticipantId());
                 ps.setLong(4, participation.getShippingAddressId());
                 ps.setLong(5, participation.getAmount());
-                ps.setString(6, participation.getRefundAccount().bank());
-                ps.setString(7, participation.getRefundAccount().account());
-                ps.setString(8, participation.getRefundAccount().holder());
-                ps.setTimestamp(9, Timestamp.from(participation.getDueAt()), UTC);
-                ps.setString(10, participation.getStatus().name());
-                ps.setLong(11, participation.getBuncheolId()); // WHERE id = ?
+                ps.setLong(6, participation.getShippingFee());
+                ps.setString(7, participation.getRefundAccount().bank());
+                ps.setString(8, participation.getRefundAccount().account());
+                ps.setString(9, participation.getRefundAccount().holder());
+                ps.setTimestamp(10, Timestamp.from(participation.getDueAt()), UTC);
+                ps.setString(11, participation.getStatus().name());
+                ps.setLong(12, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
               },
               keyHolder);

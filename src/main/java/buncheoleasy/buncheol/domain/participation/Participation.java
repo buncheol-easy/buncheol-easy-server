@@ -54,9 +54,14 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_address_id", nullable = false, updatable = false)
   private Long shippingAddressId;
 
-  // 참여자가 입금해야 할 총액 (멤버 금액 + 선택한 배송수단 배송비). 점유 시점 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다.
+  // 멤버 금액(굿즈 가격). 점유 시점 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다. 배송비는 shippingFee 로 분리 보관한다.
   @Column(nullable = false, updatable = false)
   private long amount;
+
+  // 선택한 배송수단의 배송비. 한 번에 여러 슬롯을 점유한 묶음에서는 첫 슬롯에만 부과되고(>0) 나머지는 0 이다 — 배송비는 묶음당 1회만 받기 때문.
+  // 실제 입금 총액은 amount + shippingFee 다(getTotalAmount).
+  @Column(name = "shipping_fee", nullable = false, updatable = false)
+  private long shippingFee;
 
   // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 참여와 동시에 입력받는다.
   @Embedded private RefundAccount refundAccount;
@@ -87,10 +92,18 @@ public class Participation extends TimestampedEntity {
       final Long participantId,
       final Long shippingAddressId,
       final long amount,
+      final long shippingFee,
       final RefundAccount refundAccount,
       final Instant dueAt) {
     return new Participation(
-        buncheolId, buncheolMemberId, participantId, shippingAddressId, amount, refundAccount, dueAt);
+        buncheolId,
+        buncheolMemberId,
+        participantId,
+        shippingAddressId,
+        amount,
+        shippingFee,
+        refundAccount,
+        dueAt);
   }
 
   private Participation(
@@ -99,6 +112,7 @@ public class Participation extends TimestampedEntity {
       final Long participantId,
       final Long shippingAddressId,
       final long amount,
+      final long shippingFee,
       final RefundAccount refundAccount,
       final Instant dueAt) {
     validate(refundAccount, dueAt);
@@ -107,9 +121,15 @@ public class Participation extends TimestampedEntity {
     this.participantId = participantId;
     this.shippingAddressId = shippingAddressId;
     this.amount = amount;
+    this.shippingFee = shippingFee;
     this.refundAccount = refundAccount;
     this.dueAt = dueAt;
     this.status = ParticipationStatus.AWAITING_PAYMENT;
+  }
+
+  /** 실제 입금 총액 = 멤버 금액 + 배송비. */
+  public long getTotalAmount() {
+    return amount + shippingFee;
   }
 
   public void validateOwnedBy(final Long participantId) {

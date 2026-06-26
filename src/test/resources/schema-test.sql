@@ -159,6 +159,7 @@ CREATE TABLE participations
     participant_id      BIGINT       NOT NULL,
     shipping_address_id BIGINT       NOT NULL,
     amount              BIGINT       NOT NULL,
+    shipping_fee        BIGINT       NOT NULL DEFAULT 0,
     refund_bank         VARCHAR(50)  NOT NULL,
     refund_account      VARCHAR(50)  NOT NULL,
     refund_holder       VARCHAR(50)  NOT NULL,

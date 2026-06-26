@@ -231,7 +231,7 @@ class MyParticipationQueryServiceTest {
       ParticipationCancelReason cancelReason) {
     Participation participation =
         Participation.create(
-            buncheolId, buncheolMemberId, PARTICIPANT_ID, 1L, amount, REFUND_ACCOUNT, dueAt);
+            buncheolId, buncheolMemberId, PARTICIPANT_ID, 1L, amount, 0L, REFUND_ACCOUNT, dueAt);
     setField(participation, "id", id);
     setField(participation, "status", status);
     setField(participation, "confirmedAt", confirmedAt);

@@ -83,7 +83,7 @@ class ParticipationControllerTest {
   private static final String VALID_REQUEST_BODY =
       """
       {
-        "buncheolMemberId": 10,
+        "buncheolMemberIds": [10, 11],
         "shippingAddressId": 200,
         "refundAccount": {
           "bank": "국민은행",
@@ -102,7 +102,10 @@ class ParticipationControllerTest {
       Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
       ParticipateResult result =
           new ParticipateResult(
-              PARTICIPATION_ID, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
+              List.of(PARTICIPATION_ID, 51L),
+              93_000L,
+              dueAt,
+              BankAccount.of("국민은행", "98765432", "개최자"));
 
       given(
               participationService.participate(
@@ -116,8 +119,9 @@ class ParticipationControllerTest {
                   .content(VALID_REQUEST_BODY)
                   .with(mockAuth()))
           .andExpect(status().isCreated())
-          .andExpect(jsonPath("$.participationId").value(PARTICIPATION_ID))
-          .andExpect(jsonPath("$.amount").value(53_000))
+          .andExpect(jsonPath("$.participationIds[0]").value(PARTICIPATION_ID))
+          .andExpect(jsonPath("$.participationIds[1]").value(51))
+          .andExpect(jsonPath("$.amount").value(93_000))
           .andExpect(jsonPath("$.hostAccount.bank").value("국민은행"))
           .andExpect(jsonPath("$.hostAccount.account").value("98765432"))
           .andExpect(jsonPath("$.hostAccount.holder").value("개최자"));
@@ -185,7 +189,7 @@ class ParticipationControllerTest {
       String invalidJson =
           """
           {
-            "buncheolMemberId": 10
+            "buncheolMemberIds": []
           }
           """;
 

@@ -108,35 +108,4 @@ class DeliveryDomainServiceTest {
           .isEqualTo(ErrorCode.DELIVERY_NOT_FOUND);
     }
   }
-
-  @Nested
-  @DisplayName("updateDeliveryStatus 테스트")
-  class UpdateDeliveryStatusTest {
-
-    @Test
-    void 상태_업데이트가_성공하면_예외가_발생하지_않는다() {
-      // given
-      Delivery delivery = createDelivery();
-      given(deliveryRepository.updateStatus(delivery, DeliveryStatus.SNAPSHOTTED)).willReturn(true);
-
-      // when & then (예외 없이 완료)
-      deliveryDomainService.updateDeliveryStatus(delivery, DeliveryStatus.SNAPSHOTTED);
-    }
-
-    @Test
-    void 상태_업데이트가_실패하면_예외가_발생한다() {
-      // given
-      Delivery delivery = createDelivery();
-      given(deliveryRepository.updateStatus(delivery, DeliveryStatus.SNAPSHOTTED))
-          .willReturn(false);
-
-      // when & then
-      assertThatThrownBy(
-              () ->
-                  deliveryDomainService.updateDeliveryStatus(delivery, DeliveryStatus.SNAPSHOTTED))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
-  }
 }

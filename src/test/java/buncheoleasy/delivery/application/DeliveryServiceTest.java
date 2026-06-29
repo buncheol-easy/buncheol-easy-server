@@ -84,9 +84,6 @@ class DeliveryServiceTest {
       // then
       assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
       assertThat(delivery.getTrackingNumber()).isEqualTo("TRACK123");
-      then(deliveryDomainService)
-          .should()
-          .updateDeliveryStatus(delivery, DeliveryStatus.SNAPSHOTTED);
       then(eventPublisher).should().publishEvent(any(TrackingRegisteredEvent.class));
     }
 
@@ -136,7 +133,6 @@ class DeliveryServiceTest {
       // then
       assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
       assertThat(delivery.getReceivedAt()).isNotNull();
-      then(deliveryDomainService).should().updateDeliveryStatus(delivery, DeliveryStatus.SHIPPING);
     }
 
     @Test

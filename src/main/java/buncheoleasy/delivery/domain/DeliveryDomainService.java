@@ -26,11 +26,4 @@ public class DeliveryDomainService {
         .findByParticipationId(participationId)
         .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
   }
-
-  public void updateDeliveryStatus(final Delivery delivery, final DeliveryStatus expectedStatus) {
-    boolean updated = deliveryRepository.updateStatus(delivery, expectedStatus);
-    if (!updated) {
-      throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
-  }
 }

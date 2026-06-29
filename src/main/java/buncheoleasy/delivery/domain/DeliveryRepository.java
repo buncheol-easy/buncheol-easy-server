@@ -12,6 +12,4 @@ public interface DeliveryRepository {
   Optional<Delivery> findByParticipationId(Long participationId);
 
   List<Delivery> findAllByParticipationIds(List<Long> participationIds);
-
-  boolean updateStatus(Delivery delivery, DeliveryStatus expectedStatus);
 }

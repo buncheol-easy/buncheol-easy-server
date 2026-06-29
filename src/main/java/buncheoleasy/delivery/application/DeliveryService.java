@@ -6,7 +6,6 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
-import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
@@ -14,6 +13,7 @@ import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +25,7 @@ public class DeliveryService {
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
+  @Transactional
   public void registerTracking(
       final Long hostId, final Long deliveryId, final String trackingNumber) {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
@@ -35,12 +36,15 @@ public class DeliveryService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     buncheol.validateOwner(hostId);
 
-    DeliveryStatus previousStatus = delivery.getStatus();
+    // delivery status 는 호스트/운영자만 전이시킨다. 동시 등록이 겹쳐도 양쪽 모두 SHIPPING 으로
+    // 수렴(번호만 last-write-wins)해 상태머신이 깨지지 않으므로 CAS 없이 더티체킹으로 커밋한다.
+    // 잘못된 전이는 registerTracking 도메인 메서드가 막는다.
+    // 단, DELIVERED 자동전이 스케줄러를 추가하면 이 "동일 방향 수렴" 가정이 깨지므로 CAS/@Version 재검토 필요.
     delivery.registerTracking(trackingNumber, Instant.now(clock));
-    deliveryDomainService.updateDeliveryStatus(delivery, previousStatus);
     eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
   }
 
+  @Transactional
   public void confirmReceipt(final Long participantId, final Long deliveryId) {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
 
@@ -51,8 +55,6 @@ public class DeliveryService {
       throw new BusinessException(ErrorCode.DELIVERY_NO_PERMISSION);
     }
 
-    DeliveryStatus previousStatus = delivery.getStatus();
     delivery.confirmReceipt(Instant.now(clock));
-    deliveryDomainService.updateDeliveryStatus(delivery, previousStatus);
   }
 }

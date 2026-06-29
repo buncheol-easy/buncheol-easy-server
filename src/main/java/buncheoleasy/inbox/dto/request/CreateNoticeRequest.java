@@ -1,5 +1,6 @@
 package buncheoleasy.inbox.dto.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -15,4 +16,6 @@ public record CreateNoticeRequest(
         @Pattern(
             regexp = "^/(?![/\\\\]).*",
             message = "연결 경로는 '//' 나 '/\\' 로 시작하지 않는 상대 경로(/...)여야 합니다.")
-        String linkPath) {}
+        String linkPath,
+    // 홈 배너 정보(선택). 제공 시 배너 이미지 파트(bannerImage)와 함께 와야 한다(한쪽만 오면 INB-006).
+    @Valid BannerCreateRequest banner) {}

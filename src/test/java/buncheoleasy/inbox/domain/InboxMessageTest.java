@@ -196,4 +196,47 @@ class InboxMessageTest {
       assertThat(notification.isVisibleTo(null)).isFalse();
     }
   }
+
+  @Nested
+  @DisplayName("이미지/배너 첨부(attach) 테스트")
+  class AttachTest {
+
+    @Test
+    void 본문_이미지를_첨부하면_imageUrl이_채워진다() {
+      InboxMessage notice = InboxMessage.createNotice("제목", null, "설명", false, null);
+
+      notice.attachImage("https://cdn.example.com/n.jpg");
+
+      assertThat(notice.getImageUrl()).isEqualTo("https://cdn.example.com/n.jpg");
+    }
+
+    @Test
+    void 배너를_첨부하면_제목과_이미지가_함께_채워진다() {
+      InboxMessage notice = InboxMessage.createNotice("제목", null, "설명", false, null);
+
+      notice.attachBanner("여름 이벤트", "https://cdn.example.com/b.jpg");
+
+      assertThat(notice.getBannerTitle()).isEqualTo("여름 이벤트");
+      assertThat(notice.getBannerImageUrl()).isEqualTo("https://cdn.example.com/b.jpg");
+    }
+
+    @Test
+    void 배너_제목이_비어있으면_예외가_발생한다() {
+      InboxMessage notice = InboxMessage.createNotice("제목", null, "설명", false, null);
+
+      assertThatThrownBy(() -> notice.attachBanner(" ", "https://cdn.example.com/b.jpg"))
+          .isInstanceOf(BusinessException.class)
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INBOX_MESSAGE_REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    void 배너_제목이_200자를_초과하면_예외가_발생한다() {
+      InboxMessage notice = InboxMessage.createNotice("제목", null, "설명", false, null);
+      String tooLong = "가".repeat(201);
+
+      assertThatThrownBy(() -> notice.attachBanner(tooLong, "https://cdn.example.com/b.jpg"))
+          .isInstanceOf(BusinessException.class)
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INBOX_MESSAGE_TEXT_LENGTH_INVALID);
+    }
+  }
 }

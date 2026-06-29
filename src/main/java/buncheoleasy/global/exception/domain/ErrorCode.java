@@ -139,6 +139,8 @@ public enum ErrorCode {
   INBOX_PIN_NOT_ALLOWED("INB-004", "공지만 상단 고정할 수 있습니다.", HttpStatus.CONFLICT),
   INBOX_LINK_PATH_INVALID(
       "INB-005", "연결 경로는 '//' 로 시작하지 않는 상대 경로(/...)여야 합니다.", HttpStatus.BAD_REQUEST),
+  NOTICE_BANNER_INCOMPLETE(
+      "INB-006", "배너는 제목과 이미지를 함께 입력해야 합니다.", HttpStatus.BAD_REQUEST),
 
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),

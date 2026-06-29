@@ -33,6 +33,7 @@ public class InboxMessage extends TimestampedEntity implements Cursorable {
   private static final int REFERENCE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 5000;
   private static final int LINK_PATH_MAX_LENGTH = 500;
+  private static final int BANNER_TITLE_MAX_LENGTH = 200;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,6 +63,17 @@ public class InboxMessage extends TimestampedEntity implements Cursorable {
   // 연관 화면으로 이동하는 in-app 경로(예: /profile/bids). 연관 화면이 없으면 null.
   @Column(name = "link_path", length = 500)
   private String linkPath;
+
+  // 공지 본문 이미지 URL. 공지에만 의미가 있고, 커밋 후 비동기 업로드가 끝나면 채워진다(없으면 null).
+  @Column(name = "image_url", length = 500)
+  private String imageUrl;
+
+  // 홈 배너(제목+이미지). 공지에만 의미가 있고, 배너 이미지 업로드가 끝나면 둘 다 함께 채워진다(없으면 null).
+  @Column(name = "banner_title", length = 200)
+  private String bannerTitle;
+
+  @Column(name = "banner_image_url", length = 500)
+  private String bannerImageUrl;
 
   public static InboxMessage createNotice(
       final String title,
@@ -122,6 +134,18 @@ public class InboxMessage extends TimestampedEntity implements Cursorable {
     this.pinned = false;
   }
 
+  // 본문 이미지 URL 반영(커밋 후 비동기 업로드 완료 시 호출). URL 은 서버가 생성한 값이라 별도 검증하지 않는다(컬럼 길이가 백스톱).
+  public void attachImage(final String imageUrl) {
+    this.imageUrl = imageUrl;
+  }
+
+  // 홈 배너 반영(커밋 후 비동기 업로드 완료 시 호출). 제목은 사용자 입력이라 방어 검증하고, 이미지 URL 은 서버 생성값이라 그대로 둔다.
+  public void attachBanner(final String bannerTitle, final String bannerImageUrl) {
+    validateBannerTitle(bannerTitle);
+    this.bannerTitle = bannerTitle;
+    this.bannerImageUrl = bannerImageUrl;
+  }
+
   // 알림 id 로 고정 시도 시 404 가 아니라 409 로 응답한다(메시지는 실재하나 종류가 고정 불가). 프로젝트의
   // `*_NOT_ALLOWED → CONFLICT` 컨벤션과 정합하며, 클라이언트에 "공지만 고정 가능"을 명시적으로 알린다.
   private void validatePinnable() {
@@ -156,6 +180,15 @@ public class InboxMessage extends TimestampedEntity implements Cursorable {
 
   private static void validateReference(final String value) {
     if (value != null && value.length() > REFERENCE_MAX_LENGTH) {
+      throw new BusinessException(ErrorCode.INBOX_MESSAGE_TEXT_LENGTH_INVALID);
+    }
+  }
+
+  private static void validateBannerTitle(final String value) {
+    if (value == null || value.isBlank()) {
+      throw new BusinessException(ErrorCode.INBOX_MESSAGE_REQUIRED_FIELD_MISSING);
+    }
+    if (value.length() > BANNER_TITLE_MAX_LENGTH) {
       throw new BusinessException(ErrorCode.INBOX_MESSAGE_TEXT_LENGTH_INVALID);
     }
   }

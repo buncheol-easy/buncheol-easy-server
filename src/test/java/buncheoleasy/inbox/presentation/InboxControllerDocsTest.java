@@ -149,7 +149,8 @@ class InboxControllerDocsTest {
                 InboxMessageType.NOTICE,
                 Instant.parse("2026-06-13T09:00:00Z"),
                 false,
-                "/events/summer"));
+                "/events/summer",
+                "https://cdn.example.com/notices/8/images/summer.jpg"));
 
     // when & then
     mockMvc
@@ -176,6 +177,9 @@ class InboxControllerDocsTest {
                             fieldWithPath("pinned").description("상단 고정 여부"),
                             fieldWithPath("linkPath")
                                 .description("연관 화면 in-app 경로(없으면 null)")
+                                .optional(),
+                            fieldWithPath("imageUrl")
+                                .description("공지 본문 이미지 URL(없으면 null). 알림은 항상 null")
                                 .optional())
                         .build())));
   }

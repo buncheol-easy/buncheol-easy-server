@@ -10,6 +10,13 @@ spring:
   application:
     name: buncheoleasy
 
+  servlet:
+    multipart:
+      # 이미지 업로드(공지 본문·배너, 분철 최대 5장)용 상한. 기본값(1MB/파일)은 일반 사진에 너무 작다.
+      # request 는 분철 5장(최대 5MB×5)까지 수용하도록 여유를 둔다.
+      max-file-size: 5MB
+      max-request-size: 30MB
+
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL:jdbc:mysql://localhost:3306/buncheoleasy_db?serverTimezone=UTC&characterEncoding=UTF-8}

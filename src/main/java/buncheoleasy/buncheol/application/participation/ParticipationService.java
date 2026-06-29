@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.application.participation;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -39,6 +40,7 @@ public class ParticipationService {
   private final ParticipationDomainService participationDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final UserDomainService userDomainService;
+  private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
@@ -120,8 +122,9 @@ public class ParticipationService {
   }
 
   /**
-   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 이 입금확인으로 분철의 모든 멤버
-   * 슬롯이 입금확인되면(매진+전원확정) deadline 전이라도 분철을 진행확정으로 조기 전이한다.
+   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를 스냅샷(Delivery)으로
+   * 박제하므로, 이후로는 배송지를 변경할 수 없다(입금대기중에만 변경 가능). 이 입금확인으로 분철의 모든 멤버 슬롯이 입금확인되면(매진+전원확정) deadline
+   * 전이라도 분철을 진행확정으로 조기 전이한다.
    */
   @Transactional
   public void confirmPayment(final Long hostId, final Long participationId) {
@@ -131,6 +134,8 @@ public class ParticipationService {
     buncheol.validateOwner(hostId);
 
     participationDomainService.confirmPayment(participationId, now);
+    // 입금확인 시점에 배송지를 스냅샷으로 확정한다. 한 참여는 이 경로를 1회만 타므로 create 도 1회.
+    deliverySnapshotCreator.create(participation);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
 
     confirmBuncheolIfAllSlotsConfirmed(buncheol, now);

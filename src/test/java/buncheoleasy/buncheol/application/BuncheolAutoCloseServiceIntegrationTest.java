@@ -44,7 +44,7 @@ class BuncheolAutoCloseServiceIntegrationTest {
   }
 
   @Test
-  void 확정_참여가_최소_인원_이상이면_진행확정되고_배송_스냅샷이_생성되며_입금확인중은_그대로_남는다() {
+  void 확정_참여가_최소_인원_이상이면_진행확정되고_입금확인중은_그대로_남으며_배송_스냅샷은_finalize에서_생성하지_않는다() {
     Long buncheolId = insertBuncheol(pastDeadline(), "RECRUITING", 1);
     Long confirmedSlot = insertBuncheolMember(buncheolId, "확정멤버");
     Long awaitingSlot = insertBuncheolMember(buncheolId, "대기멤버");
@@ -64,8 +64,8 @@ class BuncheolAutoCloseServiceIntegrationTest {
     assertThat(participationStatus(confirmedId)).isEqualTo("CONFIRMED");
     assertThat(participationStatus(awaitingId)).isEqualTo("AWAITING_PAYMENT");
 
-    // 확정 참여로만 배송 스냅샷이 생성된다.
-    assertThat(deliveryCountFor(confirmedId)).isEqualTo(1);
+    // 배송 스냅샷은 진행확정(finalize)이 아니라 개별 참여의 입금확인 시점에 생성되므로, finalize 는 스냅샷을 만들지 않는다.
+    assertThat(deliveryCountFor(confirmedId)).isZero();
     assertThat(deliveryCountFor(awaitingId)).isZero();
   }
 

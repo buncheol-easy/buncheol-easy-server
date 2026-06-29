@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -69,6 +70,7 @@ class ParticipationServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
   @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -371,7 +373,7 @@ class ParticipationServiceTest {
   class ConfirmPaymentTest {
 
     @Test
-    void 입금확인에_성공하면_입금확인_이벤트를_발행한다() {
+    void 입금확인에_성공하면_배송_스냅샷을_만들고_입금확인_이벤트를_발행한다() {
       Participation participation = mock(Participation.class);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
@@ -383,6 +385,8 @@ class ParticipationServiceTest {
 
       then(buncheol).should().validateOwner(HOST_ID);
       then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      // 입금확인 시점에 배송지 스냅샷이 생성된다.
+      then(deliverySnapshotCreator).should().create(participation);
       then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
     }
 

@@ -4,7 +4,6 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import java.time.Instant;
 import java.util.List;
@@ -23,7 +22,7 @@ public class BuncheolAutoCloseService {
   private final BuncheolRepository buncheolRepository;
   private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
-  private final DeliverySnapshotCreator deliverySnapshotCreator;
+  private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   private final ApplicationEventPublisher eventPublisher;
 
   /** {@code now} 기준 deadline 이 지난 RECRUITING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
@@ -60,14 +59,9 @@ public class BuncheolAutoCloseService {
   // 진행확정: 입금확인된 참여로 배송 스냅샷 생성 + 진행확정 알림. 남은 입금확인중 참여(마감 시점엔 모두 입금 기한 도과)는 여기서 손대지 않는다 —
   // 입금 만료 스케줄러가 폴링 주기 내에 CANCELLED(PAYMENT_TIMEOUT) 전이 + 자동취소 알림을 단독으로 처리한다(두 경로가 같은 참여에 알림을
   // 중복 발송하지 않도록 만료 책임을 스케줄러로 일원화). 마감 임박 참여의 컷오프 위험은 참여 시 프론트 안내로 사전 고지한다.
+  // 전 슬롯 조기 확정(ParticipationService.confirmPayment)과 동일한 후속 처리를 공유한다.
   private void finalizeAsConfirmed(final Long buncheolId) {
-    List<Participation> confirmed =
-        participationDomainService.findConfirmedByBuncheolId(buncheolId);
-    confirmed.forEach(
-        participation -> {
-          deliverySnapshotCreator.create(participation);
-          eventPublisher.publishEvent(new BuncheolConfirmedEvent(participation.getId()));
-        });
+    buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
   }
 
   // 최소 인원 미달 취소: 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 취소하고 참여자에게 취소 알림을 보낸다.

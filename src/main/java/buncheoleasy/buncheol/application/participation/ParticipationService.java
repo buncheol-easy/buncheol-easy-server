@@ -1,7 +1,9 @@
 package buncheoleasy.buncheol.application.participation;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -37,6 +39,7 @@ public class ParticipationService {
   private final ParticipationDomainService participationDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final UserDomainService userDomainService;
+  private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -116,15 +119,42 @@ public class ParticipationService {
     }
   }
 
-  /** 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. */
+  /**
+   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 이 입금확인으로 분철의 모든 멤버
+   * 슬롯이 입금확인되면(매진+전원확정) deadline 전이라도 분철을 진행확정으로 조기 전이한다.
+   */
   @Transactional
   public void confirmPayment(final Long hostId, final Long participationId) {
+    final Instant now = Instant.now(clock);
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     buncheol.validateOwner(hostId);
 
-    participationDomainService.confirmPayment(participationId, Instant.now(clock));
+    participationDomainService.confirmPayment(participationId, now);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
+
+    confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
+  }
+
+  /**
+   * 분철의 모든 멤버 슬롯이 입금확인(CONFIRMED)됐으면 deadline 전이라도 분철을 진행확정으로 조기 전이한다. 매진+전원확정이면 어차피 마감 시점에
+   * 진행확정될 운명이라 결과는 같고 시점만 앞당긴다. {@code RECRUITING → CONFIRMED} CAS 로 선점한 한쪽만 후속(배송 스냅샷·진행확정 알림)을
+   * 수행하므로, deadline 마감 스케줄러나 동시 입금확인과 경합해도 한 번만 확정된다.
+   *
+   * <p>전 슬롯 확정이라도 입금확인 인원이 최소 진행 인원에 못 미치면(슬롯 수 &lt; minHeadcount 인 분철) 진행확정 대상이 아니므로 전이하지 않고,
+   * deadline 마감 스케줄러의 취소 판정에 맡긴다.
+   */
+  private void confirmBuncheolIfAllSlotsConfirmed(final Buncheol buncheol, final Instant now) {
+    int totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
+    int confirmedCount = participationDomainService.countConfirmedByBuncheolId(buncheol.getId());
+    boolean allSlotsConfirmed = confirmedCount >= totalSlots;
+    boolean meetsMinHeadcount = confirmedCount >= buncheol.getMinHeadcount();
+    if (!allSlotsConfirmed || !meetsMinHeadcount) {
+      return;
+    }
+    if (buncheolDomainService.finalizeBuncheol(buncheol.getId(), BuncheolStatus.CONFIRMED, now)) {
+      buncheolConfirmedFinalizer.finalizeConfirmed(buncheol.getId());
+    }
   }
 
   private Instant paymentDueAt(final Instant now, final Instant deadline) {

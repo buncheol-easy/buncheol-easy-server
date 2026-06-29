@@ -11,8 +11,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -31,6 +33,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -66,6 +69,7 @@ class ParticipationServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
+  @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -421,6 +425,74 @@ class ParticipationServiceTest {
           .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_DUE_PASSED);
 
       then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 전_슬롯이_입금확인되면_분철이_진행확정으로_조기_전이되고_후속처리가_수행된다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.getMinHeadcount()).willReturn(3);
+      // 슬롯 5개, 전원 입금확인(5) → 매진+전원확정.
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(5);
+      given(buncheolDomainService.finalizeBuncheol(BUNCHEOL_ID, BuncheolStatus.CONFIRMED, NOW))
+          .willReturn(true);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      then(buncheolDomainService)
+          .should()
+          .finalizeBuncheol(BUNCHEOL_ID, BuncheolStatus.CONFIRMED, NOW);
+      then(buncheolConfirmedFinalizer).should().finalizeConfirmed(BUNCHEOL_ID);
+    }
+
+    @Test
+    void 일부_슬롯만_입금확인되면_분철을_전이하지_않는다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      // 슬롯 5개 중 3개만 입금확인 → 아직 매진 아님.
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(3);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      then(buncheolDomainService).should(never()).finalizeBuncheol(any(), any(), any());
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
+    }
+
+    @Test
+    void 전_슬롯_확정이라도_최소_인원에_못_미치면_조기_전이하지_않는다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      // 슬롯 2개 전원 확정이지만 minHeadcount(5) 미달 → deadline 스케줄러의 취소 판정에 맡긴다.
+      given(buncheol.getMinHeadcount()).willReturn(5);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(2, buncheolMember()));
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(2);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(buncheolDomainService).should(never()).finalizeBuncheol(any(), any(), any());
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
     }
   }
 

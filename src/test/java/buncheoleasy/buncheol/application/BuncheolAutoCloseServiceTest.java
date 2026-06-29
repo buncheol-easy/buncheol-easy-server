@@ -40,7 +40,7 @@ class BuncheolAutoCloseServiceTest {
 
   @Mock private ParticipationDomainService participationDomainService;
 
-  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
 
   @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -72,21 +72,17 @@ class BuncheolAutoCloseServiceTest {
   class FinalizeExpiredTest {
 
     @Test
-    void CAS_가_진행확정으로_전이하면_배송_스냅샷과_확정_이벤트를_발행한다() {
+    void CAS_가_진행확정으로_전이하면_진행확정_후속처리를_위임한다() {
       given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
       // 중첩 stubbing(UnfinishedStubbingException) 회피를 위해 mock 을 별도 문장에서 먼저 만든다.
       Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CONFIRMED);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      Participation confirmed = mock(Participation.class);
-      given(confirmed.getId()).willReturn(601L);
-      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(confirmed));
 
       boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
 
       assertThat(result).isTrue();
-      then(deliverySnapshotCreator).should().create(confirmed);
-      then(eventPublisher).should().publishEvent(any(BuncheolConfirmedEvent.class));
+      // 배송 스냅샷 생성·진행확정 알림은 BuncheolConfirmedFinalizer 로 위임된다(조기 확정 경로와 공유).
+      then(buncheolConfirmedFinalizer).should().finalizeConfirmed(BUNCHEOL_ID);
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
 
@@ -106,7 +102,7 @@ class BuncheolAutoCloseServiceTest {
       assertThat(result).isTrue();
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
-      then(deliverySnapshotCreator).should(never()).create(any());
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
     }
 
     @Test
@@ -117,9 +113,8 @@ class BuncheolAutoCloseServiceTest {
 
       assertThat(result).isFalse();
       then(buncheolDomainService).should(never()).getBuncheol(anyLong());
-      then(participationDomainService).should(never()).findConfirmedByBuncheolId(anyLong());
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
-      then(deliverySnapshotCreator).should(never()).create(any());
       then(eventPublisher).should(never()).publishEvent(any());
     }
   }

@@ -391,6 +391,23 @@ class ParticipationServiceTest {
     }
 
     @Test
+    void 입금확인_CAS_직후_재조회한_참여로_배송_스냅샷을_만든다() {
+      // 동시 배송지 변경 race 방어: confirm CAS 직후 재조회한 최신 참여로 스냅샷을 박제해야 한다(CAS 이전 detached 값이 아님).
+      Participation beforeConfirm = mock(Participation.class);
+      given(beforeConfirm.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      Participation afterConfirm = mock(Participation.class);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(beforeConfirm, afterConfirm);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(deliverySnapshotCreator).should().create(afterConfirm);
+      then(deliverySnapshotCreator).should(never()).create(beforeConfirm);
+    }
+
+    @Test
     void 호스트가_아니면_입금확인에_실패한다() {
       Participation participation = mock(Participation.class);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
@@ -497,6 +514,103 @@ class ParticipationServiceTest {
 
       then(buncheolDomainService).should(never()).finalizeBuncheol(any(), any(), any());
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("배송지 변경 테스트")
+  class ChangeShippingAddressTest {
+
+    private static final Long NEW_SHIPPING_ADDRESS_ID = 201L;
+
+    @Test
+    void 입금대기중이면_배송지를_변경한다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      participationService.changeShippingAddress(
+          PARTICIPANT_ID, PARTICIPATION_ID, NEW_SHIPPING_ADDRESS_ID);
+
+      then(participation).should().validateOwnedBy(PARTICIPANT_ID);
+      then(participationShippingAddressResolver)
+          .should()
+          .resolve(PARTICIPANT_ID, buncheol, NEW_SHIPPING_ADDRESS_ID);
+      then(participationDomainService)
+          .should()
+          .changeShippingAddress(PARTICIPATION_ID, NEW_SHIPPING_ADDRESS_ID, NOW);
+    }
+
+    @Test
+    void 본인_소유가_아니면_변경하지_않고_예외가_전파된다() {
+      Participation participation = mock(Participation.class);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION))
+          .given(participation)
+          .validateOwnedBy(PARTICIPANT_ID);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.changeShippingAddress(
+                      PARTICIPANT_ID, PARTICIPATION_ID, NEW_SHIPPING_ADDRESS_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_NO_PERMISSION);
+
+      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+      then(participationDomainService)
+          .should(never())
+          .changeShippingAddress(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void 새_배송지가_본인_소유가_아니면_변경하지_않고_예외가_전파된다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN))
+          .given(participationShippingAddressResolver)
+          .resolve(PARTICIPANT_ID, buncheol, NEW_SHIPPING_ADDRESS_ID);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.changeShippingAddress(
+                      PARTICIPANT_ID, PARTICIPATION_ID, NEW_SHIPPING_ADDRESS_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
+
+      then(participationDomainService)
+          .should(never())
+          .changeShippingAddress(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void 입금대기중이_아니면_상태위반_예외가_발생한다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID))
+          .given(participationDomainService)
+          .changeShippingAddress(PARTICIPATION_ID, NEW_SHIPPING_ADDRESS_ID, NOW);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.changeShippingAddress(
+                      PARTICIPANT_ID, PARTICIPATION_ID, NEW_SHIPPING_ADDRESS_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
   }
 

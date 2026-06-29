@@ -10,6 +10,7 @@ import static org.springframework.restdocs.headers.HeaderDocumentation.headerWit
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -325,4 +326,47 @@ class ParticipationControllerDocsTest {
                         .build())));
   }
 
+  @Test
+  void 배송지_변경() throws Exception {
+    mockMvc
+        .perform(
+            patch("/v1/participations/{participationId}/shipping-address", 500L)
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "shippingAddressId": 1
+                    }
+                    """))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-change-shipping-address",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("참여 배송지 변경")
+                        .description(
+                            """
+                            입금확인중(AWAITING_PAYMENT) 동안 참여자 본인이 수령 배송지를 본인 소유의 다른 배송지로 변경한다.
+                            입금확인(CONFIRMED)되면 이미 배송 스냅샷이 박제되어 변경할 수 없다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 403 | `BCH-069` (`PARTICIPATION_NO_PERMISSION`) | 본인 참여가 아님 |
+                            | 403 | `USR-022` (`SHIPPING_ADDRESS_FORBIDDEN`) | 본인 소유 배송지가 아님 |
+                            | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 분철이 지원하지 않는 배송수단 |
+                            | 409 | `BCH-067` (`PARTICIPATION_STATE_TRANSITION_INVALID`) | 입금대기중이 아님(이미 확정/취소) |
+                            """)
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestSchema(Schema.schema("UpdateParticipationShippingAddressRequest"))
+                        .requestFields(
+                            fieldWithPath("shippingAddressId").description("변경할 본인 소유 배송지 ID"))
+                        .build())));
+  }
 }

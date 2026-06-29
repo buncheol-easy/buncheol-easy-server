@@ -142,6 +142,11 @@ class JpaParticipationRepositoryAdapterTest {
         "SELECT cancel_reason FROM participations WHERE id = ?", String.class, participationId);
   }
 
+  private Long shippingAddressIdOf(final Long participationId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT shipping_address_id FROM participations WHERE id = ?", Long.class, participationId);
+  }
+
   // saveIfRecruiting 은 운영(MySQL) 전용 raw JDBC 조건부 INSERT(UTC_TIMESTAMP() + RETURN_GENERATED_KEYS 단일키
   // 가정)라 H2 어댑터 테스트로 직접 검증하지 않는다. 선착순 슬롯 가드(PARTICIPATION_ALREADY_EXISTS)·모집중 조건은
   // active_member_id UNIQUE 제약과 도메인/서비스 레벨 테스트에서 다룬다. 아래 케이스들은 raw INSERT 픽스처로 조회·CAS 메서드를
@@ -813,6 +818,59 @@ class JpaParticipationRepositoryAdapterTest {
 
       assertThat(affected).isEqualTo(1);
       assertThat(participationRepository.findActiveByBuncheolId(other)).hasSize(1);
+    }
+  }
+
+  @Nested
+  @DisplayName("changeShippingAddressIfAwaiting — 입금대기중 배송지 변경 CAS")
+  class ChangeShippingAddressIfAwaitingTest {
+
+    @Test
+    void AWAITING_PAYMENT_이면_배송지를_변경한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addrOld = insertShippingAddress(participantId, "기존매장");
+      Long addrNew = insertShippingAddress(participantId, "새매장");
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addrOld,
+              30_000L,
+              Instant.now().plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      boolean changed =
+          participationRepository.changeShippingAddressIfAwaiting(pid, addrNew, Instant.now());
+
+      assertThat(changed).isTrue();
+      assertThat(shippingAddressIdOf(pid)).isEqualTo(addrNew);
+    }
+
+    @Test
+    void 입금확인된_건은_변경하지_않고_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addrOld = insertShippingAddress(participantId, "확정기존매장");
+      Long addrNew = insertShippingAddress(participantId, "확정새매장");
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              addrOld,
+              30_000L,
+              Instant.now().plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+
+      boolean changed =
+          participationRepository.changeShippingAddressIfAwaiting(pid, addrNew, Instant.now());
+
+      assertThat(changed).isFalse();
+      assertThat(shippingAddressIdOf(pid)).isEqualTo(addrOld);
     }
   }
 }

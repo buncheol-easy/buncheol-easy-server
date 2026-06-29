@@ -170,6 +170,15 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public boolean changeShippingAddressIfAwaiting(
+      final Long participationId, final Long shippingAddressId, final Instant now) {
+    int updated =
+        jpaParticipationRepository.updateShippingAddressIfAwaiting(
+            participationId, shippingAddressId, ParticipationStatus.AWAITING_PAYMENT, now);
+    return updated > 0;
+  }
+
+  @Override
   public boolean expirePaymentIfOverdue(final Long participationId, final Instant now) {
     int updated =
         jpaParticipationRepository.cancelIfAwaitingAndOverdue(

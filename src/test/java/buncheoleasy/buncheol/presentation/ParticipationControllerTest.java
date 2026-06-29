@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -370,4 +371,61 @@ class ParticipationControllerTest {
     }
   }
 
+  @Nested
+  @DisplayName("배송지 변경 API 테스트")
+  class ChangeShippingAddressTest {
+
+    private static final String VALID_BODY =
+        """
+        {
+          "shippingAddressId": 201
+        }
+        """;
+
+    @Test
+    void 배송지_변경에_성공하면_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              patch("/v1/participations/{participationId}/shipping-address", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(VALID_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(participationService)
+          .should()
+          .changeShippingAddress(PARTICIPANT_ID, PARTICIPATION_ID, 201L);
+    }
+
+    @Test
+    void 배송지ID가_누락되면_400을_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              patch("/v1/participations/{participationId}/shipping-address", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{}")
+                  .with(mockAuth()))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 입금확인된_건이면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID))
+          .given(participationService)
+          .changeShippingAddress(PARTICIPANT_ID, PARTICIPATION_ID, 201L);
+
+      mockMvc
+          .perform(
+              patch("/v1/participations/{participationId}/shipping-address", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(VALID_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(
+                          ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID.getCode())));
+    }
+  }
 }

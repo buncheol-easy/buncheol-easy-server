@@ -45,6 +45,14 @@ public interface ParticipationRepository {
   boolean confirmPaymentIfAwaiting(Long participationId, Instant now);
 
   /**
+   * 입금대기중(AWAITING_PAYMENT)일 때만 참여의 배송지를 변경하는 CAS. 입금확인(CONFIRMED)·취소된 건은 이미 배송 스냅샷이 박제됐거나 종료된
+   * 상태라 변경되지 않는다.
+   *
+   * @return 변경에 성공하면 true, 입금대기중이 아니면 false
+   */
+  boolean changeShippingAddressIfAwaiting(Long participationId, Long shippingAddressId, Instant now);
+
+  /**
    * 입금 만료 처리. AWAITING_PAYMENT 이고 기한이 지났을 때만 CANCELLED({@link
    * ParticipationCancelReason#PAYMENT_TIMEOUT}) 로 전이하는 CAS (입금 만료 스케줄러용).
    *

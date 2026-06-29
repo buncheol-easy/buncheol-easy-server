@@ -134,17 +134,36 @@ public class ParticipationService {
     buncheol.validateOwner(hostId);
 
     participationDomainService.confirmPayment(participationId, now);
-    // 입금확인 시점에 배송지를 스냅샷으로 확정한다. 한 참여는 이 경로를 1회만 타므로 create 도 1회.
-    deliverySnapshotCreator.create(participation);
+    // confirm CAS(clearAutomatically)로 1차 캐시가 비워진 뒤 재조회해, 그 사이 커밋된 배송지 변경까지 반영된 최신 참여로 스냅샷을 박제한다.
+    // (입금확인과 배송지 변경이 동시에 일어나도, confirm CAS 가 행 잠금을 쥔 시점의 확정 주소로 일관되게 박제된다.)
+    Participation confirmed = participationDomainService.getParticipation(participationId);
+    deliverySnapshotCreator.create(confirmed);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
 
     confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
   }
 
   /**
+   * 입금대기중(AWAITING_PAYMENT) 참여의 배송지 변경. 본인 소유 참여여야 하고, 새 배송지도 본인 소유이며 분철이 지원하는 배송수단이어야 한다(참여 신청과
+   * 동일 규칙). 입금확인(CONFIRMED)된 건은 이미 배송 스냅샷이 박제되어 변경할 수 없다. 배송지(매장)만 바꾸며 배송비(shippingFee)는 재산정하지 않는다.
+   */
+  @Transactional
+  public void changeShippingAddress(
+      final Long participantId, final Long participationId, final Long shippingAddressId) {
+    Participation participation = participationDomainService.getParticipation(participationId);
+    participation.validateOwnedBy(participantId);
+
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    participationShippingAddressResolver.resolve(participantId, buncheol, shippingAddressId);
+
+    participationDomainService.changeShippingAddress(
+        participationId, shippingAddressId, Instant.now(clock));
+  }
+
+  /**
    * 분철의 모든 멤버 슬롯이 입금확인(CONFIRMED)됐으면 deadline 전이라도 분철을 진행확정으로 조기 전이한다. 매진+전원확정이면 어차피 마감 시점에
-   * 진행확정될 운명이라 결과는 같고 시점만 앞당긴다. {@code RECRUITING → CONFIRMED} CAS 로 선점한 한쪽만 후속(배송 스냅샷·진행확정 알림)을
-   * 수행하므로, deadline 마감 스케줄러나 동시 입금확인과 경합해도 한 번만 확정된다.
+   * 진행확정될 운명이라 결과는 같고 시점만 앞당긴다. {@code RECRUITING → CONFIRMED} CAS 로 선점한 한쪽만 후속(진행확정 알림)을 수행하므로,
+   * deadline 마감 스케줄러나 동시 입금확인과 경합해도 한 번만 확정된다.
    *
    * <p>전 슬롯 확정이라도 입금확인 인원이 최소 진행 인원에 못 미치면(슬롯 수 &lt; minHeadcount 인 분철) 진행확정 대상이 아니므로 전이하지 않고,
    * deadline 마감 스케줄러의 취소 판정에 맡긴다.

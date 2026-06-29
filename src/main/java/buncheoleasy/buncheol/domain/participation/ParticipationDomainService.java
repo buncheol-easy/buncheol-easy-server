@@ -66,6 +66,18 @@ public class ParticipationDomainService {
     throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
   }
 
+  /**
+   * 입금대기중(AWAITING_PAYMENT) 배송지 변경 CAS. 입금확인(CONFIRMED)·취소된 건은 이미 배송 스냅샷이 박제됐거나 종료돼 변경할 수 없으므로 상태
+   * 위반 예외를 던진다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void changeShippingAddress(
+      final Long participationId, final Long shippingAddressId, final Instant now) {
+    if (!participationRepository.changeShippingAddressIfAwaiting(
+        participationId, shippingAddressId, now)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
   /** 입금 만료 처리 (입금 만료 스케줄러용). 멱등하며 실패 시(이미 확정/취소) 예외 없이 false 를 돌려준다. */
   public boolean expirePayment(final Long participationId, final Instant now) {
     return participationRepository.expirePaymentIfOverdue(participationId, now);

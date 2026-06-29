@@ -3,15 +3,19 @@ package buncheoleasy.buncheol.presentation;
 import buncheoleasy.buncheol.application.participation.MyParticipationQueryService;
 import buncheoleasy.buncheol.application.participation.ParticipationDetailQueryService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
+import buncheoleasy.buncheol.dto.request.UpdateParticipationShippingAddressRequest;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,6 +48,20 @@ public class ParticipationController {
   public ResponseEntity<Void> confirmPayment(
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
     participationService.confirmPayment(hostId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 참여자 본인의 배송지 변경 API. 입금확인중(AWAITING_PAYMENT) 동안에만 본인 소유의 다른 배송지로 바꿀 수 있다. 입금확인(CONFIRMED)되면 이미
+   * 배송 스냅샷이 박제되어 변경할 수 없다.
+   */
+  @PatchMapping("/{participationId}/shipping-address")
+  public ResponseEntity<Void> changeShippingAddress(
+      @AuthenticationPrincipal final Long participantId,
+      @PathVariable final Long participationId,
+      @Valid @RequestBody final UpdateParticipationShippingAddressRequest request) {
+    participationService.changeShippingAddress(
+        participantId, participationId, request.shippingAddressId());
     return ResponseEntity.noContent().build();
   }
 }

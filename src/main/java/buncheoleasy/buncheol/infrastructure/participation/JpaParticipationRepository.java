@@ -38,6 +38,13 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 
+  @Query(
+      "SELECT p.buncheolMemberId FROM Participation p "
+          + "WHERE p.buncheolId IN :buncheolIds AND p.status IN :activeStatuses")
+  List<Long> findActiveBuncheolMemberIds(
+      @Param("buncheolIds") List<Long> buncheolIds,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
+
   List<Participation> findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
       Long buncheolId, ParticipationStatus status);
 

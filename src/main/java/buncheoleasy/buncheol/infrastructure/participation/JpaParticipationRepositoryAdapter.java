@@ -135,6 +135,15 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Long> findActiveBuncheolMemberIds(final List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaParticipationRepository.findActiveBuncheolMemberIds(
+        buncheolIds, ParticipationStatus.active());
+  }
+
+  @Override
   public List<Participation> findActiveByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.findByBuncheolIdAndStatusIn(
         buncheolId, ParticipationStatus.active());

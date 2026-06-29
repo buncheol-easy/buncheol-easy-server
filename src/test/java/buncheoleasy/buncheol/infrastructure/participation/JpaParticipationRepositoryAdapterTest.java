@@ -327,6 +327,58 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("findActiveBuncheolMemberIds — 여러 분철의 점유 슬롯 ID 조회")
+  class FindActiveBuncheolMemberIdsTest {
+
+    @Test
+    void 활성_참여가_점유한_슬롯_ID만_반환하고_취소된_슬롯은_제외한다() {
+      Long buncheolA = createBuncheol();
+      Long buncheolB = createBuncheol();
+      Long takenSlotA = createBuncheolMember(buncheolA);
+      Long takenSlotB = createBuncheolMember(buncheolB);
+      Long otherMemberB = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "취소슬롯멤버");
+      Long cancelledSlotB = createBuncheolMember(buncheolB, otherMemberB);
+      insertParticipation(
+          buncheolA,
+          takenSlotA,
+          participantId,
+          insertShippingAddress(participantId, "활성슬롯A"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          buncheolB,
+          takenSlotB,
+          participantId,
+          insertShippingAddress(participantId, "확정슬롯B"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      insertParticipation(
+          buncheolB,
+          cancelledSlotB,
+          participantId,
+          insertShippingAddress(participantId, "취소슬롯B"),
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      List<Long> result =
+          participationRepository.findActiveBuncheolMemberIds(List.of(buncheolA, buncheolB));
+
+      assertThat(result).containsExactlyInAnyOrder(takenSlotA, takenSlotB);
+    }
+
+    @Test
+    void 빈_입력에는_빈_리스트를_반환한다() {
+      assertThat(participationRepository.findActiveBuncheolMemberIds(List.of())).isEmpty();
+    }
+  }
+
+  @Nested
   @DisplayName("findActiveByBuncheolId — 분철 단위 활성 참여 전체 조회")
   class FindActiveByBuncheolIdTest {
 

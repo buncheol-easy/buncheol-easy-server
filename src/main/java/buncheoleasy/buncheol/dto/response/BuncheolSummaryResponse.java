@@ -9,6 +9,9 @@ import java.util.List;
  *
  * <p>{@code status} 는 모집중/진행확정/취소 그룹을 클라이언트가 구분(배지·섹션)하도록 노출한다. 목록은 {@code RECRUITING} / {@code
  * CONFIRMED} / {@code CANCELLED}(인원미달 자동취소) 를 보여주고, 개최자 취소({@code HOST_CANCELLED}) 는 제외한다.
+ *
+ * <p>{@code memberNames} 는 분철의 전체 멤버 이름, {@code availableMemberNames} 는 아직 안 팔린(활성 참여가 없는) 멤버 이름이다.
+ * 둘 다 호스트가 등록한 슬롯 순서로 정렬된다.
  */
 public record BuncheolSummaryResponse(
     Long id,
@@ -18,4 +21,5 @@ public record BuncheolSummaryResponse(
     boolean bookmarked,
     String groupName,
     String thumbnailUrl,
-    List<String> memberNames) {}
+    List<String> memberNames,
+    List<String> availableMemberNames) {}

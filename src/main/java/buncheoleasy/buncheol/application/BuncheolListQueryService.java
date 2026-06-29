@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
@@ -42,6 +43,7 @@ public class BuncheolListQueryService {
   private final BuncheolBookmarkRepository buncheolBookmarkRepository;
   private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
+  private final ParticipationRepository participationRepository;
   private final ApplicationEventPublisher eventPublisher;
 
   @Transactional(readOnly = true)
@@ -76,8 +78,11 @@ public class BuncheolListQueryService {
     final Map<Long, String> thumbnailByBuncheolId =
         buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
-    final Map<Long, List<String>> memberNamesByBuncheolId =
-        buncheolMemberNameResolver.findNamesByBuncheolIds(buncheolIds);
+    // 활성 참여가 점유한 슬롯을 빼면 "아직 안 팔린" 멤버. 전체/잔여 이름을 한 번의 조회로 함께 만든다.
+    final Set<Long> takenBuncheolMemberIds =
+        Set.copyOf(participationRepository.findActiveBuncheolMemberIds(buncheolIds));
+    final BuncheolMemberNameResolver.MemberNames memberNames =
+        buncheolMemberNameResolver.resolveNames(buncheolIds, takenBuncheolMemberIds);
     final Set<Long> bookmarkedBuncheolIds =
         userId == null
             ? Set.of()
@@ -95,7 +100,8 @@ public class BuncheolListQueryService {
                         bookmarkedBuncheolIds.contains(b.getId()),
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),
-                        memberNamesByBuncheolId.getOrDefault(b.getId(), List.of())))
+                        memberNames.all().getOrDefault(b.getId(), List.of()),
+                        memberNames.available().getOrDefault(b.getId(), List.of())))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;

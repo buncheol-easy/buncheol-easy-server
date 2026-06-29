@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,6 +19,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
@@ -49,6 +51,7 @@ class BuncheolListQueryServiceTest {
   @Mock private BuncheolBookmarkRepository buncheolBookmarkRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
+  @Mock private ParticipationRepository participationRepository;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Nested
@@ -63,8 +66,10 @@ class BuncheolListQueryServiceTest {
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
           .willReturn(List.of(image(10L, "https://cdn.example.com/a.jpg")));
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
-          .willReturn(Map.of(10L, List.of("민지"), 11L, List.of("하니")));
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("민지"), 11L, List.of("하니")), Map.of()));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L, 11L)))
           .willReturn(Set.of(10L));
 
@@ -86,6 +91,54 @@ class BuncheolListQueryServiceTest {
     }
 
     @Test
+    void memberNames_는_전체_멤버_availableMemberNames_는_안_팔린_멤버만_내려준다() {
+      Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      // 슬롯 501(민지)은 활성 참여로 점유됨 → available 에서 제외.
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L)))
+          .willReturn(List.of(501L));
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of(501L)))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("민지", "하니")), Map.of(10L, List.of("하니"))));
+      given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L)))
+          .willReturn(Set.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).memberNames()).containsExactly("민지", "하니");
+      assertThat(result.items().get(0).availableMemberNames()).containsExactly("하니");
+    }
+
+    @Test
+    void 전_슬롯이_매진이면_availableMemberNames_는_빈_리스트다() {
+      Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L)))
+          .willReturn(List.of(501L, 502L));
+      // 매진: all 에는 전체 멤버가 있지만 available 맵에는 해당 분철 key 자체가 없다 → getOrDefault 폴백.
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of(501L, 502L)))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("민지", "하니")), Map.of()));
+      given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L)))
+          .willReturn(Set.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).memberNames()).containsExactly("민지", "하니");
+      assertThat(result.items().get(0).availableMemberNames()).isEmpty();
+    }
+
+    @Test
     void size_plus1_fetch_되어_hasNext_true_시_마지막은_drop_되고_nextCursor_는_visible_의_마지막_항목() {
       Instant t1 = Instant.parse("2026-05-15T08:00:00Z");
       Instant t2 = Instant.parse("2026-05-14T08:00:00Z");
@@ -98,8 +151,8 @@ class BuncheolListQueryServiceTest {
           .willReturn(List.of(b1, b2, bDropped));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
-          .willReturn(Map.of());
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L, 11L)))
           .willReturn(Set.of());
 
@@ -130,8 +183,8 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(c1, c2, dropped));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L, 21L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(20L, 21L)))
-          .willReturn(Map.of());
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(20L, 21L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(20L, 21L)))
           .willReturn(Set.of());
 
@@ -174,7 +227,8 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
@@ -199,8 +253,8 @@ class BuncheolListQueryServiceTest {
       // 10L 만 이미지 등록, 11L 은 미등록
       given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
           .willReturn(List.of(image(10L, "https://cdn.example.com/a.jpg")));
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
-          .willReturn(Map.of());
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(
@@ -221,8 +275,8 @@ class BuncheolListQueryServiceTest {
               List.of(
                   image(10L, "https://cdn.example.com/a.jpg"),
                   image(11L, "https://cdn.example.com/b.jpg")));
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 11L)))
-          .willReturn(Map.of());
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       CursorResponse<BuncheolSummaryResponse> result =
           buncheolListQueryService.search(

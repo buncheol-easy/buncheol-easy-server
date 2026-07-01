@@ -4,7 +4,6 @@ import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
-import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -162,21 +161,15 @@ public class ParticipationService {
 
   /**
    * 분철의 모든 멤버 슬롯이 입금확인(CONFIRMED)됐으면 deadline 전이라도 분철을 진행확정으로 조기 전이한다. 매진+전원확정이면 어차피 마감 시점에
-   * 진행확정될 운명이라 결과는 같고 시점만 앞당긴다. {@code RECRUITING → CONFIRMED} CAS 로 선점한 한쪽만 후속(진행확정 알림)을 수행하므로,
-   * deadline 마감 스케줄러나 동시 입금확인과 경합해도 한 번만 확정된다.
+   * 진행확정될 운명이라 결과는 같고 시점만 앞당긴다. 매진·최소인원 판정과 {@code RECRUITING → CONFIRMED} 전이를 CAS UPDATE 서브쿼리로
+   * 원자화(current read)했으므로, 마지막 슬롯을 동시에 입금확인하는 경합에서도 조기 확정을 놓치지 않고 선점한 한쪽만 후속(진행확정 알림)을 수행한다.
    *
-   * <p>전 슬롯 확정이라도 입금확인 인원이 최소 진행 인원에 못 미치면(슬롯 수 &lt; minHeadcount 인 분철) 진행확정 대상이 아니므로 전이하지 않고,
-   * deadline 마감 스케줄러의 취소 판정에 맡긴다.
+   * <p>전 슬롯 확정이라도 입금확인 인원이 최소 진행 인원에 못 미치면(슬롯 수 &lt; minHeadcount 인 분철) CAS 가 전이하지 않고, deadline 마감
+   * 스케줄러의 취소 판정에 맡긴다.
    */
   private void confirmBuncheolIfAllSlotsConfirmed(final Buncheol buncheol, final Instant now) {
-    int totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
-    int confirmedCount = participationDomainService.countConfirmedByBuncheolId(buncheol.getId());
-    boolean allSlotsConfirmed = confirmedCount >= totalSlots;
-    boolean meetsMinHeadcount = confirmedCount >= buncheol.getMinHeadcount();
-    if (!allSlotsConfirmed || !meetsMinHeadcount) {
-      return;
-    }
-    if (buncheolDomainService.finalizeBuncheol(buncheol.getId(), BuncheolStatus.CONFIRMED, now)) {
+    long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
+    if (buncheolDomainService.confirmIfAllSlotsConfirmed(buncheol.getId(), totalSlots, now)) {
       buncheolConfirmedFinalizer.finalizeConfirmed(buncheol.getId());
     }
   }

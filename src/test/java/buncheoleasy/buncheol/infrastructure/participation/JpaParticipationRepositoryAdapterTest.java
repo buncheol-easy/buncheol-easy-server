@@ -62,11 +62,15 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   private Long createBuncheol() {
+    return createBuncheol(1);
+  }
+
+  private Long createBuncheol(final int minHeadcount) {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, minHeadcount, 3000, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -145,6 +149,24 @@ class JpaParticipationRepositoryAdapterTest {
   private Long shippingAddressIdOf(final Long participationId) {
     return jdbcTemplate.queryForObject(
         "SELECT shipping_address_id FROM participations WHERE id = ?", Long.class, participationId);
+  }
+
+  private String buncheolStatusOf(final Long buncheolId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+  }
+
+  private void insertConfirmedParticipation(
+      final Long buncheolId, final Long slotId, final String storeName) {
+    insertParticipation(
+        buncheolId,
+        slotId,
+        participantId,
+        insertShippingAddress(participantId, storeName),
+        30_000L,
+        Instant.now().plus(20, ChronoUnit.MINUTES),
+        ParticipationStatus.CONFIRMED,
+        null);
   }
 
   // saveIfRecruiting 은 운영(MySQL) 전용 raw JDBC 조건부 INSERT(UTC_TIMESTAMP() + RETURN_GENERATED_KEYS 단일키
@@ -870,6 +892,64 @@ class JpaParticipationRepositoryAdapterTest {
 
       assertThat(affected).isEqualTo(1);
       assertThat(participationRepository.findActiveByBuncheolId(other)).hasSize(1);
+    }
+  }
+
+  @Nested
+  @DisplayName("confirmIfAllSlotsConfirmed — 전 슬롯 입금확인 시 조기 진행확정 CAS")
+  class ConfirmIfAllSlotsConfirmedTest {
+
+    @Test
+    void 전_슬롯이_CONFIRMED_이고_minHeadcount_충족이면_CONFIRMED_로_전이한다() {
+      Long buncheolId = createBuncheol(1); // 슬롯 2, minHeadcount 1
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "확정멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      insertConfirmedParticipation(buncheolId, slot1, "확정매장1");
+      insertConfirmedParticipation(buncheolId, slot2, "확정매장2");
+
+      int updated = buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, 2, Instant.now());
+
+      assertThat(updated).isEqualTo(1);
+      assertThat(buncheolStatusOf(buncheolId)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 일부_슬롯만_CONFIRMED면_전이하지_않는다() {
+      Long buncheolId = createBuncheol(1);
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "대기멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      insertConfirmedParticipation(buncheolId, slot1, "확정매장1");
+      insertParticipation(
+          buncheolId,
+          slot2,
+          participantId,
+          insertShippingAddress(participantId, "대기매장2"),
+          30_000L,
+          Instant.now().plus(20, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      int updated = buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, 2, Instant.now());
+
+      assertThat(updated).isZero();
+      assertThat(buncheolStatusOf(buncheolId)).isEqualTo("RECRUITING");
+    }
+
+    @Test
+    void 전_슬롯_CONFIRMED_이라도_슬롯수가_minHeadcount_미만이면_전이하지_않는다() {
+      Long buncheolId = createBuncheol(3); // 슬롯 2 < minHeadcount 3
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "확정멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      insertConfirmedParticipation(buncheolId, slot1, "확정매장1");
+      insertConfirmedParticipation(buncheolId, slot2, "확정매장2");
+
+      int updated = buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, 2, Instant.now());
+
+      assertThat(updated).isZero();
+      assertThat(buncheolStatusOf(buncheolId)).isEqualTo("RECRUITING");
     }
   }
 

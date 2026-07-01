@@ -257,6 +257,37 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("existsByShippingAddressId — 배송지 삭제 가드용(상태 무관)")
+  class ExistsByShippingAddressIdTest {
+
+    @Test
+    void 배송지를_참조하는_참여가_있으면_취소된_건이라도_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "취소된참여매장");
+      // 취소 참여여도 FK 로 참조 중이라 삭제하면 DB 제약 위반 → 가드 대상.
+      insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      assertThat(participationRepository.existsByShippingAddressId(addr)).isTrue();
+    }
+
+    @Test
+    void 배송지를_참조하는_참여가_없으면_false_를_반환한다() {
+      Long addr = insertShippingAddress(participantId, "미사용매장");
+
+      assertThat(participationRepository.existsByShippingAddressId(addr)).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("countActiveByBuncheolIds — JPQL constructor expression 검증")
   class CountActiveByBuncheolIdsTest {
 

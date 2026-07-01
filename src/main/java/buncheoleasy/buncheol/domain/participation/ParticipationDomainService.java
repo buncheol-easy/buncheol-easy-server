@@ -43,6 +43,11 @@ public class ParticipationDomainService {
     return participationRepository.existsActiveByParticipantId(participantId);
   }
 
+  /** 해당 배송지를 참조하는 참여가 하나라도 있는지 (배송지 삭제 가드용). */
+  public boolean hasParticipationByShippingAddress(final Long shippingAddressId) {
+    return participationRepository.existsByShippingAddressId(shippingAddressId);
+  }
+
   /** 입금 만료가 도과한 참여 폴링 (입금 만료 스케줄러용). */
   public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
     return participationRepository.findOverduePaymentTargets(now, limit);

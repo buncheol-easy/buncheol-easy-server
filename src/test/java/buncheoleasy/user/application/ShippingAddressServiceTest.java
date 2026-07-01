@@ -2,9 +2,12 @@ package buncheoleasy.user.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.UserDomainService;
@@ -31,6 +34,8 @@ class ShippingAddressServiceTest {
   @Mock private ShippingAddressDomainService shippingAddressDomainService;
 
   @Mock private UserDomainService userDomainService;
+
+  @Mock private ParticipationDomainService participationDomainService;
 
   private ShippingAddress savedAddress(
       Long id, Long userId, String method, String storeName, String alias, boolean isDefault) {
@@ -134,6 +139,24 @@ class ShippingAddressServiceTest {
 
       // then
       then(shippingAddressDomainService).should().deleteShippingAddress(userId, addressId);
+    }
+
+    @Test
+    void 참여가_사용_중인_배송지면_삭제하지_않고_예외가_발생한다() {
+      // given
+      Long userId = 1L;
+      Long addressId = 10L;
+      given(userDomainService.isValidUser(userId)).willReturn(true);
+      given(participationDomainService.hasParticipationByShippingAddress(addressId))
+          .willReturn(true);
+
+      // when & then
+      assertThatThrownBy(() -> shippingAddressService.removeShippingAddress(userId, addressId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DELETE_BLOCKED_BY_PARTICIPATION);
+
+      then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
     }
 
     @Test

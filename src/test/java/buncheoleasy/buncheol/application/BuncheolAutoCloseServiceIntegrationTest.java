@@ -78,6 +78,8 @@ class BuncheolAutoCloseServiceIntegrationTest {
         insertParticipation(buncheolId, confirmedSlot, "fan_confirmed", "CONFIRMED");
     Long awaitingId =
         insertParticipation(buncheolId, awaitingSlot, "fan_awaiting", "AWAITING_PAYMENT");
+    // 확정 참여는 입금확인 시 배송 스냅샷이 생성돼 있다고 가정.
+    insertDelivery(confirmedId);
 
     boolean finalized = buncheolAutoCloseService.finalizeExpired(buncheolId, Instant.now());
     em.flush();
@@ -91,7 +93,7 @@ class BuncheolAutoCloseServiceIntegrationTest {
     assertThat(cancelReason(confirmedId)).isEqualTo("BUNCHEOL_CANCELLED");
     assertThat(cancelReason(awaitingId)).isEqualTo("BUNCHEOL_CANCELLED");
 
-    // 취소 시 배송 스냅샷은 생성되지 않는다.
+    // 취소 시 확정 참여의 배송 스냅샷은 고아로 남지 않고 정리된다.
     assertThat(deliveryCountFor(confirmedId)).isZero();
   }
 
@@ -228,6 +230,19 @@ class BuncheolAutoCloseServiceIntegrationTest {
   private String cancelReason(final Long participationId) {
     return jdbcTemplate.queryForObject(
         "SELECT cancel_reason FROM participations WHERE id = ?", String.class, participationId);
+  }
+
+  private void insertDelivery(final Long participationId) {
+    jdbcTemplate.update(
+        "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+            + " receiver_nickname, receiver_phone_number, status)"
+            + " VALUES (?, ?, ?, ?, ?, ?)",
+        participationId,
+        "GS25_HALF",
+        "매장",
+        "닉네임",
+        "01012345678",
+        "SNAPSHOTTED");
   }
 
   private int deliveryCountFor(final Long participationId) {

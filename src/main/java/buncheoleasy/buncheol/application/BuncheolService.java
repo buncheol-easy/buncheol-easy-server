@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
@@ -32,6 +33,7 @@ public class BuncheolService {
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final DeliveryDomainService deliveryDomainService;
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
   private final ApplicationEventPublisher eventPublisher;
@@ -95,13 +97,16 @@ public class BuncheolService {
     // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이
     // 자발취소·만료된 참여에 중복 알림이 가지 않도록).
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
-    participationDomainService
-        .findCascadeCancelledByBuncheolId(buncheolId)
-        .forEach(
-            participation ->
-                eventPublisher.publishEvent(
-                    new BuncheolCancelledEvent(
-                        participation.getId(), BuncheolCancelReason.HOST_CANCELLED)));
+    List<Participation> cancelled =
+        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
+    // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
+    deliveryDomainService.deleteByParticipationIds(
+        cancelled.stream().map(Participation::getId).toList());
+    cancelled.forEach(
+        participation ->
+            eventPublisher.publishEvent(
+                new BuncheolCancelledEvent(
+                    participation.getId(), BuncheolCancelReason.HOST_CANCELLED)));
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

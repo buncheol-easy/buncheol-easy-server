@@ -14,6 +14,7 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +42,8 @@ class BuncheolAutoCloseServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
 
   @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+
+  @Mock private DeliveryDomainService deliveryDomainService;
 
   @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -101,6 +104,8 @@ class BuncheolAutoCloseServiceTest {
 
       assertThat(result).isTrue();
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // 취소된 참여의 배송 스냅샷을 정리한다(입금확인 시 생성된 고아 스냅샷 방지).
+      then(deliveryDomainService).should().deleteByParticipationIds(List.of(701L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
     }

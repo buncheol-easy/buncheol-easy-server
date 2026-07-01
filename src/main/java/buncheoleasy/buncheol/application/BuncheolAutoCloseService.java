@@ -4,7 +4,9 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class BuncheolAutoCloseService {
   private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final DeliveryDomainService deliveryDomainService;
   private final ApplicationEventPublisher eventPublisher;
 
   /** {@code now} 기준 deadline 이 지난 RECRUITING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
@@ -69,12 +72,15 @@ public class BuncheolAutoCloseService {
   private void finalizeAsCancelled(final Long buncheolId, final Instant now) {
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
     // 스냅샷이 아니라 cascade 로 실제 전이된 참여만 재조회해 발행 — 그 사이 자발취소·만료된 참여에 중복 알림이 가지 않도록.
-    participationDomainService
-        .findCascadeCancelledByBuncheolId(buncheolId)
-        .forEach(
-            participation ->
-                eventPublisher.publishEvent(
-                    new BuncheolCancelledEvent(
-                        participation.getId(), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET)));
+    List<Participation> cancelled =
+        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
+    // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
+    deliveryDomainService.deleteByParticipationIds(
+        cancelled.stream().map(Participation::getId).toList());
+    cancelled.forEach(
+        participation ->
+            eventPublisher.publishEvent(
+                new BuncheolCancelledEvent(
+                    participation.getId(), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET)));
   }
 }

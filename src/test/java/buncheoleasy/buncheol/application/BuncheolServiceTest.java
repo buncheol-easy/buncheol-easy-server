@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
@@ -69,6 +70,8 @@ class BuncheolServiceTest {
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
 
   @Mock private ParticipationDomainService participationDomainService;
+
+  @Mock private DeliveryDomainService deliveryDomainService;
 
   @Mock private GroupDomainService groupDomainService;
 
@@ -427,6 +430,8 @@ class BuncheolServiceTest {
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // 취소된 참여의 배송 스냅샷을 정리한다.
+      then(deliveryDomainService).should().deleteByParticipationIds(List.of(50L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
     }
 

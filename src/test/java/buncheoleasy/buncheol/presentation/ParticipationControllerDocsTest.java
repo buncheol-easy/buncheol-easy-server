@@ -359,6 +359,7 @@ class ParticipationControllerDocsTest {
                             | 403 | `BCH-069` (`PARTICIPATION_NO_PERMISSION`) | 본인 참여가 아님 |
                             | 403 | `USR-022` (`SHIPPING_ADDRESS_FORBIDDEN`) | 본인 소유 배송지가 아님 |
                             | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 분철이 지원하지 않는 배송수단 |
+                            | 400 | `BCH-075` (`PARTICIPATION_SHIPPING_METHOD_CHANGE_NOT_ALLOWED`) | 기존과 다른 배송수단으로 변경 시도 |
                             | 409 | `BCH-067` (`PARTICIPATION_STATE_TRANSITION_INVALID`) | 입금대기중이 아님(이미 확정/취소) |
                             """)
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))

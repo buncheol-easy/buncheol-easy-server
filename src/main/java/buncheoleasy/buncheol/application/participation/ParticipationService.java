@@ -15,6 +15,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,6 +39,7 @@ public class ParticipationService {
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
+  private final ShippingAddressDomainService shippingAddressDomainService;
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
@@ -144,7 +146,10 @@ public class ParticipationService {
 
   /**
    * 입금대기중(AWAITING_PAYMENT) 참여의 배송지 변경. 본인 소유 참여여야 하고, 새 배송지도 본인 소유이며 분철이 지원하는 배송수단이어야 한다(참여 신청과
-   * 동일 규칙). 입금확인(CONFIRMED)된 건은 이미 배송 스냅샷이 박제되어 변경할 수 없다. 배송지(매장)만 바꾸며 배송비(shippingFee)는 재산정하지 않는다.
+   * 동일 규칙). 입금확인(CONFIRMED)된 건은 이미 배송 스냅샷이 박제되어 변경할 수 없다.
+   *
+   * <p>배송비(shippingFee)는 참여 시 배송수단 기준으로 확정·안내됐으므로 재산정하지 않는다. 대신 새 배송지의 배송수단이 기존과 다르면(GS25↔CU) 배송비가
+   * 달라져 이미 안내된 입금액과 어긋나므로 변경을 거부한다 — 같은 배송수단 안에서 매장(지점)만 바꿀 수 있다.
    */
   @Transactional
   public void changeShippingAddress(
@@ -153,7 +158,13 @@ public class ParticipationService {
     participation.validateOwnedBy(participantId);
 
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
-    participationShippingAddressResolver.resolve(participantId, buncheol, shippingAddressId);
+    ShippingAddress newAddress =
+        participationShippingAddressResolver.resolve(participantId, buncheol, shippingAddressId);
+    ShippingAddress currentAddress =
+        shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
+    if (newAddress.getShippingMethod() != currentAddress.getShippingMethod()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_SHIPPING_METHOD_CHANGE_NOT_ALLOWED);
+    }
 
     participationDomainService.changeShippingAddress(
         participationId, shippingAddressId, Instant.now(clock));

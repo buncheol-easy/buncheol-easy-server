@@ -22,8 +22,11 @@ public interface ParticipationRepository {
   /** 참여자에게 활성({@link ParticipationStatus#active()}) 참여가 하나라도 있는지 (회원탈퇴 가드용). */
   boolean existsActiveByParticipantId(Long participantId);
 
-  /** 해당 배송지를 참조하는 참여가 하나라도 있는지 (배송지 삭제 가드용 — FK 가 RESTRICT 라 참조 중이면 DB 가 삭제를 막는다). */
-  boolean existsByShippingAddressId(Long shippingAddressId);
+  /**
+   * 해당 배송지를 참조하는 활성({@link ParticipationStatus#active()}) 참여가 있는지 (배송지 삭제 가드용). 종료된 참여는 FK ON
+   * DELETE SET NULL 로 정리되므로 삭제를 막지 않는다.
+   */
+  boolean existsActiveByShippingAddressId(Long shippingAddressId);
 
   /** 여러 분철의 활성 참여 수 집계 (공개 목록의 참여자 수 표시용). */
   List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(List<Long> buncheolIds);

@@ -157,7 +157,7 @@ CREATE TABLE participations
     buncheol_id         BIGINT       NOT NULL,
     buncheol_member_id  BIGINT       NOT NULL,
     participant_id      BIGINT       NOT NULL,
-    shipping_address_id BIGINT       NOT NULL,
+    shipping_address_id BIGINT       NULL,
     amount              BIGINT       NOT NULL,
     shipping_fee        BIGINT       NOT NULL DEFAULT 0,
     refund_bank         VARCHAR(50)  NOT NULL,
@@ -177,7 +177,7 @@ CREATE TABLE participations
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
     CONSTRAINT fk_participations_buncheol_member FOREIGN KEY (buncheol_member_id) REFERENCES buncheol_members (id),
     CONSTRAINT fk_participations_user FOREIGN KEY (participant_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id)
+    CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_member_id);

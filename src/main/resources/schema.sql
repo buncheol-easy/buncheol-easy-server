@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS participations
     buncheol_id         BIGINT       NOT NULL,
     buncheol_member_id  BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
     participant_id      BIGINT       NOT NULL COMMENT '참여자',
-    shipping_address_id BIGINT       NOT NULL COMMENT '선택한 배송지',
+    shipping_address_id BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
     amount              BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
     shipping_fee        BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
     refund_bank         VARCHAR(50)  NOT NULL COMMENT '환불 은행',
@@ -226,7 +226,7 @@ CREATE TABLE IF NOT EXISTS participations
 
     CONSTRAINT fk_participations_shipping_address
         FOREIGN KEY (shipping_address_id)
-            REFERENCES shipping_addresses (id)
+            REFERENCES shipping_addresses (id) ON DELETE SET NULL
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

@@ -257,15 +257,32 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("existsByShippingAddressId — 배송지 삭제 가드용(상태 무관)")
-  class ExistsByShippingAddressIdTest {
+  @DisplayName("existsActiveByShippingAddressId — 배송지 삭제 가드용(활성만)")
+  class ExistsActiveByShippingAddressIdTest {
 
     @Test
-    void 배송지를_참조하는_참여가_있으면_취소된_건이라도_true_를_반환한다() {
+    void 배송지를_참조하는_활성_참여가_있으면_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "활성참여매장");
+      insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    @Test
+    void 배송지를_참조하는_참여가_취소된_것뿐이면_false_를_반환한다() {
       Long buncheolId = createBuncheol();
       Long buncheolMemberId = createBuncheolMember(buncheolId);
       Long addr = insertShippingAddress(participantId, "취소된참여매장");
-      // 취소 참여여도 FK 로 참조 중이라 삭제하면 DB 제약 위반 → 가드 대상.
       insertParticipation(
           buncheolId,
           buncheolMemberId,
@@ -276,14 +293,36 @@ class JpaParticipationRepositoryAdapterTest {
           ParticipationStatus.CANCELLED,
           ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
-      assertThat(participationRepository.existsByShippingAddressId(addr)).isTrue();
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isFalse();
     }
+  }
+
+  @Nested
+  @DisplayName("FK ON DELETE SET NULL — 종료된 참여가 참조하던 배송지 삭제")
+  class ShippingAddressDeleteSetNullTest {
 
     @Test
-    void 배송지를_참조하는_참여가_없으면_false_를_반환한다() {
-      Long addr = insertShippingAddress(participantId, "미사용매장");
+    void 취소된_참여가_참조하던_배송지를_삭제하면_참여의_shipping_address_id_가_NULL_이_된다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "삭제될매장");
+      Long pid =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now(),
+              ParticipationStatus.CANCELLED,
+              ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
-      assertThat(participationRepository.existsByShippingAddressId(addr)).isFalse();
+      jdbcTemplate.update("DELETE FROM shipping_addresses WHERE id = ?", addr);
+
+      Long addrAfter =
+          jdbcTemplate.queryForObject(
+              "SELECT shipping_address_id FROM participations WHERE id = ?", Long.class, pid);
+      assertThat(addrAfter).isNull();
     }
   }
 

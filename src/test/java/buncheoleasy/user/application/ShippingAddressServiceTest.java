@@ -143,19 +143,19 @@ class ShippingAddressServiceTest {
     }
 
     @Test
-    void 참여가_사용_중인_배송지면_삭제하지_않고_예외가_발생한다() {
+    void 활성_참여가_사용_중인_배송지면_삭제하지_않고_예외가_발생한다() {
       // given
       Long userId = 1L;
       Long addressId = 10L;
       given(userDomainService.isValidUser(userId)).willReturn(true);
-      given(participationDomainService.hasParticipationByShippingAddress(addressId))
+      given(participationDomainService.hasActiveParticipationByShippingAddress(addressId))
           .willReturn(true);
 
       // when & then
       assertThatThrownBy(() -> shippingAddressService.removeShippingAddress(userId, addressId))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DELETE_BLOCKED_BY_PARTICIPATION);
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DELETE_BLOCKED_BY_ACTIVE_PARTICIPATION);
 
       then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
     }
@@ -177,7 +177,9 @@ class ShippingAddressServiceTest {
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
 
       // 소유권 검증이 먼저라 참여 참조 조회·삭제까지 가지 않는다(참조 여부 정보 노출 방지).
-      then(participationDomainService).should(never()).hasParticipationByShippingAddress(anyLong());
+      then(participationDomainService)
+          .should(never())
+          .hasActiveParticipationByShippingAddress(anyLong());
       then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
     }
 

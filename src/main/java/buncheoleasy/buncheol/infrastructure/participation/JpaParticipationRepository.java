@@ -68,21 +68,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
       @Param("now") Instant now);
 
-  /**
-   * AWAITING_PAYMENT 일 때만 배송지를 변경 (입금대기중 배송지 수정 CAS). 입금확인/취소된 건은 변경되지 않는다. 입금 기한(dueAt)은 의도적으로 보지
-   * 않는다 — 기한 도과~만료 스케줄러 취소 사이의 짧은 창에서 변경돼도 곧 취소될 건이라 무해하고, 주소만 바꾸는 멱등 작업이다.
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Participation p "
-          + "SET p.shippingAddressId = :shippingAddressId, p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.status = :awaitingStatus")
-  int updateShippingAddressIfAwaiting(
-      @Param("id") Long id,
-      @Param("shippingAddressId") Long shippingAddressId,
-      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
-      @Param("now") Instant now);
-
   /** AWAITING_PAYMENT 이고 입금 기한(dueAt)이 지났을 때만 지정 사유로 CANCELLED 로 전이 (입금 만료 CAS). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

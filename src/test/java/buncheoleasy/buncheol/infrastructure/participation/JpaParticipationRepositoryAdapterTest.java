@@ -146,11 +146,6 @@ class JpaParticipationRepositoryAdapterTest {
         "SELECT cancel_reason FROM participations WHERE id = ?", String.class, participationId);
   }
 
-  private Long shippingAddressIdOf(final Long participationId) {
-    return jdbcTemplate.queryForObject(
-        "SELECT shipping_address_id FROM participations WHERE id = ?", Long.class, participationId);
-  }
-
   private String buncheolStatusOf(final Long buncheolId) {
     return jdbcTemplate.queryForObject(
         "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
@@ -953,56 +948,4 @@ class JpaParticipationRepositoryAdapterTest {
     }
   }
 
-  @Nested
-  @DisplayName("changeShippingAddressIfAwaiting — 입금대기중 배송지 변경 CAS")
-  class ChangeShippingAddressIfAwaitingTest {
-
-    @Test
-    void AWAITING_PAYMENT_이면_배송지를_변경한다() {
-      Long buncheolId = createBuncheol();
-      Long bmId = createBuncheolMember(buncheolId);
-      Long addrOld = insertShippingAddress(participantId, "기존매장");
-      Long addrNew = insertShippingAddress(participantId, "새매장");
-      Long pid =
-          insertParticipation(
-              buncheolId,
-              bmId,
-              participantId,
-              addrOld,
-              30_000L,
-              Instant.now().plus(20, ChronoUnit.MINUTES),
-              ParticipationStatus.AWAITING_PAYMENT,
-              null);
-
-      boolean changed =
-          participationRepository.changeShippingAddressIfAwaiting(pid, addrNew, Instant.now());
-
-      assertThat(changed).isTrue();
-      assertThat(shippingAddressIdOf(pid)).isEqualTo(addrNew);
-    }
-
-    @Test
-    void 입금확인된_건은_변경하지_않고_false_를_반환한다() {
-      Long buncheolId = createBuncheol();
-      Long bmId = createBuncheolMember(buncheolId);
-      Long addrOld = insertShippingAddress(participantId, "확정기존매장");
-      Long addrNew = insertShippingAddress(participantId, "확정새매장");
-      Long pid =
-          insertParticipation(
-              buncheolId,
-              bmId,
-              participantId,
-              addrOld,
-              30_000L,
-              Instant.now().plus(20, ChronoUnit.MINUTES),
-              ParticipationStatus.CONFIRMED,
-              null);
-
-      boolean changed =
-          participationRepository.changeShippingAddressIfAwaiting(pid, addrNew, Instant.now());
-
-      assertThat(changed).isFalse();
-      assertThat(shippingAddressIdOf(pid)).isEqualTo(addrOld);
-    }
-  }
 }

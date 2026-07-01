@@ -50,9 +50,7 @@ public class Participation extends TimestampedEntity {
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
 
-  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다.
-  // updatable=false 로 더티체킹 UPDATE 를 차단한다 — 변경은 오직 입금대기중 전용 JPQL CAS(updateShippingAddressIfAwaiting,
-  // updatable 을 우회)로만 하고, 입금확인 시 Delivery 스냅샷으로 박제된 뒤로는 고정된다.
+  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다. 참여 후에는 변경할 수 없다(updatable=false).
   @Column(name = "shipping_address_id", nullable = false, updatable = false)
   private Long shippingAddressId;
 

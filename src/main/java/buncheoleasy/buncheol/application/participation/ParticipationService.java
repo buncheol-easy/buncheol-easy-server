@@ -15,7 +15,6 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
-import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,7 +38,6 @@ public class ParticipationService {
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
-  private final ShippingAddressDomainService shippingAddressDomainService;
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
@@ -124,8 +122,7 @@ public class ParticipationService {
 
   /**
    * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를 스냅샷(Delivery)으로
-   * 박제하므로, 이후로는 배송지를 변경할 수 없다(입금대기중에만 변경 가능). 이 입금확인으로 분철의 모든 멤버 슬롯이 입금확인되면(매진+전원확정) deadline
-   * 전이라도 분철을 진행확정으로 조기 전이한다.
+   * 박제한다. 이 입금확인으로 분철의 모든 멤버 슬롯이 입금확인되면(매진+전원확정) deadline 전이라도 분철을 진행확정으로 조기 전이한다.
    */
   @Transactional
   public void confirmPayment(final Long hostId, final Long participationId) {
@@ -135,39 +132,11 @@ public class ParticipationService {
     buncheol.validateOwner(hostId);
 
     participationDomainService.confirmPayment(participationId, now);
-    // confirm CAS(clearAutomatically)로 1차 캐시가 비워진 뒤 재조회해, 그 사이 커밋된 배송지 변경까지 반영된 최신 참여로 스냅샷을 박제한다.
-    // (입금확인과 배송지 변경이 동시에 일어나도, confirm CAS 가 행 잠금을 쥔 시점의 확정 주소로 일관되게 박제된다.)
-    Participation confirmed = participationDomainService.getParticipation(participationId);
-    deliverySnapshotCreator.create(confirmed);
+    // 입금확인 시점에 배송지를 스냅샷으로 확정한다. 배송지는 참여 후 변경 불가(updatable=false)라 참여 시점 값이 그대로 유효하다.
+    deliverySnapshotCreator.create(participation);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
 
     confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
-  }
-
-  /**
-   * 입금대기중(AWAITING_PAYMENT) 참여의 배송지 변경. 본인 소유 참여여야 하고, 새 배송지도 본인 소유이며 분철이 지원하는 배송수단이어야 한다(참여 신청과
-   * 동일 규칙). 입금확인(CONFIRMED)된 건은 이미 배송 스냅샷이 박제되어 변경할 수 없다.
-   *
-   * <p>배송비(shippingFee)는 참여 시 배송수단 기준으로 확정·안내됐으므로 재산정하지 않는다. 대신 새 배송지의 배송수단이 기존과 다르면(GS25↔CU) 배송비가
-   * 달라져 이미 안내된 입금액과 어긋나므로 변경을 거부한다 — 같은 배송수단 안에서 매장(지점)만 바꿀 수 있다.
-   */
-  @Transactional
-  public void changeShippingAddress(
-      final Long participantId, final Long participationId, final Long shippingAddressId) {
-    Participation participation = participationDomainService.getParticipation(participationId);
-    participation.validateOwnedBy(participantId);
-
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
-    ShippingAddress newAddress =
-        participationShippingAddressResolver.resolve(participantId, buncheol, shippingAddressId);
-    ShippingAddress currentAddress =
-        shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
-    if (newAddress.getShippingMethod() != currentAddress.getShippingMethod()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_SHIPPING_METHOD_CHANGE_NOT_ALLOWED);
-    }
-
-    participationDomainService.changeShippingAddress(
-        participationId, shippingAddressId, Instant.now(clock));
   }
 
   /**

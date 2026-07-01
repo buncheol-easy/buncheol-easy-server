@@ -18,6 +18,7 @@ public record BuncheolSummaryResponse(
     String title,
     BuncheolStatus status,
     Instant deadline,
+    int minHeadcount,
     boolean bookmarked,
     String groupName,
     String thumbnailUrl,

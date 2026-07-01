@@ -83,6 +83,7 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items().get(0).bookmarked()).isTrue();
       assertThat(result.items().get(0).groupName()).isEqualTo("뉴진스");
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
+      assertThat(result.items().get(0).minHeadcount()).isEqualTo(3);
       assertThat(result.items().get(0).memberNames()).containsExactly("민지");
       assertThat(result.items().get(1).bookmarked()).isFalse();
       assertThat(result.items().get(1).thumbnailUrl()).isNull();
@@ -427,6 +428,7 @@ class BuncheolListQueryServiceTest {
     setField(buncheol, "groupId", groupId);
     setField(buncheol, "title", title);
     setField(buncheol, "deadline", Instant.parse("2026-06-01T12:00:00Z"));
+    setField(buncheol, "minHeadcount", 3);
     setField(buncheol, "status", BuncheolStatus.RECRUITING);
     // CreatedAtEntity#createdAt 은 부모 필드. setField 가 super 까지 탐색.
     setField(buncheol, "createdAt", createdAt);

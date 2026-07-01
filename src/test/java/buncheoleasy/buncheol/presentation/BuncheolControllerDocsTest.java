@@ -314,6 +314,7 @@ class BuncheolControllerDocsTest {
             "뉴진스 1집 분철",
             BuncheolStatus.RECRUITING,
             deadline,
+            3,
             true,
             "뉴진스",
             "https://cdn.example.com/buncheol-10-thumb.jpg",
@@ -399,6 +400,7 @@ class BuncheolControllerDocsTest {
                                     "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감). 목록은 `CANCELLED` 를 제외하므로 이 둘만 내려간다"),
                             fieldWithPath("items[].deadline")
                                 .description("분철 모집 마감 시각 (UTC ISO-8601)"),
+                            fieldWithPath("items[].minHeadcount").description("분철 진행 최소 인원"),
                             fieldWithPath("items[].bookmarked")
                                 .description("호출 사용자의 본인 찜 여부 (비로그인이면 항상 false)"),
                             fieldWithPath("items[].groupName").description("대상 K-pop 그룹명"),
@@ -438,6 +440,7 @@ class BuncheolControllerDocsTest {
             "뉴진스 1집 분철",
             BuncheolStatus.RECRUITING,
             deadline,
+            3,
             false,
             "뉴진스",
             null,

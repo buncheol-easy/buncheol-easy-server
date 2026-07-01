@@ -97,6 +97,7 @@ public class BuncheolListQueryService {
                         b.getTitle(),
                         b.getStatus(),
                         b.getDeadline(),
+                        b.getMinHeadcount(),
                         bookmarkedBuncheolIds.contains(b.getId()),
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),

@@ -314,10 +314,12 @@ class BuncheolControllerDocsTest {
             "뉴진스 1집 분철",
             BuncheolStatus.RECRUITING,
             deadline,
+            3,
             true,
             "뉴진스",
             "https://cdn.example.com/buncheol-10-thumb.jpg",
-            List.of("민지", "혜인"));
+            List.of("민지", "혜인"),
+            List.of("혜인"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -398,6 +400,7 @@ class BuncheolControllerDocsTest {
                                     "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감). 목록은 `CANCELLED` 를 제외하므로 이 둘만 내려간다"),
                             fieldWithPath("items[].deadline")
                                 .description("분철 모집 마감 시각 (UTC ISO-8601)"),
+                            fieldWithPath("items[].minHeadcount").description("분철 진행 최소 인원"),
                             fieldWithPath("items[].bookmarked")
                                 .description("호출 사용자의 본인 찜 여부 (비로그인이면 항상 false)"),
                             fieldWithPath("items[].groupName").description("대상 K-pop 그룹명"),
@@ -405,7 +408,9 @@ class BuncheolControllerDocsTest {
                                 .description("대표이미지 URL — 분철에 등록된 첫 이미지. 이미지 없으면 null")
                                 .optional(),
                             fieldWithPath("items[].memberNames")
-                                .description("분철에 포함된 멤버 이름 (호스트 등록 슬롯 순)"),
+                                .description("분철에 포함된 전체 멤버 이름 (호스트 등록 슬롯 순)"),
+                            fieldWithPath("items[].availableMemberNames")
+                                .description("아직 안 팔린(참여 가능한) 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -431,7 +436,16 @@ class BuncheolControllerDocsTest {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     BuncheolSummaryResponse item =
         new BuncheolSummaryResponse(
-            10L, "뉴진스 1집 분철", BuncheolStatus.RECRUITING, deadline, false, "뉴진스", null, List.of("민지"));
+            10L,
+            "뉴진스 1집 분철",
+            BuncheolStatus.RECRUITING,
+            deadline,
+            3,
+            false,
+            "뉴진스",
+            null,
+            List.of("민지"),
+            List.of("민지"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), null, false);
 

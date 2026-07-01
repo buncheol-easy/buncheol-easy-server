@@ -50,7 +50,7 @@ public class Participation extends TimestampedEntity {
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
 
-  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다.
+  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다. 참여 후에는 변경할 수 없다(updatable=false).
   @Column(name = "shipping_address_id", nullable = false, updatable = false)
   private Long shippingAddressId;
 

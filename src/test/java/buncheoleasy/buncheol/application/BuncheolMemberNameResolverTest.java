@@ -11,6 +11,7 @@ import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -76,6 +77,26 @@ class BuncheolMemberNameResolverTest {
     Map<Long, List<String>> result = resolver.findNamesByBuncheolIds(List.of(10L));
 
     assertThat(result.get(10L)).containsExactly("혜인");
+  }
+
+  @Test
+  void resolveNames_는_전체와_점유슬롯_제외한_잔여를_한_번에_정렬해_반환한다() {
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(
+            List.of(
+                buncheolMember(801L, 10L, 2001L),
+                buncheolMember(802L, 10L, 2002L),
+                buncheolMember(803L, 10L, 2003L)));
+    given(groupMemberRepository.findAllByIds(List.of(2001L, 2002L, 2003L)))
+        .willReturn(
+            List.of(groupMember(2001L, "하니"), groupMember(2002L, "민지"), groupMember(2003L, "혜인")));
+
+    // 슬롯 802(민지)는 활성 참여로 점유됨 → available 에서만 제외, all 에는 포함.
+    BuncheolMemberNameResolver.MemberNames result =
+        resolver.resolveNames(List.of(10L), Set.of(802L));
+
+    assertThat(result.all().get(10L)).containsExactly("하니", "민지", "혜인");
+    assertThat(result.available().get(10L)).containsExactly("하니", "혜인");
   }
 
   private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {

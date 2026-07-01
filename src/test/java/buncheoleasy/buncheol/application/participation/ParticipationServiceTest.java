@@ -11,6 +11,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -31,6 +33,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -66,6 +69,8 @@ class ParticipationServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -367,19 +372,27 @@ class ParticipationServiceTest {
   class ConfirmPaymentTest {
 
     @Test
-    void 입금확인에_성공하면_입금확인_이벤트를_발행한다() {
+    void 입금확인에_성공하면_배송_스냅샷을_만들고_입금확인_이벤트를_발행한다() {
       Participation participation = mock(Participation.class);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      // 아직 전 슬롯 확정 아님 → 조기확정 CAS 미전이.
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
 
       participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
 
       then(buncheol).should().validateOwner(HOST_ID);
       then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      // 입금확인 시점에 참여 시점 배송지로 스냅샷이 생성된다(배송지는 변경 불가).
+      then(deliverySnapshotCreator).should().create(participation);
       then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
     }
 
     @Test
@@ -421,6 +434,45 @@ class ParticipationServiceTest {
           .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_DUE_PASSED);
 
       then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 전_슬롯이_입금확인되면_조기확정_CAS_가_전이하고_후속처리가_수행된다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      // 슬롯 5개. 매진·최소인원 판정은 CAS 내부 서브쿼리가 담당하고, 여기선 CAS 전이(true)만 stub.
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(true);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(buncheolDomainService).should().confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW);
+      then(buncheolConfirmedFinalizer).should().finalizeConfirmed(BUNCHEOL_ID);
+    }
+
+    @Test
+    void 조기확정_CAS_가_전이하지_않으면_진행확정_후속처리를_하지_않는다() {
+      // 아직 매진 아님 / 최소인원 미달 등의 판정은 CAS(어댑터 테스트)가 담당한다. 서비스는 CAS 결과(false)만 본다.
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
     }
   }
 

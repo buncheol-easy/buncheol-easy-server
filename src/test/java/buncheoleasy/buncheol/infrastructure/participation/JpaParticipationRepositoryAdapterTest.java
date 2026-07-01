@@ -62,11 +62,15 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   private Long createBuncheol() {
+    return createBuncheol(1);
+  }
+
+  private Long createBuncheol(final int minHeadcount) {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, minHeadcount, 3000, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -140,6 +144,24 @@ class JpaParticipationRepositoryAdapterTest {
   private String cancelReasonOf(final Long participationId) {
     return jdbcTemplate.queryForObject(
         "SELECT cancel_reason FROM participations WHERE id = ?", String.class, participationId);
+  }
+
+  private String buncheolStatusOf(final Long buncheolId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+  }
+
+  private void insertConfirmedParticipation(
+      final Long buncheolId, final Long slotId, final String storeName) {
+    insertParticipation(
+        buncheolId,
+        slotId,
+        participantId,
+        insertShippingAddress(participantId, storeName),
+        30_000L,
+        Instant.now().plus(20, ChronoUnit.MINUTES),
+        ParticipationStatus.CONFIRMED,
+        null);
   }
 
   // saveIfRecruiting 은 운영(MySQL) 전용 raw JDBC 조건부 INSERT(UTC_TIMESTAMP() + RETURN_GENERATED_KEYS 단일키
@@ -235,6 +257,37 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("existsByShippingAddressId — 배송지 삭제 가드용(상태 무관)")
+  class ExistsByShippingAddressIdTest {
+
+    @Test
+    void 배송지를_참조하는_참여가_있으면_취소된_건이라도_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "취소된참여매장");
+      // 취소 참여여도 FK 로 참조 중이라 삭제하면 DB 제약 위반 → 가드 대상.
+      insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      assertThat(participationRepository.existsByShippingAddressId(addr)).isTrue();
+    }
+
+    @Test
+    void 배송지를_참조하는_참여가_없으면_false_를_반환한다() {
+      Long addr = insertShippingAddress(participantId, "미사용매장");
+
+      assertThat(participationRepository.existsByShippingAddressId(addr)).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("countActiveByBuncheolIds — JPQL constructor expression 검증")
   class CountActiveByBuncheolIdsTest {
 
@@ -318,6 +371,58 @@ class JpaParticipationRepositoryAdapterTest {
           participationRepository.countActiveByBuncheolIds(List.of(buncheolId));
 
       assertThat(result).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("findActiveBuncheolMemberIds — 여러 분철의 점유 슬롯 ID 조회")
+  class FindActiveBuncheolMemberIdsTest {
+
+    @Test
+    void 활성_참여가_점유한_슬롯_ID만_반환하고_취소된_슬롯은_제외한다() {
+      Long buncheolA = createBuncheol();
+      Long buncheolB = createBuncheol();
+      Long takenSlotA = createBuncheolMember(buncheolA);
+      Long takenSlotB = createBuncheolMember(buncheolB);
+      Long otherMemberB = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "취소슬롯멤버");
+      Long cancelledSlotB = createBuncheolMember(buncheolB, otherMemberB);
+      insertParticipation(
+          buncheolA,
+          takenSlotA,
+          participantId,
+          insertShippingAddress(participantId, "활성슬롯A"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          buncheolB,
+          takenSlotB,
+          participantId,
+          insertShippingAddress(participantId, "확정슬롯B"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      insertParticipation(
+          buncheolB,
+          cancelledSlotB,
+          participantId,
+          insertShippingAddress(participantId, "취소슬롯B"),
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      List<Long> result =
+          participationRepository.findActiveBuncheolMemberIds(List.of(buncheolA, buncheolB));
+
+      assertThat(result).containsExactlyInAnyOrder(takenSlotA, takenSlotB);
+    }
+
+    @Test
+    void 빈_입력에는_빈_리스트를_반환한다() {
+      assertThat(participationRepository.findActiveBuncheolMemberIds(List.of())).isEmpty();
     }
   }
 
@@ -815,4 +920,63 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(participationRepository.findActiveByBuncheolId(other)).hasSize(1);
     }
   }
+
+  @Nested
+  @DisplayName("confirmIfAllSlotsConfirmed — 전 슬롯 입금확인 시 조기 진행확정 CAS")
+  class ConfirmIfAllSlotsConfirmedTest {
+
+    @Test
+    void 전_슬롯이_CONFIRMED_이고_minHeadcount_충족이면_CONFIRMED_로_전이한다() {
+      Long buncheolId = createBuncheol(1); // 슬롯 2, minHeadcount 1
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "확정멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      insertConfirmedParticipation(buncheolId, slot1, "확정매장1");
+      insertConfirmedParticipation(buncheolId, slot2, "확정매장2");
+
+      int updated = buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, 2, Instant.now());
+
+      assertThat(updated).isEqualTo(1);
+      assertThat(buncheolStatusOf(buncheolId)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 일부_슬롯만_CONFIRMED면_전이하지_않는다() {
+      Long buncheolId = createBuncheol(1);
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "대기멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      insertConfirmedParticipation(buncheolId, slot1, "확정매장1");
+      insertParticipation(
+          buncheolId,
+          slot2,
+          participantId,
+          insertShippingAddress(participantId, "대기매장2"),
+          30_000L,
+          Instant.now().plus(20, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      int updated = buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, 2, Instant.now());
+
+      assertThat(updated).isZero();
+      assertThat(buncheolStatusOf(buncheolId)).isEqualTo("RECRUITING");
+    }
+
+    @Test
+    void 전_슬롯_CONFIRMED_이라도_슬롯수가_minHeadcount_미만이면_전이하지_않는다() {
+      Long buncheolId = createBuncheol(3); // 슬롯 2 < minHeadcount 3
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "확정멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      insertConfirmedParticipation(buncheolId, slot1, "확정매장1");
+      insertConfirmedParticipation(buncheolId, slot2, "확정매장2");
+
+      int updated = buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, 2, Instant.now());
+
+      assertThat(updated).isZero();
+      assertThat(buncheolStatusOf(buncheolId)).isEqualTo("RECRUITING");
+    }
+  }
+
 }

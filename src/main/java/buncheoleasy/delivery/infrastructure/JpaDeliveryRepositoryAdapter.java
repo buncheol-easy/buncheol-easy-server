@@ -35,4 +35,12 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
     }
     return jpaDeliveryRepository.findAllByParticipationIdIn(participationIds);
   }
+
+  @Override
+  public void deleteByParticipationIds(final List<Long> participationIds) {
+    if (participationIds.isEmpty()) {
+      return;
+    }
+    jpaDeliveryRepository.deleteByParticipationIdIn(participationIds);
+  }
 }

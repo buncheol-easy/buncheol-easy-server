@@ -125,12 +125,26 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public boolean existsByShippingAddressId(final Long shippingAddressId) {
+    return jpaParticipationRepository.existsByShippingAddressId(shippingAddressId);
+  }
+
+  @Override
   public List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(
       final List<Long> buncheolIds) {
     if (buncheolIds.isEmpty()) {
       return List.of();
     }
     return jpaParticipationRepository.countActiveByBuncheolIds(
+        buncheolIds, ParticipationStatus.active());
+  }
+
+  @Override
+  public List<Long> findActiveBuncheolMemberIds(final List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaParticipationRepository.findActiveBuncheolMemberIds(
         buncheolIds, ParticipationStatus.active());
   }
 

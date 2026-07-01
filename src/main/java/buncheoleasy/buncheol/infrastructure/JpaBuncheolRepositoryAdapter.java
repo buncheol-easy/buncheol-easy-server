@@ -156,4 +156,16 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         BuncheolStatus.CANCELLED,
         now);
   }
+
+  @Override
+  public int confirmIfAllSlotsConfirmed(
+      final Long buncheolId, final long totalSlots, final Instant now) {
+    return jpaBuncheolRepository.confirmIfAllSlotsConfirmed(
+        buncheolId,
+        totalSlots,
+        BuncheolStatus.RECRUITING,
+        ParticipationStatus.CONFIRMED,
+        BuncheolStatus.CONFIRMED,
+        now);
+  }
 }

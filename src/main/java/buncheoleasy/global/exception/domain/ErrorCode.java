@@ -41,6 +41,8 @@ public enum ErrorCode {
       "USR-028", "진행 중인 분철이 있어 탈퇴할 수 없습니다.", HttpStatus.CONFLICT),
   USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION(
       "USR-029", "진행 중인 분철 참여가 있어 탈퇴할 수 없습니다.", HttpStatus.CONFLICT),
+  SHIPPING_ADDRESS_DELETE_BLOCKED_BY_PARTICIPATION(
+      "USR-030", "참여에서 사용 중인 배송지는 삭제할 수 없습니다.", HttpStatus.CONFLICT),
 
   SHIPPING_ADDRESS_NOT_FOUND("USR-019", "배송지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-020", "배송지는 최대 5개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),

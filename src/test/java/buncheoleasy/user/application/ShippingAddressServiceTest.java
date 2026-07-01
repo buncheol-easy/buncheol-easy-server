@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
@@ -156,6 +157,27 @@ class ShippingAddressServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DELETE_BLOCKED_BY_PARTICIPATION);
 
+      then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
+    }
+
+    @Test
+    void 본인_소유가_아니면_참여_조회_전에_예외가_발생한다() {
+      // given
+      Long userId = 1L;
+      Long addressId = 10L;
+      given(userDomainService.isValidUser(userId)).willReturn(true);
+      willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN))
+          .given(shippingAddressDomainService)
+          .validateOwnership(userId, addressId);
+
+      // when & then
+      assertThatThrownBy(() -> shippingAddressService.removeShippingAddress(userId, addressId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
+
+      // 소유권 검증이 먼저라 참여 참조 조회·삭제까지 가지 않는다(참조 여부 정보 노출 방지).
+      then(participationDomainService).should(never()).hasParticipationByShippingAddress(anyLong());
       then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
     }
 

@@ -259,31 +259,6 @@ CREATE TABLE IF NOT EXISTS deliveries
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS settlements
-(
-    id            BIGINT      NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT      NOT NULL COMMENT '분철 ID',
-    status        VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED' COMMENT 'SCHEDULED | SETTLING | SETTLED',
-    gross_amount  BIGINT      NOT NULL COMMENT '총 결제 금액',
-    refund_amount BIGINT      NOT NULL COMMENT '총 환불 금액',
-    net_amount    BIGINT      NOT NULL COMMENT '정산 금액(총 결제 - 총 환불)',
-    scheduled_at  DATETIME    NULL COMMENT '정산 예정 시각',
-    settled_at    DATETIME    NULL COMMENT '정산 완료 시각',
-    created_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (id),
-
-    UNIQUE INDEX uq_settlements_buncheol_id (buncheol_id),
-    INDEX idx_settlements_status (status),
-
-    CONSTRAINT fk_settlements_buncheol
-        FOREIGN KEY (buncheol_id)
-            REFERENCES buncheols (id) ON DELETE CASCADE
-) ENGINE = InnoDB
-  DEFAULT CHARSET = utf8mb4
-  COLLATE = utf8mb4_unicode_ci;
-
 -- buncheol_bookmarks 테이블 생성 (찜한 분철)
 CREATE TABLE IF NOT EXISTS buncheol_bookmarks
 (

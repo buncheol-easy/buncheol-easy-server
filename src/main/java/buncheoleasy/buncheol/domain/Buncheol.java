@@ -43,7 +43,8 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   @Column(nullable = false, length = 200)
   private String title;
 
-  @Column private String description;
+  @Column(columnDefinition = "TEXT")
+  private String description;
 
   @Column(name = "purchase_site", nullable = false, length = 200)
   private String purchaseSite;

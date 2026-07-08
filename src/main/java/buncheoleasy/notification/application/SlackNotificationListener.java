@@ -1,11 +1,10 @@
 package buncheoleasy.notification.application;
 
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -30,28 +29,32 @@ public class SlackNotificationListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
-    List<ParticipationView> views =
-        event.participationIds().stream().map(assembler::loadByParticipation).toList();
-    ParticipationView first = views.get(0);
-    String memberNames =
-        views.stream().map(ParticipationView::memberName).collect(Collectors.joining(", "));
-    // 슬롯별 총액(멤버 금액 + 배송비, 배송비는 첫 슬롯에만 부과)의 합 = 이 묶음의 실제 입금 예정액.
-    long totalAmount = views.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    // 웹훅 미설정 환경(로컬/CI)은 발송하지 않으므로 조립 조회부터 건너뛴다.
+    if (!slackWebhookClient.isEnabled()) {
+      return;
+    }
+    ParticipationBundleView view = assembler.loadByParticipations(event.participationIds());
+    RefundAccount refundAccount = view.refundAccount();
 
     String message =
         """
-        🔔 [신규 참여] %s
+        🔔 [신규 참여] %s (분철 #%d)
         참여자: %s
+        환불계좌: %s %s (예금주 %s)
         멤버: %s (%d슬롯)
         입금 예정 금액: %s원
         ⏰ 입금 기한: %s (기한 내 입금확인 필요)"""
             .formatted(
-                first.buncheol().getTitle(),
-                first.participant().getNickname().value(),
-                memberNames,
-                views.size(),
-                AlimtalkFormats.amount(totalAmount),
-                DUE_AT_FORMAT.format(first.participation().getDueAt()));
+                view.buncheol().getTitle(),
+                view.buncheol().getId(),
+                view.participant().getNickname().value(),
+                refundAccount.bank(),
+                refundAccount.account(),
+                refundAccount.holder(),
+                String.join(", ", view.memberNames()),
+                view.memberNames().size(),
+                AlimtalkFormats.amount(view.totalAmount()),
+                DUE_AT_FORMAT.format(view.dueAt()));
     slackWebhookClient.send(message);
   }
 }

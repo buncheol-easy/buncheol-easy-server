@@ -21,6 +21,11 @@ public class SlackWebhookClient {
         RestClient.builder().requestFactory(createRequestFactory(properties)).build();
   }
 
+  /** 웹훅 URL 이 설정된 환경인지. 발송자가 미설정 환경에서 메시지 조립(DB 조회)까지 건너뛸 수 있게 노출한다. */
+  public boolean isEnabled() {
+    return properties.enabled();
+  }
+
   public void send(final String text) {
     // 로컬·테스트는 URL 을 비워 의도적으로 꺼두므로 정상 상태다(debug 로만 남긴다).
     if (!properties.enabled()) {

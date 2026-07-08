@@ -1,13 +1,15 @@
 package buncheoleasy.notification.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
-import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
 import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.User;
@@ -36,36 +38,49 @@ class SlackNotificationListenerTest {
   class ParticipationCreated {
 
     @Test
-    @DisplayName("슬롯 묶음을 메시지 한 건으로 발송 - 멤버명 나열, 총액 합산, 입금 기한 KST 표기")
+    @DisplayName("슬롯 묶음을 메시지 한 건으로 발송 - 분철 ID·환불계좌·멤버명·총액·입금 기한(KST) 포함")
     void sendsSingleMessageForBundle() {
+      given(slackWebhookClient.isEnabled()).willReturn(true);
       // KST 로 7/6 12:30
       Instant dueAt = Instant.parse("2026-07-06T03:30:00Z");
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getTitle()).willReturn("엔믹스 앨범");
+      given(buncheol.getId()).willReturn(7L);
       User participant = mock(User.class);
       given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
-      Participation firstParticipation = mock(Participation.class);
-      given(firstParticipation.getDueAt()).willReturn(dueAt);
-      given(assembler.loadByParticipation(1L))
+      given(assembler.loadByParticipations(List.of(1L, 2L)))
           .willReturn(
-              new ParticipationView(
-                  firstParticipation, buncheol, "설윤", participant, mock(User.class), 23_000L));
-      given(assembler.loadByParticipation(2L))
-          .willReturn(
-              new ParticipationView(
-                  mock(Participation.class), buncheol, "해원", participant, mock(User.class), 20_000L));
+              new ParticipationBundleView(
+                  buncheol,
+                  participant,
+                  List.of("설윤", "해원"),
+                  43_000L,
+                  dueAt,
+                  RefundAccount.of("국민은행", "11012345678", "김참여")));
 
       listener.onParticipationCreated(new ParticipationCreatedEvent(List.of(1L, 2L)));
 
       ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
       then(slackWebhookClient).should().send(messageCaptor.capture());
       assertThat(messageCaptor.getValue())
-          .contains("엔믹스 앨범")
+          .contains("엔믹스 앨범 (분철 #7)")
           .contains("참여자닉")
+          .contains("국민은행 11012345678 (예금주 김참여)")
           .contains("설윤, 해원")
           .contains("2슬롯")
           .contains("43,000")
           .contains("7/6 12:30");
+    }
+
+    @Test
+    @DisplayName("웹훅 미설정 환경이면 조립 조회 없이 발송을 건너뛴다")
+    void skipsAssemblyWhenDisabled() {
+      given(slackWebhookClient.isEnabled()).willReturn(false);
+
+      listener.onParticipationCreated(new ParticipationCreatedEvent(List.of(1L)));
+
+      then(assembler).should(never()).loadByParticipations(any());
+      then(slackWebhookClient).should(never()).send(any());
     }
   }
 }

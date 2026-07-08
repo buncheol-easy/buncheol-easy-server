@@ -153,6 +153,7 @@ class ParticipationServiceTest {
       assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
       assertThat(saved.getTotalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(saved.getDueAt()).isEqualTo(expectedDueAt);
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
     }
 
     @Test

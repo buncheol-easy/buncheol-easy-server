@@ -8,9 +8,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -73,12 +76,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   }
 
   private void authenticateWithToken(final String accessToken) {
-    final Long userId = jwtTokenProvider.parseUserIdFromAccessToken(accessToken);
+    final AccessTokenClaims claims = jwtTokenProvider.parseAccessTokenClaims(accessToken);
 
     final Authentication authentication =
-        new UsernamePasswordAuthenticationToken(userId, null, Collections.emptyList());
+        new UsernamePasswordAuthenticationToken(claims.userId(), null, toAuthorities(claims));
 
     SecurityContextHolder.getContext().setAuthentication(authentication);
+  }
+
+  // role claim 이 없으면 유저 토큰(ROLE_USER), 있으면 관리자 토큰(ROLE_ADMIN 등)이다. 유저와 관리자의 id 공간이
+  // 겹칠 수 있어 두 권한을 겸하지 않는다 — 관리자 토큰으로 유저 API(hasRole USER)에 접근할 수 없고 그 반대도 같다.
+  // 서명 검증을 통과한 토큰만 오므로 claim 값 자체는 신뢰한다.
+  private List<GrantedAuthority> toAuthorities(final AccessTokenClaims claims) {
+    if (claims.role() == null) {
+      return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+    }
+    return List.of(new SimpleGrantedAuthority("ROLE_" + claims.role()));
   }
 
   private void handleException(

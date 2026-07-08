@@ -28,8 +28,8 @@ public class NoticeController {
   private final NoticeCommandService noticeCommandService;
 
   /**
-   * 공지 작성(multipart/form-data). 인증된 사용자면 작성 가능하다(소유권/관리자 role 은 추후 고도화). 인증 자체는 SecurityConfig 의
-   * {@code anyRequest().authenticated()} 가 강제한다.
+   * 공지 작성(multipart/form-data). 관리자(ROLE_ADMIN) 전용 — SecurityConfig 가 {@code POST /v1/notices} 를
+   * {@code hasRole("ADMIN")} 으로 강제한다.
    *
    * <p>{@code request}(JSON) 외에 본문 이미지({@code image}, 최대 1장)와 홈 배너 이미지({@code bannerImage})를 선택적으로
    * 첨부할 수 있다. 두 이미지 모두 커밋 후 비동기로 S3 에 업로드된다.
@@ -45,14 +45,14 @@ public class NoticeController {
     return ResponseEntity.created(URI.create("/v1/inbox/" + noticeId)).build();
   }
 
-  /** 공지 상단 고정 등록. (소유권 검증은 추후 고도화) */
+  /** 공지 상단 고정 등록. 관리자(ROLE_ADMIN) 전용 — SecurityConfig 가 강제한다. */
   @PutMapping("/{noticeId}/pin")
   public ResponseEntity<Void> pinNotice(@PathVariable final Long noticeId) {
     noticeCommandService.pinNotice(noticeId);
     return ResponseEntity.noContent().build();
   }
 
-  /** 공지 상단 고정 해제. (소유권 검증은 추후 고도화) */
+  /** 공지 상단 고정 해제. 관리자(ROLE_ADMIN) 전용 — SecurityConfig 가 강제한다. */
   @DeleteMapping("/{noticeId}/pin")
   public ResponseEntity<Void> unpinNotice(@PathVariable final Long noticeId) {
     noticeCommandService.unpinNotice(noticeId);

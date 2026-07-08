@@ -16,11 +16,22 @@ import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+/**
+ * JWT 발급/파싱. 토큰은 두 종류다 — 유저 토큰(role claim 없음, {@code ROLE_USER})과 관리자 토큰(role claim = AdminRole,
+ * {@code ROLE_ADMIN}). 서비스 유저와 관리자 계정(admins)은 id 공간이 분리돼 있어 subject 가 겹칠 수 있으므로, 인가는 반드시 role 로
+ * 구분한다 (유저 API 는 hasRole(USER) — 관리자 토큰으로 같은 id 의 유저 위장 불가).
+ *
+ * <p>관리자 토큰은 refresh 없이 access 단독이다 — refresh 저장소(Redis)가 userId 키라 admin id 와 충돌하고, 관리자 1~2명 규모에서
+ * 만료 시 재로그인이 회전 관리보다 단순하기 때문. 대신 수명을 별도 설정(기본 12시간)으로 늘린다.
+ */
 @Component
 public class JwtTokenProvider {
 
+  private static final String ROLE_CLAIM = "role";
+
   private final long accessTokenExpirationSeconds;
   private final long refreshTokenExpirationSeconds;
+  private final long adminTokenExpirationSeconds;
   private final SecretKey accessSecretKey;
   private final SecretKey refreshSecretKey;
   private final RefreshTokenStore refreshTokenStore;
@@ -30,17 +41,25 @@ public class JwtTokenProvider {
       @Value("${jwt.secret.refresh-key}") final String refreshSecret,
       @Value("${jwt.access-token-expiration-seconds}") final long accessTokenExpirationSeconds,
       @Value("${jwt.refresh-token-expiration-seconds}") final long refreshTokenExpirationSeconds,
+      @Value("${jwt.admin-token-expiration-seconds:43200}") final long adminTokenExpirationSeconds,
       final RefreshTokenStore refreshTokenStore) {
     this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
     this.refreshTokenExpirationSeconds = refreshTokenExpirationSeconds;
+    this.adminTokenExpirationSeconds = adminTokenExpirationSeconds;
     this.accessSecretKey = Keys.hmacShaKeyFor(accessSecret.getBytes(StandardCharsets.UTF_8));
     this.refreshSecretKey = Keys.hmacShaKeyFor(refreshSecret.getBytes(StandardCharsets.UTF_8));
     this.refreshTokenStore = refreshTokenStore;
   }
 
   public Long parseUserIdFromAccessToken(final String token) {
+    return parseAccessTokenClaims(token).userId();
+  }
+
+  /** access token 에서 subject(유저 또는 관리자 id)와 role claim(유저 토큰이면 null)을 함께 파싱한다. */
+  public AccessTokenClaims parseAccessTokenClaims(final String token) {
     final Claims claims = parseClaims(token, accessSecretKey);
-    return parseUserId(claims.getSubject());
+    return new AccessTokenClaims(
+        parseUserId(claims.getSubject()), claims.get(ROLE_CLAIM, String.class));
   }
 
   public Long parseUserIdFromRefreshToken(final String token) {
@@ -48,20 +67,18 @@ public class JwtTokenProvider {
     return parseUserId(claims.getSubject());
   }
 
+  /** 유저 access/refresh 토큰 쌍 발급. */
   public TokenPair issueTokens(final Long userId) {
     return new TokenPair(createAccessToken(userId), createRefreshToken(userId));
   }
 
   public String createAccessToken(final Long userId) {
-    final Instant now = Instant.now();
-    final Instant expiration = now.plusSeconds(accessTokenExpirationSeconds);
+    return buildAccessToken(userId, null, accessTokenExpirationSeconds);
+  }
 
-    return Jwts.builder()
-        .subject(String.valueOf(userId))
-        .issuedAt(Date.from(now))
-        .expiration(Date.from(expiration))
-        .signWith(accessSecretKey)
-        .compact();
+  /** 관리자 access token 발급 (ID/PW 로그인). role claim 으로 유저 토큰과 구분되며 refresh 는 없다. */
+  public String createAdminAccessToken(final Long adminId, final String role) {
+    return buildAccessToken(adminId, role, adminTokenExpirationSeconds);
   }
 
   public String createRefreshToken(final Long userId) {
@@ -84,6 +101,22 @@ public class JwtTokenProvider {
     refreshTokenStore.verify(userId, oldRefreshToken);
     refreshTokenStore.delete(userId);
     return issueTokens(userId);
+  }
+
+  private String buildAccessToken(final Long subjectId, final String role, final long expirationSeconds) {
+    final Instant now = Instant.now();
+    final Instant expiration = now.plusSeconds(expirationSeconds);
+
+    final var builder =
+        Jwts.builder()
+            .subject(String.valueOf(subjectId))
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(expiration))
+            .signWith(accessSecretKey);
+    if (role != null) {
+      builder.claim(ROLE_CLAIM, role);
+    }
+    return builder.compact();
   }
 
   private Claims parseClaims(final String token, final SecretKey secretKey) {

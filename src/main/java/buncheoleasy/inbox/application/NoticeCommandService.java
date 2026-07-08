@@ -13,7 +13,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 공지 작성/상단 고정 관리. (인가는 현재 인증만 — 소유권/관리자 role 검증은 추후 고도화) */
+/** 공지 작성/상단 고정 관리. 인가는 SecurityConfig 가 관리자(ROLE_ADMIN) 전용으로 강제한다. */
 @Service
 @RequiredArgsConstructor
 public class NoticeCommandService {

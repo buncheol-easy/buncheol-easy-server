@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
+import buncheoleasy.global.query.LikeEscaper;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import java.util.List;
@@ -56,7 +57,7 @@ public class BuncheolListQueryService {
     final String trimmedKeyword = trimKeyword(condition.keyword());
     final BuncheolSearchCondition normalized =
         new BuncheolSearchCondition(
-            condition.groupId(), condition.memberId(), escapeForLike(trimmedKeyword));
+            condition.groupId(), condition.memberId(), LikeEscaper.escape(trimmedKeyword));
 
     final List<Buncheol> fetched = buncheolRepository.search(normalized, cursor, safeSize + 1);
     final boolean hasNext = fetched.size() > safeSize;
@@ -126,15 +127,5 @@ public class BuncheolListQueryService {
       return null;
     }
     return keyword.trim();
-  }
-
-  // LIKE 와일드카드(`%`, `_`) 와 이스케이프 문자 자체(`\`)를 리터럴로 매칭하도록 이스케이프한다.
-  // 호출 측 JPQL 의 ESCAPE 절은 Java 리터럴 `"ESCAPE '\\'"` 로 작성한다
-  // (실제 SQL 로 전달되는 이스케이프 문자는 단일 역슬래시 `\`).
-  private static String escapeForLike(final String trimmed) {
-    if (trimmed == null) {
-      return null;
-    }
-    return trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
   }
 }

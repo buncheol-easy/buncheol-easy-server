@@ -139,6 +139,13 @@ aligo:
       TRACKING_CU: ${ALIGO_TPL_TRACKING_CU:}
       TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
 
+slack:
+  webhook:
+    # 운영자 알림 채널 Incoming Webhook. 시크릿이라 환경변수로만 주입하며, 빈 값이면 발송을 건너뛴다.
+    url: ${SLACK_WEBHOOK_URL:}
+    connect-timeout: 3s
+    read-timeout: 5s
+
 management:
   endpoints:
     web:

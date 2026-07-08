@@ -6,6 +6,6 @@ package buncheoleasy.notification.domain;
  */
 public enum SlackChannel {
 
-  /** 운영자 채널. 신규 참여 등 운영자가 즉시 확인·조치해야 하는 알림. */
-  OPERATION
+  /** 신규 참여 접수 알림 채널. 운영자가 입금 기한 내에 확인·입금확인해야 하는 참여 접수를 받는다. */
+  NEW_PARTICIPATION
 }

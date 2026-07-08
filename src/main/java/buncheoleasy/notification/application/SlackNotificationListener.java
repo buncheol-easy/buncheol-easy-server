@@ -31,7 +31,7 @@ public class SlackNotificationListener {
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
     // 웹훅 미설정 환경(로컬/CI)은 발송하지 않으므로 조립 조회부터 건너뛴다.
-    if (!slackWebhookClient.isEnabled(SlackChannel.OPERATION)) {
+    if (!slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)) {
       return;
     }
     ParticipationBundleView view = assembler.loadByParticipations(event.participationIds());
@@ -56,6 +56,6 @@ public class SlackNotificationListener {
                 view.memberNames().size(),
                 AlimtalkFormats.amount(view.totalAmount()),
                 DUE_AT_FORMAT.format(view.dueAt()));
-    slackWebhookClient.send(SlackChannel.OPERATION, message);
+    slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, message);
   }
 }

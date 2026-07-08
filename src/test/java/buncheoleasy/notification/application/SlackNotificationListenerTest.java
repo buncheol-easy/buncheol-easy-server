@@ -42,7 +42,7 @@ class SlackNotificationListenerTest {
     @Test
     @DisplayName("슬롯 묶음을 메시지 한 건으로 발송 - 분철 ID·환불계좌·멤버명·총액·입금 기한(KST) 포함")
     void sendsSingleMessageForBundle() {
-      given(slackWebhookClient.isEnabled(SlackChannel.OPERATION)).willReturn(true);
+      given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(true);
       // KST 로 7/6 12:30
       Instant dueAt = Instant.parse("2026-07-06T03:30:00Z");
       Buncheol buncheol = mock(Buncheol.class);
@@ -63,7 +63,7 @@ class SlackNotificationListenerTest {
       listener.onParticipationCreated(new ParticipationCreatedEvent(List.of(1L, 2L)));
 
       ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-      then(slackWebhookClient).should().send(eq(SlackChannel.OPERATION), messageCaptor.capture());
+      then(slackWebhookClient).should().send(eq(SlackChannel.NEW_PARTICIPATION), messageCaptor.capture());
       assertThat(messageCaptor.getValue())
           .contains("엔믹스 앨범 (분철 #7)")
           .contains("참여자닉")
@@ -77,7 +77,7 @@ class SlackNotificationListenerTest {
     @Test
     @DisplayName("웹훅 미설정 환경이면 조립 조회 없이 발송을 건너뛴다")
     void skipsAssemblyWhenDisabled() {
-      given(slackWebhookClient.isEnabled(SlackChannel.OPERATION)).willReturn(false);
+      given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(false);
 
       listener.onParticipationCreated(new ParticipationCreatedEvent(List.of(1L)));
 

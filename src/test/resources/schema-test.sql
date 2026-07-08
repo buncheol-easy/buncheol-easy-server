@@ -1,6 +1,7 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
 DROP TABLE IF EXISTS inbox_messages;
+DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS deliveries;
 DROP TABLE IF EXISTS participations;
 DROP TABLE IF EXISTS buncheol_images;
@@ -184,6 +185,22 @@ CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_me
 CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
 CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);
+CREATE INDEX idx_participations_created ON participations (created_at DESC, id DESC);
+
+-- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)
+CREATE TABLE admins
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    login_id   VARCHAR(50)  NOT NULL,
+    password   VARCHAR(100) NOT NULL,
+    role       VARCHAR(20)  NOT NULL DEFAULT 'ADMIN',
+    created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uq_admins_login_id ON admins (login_id);
 
 CREATE TABLE deliveries
 (

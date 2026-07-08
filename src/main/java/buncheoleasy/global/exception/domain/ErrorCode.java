@@ -144,6 +144,12 @@ public enum ErrorCode {
   NOTICE_BANNER_INCOMPLETE(
       "INB-006", "배너는 제목과 이미지를 함께 입력해야 합니다.", HttpStatus.BAD_REQUEST),
 
+  /** ADM - 관리자 관련 에러 */
+  // 인증된 토큰이지만 관리자 계정이 (더 이상) 없는 경우. 404 가 아니라 403 인 것은 의도 — 계정 존재 여부를 노출하지 않는다.
+  ADMIN_NOT_FOUND("ADM-001", "관리자 권한이 없습니다.", HttpStatus.FORBIDDEN),
+  // 아이디 없음/비밀번호 불일치를 구분하지 않는다 — 계정 존재 여부 열거(enumeration)를 막기 위함.
+  ADMIN_LOGIN_FAILED("ADM-002", "아이디 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
+
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
 

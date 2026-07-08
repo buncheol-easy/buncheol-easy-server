@@ -109,7 +109,9 @@ public class ParticipationService {
       totalAmount += participation.getTotalAmount();
     }
 
-    // 개최자(MVP 운영자)는 관리 화면으로 직접 확인하므로 참여 발생 시 별도 알림을 보내지 않는다.
+    // 개최자(MVP 운영자)가 입금 기한 내에 확인·입금확인할 수 있도록 커밋 후 운영자 슬랙 채널로 신규 참여를 알린다.
+    eventPublisher.publishEvent(new ParticipationCreatedEvent(participationIds));
+
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
     return new ParticipateResult(participationIds, totalAmount, dueAt, hostAccount);
   }

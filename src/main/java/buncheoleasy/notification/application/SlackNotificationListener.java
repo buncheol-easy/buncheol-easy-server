@@ -2,6 +2,7 @@ package buncheoleasy.notification.application;
 
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.notification.domain.SlackChannel;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -30,7 +31,7 @@ public class SlackNotificationListener {
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
     // 웹훅 미설정 환경(로컬/CI)은 발송하지 않으므로 조립 조회부터 건너뛴다.
-    if (!slackWebhookClient.isEnabled()) {
+    if (!slackWebhookClient.isEnabled(SlackChannel.OPERATION)) {
       return;
     }
     ParticipationBundleView view = assembler.loadByParticipations(event.participationIds());
@@ -55,6 +56,6 @@ public class SlackNotificationListener {
                 view.memberNames().size(),
                 AlimtalkFormats.amount(view.totalAmount()),
                 DUE_AT_FORMAT.format(view.dueAt()));
-    slackWebhookClient.send(message);
+    slackWebhookClient.send(SlackChannel.OPERATION, message);
   }
 }

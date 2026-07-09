@@ -18,6 +18,8 @@ import lombok.NoArgsConstructor;
  *
  * <p>계정 생성은 배포 환경변수 부트스트랩({@code AdminAccountInitializer}) 또는 운영자의 직접 INSERT(BCrypt 해시)로 한다.
  * {@code password} 는 항상 인코딩된 해시만 보관한다 — 원문 인코딩은 애플리케이션 레이어({@code PasswordEncoder})의 책임.
+ * 직접 INSERT 시 해시는 기본 cost(10)로 생성해야 한다 — cost 가 다르면 로그인의 BCrypt 비교 시간이 계정마다 갈라져
+ * {@code AdminAuthService} 의 타이밍 방어(더미 해시 비교)가 약해진다.
  */
 @Entity
 @Table(name = "admins")

@@ -54,10 +54,11 @@ public enum ErrorCode {
       "USR-024", "정산 계좌 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   USER_BANK_ACCOUNT_NOT_REGISTERED("USR-025", "정산 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
   USER_BANK_ACCOUNT_FORMAT_INVALID("USR-026", "정산 계좌번호는 숫자만 입력 가능합니다.", HttpStatus.BAD_REQUEST),
-  // 개최 오픈 전 — 운영이 지정한 계정(can_host)만 분철을 개최할 수 있다.
-  USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
 
   SHIPPING_ADDRESS_ALIAS_TOO_LONG("USR-027", "배송지 별칭은 10자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
+
+  // 개최 오픈 전 — 운영이 지정한 계정(can_host)만 분철을 개최할 수 있다.
+  USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),

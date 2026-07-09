@@ -11,6 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -50,6 +52,18 @@ public class SecurityConfig {
    */
   private static final String[] AUTH_REQUIRED_GET_PATHS = {"/v1/buncheols/me"};
 
+  /**
+   * 관리자(ROLE_ADMIN) 전용 경로. role 은 JWT access token 의 role claim 에서 온다({@code
+   * JwtAuthenticationFilter}). 공지 작성/고정은 기존 경로를 유지한 채 관리자 전용으로 잠근다.
+   *
+   * <p>유저 API 는 authenticated 가 아니라 {@code hasRole("USER")} 로 잠근다 — 관리자 계정(admins)과 유저(users)의 id
+   * 공간이 겹칠 수 있어, 관리자 토큰이 같은 id 의 유저로 위장해 유저 API 를 호출하는 것을 role 로 차단한다.
+   */
+  private static final String[] ADMIN_PATHS = {"/v1/admin/**", "/v1/notices/*/pin"};
+
+  /** 관리자 ID/PW 로그인. ADMIN_PATHS(/v1/admin/**)보다 먼저 permitAll 로 열어야 한다. */
+  private static final String ADMIN_LOGIN_PATH = "/v1/admin/auth/login";
+
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -71,14 +85,20 @@ public class SecurityConfig {
                     .permitAll() // 메서드 무관 공개 (정적 리소스, 외부 콜백 등)
                     .requestMatchers(OAUTH_PATHS)
                     .permitAll() // OAuth2 로그인 진입/콜백 경로
+                    .requestMatchers(HttpMethod.POST, ADMIN_LOGIN_PATH)
+                    .permitAll() // 관리자 ID/PW 로그인 (ADMIN_PATHS 매처보다 먼저)
+                    .requestMatchers(ADMIN_PATHS)
+                    .hasRole("ADMIN") // 관리자 전용 API
+                    .requestMatchers(HttpMethod.POST, "/v1/notices")
+                    .hasRole("ADMIN") // 공지 작성 — 관리자 전용
                     .requestMatchers(HttpMethod.GET, AUTH_REQUIRED_GET_PATHS)
-                    .authenticated() // PUBLIC_GET_PATHS 단일 세그먼트 매처보다 우선 적용
+                    .hasRole("USER") // PUBLIC_GET_PATHS 단일 세그먼트 매처보다 우선 적용
                     .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS)
                     .permitAll() // GET 한정 공개 조회 API (비로그인 둘러보기)
                     .requestMatchers(HttpMethod.OPTIONS, "/**")
                     .permitAll() // OPTIONS 프리플라이트 요청
                     .anyRequest()
-                    .authenticated() // 그 외 모든 요청은 인증 필요
+                    .hasRole("USER") // 그 외 모든 요청은 유저 토큰 필요 (관리자 토큰 불가)
             )
         /** 필터 처리 중 발생한 예외 핸들링 */
         .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
@@ -102,5 +122,11 @@ public class SecurityConfig {
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
     return http.build();
+  }
+
+  /** 관리자 ID/PW 비밀번호 해싱용. */
+  @Bean
+  public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
   }
 }

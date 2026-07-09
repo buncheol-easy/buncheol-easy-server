@@ -17,6 +17,7 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,7 +59,8 @@ class JwtAuthenticationFilterTest {
       request.addHeader("Authorization", "Bearer valid-token");
       MockHttpServletResponse response = new MockHttpServletResponse();
       FilterChain chain = new MockFilterChain();
-      given(jwtTokenProvider.parseUserIdFromAccessToken("valid-token")).willReturn(1L);
+      given(jwtTokenProvider.parseAccessTokenClaims("valid-token"))
+          .willReturn(new AccessTokenClaims(1L, null));
 
       // when
       filter.doFilter(request, response, chain);
@@ -67,7 +69,34 @@ class JwtAuthenticationFilterTest {
       Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
       assertThat(authentication).isNotNull();
       assertThat(authentication.getPrincipal()).isEqualTo(1L);
+      // role claim 없는 유저 토큰은 ROLE_USER — 관리자 토큰과 id 공간이 겹쳐도 권한으로 구분된다.
+      assertThat(authentication.getAuthorities())
+          .extracting(GrantedAuthority::getAuthority)
+          .containsExactly("ROLE_USER");
       assertThat(request.getAttribute(JwtAuthenticationFilter.EXCEPTION_ATTRIBUTE)).isNull();
+    }
+
+    @Test
+    void role_claim이_있으면_ROLE_권한을_부여한다() throws Exception {
+      // given
+      JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider);
+      MockHttpServletRequest request = new MockHttpServletRequest();
+      request.addHeader("Authorization", "Bearer admin-token");
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      FilterChain chain = new MockFilterChain();
+      given(jwtTokenProvider.parseAccessTokenClaims("admin-token"))
+          .willReturn(new AccessTokenClaims(7L, "ADMIN"));
+
+      // when
+      filter.doFilter(request, response, chain);
+
+      // then
+      Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+      assertThat(authentication).isNotNull();
+      assertThat(authentication.getPrincipal()).isEqualTo(7L);
+      assertThat(authentication.getAuthorities())
+          .extracting(GrantedAuthority::getAuthority)
+          .containsExactly("ROLE_ADMIN");
     }
 
     @Test
@@ -118,7 +147,7 @@ class JwtAuthenticationFilterTest {
       request.addHeader("Authorization", "Bearer expired-token");
       MockHttpServletResponse response = new MockHttpServletResponse();
       FilterChain chain = new MockFilterChain();
-      given(jwtTokenProvider.parseUserIdFromAccessToken("expired-token"))
+      given(jwtTokenProvider.parseAccessTokenClaims("expired-token"))
           .willThrow(new BusinessException(ErrorCode.AUTH_EXPIRED_TOKEN));
 
       // when

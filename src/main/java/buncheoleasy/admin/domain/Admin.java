@@ -1,0 +1,64 @@
+package buncheoleasy.admin.domain;
+
+import buncheoleasy.global.domain.TimestampedEntity;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+/**
+ * 관리자 계정. 서비스 유저(users)와 무관한 독립 ID/PW 계정.
+ *
+ * <p>계정 생성은 배포 환경변수 부트스트랩({@code AdminAccountInitializer}) 또는 운영자의 직접 INSERT(BCrypt 해시)로 한다.
+ * {@code password} 는 항상 인코딩된 해시만 보관한다 — 원문 인코딩은 애플리케이션 레이어({@code PasswordEncoder})의 책임.
+ * 직접 INSERT 시 해시는 기본 cost(10)로 생성해야 한다 — cost 가 다르면 로그인의 BCrypt 비교 시간이 계정마다 갈라져
+ * {@code AdminAuthService} 의 타이밍 방어(더미 해시 비교)가 약해진다.
+ */
+@Entity
+@Table(name = "admins")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Admin extends TimestampedEntity {
+
+  private static final int LOGIN_ID_MAX_LENGTH = 50;
+  private static final int PASSWORD_MAX_LENGTH = 100;
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
+
+  @Column(name = "login_id", nullable = false, updatable = false, length = 50, unique = true)
+  private String loginId;
+
+  // BCrypt 해시 (60자). 원문 비밀번호는 절대 저장하지 않는다.
+  @Column(nullable = false, length = 100)
+  private String password;
+
+  public static Admin create(final String loginId, final String encodedPassword) {
+    return new Admin(loginId, encodedPassword);
+  }
+
+  private Admin(final String loginId, final String encodedPassword) {
+    validate(loginId, encodedPassword);
+    this.loginId = loginId;
+    this.password = encodedPassword;
+  }
+
+  private void validate(final String loginId, final String encodedPassword) {
+    if (loginId == null
+        || loginId.isBlank()
+        || loginId.length() > LOGIN_ID_MAX_LENGTH
+        || encodedPassword == null
+        || encodedPassword.isBlank()
+        || encodedPassword.length() > PASSWORD_MAX_LENGTH) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+    }
+  }
+}

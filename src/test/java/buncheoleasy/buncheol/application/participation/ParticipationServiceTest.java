@@ -375,6 +375,7 @@ class ParticipationServiceTest {
     @Test
     void 입금확인에_성공하면_배송_스냅샷을_만들고_입금확인_이벤트를_발행한다() {
       Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
@@ -394,6 +395,28 @@ class ParticipationServiceTest {
       then(deliverySnapshotCreator).should().create(participation);
       then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
+    }
+
+    @Test
+    void 관리자_입금확인은_소유권_검증_없이_수행된다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
+
+      participationService.confirmPaymentByAdmin(PARTICIPATION_ID);
+
+      then(buncheol).should(never()).validateOwner(anyLong());
+      then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      then(deliverySnapshotCreator).should().create(participation);
+      then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
     }
 
     @Test
@@ -420,6 +443,7 @@ class ParticipationServiceTest {
     @Test
     void 입금확인_도메인_전이가_실패하면_예외를_전파한다() {
       Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);

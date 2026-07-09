@@ -28,6 +28,26 @@ CREATE TABLE IF NOT EXISTS users
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- admins 테이블 생성 (관리자 계정 — 서비스 유저와 무관한 독립 ID/PW 계정)
+-- 계정 생성은 배포 환경변수 부트스트랩(AdminAccountInitializer) 또는 운영자의 직접 INSERT(BCrypt 해시)로 한다.
+-- 직접 INSERT 시 해시는 기본 cost(10)로 생성할 것 — cost 가 다르면 로그인 타이밍 방어가 약해진다 (Admin javadoc 참고).
+-- 관리자 access token 은 role claim(ADMIN)으로 유저 토큰과 구분되며, 유저 API 는 hasRole(USER) 라 관리자
+-- 토큰으로 접근할 수 없다 (admin.id 와 users.id 가 겹쳐도 위장 불가).
+CREATE TABLE IF NOT EXISTS admins
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    login_id   VARCHAR(50)  NOT NULL COMMENT '관리자 로그인 ID',
+    password   VARCHAR(100) NOT NULL COMMENT 'BCrypt 해시',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE INDEX uq_admins_login_id (login_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
 -- shipping_addresses 테이블 생성
 CREATE TABLE IF NOT EXISTS shipping_addresses
 (
@@ -211,6 +231,9 @@ CREATE TABLE IF NOT EXISTS participations
     INDEX idx_participations_status_due (status, due_at),
     -- 내 참여 목록(참여자별 최신순)용
     INDEX idx_participations_participant_created (participant_id, created_at DESC),
+    -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요
+    -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 인덱스를 추가하지 않는다).
+    INDEX idx_participations_created (created_at DESC, id DESC),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)

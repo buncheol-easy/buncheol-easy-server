@@ -128,15 +128,28 @@ public class ParticipationService {
    */
   @Transactional
   public void confirmPayment(final Long hostId, final Long participationId) {
-    final Instant now = Instant.now(clock);
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     buncheol.validateOwner(hostId);
 
-    participationDomainService.confirmPayment(participationId, now);
+    doConfirmPayment(participation, buncheol);
+  }
+
+  /** 관리자(운영자)의 입금확인. 개최자 소유권 검증 없이 모든 분철의 참여를 확인할 수 있다는 점만 다르다. */
+  @Transactional
+  public void confirmPaymentByAdmin(final Long participationId) {
+    Participation participation = participationDomainService.getParticipation(participationId);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+
+    doConfirmPayment(participation, buncheol);
+  }
+
+  private void doConfirmPayment(final Participation participation, final Buncheol buncheol) {
+    final Instant now = Instant.now(clock);
+    participationDomainService.confirmPayment(participation.getId(), now);
     // 입금확인 시점에 배송지를 스냅샷으로 확정한다. 배송지는 참여 후 변경 불가(updatable=false)라 참여 시점 값이 그대로 유효하다.
     deliverySnapshotCreator.create(participation);
-    eventPublisher.publishEvent(new PaymentConfirmedEvent(participationId));
+    eventPublisher.publishEvent(new PaymentConfirmedEvent(participation.getId()));
 
     confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
   }

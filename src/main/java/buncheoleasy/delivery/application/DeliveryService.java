@@ -44,6 +44,15 @@ public class DeliveryService {
     eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
   }
 
+  /** 관리자(운영자)의 운송장 등록. 개최자 소유권 검증 없이 모든 배송의 운송장을 등록할 수 있다는 점만 다르다. */
+  @Transactional
+  public void registerTrackingByAdmin(final Long deliveryId, final String trackingNumber) {
+    Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
+
+    delivery.registerTracking(trackingNumber, Instant.now(clock));
+    eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
+  }
+
   @Transactional
   public void confirmReceipt(final Long participantId, final Long deliveryId) {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);

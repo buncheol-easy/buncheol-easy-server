@@ -17,9 +17,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * JWT 발급/파싱. 토큰은 두 종류다 — 유저 토큰(role claim 없음, {@code ROLE_USER})과 관리자 토큰(role claim = AdminRole,
- * {@code ROLE_ADMIN}). 서비스 유저와 관리자 계정(admins)은 id 공간이 분리돼 있어 subject 가 겹칠 수 있으므로, 인가는 반드시 role 로
- * 구분한다 (유저 API 는 hasRole(USER) — 관리자 토큰으로 같은 id 의 유저 위장 불가).
+ * JWT 발급/파싱. 토큰은 두 종류다 — 유저 토큰(role claim 없음, {@code ROLE_USER})과 관리자 토큰(role claim = "ADMIN",
+ * {@code ROLE_ADMIN}). role claim 은 권한 등급이 아니라 토큰 종류 구분자다. 서비스 유저와 관리자 계정(admins)은 id 공간이 분리돼 있어
+ * subject 가 겹칠 수 있으므로, 인가는 반드시 role 로 구분한다 (유저 API 는 hasRole(USER) — 관리자 토큰으로 같은 id 의 유저 위장 불가).
  *
  * <p>관리자 토큰은 refresh 없이 access 단독이다 — refresh 저장소(Redis)가 userId 키라 admin id 와 충돌하고, 관리자 1~2명 규모에서
  * 만료 시 재로그인이 회전 관리보다 단순하기 때문. 대신 수명을 별도 설정(기본 12시간)으로 늘린다.
@@ -28,6 +28,7 @@ import org.springframework.stereotype.Component;
 public class JwtTokenProvider {
 
   private static final String ROLE_CLAIM = "role";
+  private static final String ADMIN_ROLE = "ADMIN";
 
   private final long accessTokenExpirationSeconds;
   private final long refreshTokenExpirationSeconds;
@@ -77,8 +78,8 @@ public class JwtTokenProvider {
   }
 
   /** 관리자 access token 발급 (ID/PW 로그인). role claim 으로 유저 토큰과 구분되며 refresh 는 없다. */
-  public String createAdminAccessToken(final Long adminId, final String role) {
-    return buildAccessToken(adminId, role, adminTokenExpirationSeconds);
+  public String createAdminAccessToken(final Long adminId) {
+    return buildAccessToken(adminId, ADMIN_ROLE, adminTokenExpirationSeconds);
   }
 
   public String createRefreshToken(final Long userId) {

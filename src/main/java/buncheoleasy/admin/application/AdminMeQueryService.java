@@ -8,10 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 관리자 본인 확인. 토큰 claim 은 발급 시점 스냅샷이므로 admins 테이블을 재조회해 확인 시점 기준으로 판정한다 — 계정 삭제 후에도 토큰 수명 동안 게이트를
- * 통과하는 창을 admin 프론트 진입 시점에 한 번 더 좁힌다.
- */
+/** 관리자 본인 확인. admin 프론트가 진입/새로고침 시 로그인 유지 여부를 판정하는 세션 게이트용. */
 @Service
 @RequiredArgsConstructor
 public class AdminMeQueryService {

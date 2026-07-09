@@ -44,15 +44,14 @@ class AdminAuthorizationTest {
   }
 
   private String adminBearer() {
-    return "Bearer " + jwtTokenProvider.createAdminAccessToken(insertAdmin(), "ADMIN");
+    return "Bearer " + jwtTokenProvider.createAdminAccessToken(insertAdmin());
   }
 
   private Long insertAdmin() {
     jdbcTemplate.update(
-        "INSERT INTO admins (login_id, password, role) VALUES (?, ?, ?)",
+        "INSERT INTO admins (login_id, password) VALUES (?, ?)",
         "buncheol-admin",
-        passwordEncoder.encode("admin-password-1234"),
-        "ADMIN");
+        passwordEncoder.encode("admin-password-1234"));
     return jdbcTemplate.queryForObject(
         "SELECT id FROM admins WHERE login_id = ?", Long.class, "buncheol-admin");
   }

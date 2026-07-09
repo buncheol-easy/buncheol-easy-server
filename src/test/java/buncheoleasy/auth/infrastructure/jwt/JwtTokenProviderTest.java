@@ -66,7 +66,7 @@ class JwtTokenProviderTest {
       JwtTokenProvider provider = createProvider(3600, 604800);
 
       // when
-      String adminToken = provider.createAdminAccessToken(1L, "ADMIN");
+      String adminToken = provider.createAdminAccessToken(1L);
 
       // then
       AccessTokenClaims claims = provider.parseAccessTokenClaims(adminToken);
@@ -92,7 +92,7 @@ class JwtTokenProviderTest {
     void 만료된_관리자_토큰이면_예외가_발생한다() {
       // given
       JwtTokenProvider provider = createProvider(3600, 604800, -1);
-      String expiredAdminToken = provider.createAdminAccessToken(1L, "ADMIN");
+      String expiredAdminToken = provider.createAdminAccessToken(1L);
 
       // when & then
       assertThatThrownBy(() -> provider.parseAccessTokenClaims(expiredAdminToken))

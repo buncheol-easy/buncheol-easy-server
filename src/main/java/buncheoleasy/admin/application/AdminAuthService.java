@@ -48,7 +48,6 @@ public class AdminAuthService {
       throw new BusinessException(ErrorCode.ADMIN_LOGIN_FAILED);
     }
 
-    return new AdminLoginResponse(
-        jwtTokenProvider.createAdminAccessToken(admin.getId(), admin.getRole().name()));
+    return new AdminLoginResponse(jwtTokenProvider.createAdminAccessToken(admin.getId()));
   }
 }

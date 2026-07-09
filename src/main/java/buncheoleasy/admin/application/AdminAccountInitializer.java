@@ -2,7 +2,6 @@ package buncheoleasy.admin.application;
 
 import buncheoleasy.admin.domain.Admin;
 import buncheoleasy.admin.domain.AdminRepository;
-import buncheoleasy.admin.domain.AdminRole;
 import java.nio.charset.StandardCharsets;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -62,8 +61,7 @@ public class AdminAccountInitializer implements ApplicationRunner {
     }
     try {
       adminRepository.save(
-          Admin.create(
-              bootstrapLoginId, passwordEncoder.encode(bootstrapPassword), AdminRole.ADMIN));
+          Admin.create(bootstrapLoginId, passwordEncoder.encode(bootstrapPassword)));
       log.info("부트스트랩 관리자 계정을 생성했습니다. loginId={}", bootstrapLoginId);
     } catch (final DataIntegrityViolationException exception) {
       // 다중 인스턴스 동시 첫 기동 경합 — unique 제약(uq_admins_login_id)이 진짜 가드이므로 위반은 흡수한다.

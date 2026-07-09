@@ -7,7 +7,6 @@ import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.admin.domain.Admin;
 import buncheoleasy.admin.domain.AdminRepository;
-import buncheoleasy.admin.domain.AdminRole;
 import buncheoleasy.admin.dto.response.AdminLoginResponse;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -34,7 +33,7 @@ class AdminAuthServiceTest {
   @Mock private JwtTokenProvider jwtTokenProvider;
 
   private Admin admin(final Long id) {
-    Admin admin = Admin.create("buncheol-admin", "encoded-hash", AdminRole.ADMIN);
+    Admin admin = Admin.create("buncheol-admin", "encoded-hash");
     ReflectionTestUtils.setField(admin, "id", id);
     return admin;
   }
@@ -48,7 +47,7 @@ class AdminAuthServiceTest {
       // given
       given(adminRepository.findByLoginId("buncheol-admin")).willReturn(Optional.of(admin(1L)));
       given(passwordEncoder.matches("raw-password", "encoded-hash")).willReturn(true);
-      given(jwtTokenProvider.createAdminAccessToken(1L, "ADMIN")).willReturn("admin-access-token");
+      given(jwtTokenProvider.createAdminAccessToken(1L)).willReturn("admin-access-token");
 
       // when
       AdminLoginResponse response = adminAuthService.login("buncheol-admin", "raw-password");

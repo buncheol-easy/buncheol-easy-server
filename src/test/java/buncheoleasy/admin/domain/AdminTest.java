@@ -19,17 +19,16 @@ class AdminTest {
   class CreateTest {
 
     @Test
-    void 로그인_ID와_인코딩된_비밀번호와_role_로_관리자를_생성한다() {
-      Admin admin = Admin.create("buncheol-admin", ENCODED_PASSWORD, AdminRole.ADMIN);
+    void 로그인_ID와_인코딩된_비밀번호로_관리자를_생성한다() {
+      Admin admin = Admin.create("buncheol-admin", ENCODED_PASSWORD);
 
       assertThat(admin.getLoginId()).isEqualTo("buncheol-admin");
       assertThat(admin.getPassword()).isEqualTo(ENCODED_PASSWORD);
-      assertThat(admin.getRole()).isEqualTo(AdminRole.ADMIN);
     }
 
     @Test
     void 로그인_ID가_비어있으면_예외가_발생한다() {
-      assertThatThrownBy(() -> Admin.create(" ", ENCODED_PASSWORD, AdminRole.ADMIN))
+      assertThatThrownBy(() -> Admin.create(" ", ENCODED_PASSWORD))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
@@ -37,7 +36,7 @@ class AdminTest {
 
     @Test
     void 로그인_ID가_50자를_넘으면_예외가_발생한다() {
-      assertThatThrownBy(() -> Admin.create("a".repeat(51), ENCODED_PASSWORD, AdminRole.ADMIN))
+      assertThatThrownBy(() -> Admin.create("a".repeat(51), ENCODED_PASSWORD))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
@@ -45,15 +44,7 @@ class AdminTest {
 
     @Test
     void 비밀번호가_비어있으면_예외가_발생한다() {
-      assertThatThrownBy(() -> Admin.create("buncheol-admin", " ", AdminRole.ADMIN))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
-    }
-
-    @Test
-    void role_이_없으면_예외가_발생한다() {
-      assertThatThrownBy(() -> Admin.create("buncheol-admin", ENCODED_PASSWORD, null))
+      assertThatThrownBy(() -> Admin.create("buncheol-admin", " "))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);

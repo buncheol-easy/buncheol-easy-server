@@ -37,7 +37,6 @@ CREATE TABLE IF NOT EXISTS admins
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     login_id   VARCHAR(50)  NOT NULL COMMENT '관리자 로그인 ID',
     password   VARCHAR(100) NOT NULL COMMENT 'BCrypt 해시',
-    role       VARCHAR(20)  NOT NULL DEFAULT 'ADMIN' COMMENT '관리자 권한 등급 (AdminRole enum, 현재 ADMIN 단일)',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

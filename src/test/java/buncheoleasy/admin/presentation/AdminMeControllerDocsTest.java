@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.admin.application.AdminMeQueryService;
-import buncheoleasy.admin.domain.AdminRole;
 import buncheoleasy.admin.dto.response.AdminMeResponse;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -71,8 +70,7 @@ class AdminMeControllerDocsTest {
   @Test
   void 관리자_본인_확인() throws Exception {
     // given
-    given(adminMeQueryService.getMe(anyLong()))
-        .willReturn(new AdminMeResponse("buncheol-admin", AdminRole.ADMIN));
+    given(adminMeQueryService.getMe(anyLong())).willReturn(new AdminMeResponse("buncheol-admin"));
 
     // when & then
     mockMvc
@@ -92,9 +90,7 @@ class AdminMeControllerDocsTest {
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {adminAccessToken}"))
                         .responseSchema(Schema.schema("AdminMeResponse"))
-                        .responseFields(
-                            fieldWithPath("loginId").description("관리자 로그인 ID"),
-                            fieldWithPath("role").description("관리자 권한 등급: ADMIN"))
+                        .responseFields(fieldWithPath("loginId").description("관리자 로그인 ID"))
                         .build())));
   }
 }

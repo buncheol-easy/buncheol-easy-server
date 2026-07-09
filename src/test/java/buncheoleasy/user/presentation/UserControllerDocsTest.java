@@ -91,7 +91,8 @@ class UserControllerDocsTest {
                 "user@example.com",
                 "에이지",
                 "01012345678",
-                new BankAccountInfo("국민", "12345678901234", "채아진")));
+                new BankAccountInfo("국민", "12345678901234", "채아진"),
+                false));
 
     // when & then
     mockMvc
@@ -117,7 +118,9 @@ class UserControllerDocsTest {
                             fieldWithPath("bankAccount").description("정산 계좌 (없으면 null)").optional(),
                             fieldWithPath("bankAccount.bank").description("은행명").optional(),
                             fieldWithPath("bankAccount.account").description("계좌번호").optional(),
-                            fieldWithPath("bankAccount.holder").description("예금주").optional())
+                            fieldWithPath("bankAccount.holder").description("예금주").optional(),
+                            fieldWithPath("canHost")
+                                .description("분철 개최 가능 여부 (개최 오픈 전엔 운영 지정 계정만 true)"))
                         .build())));
   }
 

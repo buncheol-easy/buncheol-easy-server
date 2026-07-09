@@ -80,7 +80,8 @@ public class UserService {
         user.getEmail().value(),
         user.getNickname().value(),
         user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null,
-        toBankAccountInfo(user.getBankAccount()));
+        toBankAccountInfo(user.getBankAccount()),
+        user.isCanHost());
   }
 
   private UserProfileResponse.BankAccountInfo toBankAccountInfo(final BankAccount bankAccount) {

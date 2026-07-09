@@ -5,15 +5,17 @@ public record UserProfileResponse(
     String email,
     String nickname,
     String phoneNumber,
-    BankAccountInfo bankAccount) {
+    BankAccountInfo bankAccount,
+    boolean canHost) {
 
   public static UserProfileResponse of(
       final String provider,
       final String email,
       final String nickname,
       final String phoneNumber,
-      final BankAccountInfo bankAccount) {
-    return new UserProfileResponse(provider, email, nickname, phoneNumber, bankAccount);
+      final BankAccountInfo bankAccount,
+      final boolean canHost) {
+    return new UserProfileResponse(provider, email, nickname, phoneNumber, bankAccount, canHost);
   }
 
   public record BankAccountInfo(String bank, String account, String holder) {}

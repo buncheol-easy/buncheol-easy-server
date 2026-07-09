@@ -69,7 +69,8 @@ class UserControllerTest {
   void 내_프로필_조회가_성공하면_200과_응답본문을_반환한다() throws Exception {
     given(userService.getUserProfile(USER_ID))
         .willReturn(
-            UserProfileResponse.of("KAKAO", "test@example.com", "테스트닉", "01012345678", null));
+            UserProfileResponse.of(
+                "KAKAO", "test@example.com", "테스트닉", "01012345678", null, false));
 
     mockMvc
         .perform(get("/v1/users/me").with(mockAuth()))
@@ -77,7 +78,8 @@ class UserControllerTest {
         .andExpect(jsonPath("$.provider").value("KAKAO"))
         .andExpect(jsonPath("$.email").value("test@example.com"))
         .andExpect(jsonPath("$.nickname").value("테스트닉"))
-        .andExpect(jsonPath("$.phoneNumber").value("01012345678"));
+        .andExpect(jsonPath("$.phoneNumber").value("01012345678"))
+        .andExpect(jsonPath("$.canHost").value(false));
   }
 
   @Test

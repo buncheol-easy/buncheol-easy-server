@@ -234,6 +234,23 @@ class UserServiceTest {
       assertThat(response.nickname()).isEqualTo("테스트닉");
       assertThat(response.phoneNumber()).isEqualTo("01012345678");
       assertThat(response.bankAccount()).isNull();
+      assertThat(response.canHost()).isFalse();
+    }
+
+    @Test
+    void 개최_권한이_부여된_유저는_canHost가_true로_반환된다() {
+      // given
+      Long userId = 1L;
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      user.allowHosting();
+      given(userDomainService.getUser(userId)).willReturn(user);
+
+      // when
+      UserProfileResponse response = userService.getUserProfile(userId);
+
+      // then
+      assertThat(response.canHost()).isTrue();
     }
 
     @Test

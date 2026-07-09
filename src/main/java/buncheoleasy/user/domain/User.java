@@ -53,6 +53,10 @@ public class User extends TimestampedEntity {
   @Column(name = "profile_completed", nullable = false)
   private boolean profileCompleted;
 
+  // 분철 개최 허용 여부. 개최 오픈 전이라 운영이 지정한 계정만 true (부여는 현재 DB 직접 UPDATE).
+  @Column(name = "can_host", nullable = false)
+  private boolean canHost;
+
   // 회원 탈퇴 soft delete 시각. NULL 이면 활성 유저. @SQLRestriction 으로 모든 조회에서 자동 제외.
   @Column(name = "deleted_at")
   private Instant deletedAt;
@@ -69,6 +73,7 @@ public class User extends TimestampedEntity {
     this.email = email;
     this.nickname = nickname;
     this.profileCompleted = false;
+    this.canHost = false;
   }
 
   private static String generateRandomNickname() {
@@ -100,6 +105,16 @@ public class User extends TimestampedEntity {
   public void requireBankAccount() {
     if (this.bankAccount == null) {
       throw new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
+
+  public void allowHosting() {
+    this.canHost = true;
+  }
+
+  public void requireCanHost() {
+    if (!this.canHost) {
+      throw new BusinessException(ErrorCode.USER_CANNOT_HOST);
     }
   }
 

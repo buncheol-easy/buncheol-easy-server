@@ -42,6 +42,9 @@ public class BuncheolService {
   @Transactional
   public void holdBuncheol(
       final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
+    // 개최 오픈 전 — 운영이 지정한 계정(can_host)만 분철을 개최할 수 있다.
+    userDomainService.requireCanHost(hostId);
+
     buncheolImageDomainService.validateImageCount(images.size());
 
     // 정산 계좌가 등록된 호스트만 분철을 개최할 수 있다.

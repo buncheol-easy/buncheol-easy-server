@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS users
     settlement_account  VARCHAR(50)  NULL COMMENT '정산 계좌번호',
     settlement_holder   VARCHAR(50)  NULL COMMENT '정산 예금주',
     profile_completed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '프로필 설정 완료 여부',
+    -- 개최 오픈 전 운영 지정 계정만 true. 부여는 DB 직접 UPDATE. 기존 배포 DB 에는 수동 ALTER 필요
+    -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 컬럼을 추가하지 않는다).
+    can_host            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '분철 개최 허용 여부',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          DATETIME     NULL COMMENT '회원탈퇴 soft delete',

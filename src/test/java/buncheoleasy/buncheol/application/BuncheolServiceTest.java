@@ -253,6 +253,23 @@ class BuncheolServiceTest {
     }
 
     @Test
+    void 개최_권한이_없는_유저면_예외가_발생한다() {
+      // given
+      willThrow(new BusinessException(ErrorCode.USER_CANNOT_HOST))
+          .given(userDomainService)
+          .requireCanHost(HOST_ID);
+
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+    }
+
+    @Test
     void 호스트가_정산_계좌를_등록하지_않았으면_예외가_발생한다() {
       // given
       willThrow(new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED))

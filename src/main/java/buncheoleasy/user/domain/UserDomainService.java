@@ -60,6 +60,10 @@ public class UserDomainService {
     getUser(id).requireBankAccount();
   }
 
+  public void requireCanHost(final Long id) {
+    getUser(id).requireCanHost();
+  }
+
   public boolean isNicknameDuplicate(final String nickname, final Long excludeId) {
     return userRepository.existsByNicknameExcludingId(nickname, excludeId);
   }

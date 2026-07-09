@@ -295,4 +295,29 @@ class UserDomainServiceTest {
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
     }
   }
+
+  @Nested
+  @DisplayName("분철 개최 권한 검증 테스트")
+  class RequireCanHostTest {
+
+    @Test
+    void 개최_권한이_있으면_통과한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.allowHosting();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      userDomainService.requireCanHost(1L);
+    }
+
+    @Test
+    void 개최_권한이_없으면_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireCanHost(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+    }
+  }
 }

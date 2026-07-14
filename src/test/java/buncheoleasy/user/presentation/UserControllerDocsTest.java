@@ -237,7 +237,7 @@ class UserControllerDocsTest {
                         .requestSchema(Schema.schema("BankAccountRequest"))
                         .requestFields(
                             fieldWithPath("bank").description("은행명 (1~50자)"),
-                            fieldWithPath("account").description("계좌번호 (숫자만, 1~50자)"),
+                            fieldWithPath("account").description("계좌번호 (숫자·하이픈, 1~50자)"),
                             fieldWithPath("holder").description("예금주 (1~50자)"))
                         .build())));
   }

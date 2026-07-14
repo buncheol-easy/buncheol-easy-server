@@ -53,7 +53,8 @@ public enum ErrorCode {
   USER_BANK_ACCOUNT_LENGTH_INVALID(
       "USR-024", "정산 계좌 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   USER_BANK_ACCOUNT_NOT_REGISTERED("USR-025", "정산 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
-  USER_BANK_ACCOUNT_FORMAT_INVALID("USR-026", "정산 계좌번호는 숫자만 입력 가능합니다.", HttpStatus.BAD_REQUEST),
+  USER_BANK_ACCOUNT_FORMAT_INVALID(
+      "USR-026", "계좌번호는 숫자와 하이픈(-)만 입력 가능합니다.", HttpStatus.BAD_REQUEST),
 
   SHIPPING_ADDRESS_ALIAS_TOO_LONG("USR-027", "배송지 별칭은 10자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
 

@@ -81,11 +81,10 @@ public class BuncheolDetailQueryService {
 
     List<Participation> activeParticipations =
         participationRepository.findActiveByBuncheolId(buncheolId);
-    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 슬롯별 활성 참여 상태로 판매 상태를 계산한다.
-    Map<Long, ParticipationStatus> activeStatusByMemberId =
+    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 슬롯별 활성 참여로 판매 상태·입금 기한을 계산한다.
+    Map<Long, Participation> activeByMemberId =
         activeParticipations.stream()
-            .collect(
-                Collectors.toMap(Participation::getBuncheolMemberId, Participation::getStatus));
+            .collect(Collectors.toMap(Participation::getBuncheolMemberId, Function.identity()));
     int confirmedCount =
         (int)
             activeParticipations.stream()
@@ -94,7 +93,7 @@ public class BuncheolDetailQueryService {
 
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeStatusByMemberId))
+            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeByMemberId))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -123,22 +122,25 @@ public class BuncheolDetailQueryService {
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
-      final Map<Long, ParticipationStatus> activeStatusByMemberId) {
+      final Map<Long, Participation> activeByMemberId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
+    Participation active = activeByMemberId.get(buncheolMember.getId());
+    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active);
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
         groupMember == null ? null : groupMember.getName(),
         groupMember == null ? null : groupMember.getImage(),
         buncheolMember.getPrice(),
-        toSaleStatus(activeStatusByMemberId.get(buncheolMember.getId())));
+        saleStatus,
+        saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null);
   }
 
-  private BuncheolMemberSaleStatus toSaleStatus(final ParticipationStatus activeStatus) {
-    if (activeStatus == null) {
+  private BuncheolMemberSaleStatus toSaleStatus(final Participation active) {
+    if (active == null) {
       return BuncheolMemberSaleStatus.AVAILABLE;
     }
-    return activeStatus == ParticipationStatus.CONFIRMED
+    return active.getStatus() == ParticipationStatus.CONFIRMED
         ? BuncheolMemberSaleStatus.SOLD
         : BuncheolMemberSaleStatus.AWAITING_PAYMENT;
   }

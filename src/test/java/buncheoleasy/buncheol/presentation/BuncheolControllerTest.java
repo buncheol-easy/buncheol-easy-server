@@ -564,7 +564,8 @@ class BuncheolControllerTest {
               List.of(
                   new BuncheolMemberDetailResponse(
                       101L, 1001L, "민지", "minji.png", 50_000L,
-                      BuncheolMemberSaleStatus.AWAITING_PAYMENT)),
+                      BuncheolMemberSaleStatus.AWAITING_PAYMENT,
+                      Instant.parse("2026-05-20T10:30:00Z"))),
               true,
               new MyParticipationSummaryResponse(
                   1,
@@ -588,6 +589,7 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.members[0].buncheolMemberId").value(101))
           .andExpect(jsonPath("$.members[0].price").value(50000))
           .andExpect(jsonPath("$.members[0].saleStatus").value("AWAITING_PAYMENT"))
+          .andExpect(jsonPath("$.members[0].paymentDueAt").value("2026-05-20T10:30:00Z"))
           .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))

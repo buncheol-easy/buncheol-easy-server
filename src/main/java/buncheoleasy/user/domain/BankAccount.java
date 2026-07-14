@@ -16,7 +16,7 @@ public record BankAccount(
   private static final int BANK_MAX_LENGTH = 50;
   private static final int ACCOUNT_MAX_LENGTH = 50;
   private static final int HOLDER_MAX_LENGTH = 50;
-  private static final Pattern ACCOUNT_PATTERN = Pattern.compile("^\\d+$");
+  private static final Pattern ACCOUNT_PATTERN = Pattern.compile("^\\d+(-\\d+)*$");
 
   public BankAccount {
     validate(bank, account, holder);

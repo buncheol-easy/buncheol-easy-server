@@ -157,7 +157,7 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
                             fieldWithPath("refundAccount").description("분철 취소 시 환불받을 본인 계좌"),
                             fieldWithPath("refundAccount.bank").description("은행명"),
-                            fieldWithPath("refundAccount.account").description("계좌번호 (숫자만)"),
+                            fieldWithPath("refundAccount.account").description("계좌번호 (숫자·하이픈)"),
                             fieldWithPath("refundAccount.holder").description("예금주"))
                         .responseSchema(Schema.schema("ParticipateResponse"))
                         .responseFields(

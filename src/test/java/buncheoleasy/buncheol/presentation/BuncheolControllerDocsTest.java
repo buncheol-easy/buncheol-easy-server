@@ -272,7 +272,15 @@ class BuncheolControllerDocsTest {
     Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
     MyHostedBuncheolResponse response =
         new MyHostedBuncheolResponse(
-            10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);
+            10L,
+            "뉴진스 1집 분철",
+            "뉴진스",
+            BuncheolStatus.RECRUITING,
+            deadline,
+            5,
+            7L,
+            createdAt,
+            "https://cdn.example.com/buncheol-10-thumb.jpg");
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -302,7 +310,10 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("[].memberSlotCount").description("분철에 포함된 멤버 슬롯 수"),
                             fieldWithPath("[].activeParticipationCount")
                                 .description("활성 참여자 수 (AWAITING_PAYMENT/CONFIRMED)"),
-                            fieldWithPath("[].createdAt").description("분철 개최 일시"))
+                            fieldWithPath("[].createdAt").description("분철 개최 일시"),
+                            fieldWithPath("[].thumbnailUrl")
+                                .description("분철 대표 이미지 URL. 이미지가 없으면 null")
+                                .optional())
                         .build())));
   }
 

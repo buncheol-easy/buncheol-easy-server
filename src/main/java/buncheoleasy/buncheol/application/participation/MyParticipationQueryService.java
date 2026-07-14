@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -85,7 +84,7 @@ public class MyParticipationQueryService {
     List<Long> participationIds = participations.stream().map(Participation::getId).toList();
     Map<Long, Delivery> deliveryByParticipationId =
         deliveryRepository.findAllByParticipationIds(participationIds).stream()
-            .collect(Collectors.toMap(Delivery::getParticipationId, Function.identity()));
+            .collect(Collectors.toMap(Delivery::getParticipationId, d -> d));
 
     Map<Long, HostAccountResponse> hostAccountByHostId =
         findHostAccountsForAwaitingPayments(participations, buncheolById);

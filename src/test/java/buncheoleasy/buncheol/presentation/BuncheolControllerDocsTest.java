@@ -28,6 +28,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
@@ -482,9 +483,12 @@ class BuncheolControllerDocsTest {
                 new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
             List.of(
                 new BuncheolMemberDetailResponse(
-                    101L, 1001L, "민지", "https://cdn.example.com/minji.png", 40_000L, false),
+                    101L, 1001L, "민지", "https://cdn.example.com/minji.png", 40_000L,
+                    BuncheolMemberSaleStatus.AWAITING_PAYMENT,
+                    Instant.parse("2026-05-20T10:30:00Z")),
                 new BuncheolMemberDetailResponse(
-                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", 30_000L, true)),
+                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", 30_000L,
+                    BuncheolMemberSaleStatus.AVAILABLE, null)),
             true,
             new MyParticipationSummaryResponse(
                 1,
@@ -515,7 +519,10 @@ class BuncheolControllerDocsTest {
                             - `CANCELLED` 상태 분철도 200 으로 응답하며 `status` 로 구분
                             - `minHeadcount` 는 분철 진행 최소 인원, `confirmedCount` 는 현재 입금확인된 참여자 수
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, 양수)
-                            - 멤버별 `available` 은 현재 참여 가능 여부 (활성 참여가 없으면 true=판매중, 있으면 false=마감)
+                            - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) /
+                              `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료)
+                            - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
+                              내려가며, 이 시각이 지나면 슬롯이 다시 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용
                             - `hostedByMe` 는 호출 유저가 개최자인지 여부 (비로그인 호출이면 항상 false)
                             - 로그인 유저 한정: `myParticipation.participations[]` 는 내 활성 참여 목록 (멤버 슬롯별 1건)
                             - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 멤버 슬롯 수
@@ -545,7 +552,8 @@ class BuncheolControllerDocsTest {
                                   "memberName": "민지",
                                   "memberImage": "https://cdn.example.com/minji.png",
                                   "price": 40000,
-                                  "available": false
+                                  "saleStatus": "AWAITING_PAYMENT",
+                                  "paymentDueAt": "2026-05-20T10:30:00Z"
                                 },
                                 {
                                   "buncheolMemberId": 102,
@@ -553,7 +561,8 @@ class BuncheolControllerDocsTest {
                                   "memberName": "해린",
                                   "memberImage": "https://cdn.example.com/haerin.png",
                                   "price": 30000,
-                                  "available": true
+                                  "saleStatus": "AVAILABLE",
+                                  "paymentDueAt": null
                                 }
                               ],
                               "hostedByMe": true,
@@ -603,8 +612,14 @@ class BuncheolControllerDocsTest {
                                 .optional(),
                             fieldWithPath("members[].price")
                                 .description("호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원)"),
-                            fieldWithPath("members[].available")
-                                .description("현재 참여 가능 여부 (true=판매중 / false=마감)"),
+                            fieldWithPath("members[].saleStatus")
+                                .description(
+                                    "판매 상태 (AVAILABLE=공석 | AWAITING_PAYMENT=입금 확인 대기 중 | SOLD=판매 완료)"),
+                            fieldWithPath("members[].paymentDueAt")
+                                .description(
+                                    "선점한 참여의 입금 기한 (UTC ISO-8601). AWAITING_PAYMENT 일 때만 값이 있고,"
+                                        + " 이 시각이 지나면 슬롯이 다시 공석으로 풀린다")
+                                .optional(),
                             fieldWithPath("hostedByMe")
                                 .description("호출 유저가 개최자인지 여부 (비로그인은 false)"),
                             fieldWithPath("myParticipation")

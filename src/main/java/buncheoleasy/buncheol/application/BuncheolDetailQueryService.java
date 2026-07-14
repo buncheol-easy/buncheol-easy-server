@@ -13,6 +13,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
@@ -26,7 +27,6 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -81,11 +81,10 @@ public class BuncheolDetailQueryService {
 
     List<Participation> activeParticipations =
         participationRepository.findActiveByBuncheolId(buncheolId);
-    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 활성 참여가 존재하는 멤버 슬롯은 '마감'으로 표시한다.
-    Set<Long> takenMemberIds =
+    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 슬롯별 활성 참여로 판매 상태·입금 기한을 계산한다.
+    Map<Long, Participation> activeByMemberId =
         activeParticipations.stream()
-            .map(Participation::getBuncheolMemberId)
-            .collect(Collectors.toSet());
+            .collect(Collectors.toMap(Participation::getBuncheolMemberId, Function.identity()));
     int confirmedCount =
         (int)
             activeParticipations.stream()
@@ -94,7 +93,7 @@ public class BuncheolDetailQueryService {
 
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, takenMemberIds))
+            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeByMemberId))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -123,15 +122,31 @@ public class BuncheolDetailQueryService {
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
-      final Set<Long> takenMemberIds) {
+      final Map<Long, Participation> activeByMemberId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
+    Participation active = activeByMemberId.get(buncheolMember.getId());
+    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active);
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
         groupMember == null ? null : groupMember.getName(),
         groupMember == null ? null : groupMember.getImage(),
         buncheolMember.getPrice(),
-        !takenMemberIds.contains(buncheolMember.getId()));
+        saleStatus,
+        saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null);
+  }
+
+  // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.
+  private BuncheolMemberSaleStatus toSaleStatus(final Participation active) {
+    if (active == null) {
+      return BuncheolMemberSaleStatus.AVAILABLE;
+    }
+    return switch (active.getStatus()) {
+      case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
+      case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
+      // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 두 상태만 온다).
+      case CANCELLED -> BuncheolMemberSaleStatus.AVAILABLE;
+    };
   }
 
   private List<ShippingOptionResponse> toShippingOptions(final ShippingFeePolicy policy) {

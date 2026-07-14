@@ -13,6 +13,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
@@ -26,7 +27,6 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -81,11 +81,11 @@ public class BuncheolDetailQueryService {
 
     List<Participation> activeParticipations =
         participationRepository.findActiveByBuncheolId(buncheolId);
-    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 활성 참여가 존재하는 멤버 슬롯은 '마감'으로 표시한다.
-    Set<Long> takenMemberIds =
+    // 멤버 슬롯당 활성 참여는 최대 1건(선착순)이므로, 슬롯별 활성 참여 상태로 판매 상태를 계산한다.
+    Map<Long, ParticipationStatus> activeStatusByMemberId =
         activeParticipations.stream()
-            .map(Participation::getBuncheolMemberId)
-            .collect(Collectors.toSet());
+            .collect(
+                Collectors.toMap(Participation::getBuncheolMemberId, Participation::getStatus));
     int confirmedCount =
         (int)
             activeParticipations.stream()
@@ -94,7 +94,7 @@ public class BuncheolDetailQueryService {
 
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, takenMemberIds))
+            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeStatusByMemberId))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -123,7 +123,7 @@ public class BuncheolDetailQueryService {
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
-      final Set<Long> takenMemberIds) {
+      final Map<Long, ParticipationStatus> activeStatusByMemberId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
@@ -131,7 +131,16 @@ public class BuncheolDetailQueryService {
         groupMember == null ? null : groupMember.getName(),
         groupMember == null ? null : groupMember.getImage(),
         buncheolMember.getPrice(),
-        !takenMemberIds.contains(buncheolMember.getId()));
+        toSaleStatus(activeStatusByMemberId.get(buncheolMember.getId())));
+  }
+
+  private BuncheolMemberSaleStatus toSaleStatus(final ParticipationStatus activeStatus) {
+    if (activeStatus == null) {
+      return BuncheolMemberSaleStatus.AVAILABLE;
+    }
+    return activeStatus == ParticipationStatus.CONFIRMED
+        ? BuncheolMemberSaleStatus.SOLD
+        : BuncheolMemberSaleStatus.AWAITING_PAYMENT;
   }
 
   private List<ShippingOptionResponse> toShippingOptions(final ShippingFeePolicy policy) {

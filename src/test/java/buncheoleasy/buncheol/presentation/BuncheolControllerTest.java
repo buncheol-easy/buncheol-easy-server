@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
@@ -560,7 +561,10 @@ class BuncheolControllerTest {
               1,
               List.of("https://cdn/img1.jpg"),
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
-              List.of(new BuncheolMemberDetailResponse(101L, 1001L, "민지", "minji.png", 50_000L, false)),
+              List.of(
+                  new BuncheolMemberDetailResponse(
+                      101L, 1001L, "민지", "minji.png", 50_000L,
+                      BuncheolMemberSaleStatus.AWAITING_PAYMENT)),
               true,
               new MyParticipationSummaryResponse(
                   1,
@@ -583,7 +587,7 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.shippingOptions[0].fee").value(3000))
           .andExpect(jsonPath("$.members[0].buncheolMemberId").value(101))
           .andExpect(jsonPath("$.members[0].price").value(50000))
-          .andExpect(jsonPath("$.members[0].available").value(false))
+          .andExpect(jsonPath("$.members[0].saleStatus").value("AWAITING_PAYMENT"))
           .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))

@@ -136,13 +136,17 @@ public class BuncheolDetailQueryService {
         saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null);
   }
 
+  // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.
   private BuncheolMemberSaleStatus toSaleStatus(final Participation active) {
     if (active == null) {
       return BuncheolMemberSaleStatus.AVAILABLE;
     }
-    return active.getStatus() == ParticipationStatus.CONFIRMED
-        ? BuncheolMemberSaleStatus.SOLD
-        : BuncheolMemberSaleStatus.AWAITING_PAYMENT;
+    return switch (active.getStatus()) {
+      case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
+      case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
+      // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 두 상태만 온다).
+      case CANCELLED -> BuncheolMemberSaleStatus.AVAILABLE;
+    };
   }
 
   private List<ShippingOptionResponse> toShippingOptions(final ShippingFeePolicy policy) {

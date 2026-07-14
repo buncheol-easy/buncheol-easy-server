@@ -3,7 +3,6 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -23,8 +22,6 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
-import buncheoleasy.user.domain.shipping.ShippingMethod;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -97,7 +94,7 @@ public class BuncheolDetailQueryService {
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
-        toShippingOptions(buncheol.getShippingFeePolicy());
+        ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy());
     MyParticipationSummaryResponse myParticipation =
         userId == null ? null : toMyParticipation(userId, activeParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
@@ -147,17 +144,6 @@ public class BuncheolDetailQueryService {
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 두 상태만 온다).
       case CANCELLED -> BuncheolMemberSaleStatus.AVAILABLE;
     };
-  }
-
-  private List<ShippingOptionResponse> toShippingOptions(final ShippingFeePolicy policy) {
-    List<ShippingOptionResponse> options = new ArrayList<>(2);
-    if (policy.gs25ShippingFee() != null) {
-      options.add(new ShippingOptionResponse(ShippingMethod.GS25_HALF, policy.gs25ShippingFee()));
-    }
-    if (policy.cuShippingFee() != null) {
-      options.add(new ShippingOptionResponse(ShippingMethod.CU_HALF, policy.cuShippingFee()));
-    }
-    return options;
   }
 
   private MyParticipationSummaryResponse toMyParticipation(

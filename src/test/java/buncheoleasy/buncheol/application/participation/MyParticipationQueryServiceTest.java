@@ -6,6 +6,9 @@ import static org.mockito.BDDMockito.given;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
+import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -13,9 +16,17 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.DeliveryRepository;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserRepository;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -38,8 +49,12 @@ class MyParticipationQueryServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private BuncheolMemberRepository buncheolMemberRepository;
   @Mock private GroupMemberRepository groupMemberRepository;
+  @Mock private BuncheolImageRepository buncheolImageRepository;
+  @Mock private DeliveryRepository deliveryRepository;
+  @Mock private UserRepository userRepository;
 
   private static final Long PARTICIPANT_ID = 100L;
+  private static final Long HOST_ID = 900L;
   private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
   private static final Instant DUE_AT = Instant.parse("2026-05-14T12:30:00Z");
 
@@ -82,6 +97,12 @@ class MyParticipationQueryServiceTest {
       // 참여한 슬롯(102) 의 멤버(1002) 만 조회된다.
       given(groupMemberRepository.findAllByIds(List.of(1002L)))
           .willReturn(List.of(groupMember(1002L, "민지")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
+      given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
+      // 입금확인중 참여가 있으므로 개최자 계좌를 배치 조회한다.
+      given(userRepository.findAllByIds(List.of(HOST_ID)))
+          .willReturn(List.of(host(HOST_ID, "국민", "98765432", "개최자")));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -100,6 +121,42 @@ class MyParticipationQueryServiceTest {
       assertThat(response.buncheolDeadline()).isEqualTo(deadline);
       assertThat(response.dueAt()).isEqualTo(DUE_AT);
       assertThat(response.confirmedAt()).isNull();
+      assertThat(response.thumbnailUrl()).isEqualTo("https://cdn.example.com/10-thumb.jpg");
+      assertThat(response.shippingOptions())
+          .containsExactly(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800));
+      // 입금확인중이므로 개최자 계좌가 노출된다.
+      assertThat(response.hostAccount())
+          .isEqualTo(new HostAccountResponse("국민", "98765432", "개최자"));
+      // 배송 스냅샷은 입금확인 시 생성되므로 아직 null.
+      assertThat(response.delivery()).isNull();
+    }
+
+    @Test
+    void 개최자_계좌가_미등록이면_입금확인중이어도_hostAccount_없이_반환한다() {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Buncheol buncheol = buncheol(10L, "뉴진스 1집 분철", deadline, BuncheolStatus.RECRUITING);
+      Participation participation =
+          participation(
+              500L, 10L, 101L, 53_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(participation));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(groupMemberRepository.findAllByIds(List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
+      // 계좌 미등록 개최자.
+      given(userRepository.findAllByIds(List.of(HOST_ID)))
+          .willReturn(List.of(hostWithoutBankAccount(HOST_ID)));
+
+      List<MyParticipationResponse> result =
+          myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).hostAccount()).isNull();
     }
 
     @Test
@@ -126,6 +183,8 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(buncheolMember(201L, 20L, 2001L)));
       given(groupMemberRepository.findAllByIds(List.of(2001L)))
           .willReturn(List.of(groupMember(2001L, "지수")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L))).willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(600L))).willReturn(List.of());
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -137,6 +196,9 @@ class MyParticipationQueryServiceTest {
           .isEqualTo(ParticipationCancelReason.BUNCHEOL_CANCELLED);
       assertThat(result.get(0).buncheolStatus()).isEqualTo(BuncheolStatus.CANCELLED);
       assertThat(result.get(0).amount()).isEqualTo(33_000L);
+      // 입금확인중이 아니므로 개최자 계좌를 노출하지 않는다.
+      assertThat(result.get(0).hostAccount()).isNull();
+      assertThat(result.get(0).thumbnailUrl()).isNull();
     }
 
     @Test
@@ -173,6 +235,13 @@ class MyParticipationQueryServiceTest {
       // 참여한 슬롯(201, 301) 의 멤버(2001, 3001) 만 조회된다.
       given(groupMemberRepository.findAllByIds(List.of(2001L, 3001L)))
           .willReturn(List.of(groupMember(2001L, "지수"), groupMember(3001L, "제니")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
+      // 확정된 pA 에만 배송 스냅샷이 생성돼 있다.
+      given(deliveryRepository.findAllByParticipationIds(List.of(500L, 600L)))
+          .willReturn(List.of(delivery(900L, 500L, "1234567890", DeliveryStatus.SHIPPING)));
+      given(userRepository.findAllByIds(List.of(HOST_ID)))
+          .willReturn(List.of(host(HOST_ID, "국민", "98765432", "개최자")));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -187,6 +256,10 @@ class MyParticipationQueryServiceTest {
       assertThat(first.participationStatus()).isEqualTo(ParticipationStatus.CONFIRMED);
       assertThat(first.buncheolStatus()).isEqualTo(BuncheolStatus.CONFIRMED);
       assertThat(first.confirmedAt()).isEqualTo(confirmedAt);
+      assertThat(first.delivery().deliveryId()).isEqualTo(900L);
+      assertThat(first.delivery().trackingNumber()).isEqualTo("1234567890");
+      assertThat(first.delivery().status()).isEqualTo(DeliveryStatus.SHIPPING);
+      assertThat(first.hostAccount()).isNull();
 
       MyParticipationResponse second = result.get(1);
       assertThat(second.buncheolTitle()).isEqualTo("분철 B");
@@ -196,16 +269,44 @@ class MyParticipationQueryServiceTest {
       assertThat(second.participationStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(second.buncheolStatus()).isEqualTo(BuncheolStatus.RECRUITING);
       assertThat(second.confirmedAt()).isNull();
+      assertThat(second.hostAccount())
+          .isEqualTo(new HostAccountResponse("국민", "98765432", "개최자"));
+      assertThat(second.delivery()).isNull();
     }
   }
 
   private Buncheol buncheol(Long id, String title, Instant deadline, BuncheolStatus status) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
+    setField(buncheol, "hostId", HOST_ID);
     setField(buncheol, "title", title);
     setField(buncheol, "deadline", deadline);
     setField(buncheol, "status", status);
+    setField(buncheol, "shippingFeePolicy", ShippingFeePolicy.of(1_800, null));
     return buncheol;
+  }
+
+  private User host(Long id, String bank, String account, String holder) {
+    User user = newInstance(User.class);
+    setField(user, "id", id);
+    user.updateBankAccount(bank, account, holder);
+    return user;
+  }
+
+  private User hostWithoutBankAccount(Long id) {
+    User user = newInstance(User.class);
+    setField(user, "id", id);
+    return user;
+  }
+
+  private Delivery delivery(
+      Long id, Long participationId, String trackingNumber, DeliveryStatus status) {
+    Delivery delivery =
+        Delivery.createSnapshot(participationId, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
+    setField(delivery, "id", id);
+    setField(delivery, "trackingNumber", trackingNumber);
+    setField(delivery, "status", status);
+    return delivery;
   }
 
   private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {

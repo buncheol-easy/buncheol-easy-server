@@ -20,11 +20,15 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -225,7 +229,12 @@ class ParticipationControllerTest {
               BuncheolStatus.CONFIRMED,
               deadline,
               dueAt,
-              confirmedAt);
+              confirmedAt,
+              "https://cdn.example.com/buncheols/10/main.jpg",
+              List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
+              null,
+              new MyParticipationDeliveryResponse(
+                  900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING));
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
           .willReturn(List.of(response));
@@ -241,7 +250,15 @@ class ParticipationControllerTest {
           .andExpect(jsonPath("$[0].amount").value(53_000))
           .andExpect(jsonPath("$[0].participationStatus").value("CONFIRMED"))
           .andExpect(jsonPath("$[0].buncheolStatus").value("CONFIRMED"))
-          .andExpect(jsonPath("$[0].confirmedAt").value("2026-06-01T13:00:00Z"));
+          .andExpect(jsonPath("$[0].confirmedAt").value("2026-06-01T13:00:00Z"))
+          .andExpect(
+              jsonPath("$[0].thumbnailUrl").value("https://cdn.example.com/buncheols/10/main.jpg"))
+          .andExpect(jsonPath("$[0].shippingOptions[0].method").value("GS25_HALF"))
+          .andExpect(jsonPath("$[0].shippingOptions[0].fee").value(1_800))
+          .andExpect(jsonPath("$[0].hostAccount").doesNotExist())
+          .andExpect(jsonPath("$[0].delivery.deliveryId").value(900))
+          .andExpect(jsonPath("$[0].delivery.status").value("SHIPPING"))
+          .andExpect(jsonPath("$[0].delivery.trackingNumber").value("1234567890"));
     }
 
     @Test

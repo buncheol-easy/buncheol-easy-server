@@ -2,6 +2,8 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
@@ -24,6 +26,7 @@ public class MyHostedBuncheolQueryService {
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
+  private final BuncheolImageRepository buncheolImageRepository;
 
   @Transactional(readOnly = true)
   public List<MyHostedBuncheolResponse> getMyHostedBuncheols(final Long hostId) {
@@ -50,8 +53,19 @@ public class MyHostedBuncheolQueryService {
         groupRepository.findAllByIds(groupIds).stream()
             .collect(Collectors.toMap(Group::getId, Group::getName));
 
+    Map<Long, String> thumbnailByBuncheolId =
+        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+            .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
+
     return buncheols.stream()
-        .map(b -> toResponse(b, slotCountByBuncheolId, activeCountByBuncheolId, groupNameById))
+        .map(
+            b ->
+                toResponse(
+                    b,
+                    slotCountByBuncheolId,
+                    activeCountByBuncheolId,
+                    groupNameById,
+                    thumbnailByBuncheolId))
         .toList();
   }
 
@@ -59,7 +73,8 @@ public class MyHostedBuncheolQueryService {
       final Buncheol buncheol,
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, Long> activeCountByBuncheolId,
-      final Map<Long, String> groupNameById) {
+      final Map<Long, String> groupNameById,
+      final Map<Long, String> thumbnailByBuncheolId) {
     int slotCount = slotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue();
     long activeCount = activeCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
     return new MyHostedBuncheolResponse(
@@ -70,6 +85,7 @@ public class MyHostedBuncheolQueryService {
         buncheol.getDeadline(),
         slotCount,
         activeCount,
-        buncheol.getCreatedAt());
+        buncheol.getCreatedAt(),
+        thumbnailByBuncheolId.get(buncheol.getId()));
   }
 }

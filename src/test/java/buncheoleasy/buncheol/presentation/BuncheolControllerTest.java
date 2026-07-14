@@ -515,7 +515,15 @@ class BuncheolControllerTest {
       Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
       MyHostedBuncheolResponse response =
           new MyHostedBuncheolResponse(
-              10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);
+              10L,
+              "뉴진스 1집 분철",
+              "뉴진스",
+              BuncheolStatus.RECRUITING,
+              deadline,
+              5,
+              7L,
+              createdAt,
+              "https://cdn.example.com/buncheol-10-thumb.jpg");
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -527,7 +535,10 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$[0].groupName").value("뉴진스"))
           .andExpect(jsonPath("$[0].status").value("RECRUITING"))
           .andExpect(jsonPath("$[0].memberSlotCount").value(5))
-          .andExpect(jsonPath("$[0].activeParticipationCount").value(7));
+          .andExpect(jsonPath("$[0].activeParticipationCount").value(7))
+          .andExpect(
+              jsonPath("$[0].thumbnailUrl")
+                  .value("https://cdn.example.com/buncheol-10-thumb.jpg"));
     }
 
     @Test

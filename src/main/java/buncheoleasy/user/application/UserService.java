@@ -48,7 +48,8 @@ public class UserService {
   }
 
   public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
-    userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
+    userDomainService.updateProfile(
+        userId, request.nickname(), request.phoneNumber(), request.marketingAgreed());
   }
 
   public ProfileStatusResponse getProfileStatus(final Long userId) {

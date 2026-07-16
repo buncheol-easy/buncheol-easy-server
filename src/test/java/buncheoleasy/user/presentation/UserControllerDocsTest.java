@@ -193,7 +193,9 @@ class UserControllerDocsTest {
                 .header("Authorization", "Bearer {accessToken}")
                 .with(mockAuth())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01098765432\"}"))
+                .content(
+                    "{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01098765432\","
+                        + "\"marketingAgreed\":true}"))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -209,7 +211,10 @@ class UserControllerDocsTest {
                         .requestFields(
                             fieldWithPath("nickname").description("닉네임 (1~20자, 한글/영문/숫자)"),
                             fieldWithPath("phoneNumber")
-                                .description("휴대폰 번호 (01x로 시작하는 10~11자리 숫자)"))
+                                .description("휴대폰 번호 (01x로 시작하는 10~11자리 숫자)"),
+                            fieldWithPath("marketingAgreed")
+                                .optional()
+                                .description("마케팅 정보 수신 동의 여부 (생략하면 기존 동의 상태 유지)"))
                         .build())));
   }
 

@@ -28,6 +28,7 @@ CREATE TABLE users
     settlement_holder   VARCHAR(50)  NULL,
     profile_completed   BOOLEAN      NOT NULL DEFAULT FALSE,
     can_host            BOOLEAN      NOT NULL DEFAULT FALSE,
+    marketing_agreed_at TIMESTAMP    NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP    NULL,

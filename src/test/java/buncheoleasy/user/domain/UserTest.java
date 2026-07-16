@@ -392,4 +392,58 @@ class UserTest {
       assertThatCode(user::requireCanHost).doesNotThrowAnyException();
     }
   }
+
+  @Nested
+  @DisplayName("마케팅 수신 동의 테스트")
+  class MarketingAgreementTest {
+
+    private static final Instant AGREED_AT = Instant.parse("2026-07-16T12:00:00Z");
+
+    @Test
+    void 신규_유저는_마케팅_미동의_상태다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      assertThat(user.getMarketingAgreedAt()).isNull();
+    }
+
+    @Test
+    void 동의하면_동의_일시가_기록된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      user.updateMarketingAgreement(true, AGREED_AT);
+
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(AGREED_AT);
+    }
+
+    @Test
+    void 동의_상태에서_다시_동의해도_최초_동의_일시가_보존된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateMarketingAgreement(true, AGREED_AT);
+
+      user.updateMarketingAgreement(true, AGREED_AT.plusSeconds(3600));
+
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(AGREED_AT);
+    }
+
+    @Test
+    void 철회하면_동의_일시가_제거된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateMarketingAgreement(true, AGREED_AT);
+
+      user.updateMarketingAgreement(false, AGREED_AT.plusSeconds(3600));
+
+      assertThat(user.getMarketingAgreedAt()).isNull();
+    }
+
+    @Test
+    void 철회_후_다시_동의하면_새_동의_일시가_기록된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateMarketingAgreement(true, AGREED_AT);
+      user.updateMarketingAgreement(false, AGREED_AT.plusSeconds(3600));
+
+      user.updateMarketingAgreement(true, AGREED_AT.plusSeconds(7200));
+
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(AGREED_AT.plusSeconds(7200));
+    }
+  }
 }

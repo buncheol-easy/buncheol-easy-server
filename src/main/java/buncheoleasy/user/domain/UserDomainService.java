@@ -38,7 +38,11 @@ public class UserDomainService {
   }
 
   @Transactional
-  public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
+  public void updateProfile(
+      final Long id,
+      final String nickname,
+      final String phoneNumber,
+      final Boolean marketingAgreed) {
     User user = getUser(id);
 
     if (userRepository.existsByNicknameExcludingId(nickname, id)) {
@@ -47,6 +51,10 @@ public class UserDomainService {
 
     user.updateNickname(nickname);
     user.updatePhoneNumber(phoneNumber);
+    // null 이면 동의 상태를 건드리지 않는다 (동의 필드 없이 프로필만 수정하는 기존 호출 호환).
+    if (marketingAgreed != null) {
+      user.updateMarketingAgreement(marketingAgreed, Instant.now(clock));
+    }
   }
 
   @Transactional

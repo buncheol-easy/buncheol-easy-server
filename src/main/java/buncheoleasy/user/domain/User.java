@@ -57,6 +57,11 @@ public class User extends TimestampedEntity {
   @Column(name = "can_host", nullable = false)
   private boolean canHost;
 
+  // 마케팅 정보 수신 동의 일시. NULL 이면 미동의(또는 철회).
+  // 광고성 정보 수신동의는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장한다.
+  @Column(name = "marketing_agreed_at")
+  private Instant marketingAgreedAt;
+
   // 회원 탈퇴 soft delete 시각. NULL 이면 활성 유저. @SQLRestriction 으로 모든 조회에서 자동 제외.
   @Column(name = "deleted_at")
   private Instant deletedAt;
@@ -100,6 +105,14 @@ public class User extends TimestampedEntity {
 
   public void updateBankAccount(final String bank, final String account, final String holder) {
     this.bankAccount = BankAccount.of(bank, account, holder);
+  }
+
+  // 같은 상태 재요청은 no-op 으로 두어 최초 동의 일시를 보존한다.
+  public void updateMarketingAgreement(final boolean agreed, final Instant now) {
+    if (agreed == (this.marketingAgreedAt != null)) {
+      return;
+    }
+    this.marketingAgreedAt = agreed ? now : null;
   }
 
   public void requireBankAccount() {

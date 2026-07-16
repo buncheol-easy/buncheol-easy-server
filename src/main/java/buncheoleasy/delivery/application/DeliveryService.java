@@ -66,4 +66,12 @@ public class DeliveryService {
 
     delivery.confirmReceipt(Instant.now(clock));
   }
+
+  /** 관리자(운영자)의 수령완료 처리. 참여자 본인 검증 없이 모든 배송을 수령완료로 전이할 수 있다는 점만 다르다. */
+  @Transactional
+  public void confirmReceiptByAdmin(final Long deliveryId) {
+    Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
+
+    delivery.confirmReceipt(Instant.now(clock));
+  }
 }

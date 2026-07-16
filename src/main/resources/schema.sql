@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS users
     -- 개최 오픈 전 운영 지정 계정만 true. 부여는 DB 직접 UPDATE. 기존 배포 DB 에는 수동 ALTER 필요
     -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 컬럼을 추가하지 않는다).
     can_host            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '분철 개최 허용 여부',
+    -- NULL = 미동의/철회. 광고성 정보는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장.
+    -- 기존 배포 DB 에는 수동 ALTER 필요.
+    marketing_agreed_at DATETIME     NULL COMMENT '마케팅 정보 수신 동의 일시',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          DATETIME     NULL COMMENT '회원탈퇴 soft delete',

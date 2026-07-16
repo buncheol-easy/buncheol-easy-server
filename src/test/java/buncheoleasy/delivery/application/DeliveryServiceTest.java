@@ -136,6 +136,36 @@ class DeliveryServiceTest {
     }
 
     @Test
+    void 관리자는_참여자_검증_없이_수령완료로_전이한다() {
+      // given
+      Delivery delivery = createSnapshotDelivery();
+      delivery.registerTracking("TRACK123", Instant.now(clock));
+
+      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
+
+      // when
+      deliveryService.confirmReceiptByAdmin(DELIVERY_ID);
+
+      // then
+      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+      assertThat(delivery.getReceivedAt()).isNotNull();
+    }
+
+    @Test
+    void 관리자여도_운송장_등록_전이면_예외가_발생한다() {
+      // given
+      Delivery delivery = createSnapshotDelivery();
+
+      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
+
+      // when & then
+      assertThatThrownBy(() -> deliveryService.confirmReceiptByAdmin(DELIVERY_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+    }
+
+    @Test
     void 참여자_본인이_아니면_예외가_발생한다() {
       // given
       Delivery delivery = createSnapshotDelivery();

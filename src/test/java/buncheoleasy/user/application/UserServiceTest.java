@@ -111,13 +111,14 @@ class UserServiceTest {
     void 프로필을_정상적으로_업데이트한다() {
       // given
       Long userId = 1L;
-      UpdateUserProfileRequest request = new UpdateUserProfileRequest("새닉네임", "01012345678");
+      UpdateUserProfileRequest request =
+          new UpdateUserProfileRequest("새닉네임", "01012345678", true);
 
       // when
       userService.updateProfile(userId, request);
 
       // then
-      then(userDomainService).should().updateProfile(userId, "새닉네임", "01012345678");
+      then(userDomainService).should().updateProfile(userId, "새닉네임", "01012345678", true);
     }
   }
 

@@ -9,6 +9,7 @@ import static org.springframework.restdocs.headers.HeaderDocumentation.headerWit
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.admin.application.AdminDeliveryCommandService;
@@ -95,6 +96,50 @@ class AdminDeliveryControllerDocsTest {
                         .responseSchema(Schema.schema("AdminBulkResultResponse"))
                         .responseFields(
                             fieldWithPath("succeededIds").description("등록에 성공한 배송 ID 목록"),
+                            fieldWithPath("failures[].id").description("실패한 배송 ID"),
+                            fieldWithPath("failures[].code").description("실패 사유 에러 코드"),
+                            fieldWithPath("failures[].message").description("실패 사유 메시지"))
+                        .build())));
+  }
+
+  @Test
+  void 관리자_수령완료_벌크_처리() throws Exception {
+    // given
+    given(adminDeliveryCommandService.confirmReceipts(anyList()))
+        .willReturn(
+            new AdminBulkResultResponse(
+                List.of(7L, 8L),
+                List.of(
+                    new AdminBulkResultResponse.Failure(
+                        9L, "DLV-007", "현재 배송 상태에서는 해당 작업을 수행할 수 없습니다."))));
+
+    // when & then
+    mockMvc
+        .perform(
+            post("/v1/admin/deliveries/receipt")
+                .header("Authorization", "Bearer {accessToken}")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"deliveryIds\": [7, 8, 9]}"))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "admin-deliveries-receipt",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Admin")
+                        .summary("관리자 수령완료 벌크 처리")
+                        .description(
+                            """
+                            여러 배송 건을 한 번에 수령완료(RECEIVED) 상태로 전이한다 (ROLE_ADMIN 전용).
+                            참여자 본인 검증 없이 전체 배송에 적용되며, 건별 독립 처리라 일부 실패가 나머지 성공을 되돌리지 않는다.
+                            운송장 등록 전(SNAPSHOTTED) 배송 건은 실패 항목으로 돌아온다.""")
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestSchema(Schema.schema("AdminReceiptConfirmRequest"))
+                        .requestFields(fieldWithPath("deliveryIds").description("수령완료로 전이할 배송 ID 목록"))
+                        .responseSchema(Schema.schema("AdminBulkResultResponse"))
+                        .responseFields(
+                            fieldWithPath("succeededIds").description("전이에 성공한 배송 ID 목록"),
                             fieldWithPath("failures[].id").description("실패한 배송 ID"),
                             fieldWithPath("failures[].code").description("실패 사유 에러 코드"),
                             fieldWithPath("failures[].message").description("실패 사유 메시지"))

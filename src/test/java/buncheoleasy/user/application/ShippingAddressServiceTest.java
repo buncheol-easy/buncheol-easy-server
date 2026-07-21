@@ -53,12 +53,12 @@ class ShippingAddressServiceTest {
       Long userId = 1L;
       ShippingAddressRequest request =
           new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", "회사 근처", true);
-      given(userDomainService.isValidUser(userId)).willReturn(true);
 
       // when
       shippingAddressService.registerShippingAddress(userId, request);
 
       // then
+      then(userDomainService).should().requireProfileCompleted(userId);
       then(shippingAddressDomainService)
           .should()
           .createShippingAddress(userId, "GS25_HALF", "GS25 강남역점", "회사 근처", true);
@@ -70,13 +70,34 @@ class ShippingAddressServiceTest {
       Long userId = 1L;
       ShippingAddressRequest request =
           new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", null, false);
-      given(userDomainService.isValidUser(userId)).willReturn(false);
+      willThrow(new BusinessException(ErrorCode.USER_NOT_FOUND))
+          .given(userDomainService)
+          .requireProfileCompleted(userId);
 
       // when & then
       assertThatThrownBy(() -> shippingAddressService.registerShippingAddress(userId, request))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+      then(shippingAddressDomainService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 프로필_미완료_유저면_예외가_발생하고_등록하지_않는다() {
+      // given
+      Long userId = 1L;
+      ShippingAddressRequest request =
+          new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", null, false);
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(userId);
+
+      // when & then
+      assertThatThrownBy(() -> shippingAddressService.registerShippingAddress(userId, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
 
       then(shippingAddressDomainService).shouldHaveNoInteractions();
     }

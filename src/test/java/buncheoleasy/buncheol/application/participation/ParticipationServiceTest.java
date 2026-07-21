@@ -139,6 +139,8 @@ class ParticipationServiceTest {
       assertThat(result.dueAt()).isEqualTo(expectedDueAt);
       assertThat(result.hostAccount()).isEqualTo(HOST_ACCOUNT);
 
+      // 가드 호출이 실수로 제거되는 회귀를 잡는다.
+      then(userDomainService).should().requireProfileCompleted(PARTICIPANT_ID);
       then(buncheol).should().validateRecruiting(NOW);
       then(participationDomainService)
           .should()
@@ -294,6 +296,23 @@ class ParticipationServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    @Test
+    void 프로필_미완료_유저가_참여하면_예외가_발생한다() {
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(PARTICIPANT_ID);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
 
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }

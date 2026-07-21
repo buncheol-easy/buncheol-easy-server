@@ -68,6 +68,10 @@ public class UserDomainService {
     getUser(id).requireBankAccount();
   }
 
+  public void requireProfileCompleted(final Long id) {
+    getUser(id).requireProfileCompleted();
+  }
+
   public void requireCanHost(final Long id) {
     getUser(id).requireCanHost();
   }

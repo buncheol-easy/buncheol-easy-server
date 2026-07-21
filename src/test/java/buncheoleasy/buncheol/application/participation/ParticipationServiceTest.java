@@ -139,6 +139,8 @@ class ParticipationServiceTest {
       assertThat(result.dueAt()).isEqualTo(expectedDueAt);
       assertThat(result.hostAccount()).isEqualTo(HOST_ACCOUNT);
 
+      // 가드 호출이 실수로 제거되는 회귀를 잡는다.
+      then(userDomainService).should().requireProfileCompleted(PARTICIPANT_ID);
       then(buncheol).should().validateRecruiting(NOW);
       then(participationDomainService)
           .should()

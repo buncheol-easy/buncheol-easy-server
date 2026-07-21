@@ -22,6 +22,8 @@ public class ShippingAddressService {
 
   public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
     // 가입 미완료 유저의 배송지 등록 차단 (내부 getUser 가 USER_NOT_FOUND 검증도 겸한다).
+    // 등록만 강화하고 수정/삭제/조회는 validateUser 를 유지한다 — profileCompleted 는 비가역
+    // true 전이라 미완료 유저는 배송지를 만들 수 없고, 따라서 수정/삭제할 대상도 없다.
     userDomainService.requireProfileCompleted(userId);
     shippingAddressDomainService.createShippingAddress(
         userId,

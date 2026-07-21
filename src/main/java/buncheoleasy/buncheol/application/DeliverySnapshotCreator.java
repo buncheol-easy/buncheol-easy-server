@@ -30,6 +30,10 @@ public class DeliverySnapshotCreator {
     ShippingAddress shippingAddress =
         shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
     User user = userDomainService.getUser(participation.getParticipantId());
+    // 참여 진입 가드 도입 전에 생성된 가입 미완료(Guest) 참여가 입금확인되면 아래 phoneNumber
+    // 접근에서 NPE(500)가 난다. 명시적 403 으로 바꿔 레거시 데이터의 잔여 위험을 닫는다.
+    // (profileCompleted 는 첫 전화번호 등록 시 true 로만 전이하므로 통과 = phoneNumber 존재 보장)
+    user.requireProfileCompleted();
 
     Delivery delivery =
         Delivery.createSnapshot(

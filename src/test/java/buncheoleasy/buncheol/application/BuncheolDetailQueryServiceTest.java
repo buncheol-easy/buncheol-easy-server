@@ -115,6 +115,26 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
+    void 비로그인_호출이면_선점된_슬롯도_participatedByMe_는_false() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(
+              List.of(active(501L, 101L, OTHER_USER, ParticipationStatus.AWAITING_PAYMENT)));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AWAITING_PAYMENT);
+      assertThat(response.members().get(0).participatedByMe()).isFalse();
+    }
+
+    @Test
     void 호스트_본인이_조회하면_hostedByMe_가_true() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
@@ -165,6 +185,8 @@ class BuncheolDetailQueryServiceTest {
       assertThat(response.members().get(0).saleStatus())
           .isEqualTo(BuncheolMemberSaleStatus.AWAITING_PAYMENT);
       assertThat(response.members().get(0).paymentDueAt()).isEqualTo(PAYMENT_DUE_AT);
+      // 다른 유저의 선점이므로 내 참여 아님.
+      assertThat(response.members().get(0).participatedByMe()).isFalse();
     }
 
     @Test
@@ -201,11 +223,16 @@ class BuncheolDetailQueryServiceTest {
               BuncheolMemberDetailResponse::memberName,
               BuncheolMemberDetailResponse::price,
               BuncheolMemberDetailResponse::saleStatus,
-              BuncheolMemberDetailResponse::paymentDueAt)
+              BuncheolMemberDetailResponse::paymentDueAt,
+              BuncheolMemberDetailResponse::participatedByMe)
           .containsExactly(
-              tuple(101L, "민지", 40_000L, BuncheolMemberSaleStatus.AWAITING_PAYMENT, PAYMENT_DUE_AT),
-              tuple(102L, "해린", 30_000L, BuncheolMemberSaleStatus.SOLD, null),
-              tuple(103L, "혜인", 20_000L, BuncheolMemberSaleStatus.AWAITING_PAYMENT, PAYMENT_DUE_AT));
+              tuple(
+                  101L, "민지", 40_000L, BuncheolMemberSaleStatus.AWAITING_PAYMENT, PAYMENT_DUE_AT,
+                  true),
+              tuple(102L, "해린", 30_000L, BuncheolMemberSaleStatus.SOLD, null, true),
+              tuple(
+                  103L, "혜인", 20_000L, BuncheolMemberSaleStatus.AWAITING_PAYMENT, PAYMENT_DUE_AT,
+                  false));
 
       assertThat(response.myParticipation().participatedMemberCount()).isEqualTo(2);
       assertThat(response.myParticipation().participations())

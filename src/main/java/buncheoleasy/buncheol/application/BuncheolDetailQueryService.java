@@ -90,7 +90,7 @@ public class BuncheolDetailQueryService {
 
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeByMemberId))
+            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeByMemberId, userId))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -119,7 +119,8 @@ public class BuncheolDetailQueryService {
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
-      final Map<Long, Participation> activeByMemberId) {
+      final Map<Long, Participation> activeByMemberId,
+      final Long userId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     Participation active = activeByMemberId.get(buncheolMember.getId());
     BuncheolMemberSaleStatus saleStatus = toSaleStatus(active);
@@ -130,7 +131,11 @@ public class BuncheolDetailQueryService {
         groupMember == null ? null : groupMember.getImage(),
         buncheolMember.getPrice(),
         saleStatus,
-        saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null);
+        saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null,
+        // AVAILABLE(공석) 슬롯은 점유 참여가 없으므로 항상 false — saleStatus 와의 불변식을 코드로 보장한다.
+        saleStatus != BuncheolMemberSaleStatus.AVAILABLE
+            && userId != null
+            && userId.equals(active.getParticipantId()));
   }
 
   // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.

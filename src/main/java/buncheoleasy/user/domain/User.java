@@ -121,6 +121,12 @@ public class User extends TimestampedEntity {
     }
   }
 
+  public void requireProfileCompleted() {
+    if (!this.profileCompleted) {
+      throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+  }
+
   public void allowHosting() {
     this.canHost = true;
   }

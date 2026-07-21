@@ -21,7 +21,8 @@ public class ShippingAddressService {
   private final ParticipationDomainService participationDomainService;
 
   public void registerShippingAddress(final Long userId, final ShippingAddressRequest request) {
-    validateUser(userId);
+    // 가입 미완료 유저의 배송지 등록 차단 (내부 getUser 가 USER_NOT_FOUND 검증도 겸한다).
+    userDomainService.requireProfileCompleted(userId);
     shippingAddressDomainService.createShippingAddress(
         userId,
         request.shippingMethod(),

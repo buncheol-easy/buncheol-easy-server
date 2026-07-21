@@ -61,6 +61,9 @@ public class ParticipationService {
       final Long buncheolId, final Long participantId, final ParticipateRequest request) {
     final Instant now = Instant.now(clock);
 
+    // 가입 미완료(전화번호 미등록) 유저 차단. 배송 스냅샷이 phoneNumber 를 요구하므로 참여 진입 자체를 막는다.
+    userDomainService.requireProfileCompleted(participantId);
+
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateRecruiting(now);
     if (buncheol.isHost(participantId)) {

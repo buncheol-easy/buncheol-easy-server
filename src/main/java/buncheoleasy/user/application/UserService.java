@@ -71,10 +71,7 @@ public class UserService {
 
   public UserProfileResponse getUserProfile(final Long userId) {
     User user = userDomainService.getUser(userId);
-
-    if (!user.isProfileCompleted()) {
-      throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
-    }
+    user.requireProfileCompleted();
 
     return UserProfileResponse.of(
         user.getSocialInfo().provider().name(),

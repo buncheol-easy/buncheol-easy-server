@@ -62,6 +62,8 @@ public class ParticipationService {
     }
 
     // DTO(@NotNull) 검증과 별개로 서비스에서도 방어 검증한다 — 참여 1건 = 멤버 슬롯 1개(단일 선택 정책).
+    // HTTP 경로에서는 @NotNull 이 먼저 걸러 C-001 로 응답하므로 이 분기는 도달하지 않는다.
+    // 컨트롤러를 거치지 않는 직접 호출(배치·테스트 등)을 막는 최후 가드로만 동작한다.
     if (request.buncheolMemberId() == null) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }

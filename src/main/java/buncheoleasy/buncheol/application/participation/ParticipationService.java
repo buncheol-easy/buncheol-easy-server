@@ -8,7 +8,6 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -18,9 +17,6 @@ import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -45,16 +41,11 @@ public class ParticipationService {
   private final Clock clock;
 
   /**
-   * 분철 참여(멤버 슬롯 선착순 점유). 한 요청으로 여러 멤버 슬롯을 동시에 점유할 수 있다. 점유에 성공하면 개최자 계좌가 노출되고 입금 만료
+   * 분철 참여(멤버 슬롯 선착순 점유). 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이며, 점유에 성공하면 개최자 계좌가 노출되고 입금 만료
    * 타이머(min(now+30분, deadline))가 시작된다. 참여와 동시에 환불 계좌를 입력받는다.
    *
-   * <p>각 참여는 멤버 금액(amount)과 배송비(shippingFee)를 분리 저장한다. 배송비는 묶음당 1회만 부과하므로 첫 슬롯에만 얹고 나머지는 0 이며, 응답
-   * 총액(= 각 참여 getTotalAmount 의 합)에는 배송비가 한 번만 포함된다. 슬롯 중 하나라도 점유에 실패하면(이미 점유됨/모집 마감) 트랜잭션 전체가 롤백돼 전부
-   * 성공하거나 전부 실패한다.
-   *
-   * <p>주의: "첫 슬롯에만 배송비" 모델은 묶음 단위 입금/취소(현재 MVP: 분철 전체 취소만 존재)를 전제로 한다. 슬롯 단위 부분 취소·부분 환불이 도입되면 배송비가
-   * 붙은 슬롯만 취소될 때 환불 금액이 왜곡될 수 있으므로, 그 시점엔 배송비 귀속 규칙을 재검토해야 한다. 서로 다른 참여 호출은 각각 배송비를 부과하며, 합산 환불은
-   * 별도 문의 통로로 수동 처리한다.
+   * <p>참여는 멤버 금액(amount)과 배송비(shippingFee)를 분리 저장하며, 참여 1건이 곧 이체 1건이므로 배송비는 참여마다 부과된다. 여러 멤버를 원하는
+   * 참여자는 참여를 여러 번 반복한다 — 배송비도 각각 부과되며, 중복 배송비 보정(합산 환불)은 초기 운영에선 개최자가 수동 처리한다.
    */
   @Transactional
   public ParticipateResult participate(
@@ -70,59 +61,41 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }
 
-    List<Long> memberIds = request.buncheolMemberIds();
-    validateNoDuplicateMembers(memberIds);
-    // 멤버 슬롯 INSERT 는 슬롯별 유니크 인덱스(uq_participations_active_member)에 X-lock 을 잡는다. 동시 요청이
-    // 서로 다른 순서로 같은 슬롯들을 점유하면 InnoDB 데드락이 날 수 있으므로, 정렬해 잠금 획득 순서를 항상 오름차순으로 고정한다.
-    List<Long> orderedMemberIds = memberIds.stream().sorted().toList();
-    List<BuncheolMember> members =
-        orderedMemberIds.stream()
-            .map(memberId -> buncheolMemberDomainService.getBuncheolMember(memberId, buncheolId))
-            .toList();
+    // DTO(@NotNull) 검증과 별개로 서비스에서도 방어 검증한다 — 참여 1건 = 멤버 슬롯 1개(단일 선택 정책).
+    if (request.buncheolMemberId() == null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+    }
+    BuncheolMember member =
+        buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheolId);
 
     ShippingAddress shippingAddress =
         participationShippingAddressResolver.resolve(
             participantId, buncheol, request.shippingAddressId());
     long shippingFee = buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
     Instant dueAt = paymentDueAt(now, buncheol.getDeadline());
-    RefundAccount refundAccount = request.toRefundAccount();
 
-    List<Long> participationIds = new ArrayList<>(members.size());
-    long totalAmount = 0;
-    for (int i = 0; i < members.size(); i++) {
-      BuncheolMember member = members.get(i);
-      // 멤버 금액과 배송비를 분리 저장한다. 배송비는 첫 슬롯에만 1회 부과하고 나머지는 0.
-      long slotShippingFee = (i == 0) ? shippingFee : 0L;
-      Participation participation =
-          Participation.create(
-              buncheolId,
-              member.getId(),
-              participantId,
-              shippingAddress.getId(),
-              member.getPrice(),
-              slotShippingFee,
-              refundAccount,
-              dueAt);
-      // 저장 시점에도 분철이 모집중인지 원자적으로 재확인(없으면 false → 전체 롤백). 멤버 슬롯이 이미 점유됐으면 DuplicateKey →
-      // PARTICIPATION_ALREADY_EXISTS 로 전체 롤백.
-      if (!participationDomainService.createParticipationIfRecruiting(participation)) {
-        throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-      }
-      participationIds.add(participation.getId());
-      totalAmount += participation.getTotalAmount();
+    Participation participation =
+        Participation.create(
+            buncheolId,
+            member.getId(),
+            participantId,
+            shippingAddress.getId(),
+            member.getPrice(),
+            shippingFee,
+            request.toRefundAccount(),
+            dueAt);
+    // 저장 시점에도 분철이 모집중인지 원자적으로 재확인(없으면 false → 롤백). 멤버 슬롯이 이미 점유됐으면 DuplicateKey →
+    // PARTICIPATION_ALREADY_EXISTS 로 롤백.
+    if (!participationDomainService.createParticipationIfRecruiting(participation)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
     // 개최자(MVP 운영자)가 입금 기한 내에 확인·입금확인할 수 있도록 커밋 후 운영자 슬랙 채널로 신규 참여를 알린다.
-    eventPublisher.publishEvent(new ParticipationCreatedEvent(participationIds));
+    eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId()));
 
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
-    return new ParticipateResult(participationIds, totalAmount, dueAt, hostAccount);
-  }
-
-  private void validateNoDuplicateMembers(final List<Long> memberIds) {
-    if (Set.copyOf(memberIds).size() != memberIds.size()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_DUPLICATE_MEMBER);
-    }
+    return new ParticipateResult(
+        participation.getId(), participation.getTotalAmount(), dueAt, hostAccount);
   }
 
   /**

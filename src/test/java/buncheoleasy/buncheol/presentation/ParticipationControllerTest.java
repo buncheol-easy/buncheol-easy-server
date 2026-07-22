@@ -87,7 +87,7 @@ class ParticipationControllerTest {
   private static final String VALID_REQUEST_BODY =
       """
       {
-        "buncheolMemberIds": [10, 11],
+        "buncheolMemberId": 10,
         "shippingAddressId": 200,
         "refundAccount": {
           "bank": "국민은행",
@@ -106,10 +106,7 @@ class ParticipationControllerTest {
       Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
       ParticipateResult result =
           new ParticipateResult(
-              List.of(PARTICIPATION_ID, 51L),
-              93_000L,
-              dueAt,
-              BankAccount.of("국민은행", "98765432", "개최자"));
+              PARTICIPATION_ID, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
 
       given(
               participationService.participate(
@@ -123,12 +120,37 @@ class ParticipationControllerTest {
                   .content(VALID_REQUEST_BODY)
                   .with(mockAuth()))
           .andExpect(status().isCreated())
-          .andExpect(jsonPath("$.participationIds[0]").value(PARTICIPATION_ID))
-          .andExpect(jsonPath("$.participationIds[1]").value(51))
-          .andExpect(jsonPath("$.amount").value(93_000))
+          .andExpect(jsonPath("$.participationId").value(PARTICIPATION_ID))
+          .andExpect(jsonPath("$.amount").value(53_000))
           .andExpect(jsonPath("$.hostAccount.bank").value("국민은행"))
           .andExpect(jsonPath("$.hostAccount.account").value("98765432"))
           .andExpect(jsonPath("$.hostAccount.holder").value("개최자"));
+    }
+
+    @Test
+    void 멤버_슬롯을_지정하지_않으면_400을_반환한다() throws Exception {
+      // 참여 1건 = 멤버 슬롯 1개(단일 선택 정책). buncheolMemberId 는 @NotNull 검증에서 걸러진다.
+      String missingMemberJson =
+          """
+          {
+            "shippingAddressId": 200,
+            "refundAccount": {
+              "bank": "국민은행",
+              "account": "12345678",
+              "holder": "홍길동"
+            }
+          }
+          """;
+
+      mockMvc
+          .perform(
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(missingMemberJson)
+                  .with(mockAuth()))
+          .andExpect(status().isBadRequest());
+
+      then(participationService).shouldHaveNoInteractions();
     }
 
     @Test
@@ -193,7 +215,7 @@ class ParticipationControllerTest {
       String invalidJson =
           """
           {
-            "buncheolMemberIds": []
+            "buncheolMemberId": 10
           }
           """;
 
@@ -224,6 +246,7 @@ class ParticipationControllerTest {
               5,
               "민지",
               53_000L,
+              3_000L,
               ParticipationStatus.CONFIRMED,
               null,
               BuncheolStatus.CONFIRMED,
@@ -248,6 +271,7 @@ class ParticipationControllerTest {
           .andExpect(jsonPath("$[0].buncheolMemberCount").value(5))
           .andExpect(jsonPath("$[0].memberName").value("민지"))
           .andExpect(jsonPath("$[0].amount").value(53_000))
+          .andExpect(jsonPath("$[0].shippingFee").value(3_000))
           .andExpect(jsonPath("$[0].participationStatus").value("CONFIRMED"))
           .andExpect(jsonPath("$[0].buncheolStatus").value("CONFIRMED"))
           .andExpect(jsonPath("$[0].confirmedAt").value("2026-06-01T13:00:00Z"))

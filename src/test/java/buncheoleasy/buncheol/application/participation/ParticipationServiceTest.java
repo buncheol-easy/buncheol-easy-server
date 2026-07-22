@@ -9,7 +9,6 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
@@ -34,7 +33,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collections;
-import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -78,12 +76,8 @@ class ParticipationServiceTest {
   @Captor private ArgumentCaptor<Participation> participationCaptor;
 
   private ParticipateRequest participateRequest() {
-    return participateRequest(BUNCHEOL_MEMBER_ID);
-  }
-
-  private ParticipateRequest participateRequest(final Long... buncheolMemberIds) {
     return new ParticipateRequest(
-        List.of(buncheolMemberIds),
+        BUNCHEOL_MEMBER_ID,
         SHIPPING_ADDRESS_ID,
         new RefundAccountRequest("국민", "12345678", "홍길동"));
   }
@@ -125,7 +119,13 @@ class ParticipationServiceTest {
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
           .willReturn(shippingAddress());
-      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(true);
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                // 저장 성공 시 영속화로 id 가 채워지는 것을 흉내낸다.
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
       User host = mock(User.class);
       given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
       given(userDomainService.getUser(HOST_ID)).willReturn(host);
@@ -159,54 +159,27 @@ class ParticipationServiceTest {
     }
 
     @Test
-    void 여러_멤버를_한_번에_점유하면_배송비는_1회만_부과되고_각_참여가_생성된다() {
-      Long secondMemberId = 102L;
-      long secondPrice = 40_000L;
-      Instant deadline = NOW.plus(Duration.ofDays(7));
+    void 멤버_지정이_없으면_저장하지_않고_예외가_발생한다() {
+      // DTO @NotNull 검증과 별개로 서비스 방어 검증을 확인한다.
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
-      given(buncheol.getDeadline()).willReturn(deadline);
-      given(buncheol.getHostId()).willReturn(HOST_ID);
-      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
-          .willReturn(buncheolMember());
-      given(buncheolMemberDomainService.getBuncheolMember(secondMemberId, BUNCHEOL_ID))
-          .willReturn(buncheolMember(secondMemberId, secondPrice));
-      given(
-              participationShippingAddressResolver.resolve(
-                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
-          .willReturn(shippingAddress());
-      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(true);
-      User host = mock(User.class);
-      given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
-      given(userDomainService.getUser(HOST_ID)).willReturn(host);
 
-      // 데드락 예방을 위해 슬롯 점유는 멤버 ID 오름차순으로 고정된다 — 요청을 역순(102, 101)으로 넣어도 101 부터 INSERT 된다.
-      ParticipateResult result =
-          participationService.participate(
-              BUNCHEOL_ID, PARTICIPANT_ID, participateRequest(secondMemberId, BUNCHEOL_MEMBER_ID));
+      ParticipateRequest emptyRequest =
+          new ParticipateRequest(
+              null, SHIPPING_ADDRESS_ID, new RefundAccountRequest("국민", "12345678", "홍길동"));
 
-      // 총액 = 두 멤버 금액 합 + 배송비 1회.
-      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + secondPrice + SHIPPING_FEE);
+      assertThatThrownBy(
+              () -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, emptyRequest))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
 
-      then(participationDomainService)
-          .should(times(2))
-          .createParticipationIfRecruiting(participationCaptor.capture());
-      List<Participation> saved = participationCaptor.getAllValues();
-      // 멤버 ID 오름차순(101→102)으로 처리되고, 멤버 금액(amount)은 각 슬롯의 굿즈 가격,
-      // 배송비(shippingFee)는 첫 슬롯(가장 작은 ID)에만 얹힌다.
-      assertThat(saved.get(0).getBuncheolMemberId()).isEqualTo(BUNCHEOL_MEMBER_ID);
-      assertThat(saved.get(0).getAmount()).isEqualTo(MEMBER_PRICE);
-      assertThat(saved.get(0).getShippingFee()).isEqualTo(SHIPPING_FEE);
-      assertThat(saved.get(1).getBuncheolMemberId()).isEqualTo(secondMemberId);
-      assertThat(saved.get(1).getAmount()).isEqualTo(secondPrice);
-      assertThat(saved.get(1).getShippingFee()).isZero();
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
     @Test
-    void 묶음_중_한_슬롯이라도_점유에_실패하면_예외가_발생한다() {
-      Long secondMemberId = 102L;
+    void 슬롯_점유에_실패하면_예외가_발생한다() {
       Instant deadline = NOW.plus(Duration.ofDays(7));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -215,47 +188,23 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
-      given(buncheolMemberDomainService.getBuncheolMember(secondMemberId, BUNCHEOL_ID))
-          .willReturn(buncheolMember(secondMemberId, 40_000L));
       given(
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
           .willReturn(shippingAddress());
-      // 첫 슬롯은 성공, 둘째 슬롯은 모집 마감 → 전체 트랜잭션 롤백 의도.
-      given(participationDomainService.createParticipationIfRecruiting(any()))
-          .willReturn(true, false);
+      // 저장 시점 재확인에서 모집중이 아니면 false → 롤백 의도.
+      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(false);
 
       assertThatThrownBy(
               () ->
                   participationService.participate(
-                      BUNCHEOL_ID,
-                      PARTICIPANT_ID,
-                      participateRequest(BUNCHEOL_MEMBER_ID, secondMemberId)))
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
-      // 호스트 계좌 조회까지 가지 않고 둘째 슬롯에서 끊긴다.
+      // 호스트 계좌 조회까지 가지 않는다.
       then(userDomainService).should(never()).getUser(anyLong());
-    }
-
-    @Test
-    void 같은_멤버를_중복으로_선택하면_저장하지_않고_예외가_발생한다() {
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
-
-      assertThatThrownBy(
-              () ->
-                  participationService.participate(
-                      BUNCHEOL_ID,
-                      PARTICIPANT_ID,
-                      participateRequest(BUNCHEOL_MEMBER_ID, BUNCHEOL_MEMBER_ID)))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_DUPLICATE_MEMBER);
-
-      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
     @Test
@@ -273,7 +222,13 @@ class ParticipationServiceTest {
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
           .willReturn(shippingAddress());
-      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(true);
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                // 저장 성공 시 영속화로 id 가 채워지는 것을 흉내낸다.
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
       User host = mock(User.class);
       given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
       given(userDomainService.getUser(HOST_ID)).willReturn(host);

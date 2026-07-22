@@ -60,7 +60,8 @@ public class Participation extends TimestampedEntity {
   @Column(nullable = false, updatable = false)
   private long amount;
 
-  // 선택한 배송수단의 배송비. 한 번에 여러 슬롯을 점유한 묶음에서는 첫 슬롯에만 부과되고(>0) 나머지는 0 이다 — 배송비는 묶음당 1회만 받기 때문.
+  // 선택한 배송수단의 배송비. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)라 참여마다 부과된다.
+  // 단, 다중 선택 시절 생성된 기존 행은 묶음 첫 슬롯에만 부과되고(>0) 나머지는 0 일 수 있다.
   // 실제 입금 총액은 amount + shippingFee 다(getTotalAmount).
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;

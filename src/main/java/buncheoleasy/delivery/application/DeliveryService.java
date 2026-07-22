@@ -2,6 +2,7 @@ package buncheoleasy.delivery.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.Delivery;
@@ -31,10 +32,9 @@ public class DeliveryService {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
 
     // 참여 → 분철 → 개최자 검증
-    Participation participation =
-        participationDomainService.getParticipation(delivery.getParticipationId());
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    Buncheol buncheol = getBuncheolOf(delivery);
     buncheol.validateOwner(hostId);
+    validateBuncheolConfirmed(buncheol);
 
     // delivery status 는 호스트/운영자만 전이시킨다. 동시 등록이 겹쳐도 양쪽 모두 SHIPPING 으로
     // 수렴(번호만 last-write-wins)해 상태머신이 깨지지 않으므로 CAS 없이 더티체킹으로 커밋한다.
@@ -49,8 +49,26 @@ public class DeliveryService {
   public void registerTrackingByAdmin(final Long deliveryId, final String trackingNumber) {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
 
+    validateBuncheolConfirmed(getBuncheolOf(delivery));
+
     delivery.registerTracking(trackingNumber, Instant.now(clock));
     eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
+  }
+
+  private Buncheol getBuncheolOf(final Delivery delivery) {
+    Participation participation =
+        participationDomainService.getParticipation(delivery.getParticipationId());
+    return buncheolDomainService.getBuncheol(participation.getBuncheolId());
+  }
+
+  // 운송장 등록(발송 시작)은 분철 진행확정(CONFIRMED) 후에만 허용한다. 모집중 발송을 허용하면 마감 시점 최소 인원
+  // 미달로 분철이 취소될 때 이미 발송된 물건과 환불·배송 스냅샷 정리(취소 cascade)가 모순되기 때문이다. 관리자 경로도
+  // 동일하게 막아 "모집중엔 배송중 참여가 없다"는 불변식을 보장한다. CONFIRMED 는 이후 RECRUITING 으로 되돌아가지
+  // 않으므로 check-then-act 갭이 없다.
+  private void validateBuncheolConfirmed(final Buncheol buncheol) {
+    if (buncheol.getStatus() != BuncheolStatus.CONFIRMED) {
+      throw new BusinessException(ErrorCode.DELIVERY_BUNCHEOL_NOT_CONFIRMED);
+    }
   }
 
   @Transactional

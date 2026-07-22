@@ -20,6 +20,7 @@ import buncheoleasy.admin.domain.payment.AdminPaymentStatus;
 import buncheoleasy.admin.dto.response.AdminBulkResultResponse;
 import buncheoleasy.admin.dto.response.AdminPaymentRecordResponse;
 import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
+import buncheoleasy.admin.dto.response.AdminRequestedShippingAddressResponse;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -97,6 +98,7 @@ class AdminPaymentControllerDocsTest {
                 "01012345678",
                 "TRACK-1234",
                 DeliveryStatus.SHIPPING),
+            new AdminRequestedShippingAddressResponse("GS25_HALF", "역삼점"),
             10L,
             "아이브 포카 분철",
             BuncheolStatus.CONFIRMED,
@@ -185,6 +187,16 @@ class AdminPaymentControllerDocsTest {
                             fieldWithPath("items[].delivery.status")
                                 .description(
                                     "배송 상태: SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED"),
+                            fieldWithPath("items[].requestedShippingAddress")
+                                .description(
+                                    "결제 요청 배송지 — 참여가 선택한 배송지의 현재 원본. 입금확인 전에도 확인용으로 내려가며, 배송지 미지정(레거시 행)이거나 원본 삭제(종료된 참여 한정) 시 null")
+                                .optional(),
+                            fieldWithPath("items[].requestedShippingAddress.shippingMethod")
+                                .description("배송방법 (GS25_HALF | CU_HALF)")
+                                .optional(),
+                            fieldWithPath("items[].requestedShippingAddress.storeName")
+                                .description("편의점 지점명")
+                                .optional(),
                             fieldWithPath("items[].buncheolId").description("분철 ID"),
                             fieldWithPath("items[].buncheolTitle").description("분철 제목"),
                             fieldWithPath("items[].buncheolStatus")

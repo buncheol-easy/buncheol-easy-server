@@ -13,6 +13,7 @@ import buncheoleasy.global.page.Cursor;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -67,7 +68,7 @@ public class JpaAdminPaymentQueryRepositoryAdapter implements AdminPaymentQueryR
         toLong(row[5]));
   }
 
-  // SELECT 절 순서(p, b, g, u, gm, d)와 일치해야 한다.
+  // SELECT 절 순서(p, b, g, u, gm, d, sa)와 일치해야 한다.
   private static AdminPaymentView toView(final Object[] row) {
     return new AdminPaymentView(
         (Participation) row[0],
@@ -75,7 +76,8 @@ public class JpaAdminPaymentQueryRepositoryAdapter implements AdminPaymentQueryR
         (Group) row[2],
         (User) row[3],
         (GroupMember) row[4],
-        (Delivery) row[5]);
+        (Delivery) row[5],
+        (ShippingAddress) row[6]);
   }
 
   private static long toLong(final Object value) {

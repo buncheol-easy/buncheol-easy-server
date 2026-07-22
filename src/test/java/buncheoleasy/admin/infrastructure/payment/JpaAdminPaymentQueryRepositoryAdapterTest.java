@@ -14,6 +14,7 @@ import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.query.LikeEscaper;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
@@ -178,6 +179,37 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       assertThat(view.participant().getNickname().value()).isEqualTo("Guestadminbuyer");
       assertThat(view.participation().getTotalAmount()).isEqualTo(13000);
       assertThat(view.delivery()).isNull();
+      // 픽스처가 배송지를 지정하지 않았으므로 LEFT JOIN 으로 행이 보존되고 배송지는 null 이다.
+      assertThat(view.shippingAddress()).isNull();
+    }
+
+    @Test
+    void 참여가_선택한_배송지를_함께_반환한다() {
+      // 입금확인 전(배송 스냅샷 없음)에도 운영자가 "결제 요청 배송지" 를 확인할 수 있어야 한다.
+      Long buncheolId = insertBuncheol("결제요청배송지 분철");
+      Long slotId = insertSlot(buncheolId, groupMemberId);
+      jdbcTemplate.update(
+          "INSERT INTO shipping_addresses (user_id, shipping_method, store_name) VALUES (?, ?, ?)",
+          participantId,
+          "GS25_HALF",
+          "결제요청지점");
+      Long addressId =
+          jdbcTemplate.queryForObject("SELECT MAX(id) FROM shipping_addresses", Long.class);
+      Long participationId =
+          insertParticipation(
+              buncheolId, slotId, participantId, 10000, 0, "AWAITING_PAYMENT", null, BASE_TIME);
+      jdbcTemplate.update(
+          "UPDATE participations SET shipping_address_id = ? WHERE id = ?",
+          addressId,
+          participationId);
+      em.clear();
+
+      AdminPaymentView view = findAll().getFirst();
+
+      assertThat(view.delivery()).isNull();
+      assertThat(view.shippingAddress()).isNotNull();
+      assertThat(view.shippingAddress().getStoreName()).isEqualTo("결제요청지점");
+      assertThat(view.shippingAddress().getShippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
     }
 
     @Test

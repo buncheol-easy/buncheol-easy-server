@@ -69,7 +69,7 @@ class AdminPaymentQueryServiceTest {
     ReflectionTestUtils.setField(buncheol, "id", buncheolId);
 
     return new AdminPaymentView(
-        participation, buncheol, new Group(1L, "그룹", null), null, null, null);
+        participation, buncheol, new Group(1L, "그룹", null), null, null, null, null);
   }
 
   @Nested

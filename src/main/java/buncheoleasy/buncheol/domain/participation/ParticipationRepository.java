@@ -23,6 +23,12 @@ public interface ParticipationRepository {
   boolean existsActiveByParticipantId(Long participantId);
 
   /**
+   * 해당 분철에 참여자의 활성({@link ParticipationStatus#active()}) 참여가 있는지 (분철당 중복 참여 가드용). 취소·만료된 참여는
+   * 재참여를 막지 않는다.
+   */
+  boolean existsActiveByBuncheolIdAndParticipantId(Long buncheolId, Long participantId);
+
+  /**
    * 해당 배송지를 참조하는 활성({@link ParticipationStatus#active()}) 참여가 있는지 (배송지 삭제 가드용). 종료된 참여는 FK ON
    * DELETE SET NULL 로 정리되므로 삭제를 막지 않는다.
    */

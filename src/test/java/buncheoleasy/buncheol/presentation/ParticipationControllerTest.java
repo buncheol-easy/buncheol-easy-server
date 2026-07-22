@@ -192,6 +192,26 @@ class ParticipationControllerTest {
     }
 
     @Test
+    void 같은_분철에_이미_참여_중이면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL))
+          .given(participationService)
+          .participate(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
+
+      mockMvc
+          .perform(
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(VALID_REQUEST_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(
+                          ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL.getCode())));
+    }
+
+    @Test
     void 이미_활성_참여가_있으면_409를_반환한다() throws Exception {
       willThrow(new BusinessException(ErrorCode.PARTICIPATION_ALREADY_EXISTS))
           .given(participationService)

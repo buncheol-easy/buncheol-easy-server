@@ -159,6 +159,28 @@ class ParticipationServiceTest {
     }
 
     @Test
+    void 같은_분철에_이미_활성_참여가_있으면_저장하지_않고_예외가_발생한다() {
+      // 오픈 이벤트 운영 정책: 분철당 참여 1건(멤버 1명). 취소·만료된 참여는 재참여를 막지 않는다(mock 기본 false).
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(
+              participationDomainService.hasActiveParticipationInBuncheol(
+                  BUNCHEOL_ID, PARTICIPANT_ID))
+          .willReturn(true);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    @Test
     void 멤버_지정이_없으면_저장하지_않고_예외가_발생한다() {
       // DTO @NotNull 검증과 별개로 서비스 방어 검증을 확인한다.
       Buncheol buncheol = mock(Buncheol.class);

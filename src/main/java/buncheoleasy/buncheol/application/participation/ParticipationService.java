@@ -44,8 +44,8 @@ public class ParticipationService {
    * 분철 참여(멤버 슬롯 선착순 점유). 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이며, 점유에 성공하면 개최자 계좌가 노출되고 입금 만료
    * 타이머(min(now+30분, deadline))가 시작된다. 참여와 동시에 환불 계좌를 입력받는다.
    *
-   * <p>참여는 멤버 금액(amount)과 배송비(shippingFee)를 분리 저장하며, 참여 1건이 곧 이체 1건이므로 배송비는 참여마다 부과된다. 여러 멤버를 원하는
-   * 참여자는 참여를 여러 번 반복한다 — 배송비도 각각 부과되며, 중복 배송비 보정(합산 환불)은 초기 운영에선 개최자가 수동 처리한다.
+   * <p>참여는 멤버 금액(amount)과 배송비(shippingFee)를 분리 저장하며, 참여 1건이 곧 이체 1건이므로 배송비는 참여마다 부과된다. 오픈 이벤트 운영
+   * 정책으로 분철당 활성 참여는 1건(멤버 1명)만 허용하고, 취소·만료된 참여만 같은 분철에 다시 참여할 수 있다.
    */
   @Transactional
   public ParticipateResult participate(
@@ -59,6 +59,13 @@ public class ParticipationService {
     buncheol.validateRecruiting(now);
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
+    }
+
+    // 오픈 이벤트 운영 정책: 분철당 참여 1건(멤버 1명). 활성(입금확인중·확정) 참여가 있으면 중복 참여를 막고,
+    // 취소·만료된 참여는 재참여를 허용한다. 이 사전 체크의 check-then-insert 갭(동시 이중 요청)은
+    // uq_participations_active_participant 유니크가 최종 차단한다.
+    if (participationDomainService.hasActiveParticipationInBuncheol(buncheolId, participantId)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
     }
 
     // DTO(@NotNull) 검증과 별개로 서비스에서도 방어 검증한다 — 참여 1건 = 멤버 슬롯 1개(단일 선택 정책).

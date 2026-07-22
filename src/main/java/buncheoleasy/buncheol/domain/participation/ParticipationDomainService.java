@@ -43,6 +43,12 @@ public class ParticipationDomainService {
     return participationRepository.existsActiveByParticipantId(participantId);
   }
 
+  /** 해당 분철에 참여자의 활성 참여가 있는지 (분철당 중복 참여 가드용). 취소·만료된 참여는 재참여를 막지 않는다. */
+  public boolean hasActiveParticipationInBuncheol(final Long buncheolId, final Long participantId) {
+    return participationRepository.existsActiveByBuncheolIdAndParticipantId(
+        buncheolId, participantId);
+  }
+
   /** 해당 배송지를 참조하는 활성 참여가 있는지 (배송지 삭제 가드용). */
   public boolean hasActiveParticipationByShippingAddress(final Long shippingAddressId) {
     return participationRepository.existsActiveByShippingAddressId(shippingAddressId);

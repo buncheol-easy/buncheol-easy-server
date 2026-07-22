@@ -95,6 +95,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
               },
               keyHolder);
     } catch (DuplicateKeyException ex) {
+      // 어느 유니크 제약에 걸렸는지 인덱스명으로 구분한다 (서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단).
+      if (isViolationOf(ex, "uq_participations_active_participant")) {
+        // 같은 분철에 참여자의 활성 참여가 이미 존재(분철당 중복 참여 금지).
+        throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
+      }
       // 멤버 슬롯에 이미 활성 참여가 존재(선착순 마감). uq_participations_active_member 위반.
       throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_EXISTS);
     }
@@ -106,6 +111,14 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       ReflectionUtils.setField(ID_FIELD, participation, generatedKey.longValue());
     }
     return true;
+  }
+
+  // MySQL·H2 모두 유니크 위반 메시지에 인덱스명이 포함된다 (H2 는 대문자로 노출될 수 있어 대소문자 무시 비교).
+  // saveIfRecruiting 은 운영(MySQL) 전용 raw SQL 이라 H2 통합 테스트로 못 태우므로, 메시지 형식 매칭은
+  // 단위 테스트에서 직접 검증할 수 있게 package-private 로 열어 둔다.
+  static boolean isViolationOf(final DuplicateKeyException ex, final String indexName) {
+    String message = String.valueOf(ex.getMessage());
+    return message.toLowerCase().contains(indexName.toLowerCase());
   }
 
   @Override
@@ -122,6 +135,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public boolean existsActiveByParticipantId(final Long participantId) {
     return jpaParticipationRepository.existsByParticipantIdAndStatusIn(
         participantId, ParticipationStatus.active());
+  }
+
+  @Override
+  public boolean existsActiveByBuncheolIdAndParticipantId(
+      final Long buncheolId, final Long participantId) {
+    return jpaParticipationRepository.existsByBuncheolIdAndParticipantIdAndStatusIn(
+        buncheolId, participantId, ParticipationStatus.active());
   }
 
   @Override

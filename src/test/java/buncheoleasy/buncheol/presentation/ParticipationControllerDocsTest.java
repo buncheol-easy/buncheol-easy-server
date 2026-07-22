@@ -136,12 +136,14 @@ class ParticipationControllerDocsTest {
                         .summary("분철 참여 신청")
                         .description(
                             """
-                            멤버 슬롯을 선착순으로 점유한다. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이므로
-                            `buncheolMemberId` 로 슬롯 하나를 지정하며, 여러 멤버를 원하면 참여를 여러 번
-                            반복한다(배송비도 참여마다 부과). 점유에 성공하면 입금확인중(AWAITING_PAYMENT) 상태로
-                            등록되고, 응답으로 생성된 참여 ID(`participationId`)·개최자 계좌·입금 총액·입금 만료
-                            시각(`dueAt`)을 받는다. `amount` 는 (멤버 가격 + 배송비)다. 참여와 동시에 분철 취소 시
-                            환불받을 본인 계좌(`refundAccount`)를 입력한다.
+                            멤버 슬롯을 선착순으로 점유한다. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이고,
+                            오픈 이벤트 운영 정책으로 **분철당 참여는 1회(멤버 1명)로 제한**된다 — 같은 분철에
+                            활성(입금확인중·확정) 참여가 있으면 중복 참여가 거부되며, 취소·만료된 참여는 재참여할 수
+                            있다. `buncheolMemberId` 로 슬롯 하나를 지정하고, 점유에 성공하면
+                            입금확인중(AWAITING_PAYMENT) 상태로 등록되며 응답으로 생성된 참여
+                            ID(`participationId`)·개최자 계좌·입금 총액·입금 만료 시각(`dueAt`)을 받는다.
+                            `amount` 는 (멤버 가격 + 배송비)다. 참여와 동시에 분철 취소 시 환불받을 본인
+                            계좌(`refundAccount`)를 입력한다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
@@ -149,6 +151,7 @@ class ParticipationControllerDocsTest {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님 |
                             | 403 | `BCH-065` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
+                            | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |
                             """)
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))

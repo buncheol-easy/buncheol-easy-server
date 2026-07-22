@@ -46,6 +46,10 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
 
   private Long hostId;
   private Long participantId;
+  // 분철당 활성 참여는 참여자별 1건(uq_participations_active_participant)이라, 같은 분철에
+  // 활성 참여를 여러 건 깔아야 하는 픽스처는 유저를 나눠 쓴다.
+  private Long secondParticipantId;
+  private Long thirdParticipantId;
   private Long groupId;
   private Long groupMemberId;
 
@@ -53,6 +57,8 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
   void setUp() {
     hostId = TestUserFixture.insertUser(jdbcTemplate, "adminhost");
     participantId = TestUserFixture.insertUser(jdbcTemplate, "adminbuyer");
+    secondParticipantId = TestUserFixture.insertUser(jdbcTemplate, "adminbuyerB");
+    thirdParticipantId = TestUserFixture.insertUser(jdbcTemplate, "adminbuyerC");
     groupId = TestGroupFixture.insertGroup(jdbcTemplate, "관리자 테스트 그룹");
     groupMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "관리자 테스트 멤버");
   }
@@ -150,7 +156,7 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
           insertParticipation(
               buncheolId,
               slot2,
-              participantId,
+              secondParticipantId,
               20000,
               0,
               "AWAITING_PAYMENT",
@@ -237,7 +243,7 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
               buncheolId, slot1, participantId, 10000, 0, "AWAITING_PAYMENT", null, BASE_TIME);
       confirmedId =
           insertParticipation(
-              buncheolId, slot2, participantId, 10000, 0, "CONFIRMED", BASE_TIME, BASE_TIME);
+              buncheolId, slot2, secondParticipantId, 10000, 0, "CONFIRMED", BASE_TIME, BASE_TIME);
       // 입금확인 후 분철 취소 cascade → 환불 필요
       refundRequiredId =
           insertParticipation(
@@ -409,11 +415,12 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
         Long slotId =
             insertSlot(
                 buncheolId, TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "cm" + i));
+        Long cursorBuyerId = TestUserFixture.insertUser(jdbcTemplate, "cursorbuyer" + i);
         Long id =
             insertParticipation(
                 buncheolId,
                 slotId,
-                participantId,
+                cursorBuyerId,
                 10000,
                 0,
                 "AWAITING_PAYMENT",
@@ -463,7 +470,7 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       insertParticipation(
           buncheolA,
           insertSlot(buncheolA, TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "a2")),
-          participantId,
+          secondParticipantId,
           10000,
           0,
           "CONFIRMED",
@@ -511,9 +518,9 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       insertParticipation(
           buncheolId, slot1, participantId, 10000, 3000, "AWAITING_PAYMENT", null, BASE_TIME);
       insertParticipation(
-          buncheolId, slot2, participantId, 20000, 0, "AWAITING_PAYMENT", null, BASE_TIME);
+          buncheolId, slot2, secondParticipantId, 20000, 0, "AWAITING_PAYMENT", null, BASE_TIME);
       insertParticipation(
-          buncheolId, slot3, participantId, 30000, 0, "CONFIRMED", BASE_TIME, BASE_TIME);
+          buncheolId, slot3, thirdParticipantId, 30000, 0, "CONFIRMED", BASE_TIME, BASE_TIME);
       insertParticipation(
           buncheolId, slot4, participantId, 40000, 0, "CANCELLED", BASE_TIME, BASE_TIME);
 

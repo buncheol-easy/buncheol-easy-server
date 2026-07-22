@@ -95,6 +95,8 @@ class DeliveryControllerDocsTest {
                             """
                             개최자(운영자)가 확정 참여자의 배송 건에 운송장 번호를 등록한다. 등록 시 배송 상태가
                             `SNAPSHOTTED` → `SHIPPING` 으로 전이되고, 참여자에게 운송장 등록 알림(알림톡)이 발송된다.
+                            분철이 진행확정(CONFIRMED)된 뒤에만 등록할 수 있다 — 모집중 발송을 허용하면 마감 시점
+                            취소(최소 인원 미달)와 이미 발송된 물건이 모순되기 때문.
 
                             **권한**: 해당 배송이 속한 분철의 **개최자 본인만** 호출 가능.
 
@@ -104,6 +106,7 @@ class DeliveryControllerDocsTest {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `trackingNumber` 누락/공백 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 분철 개최자가 아님 |
                             | 404 | `DLV-006` (`DELIVERY_NOT_FOUND`) | 존재하지 않는 배송 정보 |
+                            | 409 | `DLV-009` (`DELIVERY_BUNCHEOL_NOT_CONFIRMED`) | 분철이 아직 진행확정 전 |
                             | 409 | `DLV-007` (`DELIVERY_STATE_TRANSITION_INVALID`) | 현재 배송 상태에서 운송장을 등록할 수 없음 |
                             """)
                         .pathParameters(parameterWithName("id").description("배송 ID"))

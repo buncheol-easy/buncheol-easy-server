@@ -88,7 +88,9 @@ class MyParticipationQueryServiceTest {
       // 내가 참여한 슬롯: 102 (멤버 group_members.id=1002 → 이름 "민지")
       Participation participation =
           participation(
-              500L, 10L, 102L, 53_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+              500L, 10L, 102L, 50_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+      // 멤버 가격 50_000 + 배송비 3_000 → 응답 amount(총액)는 53_000, 배송비는 shippingFee 로 분리 노출된다.
+      setField(participation, "shippingFee", 3_000L);
 
       given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
           .willReturn(List.of(participation));
@@ -115,6 +117,7 @@ class MyParticipationQueryServiceTest {
       assertThat(response.buncheolMemberCount()).isEqualTo(5);
       assertThat(response.memberName()).isEqualTo("민지");
       assertThat(response.amount()).isEqualTo(53_000L);
+      assertThat(response.shippingFee()).isEqualTo(3_000L);
       assertThat(response.participationStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(response.cancelReason()).isNull();
       assertThat(response.buncheolStatus()).isEqualTo(BuncheolStatus.RECRUITING);

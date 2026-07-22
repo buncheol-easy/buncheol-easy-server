@@ -26,7 +26,7 @@ public class SlackNotificationListener {
   private final NotificationAssembler assembler;
   private final SlackWebhookClient slackWebhookClient;
 
-  /** (운영자) 신규 참여 접수. 한 참여 요청의 슬롯 묶음을 메시지 한 건으로 합쳐 보낸다. */
+  /** (운영자) 신규 참여 접수. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)라 참여 한 건이 메시지 한 건이다. */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
@@ -34,15 +34,15 @@ public class SlackNotificationListener {
     if (!slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)) {
       return;
     }
-    ParticipationBundleView view = assembler.loadByParticipations(event.participationIds());
-    RefundAccount refundAccount = view.refundAccount();
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    RefundAccount refundAccount = view.participation().getRefundAccount();
 
     String message =
         """
         🔔 [신규 참여] %s (분철 #%d)
         참여자: %s
         환불계좌: %s %s (예금주 %s)
-        멤버: %s (%d슬롯)
+        멤버: %s
         입금 예정 금액: %s원
         ⏰ 입금 기한: %s (기한 내 입금확인 필요)"""
             .formatted(
@@ -52,10 +52,9 @@ public class SlackNotificationListener {
                 refundAccount.bank(),
                 refundAccount.account(),
                 refundAccount.holder(),
-                String.join(", ", view.memberNames()),
-                view.memberNames().size(),
-                AlimtalkFormats.amount(view.totalAmount()),
-                DUE_AT_FORMAT.format(view.dueAt()));
+                view.memberName(),
+                AlimtalkFormats.amount(view.paymentAmount()),
+                DUE_AT_FORMAT.format(view.participation().getDueAt()));
     slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, message);
   }
 }

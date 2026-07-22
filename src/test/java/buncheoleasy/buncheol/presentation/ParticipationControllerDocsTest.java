@@ -103,8 +103,7 @@ class ParticipationControllerDocsTest {
     // given
     Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     ParticipateResult result =
-        new ParticipateResult(
-            List.of(500L, 501L), 93_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
+        new ParticipateResult(500L, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
     given(participationService.participate(eq(10L), eq(PARTICIPANT_ID), any()))
         .willReturn(result);
 
@@ -118,7 +117,7 @@ class ParticipationControllerDocsTest {
                 .content(
                     """
                     {
-                      "buncheolMemberIds": [200, 201],
+                      "buncheolMemberId": 200,
                       "shippingAddressId": 1,
                       "refundAccount": {
                         "bank": "국민은행",
@@ -137,16 +136,17 @@ class ParticipationControllerDocsTest {
                         .summary("분철 참여 신청")
                         .description(
                             """
-                            멤버 슬롯을 선착순으로 점유한다. `buncheolMemberIds` 에 여러 슬롯을 담아 한 번에 점유할 수 있다.
-                            점유에 성공하면 각 슬롯이 입금확인중(AWAITING_PAYMENT) 상태로 등록되고, 응답으로 생성된 참여 ID
-                            목록(`participationIds`)·개최자 계좌·입금 총액·입금 만료 시각(`dueAt`)을 받는다.
-                            배송비는 묶음당 1회만 부과되며 `amount` 는 (멤버 가격 합 + 배송비 1회)다. 참여와 동시에 분철 취소 시
-                            환불받을 본인 계좌(`refundAccount`)를 입력한다. 슬롯 중 하나라도 점유에 실패하면 전부 롤백된다.
+                            멤버 슬롯을 선착순으로 점유한다. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이므로
+                            `buncheolMemberId` 로 슬롯 하나를 지정하며, 여러 멤버를 원하면 참여를 여러 번
+                            반복한다(배송비도 참여마다 부과). 점유에 성공하면 입금확인중(AWAITING_PAYMENT) 상태로
+                            등록되고, 응답으로 생성된 참여 ID(`participationId`)·개최자 계좌·입금 총액·입금 만료
+                            시각(`dueAt`)을 받는다. `amount` 는 (멤버 가격 + 배송비)다. 참여와 동시에 분철 취소 시
+                            환불받을 본인 계좌(`refundAccount`)를 입력한다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 400 | `BCH-074` (`PARTICIPATION_DUPLICATE_MEMBER`) | 같은 멤버 슬롯을 중복 선택 |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님 |
                             | 403 | `BCH-065` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |
@@ -156,8 +156,8 @@ class ParticipationControllerDocsTest {
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .requestSchema(Schema.schema("ParticipateRequest"))
                         .requestFields(
-                            fieldWithPath("buncheolMemberIds")
-                                .description("참여할 분철 멤버 슬롯 ID 목록 (1개 이상, 중복 불가)"),
+                            fieldWithPath("buncheolMemberId")
+                                .description("참여할 분철 멤버 슬롯 ID (단일 선택 정책)"),
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
                             fieldWithPath("refundAccount").description("분철 취소 시 환불받을 본인 계좌"),
                             fieldWithPath("refundAccount.bank").description("은행명"),
@@ -165,8 +165,8 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("refundAccount.holder").description("예금주"))
                         .responseSchema(Schema.schema("ParticipateResponse"))
                         .responseFields(
-                            fieldWithPath("participationIds").description("생성된 참여 ID 목록"),
-                            fieldWithPath("amount").description("입금할 총액 (멤버 가격 합 + 배송비 1회, 원)"),
+                            fieldWithPath("participationId").description("생성된 참여 ID"),
+                            fieldWithPath("amount").description("입금할 총액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("dueAt").description("입금 만료 시각 (UTC ISO-8601)"),
                             fieldWithPath("hostAccount").description("참여자가 입금할 개최자 계좌"),
                             fieldWithPath("hostAccount.bank").description("개최자 은행명"),
@@ -188,6 +188,7 @@ class ParticipationControllerDocsTest {
             5,
             "민지",
             53_000L,
+            3_000L,
             ParticipationStatus.CONFIRMED,
             null,
             BuncheolStatus.CONFIRMED,
@@ -207,6 +208,7 @@ class ParticipationControllerDocsTest {
             4,
             "카리나",
             41_000L,
+            2_000L,
             ParticipationStatus.AWAITING_PAYMENT,
             null,
             BuncheolStatus.RECRUITING,
@@ -244,6 +246,8 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("[].buncheolMemberCount").description("분철에 포함된 멤버 슬롯 수"),
                             fieldWithPath("[].memberName").description("내가 참여한 멤버 이름"),
                             fieldWithPath("[].amount").description("참여 금액 (멤버 가격 + 배송비, 원)"),
+                            fieldWithPath("[].shippingFee")
+                                .description("이 참여에 부과된 배송비 (원). 멤버 가격 = amount - shippingFee"),
                             fieldWithPath("[].participationStatus")
                                 .description(
                                     "내 참여 상태 (AWAITING_PAYMENT | CONFIRMED | CANCELLED)"),

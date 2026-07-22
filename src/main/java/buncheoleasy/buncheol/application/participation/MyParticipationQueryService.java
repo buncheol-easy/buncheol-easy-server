@@ -149,6 +149,7 @@ public class MyParticipationQueryService {
         slotCount,
         groupMemberNameById.get(buncheolMember.getMemberId()),
         participation.getTotalAmount(),
+        participation.getShippingFee(),
         participation.getStatus(),
         participation.getCancelReason(),
         buncheol.getStatus(),

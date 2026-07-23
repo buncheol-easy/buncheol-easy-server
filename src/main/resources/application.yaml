@@ -146,6 +146,15 @@ aligo:
       TRACKING_CU: ${ALIGO_TPL_TRACKING_CU:}
       TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
 
+# 오픈 이벤트 배송비 환급(배송비 돌려받기). 개최 기능 오픈 시 enabled=false 로 내려 종료한다.
+shipping-fee-payback:
+  enabled: ${SHIPPING_FEE_PAYBACK_ENABLED:false}
+  # 이벤트 분철 개최(created_at) 판정 구간. 구간 내 개최 + 슬롯 0원 참여만 환급 대상.
+  event-start-at: ${SHIPPING_FEE_PAYBACK_EVENT_START_AT:2026-01-01T00:00:00Z}
+  event-end-at: ${SHIPPING_FEE_PAYBACK_EVENT_END_AT:2026-01-01T00:00:00Z}
+  # 신청 마감 = 기준 시점(배송 완료) + N일. 분철·참여마다 기준 시점이 달라 상대 일수로 관리한다.
+  submit-window-days: ${SHIPPING_FEE_PAYBACK_SUBMIT_WINDOW_DAYS:7}
+
 slack:
   webhook:
     connect-timeout: 3s
@@ -153,6 +162,7 @@ slack:
     # 채널별 Incoming Webhook URL (SlackChannel enum 키). 시크릿이라 환경변수로만 주입하며, 빈 값이면 해당 채널 발송을 건너뛴다.
     urls:
       NEW_PARTICIPATION: ${SLACK_WEBHOOK_NEW_PARTICIPATION_URL:}
+      SHIPPING_FEE_PAYBACK: ${SLACK_WEBHOOK_SHIPPING_FEE_PAYBACK_URL:}
 
 management:
   endpoints:

@@ -223,6 +223,13 @@ CREATE TABLE IF NOT EXISTS participations
     cancelled_at        DATETIME     NULL COMMENT '참여 취소 시각',
     cancel_reason       VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED',
     status              VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED',
+    -- 오픈 이벤트 배송비 환급(배송비 돌려받기). ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc 참고).
+    payback_status        VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
+    payback_tweet_url     VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
+    payback_requested_at  DATETIME     NULL COMMENT '환급 신청(재신청 포함) 시각',
+    payback_completed_at  DATETIME     NULL COMMENT '환급 입금 완료 시각',
+    payback_reject_reason VARCHAR(200) NULL COMMENT '환급 반려 사유 (재신청 시 초기화)',
+    payback_amount        BIGINT       NULL COMMENT '신청 시점 배송비 스냅샷 (환급액 고정)',
     -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용 가상 컬럼: 활성 상태일 때만 멤버 슬롯 id 값을 갖고, 취소/만료되면 NULL 이 되어 슬롯이 다시 열린다.
     active_member_id    BIGINT GENERATED ALWAYS AS (
                             IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), buncheol_member_id, NULL)
@@ -256,6 +263,21 @@ CREATE TABLE IF NOT EXISTS participations
     -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요
     -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 인덱스를 추가하지 않는다).
     INDEX idx_participations_created (created_at DESC, id DESC),
+    -- 같은 후기 트윗의 타 참여 중복 신청 방지 (서비스 사전 체크의 check-then-update 갭을 DB 가 최종 차단).
+    -- NULL(미신청)은 MySQL 유니크에서 중복 허용이라 문제없다.
+    UNIQUE INDEX uq_participations_payback_tweet_url (payback_tweet_url),
+    -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용.
+    -- 기존 배포 DB 에는 아래 수동 ALTER 필요 (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 컬럼/인덱스를 추가하지 않는다):
+    --   ALTER TABLE participations
+    --     ADD COLUMN payback_status VARCHAR(20) NOT NULL DEFAULT 'NONE',
+    --     ADD COLUMN payback_tweet_url VARCHAR(255) NULL,
+    --     ADD COLUMN payback_requested_at DATETIME NULL,
+    --     ADD COLUMN payback_completed_at DATETIME NULL,
+    --     ADD COLUMN payback_reject_reason VARCHAR(200) NULL,
+    --     ADD COLUMN payback_amount BIGINT NULL,
+    --     ADD UNIQUE INDEX uq_participations_payback_tweet_url (payback_tweet_url),
+    --     ADD INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC);
+    INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)

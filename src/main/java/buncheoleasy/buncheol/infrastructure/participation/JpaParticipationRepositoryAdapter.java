@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.TimeZone;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Limit;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -230,5 +231,23 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public List<Participation> findCascadeCancelledByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.findByBuncheolIdAndStatusAndCancelReason(
         buncheolId, ParticipationStatus.CANCELLED, ParticipationCancelReason.BUNCHEOL_CANCELLED);
+  }
+
+  @Override
+  public boolean existsPaybackTweetUrlUsedByOther(
+      final String tweetUrl, final Long participationId) {
+    return jpaParticipationRepository.existsByPaybackTweetUrlAndIdNot(tweetUrl, participationId);
+  }
+
+  @Override
+  public void savePaybackRequest(final Participation participation) {
+    try {
+      // 트랜잭션 커밋까지 미루지 않고 즉시 flush 해 유니크 위반을 이 자리에서 4xx 로 변환한다
+      // (커밋 시점에 터지면 어댑터 밖으로 raw DataIntegrityViolationException 이 새어 500 이 된다).
+      jpaParticipationRepository.saveAndFlush(participation);
+    } catch (DataIntegrityViolationException ex) {
+      // 사전 중복 체크의 check-then-update 갭을 DB 유니크가 최종 차단한 경우.
+      throw new BusinessException(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE);
+    }
   }
 }

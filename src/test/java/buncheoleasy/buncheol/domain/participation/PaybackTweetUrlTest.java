@@ -34,6 +34,13 @@ class PaybackTweetUrlTest {
 
       assertThat(url.value()).isEqualTo("https://twitter.com/fan/status/987654321");
     }
+
+    @Test
+    void 퍼머링크_뒤_추가_경로도_잘라낸다() {
+      PaybackTweetUrl url = PaybackTweetUrl.parse("https://x.com/fan/status/123/photo/1");
+
+      assertThat(url.value()).isEqualTo("https://x.com/fan/status/123");
+    }
   }
 
   @Nested
@@ -57,9 +64,9 @@ class PaybackTweetUrlTest {
           "http://x.com/fan/status/123", // https 아님
           "https://mobile.x.com/fan/status/123", // 서브도메인 불허
           "https://x.com/fan/status/abc", // status id 가 숫자 아님
+          "https://x.com/fan/status/123abc", // status id 뒤에 구분자 없이 문자가 붙음
           "https://x.com/fan", // status 경로 없음
-          "https://instagram.com/p/abc123", // 타 서비스
-          "https://x.com/fan/status/123/photo/1" // 퍼머링크 뒤 추가 경로
+          "https://instagram.com/p/abc123" // 타 서비스
         })
     void 트윗_퍼머링크_형식이_아니면_예외가_발생한다(final String raw) {
       assertThatThrownBy(() -> PaybackTweetUrl.parse(raw))

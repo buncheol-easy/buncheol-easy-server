@@ -16,6 +16,7 @@ import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * 분철 멤버 슬롯에 대한 참여. 한 멤버 슬롯에는 활성({@link ParticipationStatus#active()}) 참여가 최대 1개만 존재한다 (선착순) —
@@ -29,12 +30,17 @@ import lombok.NoArgsConstructor;
  * 참여자 본인, 검수는 운영진 한 명뿐), 유일한 실질 경합인 같은 트윗 URL 의 동시 신청은 {@code payback_tweet_url} 유니크 인덱스가 커밋
  * 시점에 차단한다. payback 전이 트랜잭션에서는 참여 status CAS 를 함께 수행하지 않으므로 더티체킹+CAS 혼용 문제도 없다.
  *
+ * <p>{@code @DynamicUpdate} 는 payback dirty flush 가 변경된 payback 컬럼만 UPDATE 하게 한다. 없으면 flush 가 행
+ * 전체(status/cancel 컬럼 포함)를 다시 써서, 로드~커밋 사이에 분철 취소 CAS 가 전이해 둔 CANCELLED 를 stale 값(CONFIRMED)으로
+ * 되돌리는 lost update 가 생길 수 있다.
+ *
  * <p>참여 INSERT 는 분철이 모집중인지 원자적으로 확인해야 하므로 JPA save 가 아니라 {@code
  * JpaParticipationRepositoryAdapter} 의 conditional INSERT 로 수행하고, generated PK 를 리플렉션으로 {@code id}
  * 필드에 주입한다. 필드명·타입 변경 시 어댑터의 정적 {@code ID_FIELD} 초기화도 함께 갱신할 것.
  */
 @Entity
 @Table(name = "participations")
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Participation extends TimestampedEntity {

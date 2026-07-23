@@ -117,7 +117,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   // MySQL·H2 모두 유니크 위반 메시지에 인덱스명이 포함된다 (H2 는 대문자로 노출될 수 있어 대소문자 무시 비교).
   // saveIfRecruiting 은 운영(MySQL) 전용 raw SQL 이라 H2 통합 테스트로 못 태우므로, 메시지 형식 매칭은
   // 단위 테스트에서 직접 검증할 수 있게 package-private 로 열어 둔다.
-  static boolean isViolationOf(final DuplicateKeyException ex, final String indexName) {
+  static boolean isViolationOf(final DataIntegrityViolationException ex, final String indexName) {
     String message = String.valueOf(ex.getMessage());
     return message.toLowerCase().contains(indexName.toLowerCase());
   }
@@ -246,8 +246,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       // (커밋 시점에 터지면 어댑터 밖으로 raw DataIntegrityViolationException 이 새어 500 이 된다).
       jpaParticipationRepository.saveAndFlush(participation);
     } catch (DataIntegrityViolationException ex) {
-      // 사전 중복 체크의 check-then-update 갭을 DB 유니크가 최종 차단한 경우.
-      throw new BusinessException(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE);
+      // 사전 중복 체크의 check-then-update 갭을 DB 유니크가 최종 차단한 경우. 트윗 URL 유니크가 아닌
+      // 다른 제약 위반을 중복 신청으로 오분류하지 않도록 인덱스명으로 좁혀 매핑한다.
+      if (isViolationOf(ex, "uq_participations_payback_tweet_url")) {
+        throw new BusinessException(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE);
+      }
+      throw ex;
     }
   }
 }

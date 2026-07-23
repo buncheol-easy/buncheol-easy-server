@@ -170,7 +170,7 @@ class UserDomainServiceTest {
       given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
 
       // when
-      userDomainService.updateProfile(1L, "새닉네임", "01012345678");
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", null, null);
 
       // then
       assertThat(user.getNickname().value()).isEqualTo("새닉네임");
@@ -186,7 +186,7 @@ class UserDomainServiceTest {
       given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
 
       // when
-      userDomainService.updateProfile(1L, "새닉네임", "01012345678");
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", null, null);
 
       // then
       assertThat(user.isProfileCompleted()).isTrue();
@@ -201,7 +201,8 @@ class UserDomainServiceTest {
       given(userRepository.existsByNicknameExcludingId("중복닉네임", 1L)).willReturn(true);
 
       // when & then
-      assertThatThrownBy(() -> userDomainService.updateProfile(1L, "중복닉네임", "01012345678"))
+      assertThatThrownBy(
+              () -> userDomainService.updateProfile(1L, "중복닉네임", "01012345678", null, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NICKNAME_DUPLICATE);
@@ -216,10 +217,84 @@ class UserDomainServiceTest {
       given(userRepository.findById(999L)).willReturn(Optional.empty());
 
       // when & then
-      assertThatThrownBy(() -> userDomainService.updateProfile(999L, "새닉네임", "01012345678"))
+      assertThatThrownBy(
+              () -> userDomainService.updateProfile(999L, "새닉네임", "01012345678", null, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    void 마케팅_동의가_true면_동의_일시가_기록된다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", null, true);
+
+      // then
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(Instant.now(clock));
+    }
+
+    @Test
+    void 마케팅_동의가_false면_동의_일시가_제거된다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateMarketingAgreement(true, Instant.parse("2026-01-01T00:00:00Z"));
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", null, false);
+
+      // then
+      assertThat(user.getMarketingAgreedAt()).isNull();
+    }
+
+    @Test
+    void 마케팅_동의가_null이면_기존_동의_상태를_유지한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateMarketingAgreement(true, Instant.parse("2026-01-01T00:00:00Z"));
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", null, null);
+
+      // then
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
+    }
+
+    @Test
+    void 실명이_전달되면_갱신된다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", "김실명", null);
+
+      // then
+      assertThat(user.getName()).isEqualTo("김실명");
+    }
+
+    @Test
+    void 실명이_null이면_기존_실명을_유지한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateName("김기존");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("새닉네임", 1L)).willReturn(false);
+
+      // when
+      userDomainService.updateProfile(1L, "새닉네임", "01012345678", null, null);
+
+      // then
+      assertThat(user.getName()).isEqualTo("김기존");
     }
   }
 
@@ -293,6 +368,31 @@ class UserDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 개최 권한 검증 테스트")
+  class RequireCanHostTest {
+
+    @Test
+    void 개최_권한이_있으면_통과한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.allowHosting();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      userDomainService.requireCanHost(1L);
+    }
+
+    @Test
+    void 개최_권한이_없으면_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireCanHost(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
     }
   }
 }

@@ -48,7 +48,8 @@ public class UserService {
   }
 
   public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
-    userDomainService.updateProfile(userId, request.nickname(), request.phoneNumber());
+    userDomainService.updateProfile(
+        userId, request.nickname(), request.phoneNumber(), request.name(), request.marketingAgreed());
   }
 
   public ProfileStatusResponse getProfileStatus(final Long userId) {
@@ -70,17 +71,16 @@ public class UserService {
 
   public UserProfileResponse getUserProfile(final Long userId) {
     User user = userDomainService.getUser(userId);
-
-    if (!user.isProfileCompleted()) {
-      throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
-    }
+    user.requireProfileCompleted();
 
     return UserProfileResponse.of(
         user.getSocialInfo().provider().name(),
         user.getEmail().value(),
         user.getNickname().value(),
+        user.getName(),
         user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null,
-        toBankAccountInfo(user.getBankAccount()));
+        toBankAccountInfo(user.getBankAccount()),
+        user.isCanHost());
   }
 
   private UserProfileResponse.BankAccountInfo toBankAccountInfo(final BankAccount bankAccount) {

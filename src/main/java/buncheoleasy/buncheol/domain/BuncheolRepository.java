@@ -62,4 +62,15 @@ public interface BuncheolRepository {
    * @return 갱신된 행 수 (0 이면 이미 마감됐거나 RECRUITING 이 아님)
    */
   int finalizeExpiredByConfirmedHeadcount(Long buncheolId, Instant now);
+
+  /**
+   * 전 슬롯 조기 진행확정 전용 CAS. 입금확인(CONFIRMED) 참여 수가 {@code totalSlots}(전체 멤버 슬롯 수) 이상이고 {@code
+   * minHeadcount} 도 충족할 때만 {@code RECRUITING} 인 분철을 CONFIRMED 로 전이한다. count 를 UPDATE WHERE 서브쿼리로
+   * 세어(current read), 마지막 슬롯들을 동시에 입금확인하는 경합에서도 조기 확정을 놓치지 않는다.
+   *
+   * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 아직 매진 아님 / 최소인원 미달 / 이미 마감됨)
+   */
+  int confirmIfAllSlotsConfirmed(Long buncheolId, long totalSlots, Instant now);
 }

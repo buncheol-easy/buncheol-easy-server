@@ -6,11 +6,20 @@ CREATE TABLE IF NOT EXISTS users
     provider_id         VARCHAR(100) NOT NULL COMMENT '소셜 제공자 고유 ID',
     email               VARCHAR(320) NOT NULL COMMENT '소셜 계정 이메일',
     nickname            VARCHAR(20)  NOT NULL COMMENT '닉네임',
+    -- NULL 허용: 기존 회원은 값이 없고 마이페이지에서 수시 입력한다 (신규 가입은 FE 에서 필수 강제).
+    -- 기존 배포 DB 에는 수동 ALTER 필요.
+    name                VARCHAR(30)  NULL COMMENT '실명 (입금 대조·배송 연락 참조)',
     phone_number        VARCHAR(15)  NULL COMMENT '연락처',
     settlement_bank     VARCHAR(50)  NULL COMMENT '정산 은행',
     settlement_account  VARCHAR(50)  NULL COMMENT '정산 계좌번호',
     settlement_holder   VARCHAR(50)  NULL COMMENT '정산 예금주',
     profile_completed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '프로필 설정 완료 여부',
+    -- 개최 오픈 전 운영 지정 계정만 true. 부여는 DB 직접 UPDATE. 기존 배포 DB 에는 수동 ALTER 필요
+    -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 컬럼을 추가하지 않는다).
+    can_host            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '분철 개최 허용 여부',
+    -- NULL = 미동의/철회. 광고성 정보는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장.
+    -- 기존 배포 DB 에는 수동 ALTER 필요.
+    marketing_agreed_at DATETIME     NULL COMMENT '마케팅 정보 수신 동의 일시',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          DATETIME     NULL COMMENT '회원탈퇴 soft delete',
@@ -24,6 +33,26 @@ CREATE TABLE IF NOT EXISTS users
 
     UNIQUE INDEX uq_users_active_social_account (_active_provider, _active_provider_id),
     UNIQUE INDEX uq_users_active_nickname (_active_nickname)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- admins 테이블 생성 (관리자 계정 — 서비스 유저와 무관한 독립 ID/PW 계정)
+-- 계정 생성은 배포 환경변수 부트스트랩(AdminAccountInitializer) 또는 운영자의 직접 INSERT(BCrypt 해시)로 한다.
+-- 직접 INSERT 시 해시는 기본 cost(10)로 생성할 것 — cost 가 다르면 로그인 타이밍 방어가 약해진다 (Admin javadoc 참고).
+-- 관리자 access token 은 role claim(ADMIN)으로 유저 토큰과 구분되며, 유저 API 는 hasRole(USER) 라 관리자
+-- 토큰으로 접근할 수 없다 (admin.id 와 users.id 가 겹쳐도 위장 불가).
+CREATE TABLE IF NOT EXISTS admins
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    login_id   VARCHAR(50)  NOT NULL COMMENT '관리자 로그인 ID',
+    password   VARCHAR(100) NOT NULL COMMENT 'BCrypt 해시',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE INDEX uq_admins_login_id (login_id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -183,8 +212,9 @@ CREATE TABLE IF NOT EXISTS participations
     buncheol_id         BIGINT       NOT NULL,
     buncheol_member_id  BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
     participant_id      BIGINT       NOT NULL COMMENT '참여자',
-    shipping_address_id BIGINT       NOT NULL COMMENT '선택한 배송지',
-    amount              BIGINT       NOT NULL COMMENT '입금 총액 (멤버 금액 + 배송비)',
+    shipping_address_id BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
+    amount              BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
+    shipping_fee        BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
     refund_bank         VARCHAR(50)  NOT NULL COMMENT '환불 은행',
     refund_account      VARCHAR(50)  NOT NULL COMMENT '환불 계좌번호',
     refund_holder       VARCHAR(50)  NOT NULL COMMENT '환불 예금주',
@@ -197,6 +227,10 @@ CREATE TABLE IF NOT EXISTS participations
     active_member_id    BIGINT GENERATED ALWAYS AS (
                             IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), buncheol_member_id, NULL)
                             ) STORED COMMENT '활성 상태일 때만 buncheol_member_id 값 (선착순 유니크용)',
+    -- 분철당 참여자 1명(중복 참여 금지) 보장용 가상 컬럼: 활성 상태일 때만 참여자 id 값을 갖고, 취소/만료되면 NULL 이 되어 재참여가 열린다.
+    active_participant_id BIGINT GENERATED ALWAYS AS (
+                            IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), participant_id, NULL)
+                            ) STORED COMMENT '활성 상태일 때만 participant_id 값 (분철당 중복 참여 방지용)',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -204,12 +238,24 @@ CREATE TABLE IF NOT EXISTS participations
 
     -- 멤버 슬롯당 활성 참여 1건 (선착순). 동시 참여 시 두 번째 INSERT 가 이 제약에 막혀 DuplicateKey 로 떨어진다.
     UNIQUE INDEX uq_participations_active_member (active_member_id),
+    -- 분철당 참여자 1명 (중복 참여 금지, 오픈 이벤트 정책). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
+    -- 기존 배포 DB 에는 아래 수동 ALTER 필요. 다중 선택 시절 같은 분철에 활성 참여가 여러 건인 유저가 있으면 인덱스 생성이
+    -- 실패하므로 적용 전 중복 활성 참여를 정리(취소)하고, STORED 생성 컬럼 추가는 테이블 리빌드(쓰기 블로킹)라
+    -- 저트래픽 시간대에 컬럼+인덱스를 한 문장으로 적용한다 (정리~인덱스 생성 사이 신규 중복 유입 창 최소화):
+    --   ALTER TABLE participations
+    --     ADD COLUMN active_participant_id BIGINT GENERATED ALWAYS AS
+    --       (IF(status IN ('AWAITING_PAYMENT','CONFIRMED'), participant_id, NULL)) STORED,
+    --     ADD UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id);
+    UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
     -- 입금 만료 스케줄러 폴링(status='AWAITING_PAYMENT' AND due_at<=now)용
     INDEX idx_participations_status_due (status, due_at),
     -- 내 참여 목록(참여자별 최신순)용
     INDEX idx_participations_participant_created (participant_id, created_at DESC),
+    -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요
+    -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 인덱스를 추가하지 않는다).
+    INDEX idx_participations_created (created_at DESC, id DESC),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)
@@ -225,7 +271,7 @@ CREATE TABLE IF NOT EXISTS participations
 
     CONSTRAINT fk_participations_shipping_address
         FOREIGN KEY (shipping_address_id)
-            REFERENCES shipping_addresses (id)
+            REFERENCES shipping_addresses (id) ON DELETE SET NULL
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -254,31 +300,6 @@ CREATE TABLE IF NOT EXISTS deliveries
     CONSTRAINT fk_deliveries_participation
         FOREIGN KEY (participation_id)
             REFERENCES participations (id) ON DELETE CASCADE
-) ENGINE = InnoDB
-  DEFAULT CHARSET = utf8mb4
-  COLLATE = utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS settlements
-(
-    id            BIGINT      NOT NULL AUTO_INCREMENT,
-    buncheol_id   BIGINT      NOT NULL COMMENT '분철 ID',
-    status        VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED' COMMENT 'SCHEDULED | SETTLING | SETTLED',
-    gross_amount  BIGINT      NOT NULL COMMENT '총 결제 금액',
-    refund_amount BIGINT      NOT NULL COMMENT '총 환불 금액',
-    net_amount    BIGINT      NOT NULL COMMENT '정산 금액(총 결제 - 총 환불)',
-    scheduled_at  DATETIME    NULL COMMENT '정산 예정 시각',
-    settled_at    DATETIME    NULL COMMENT '정산 완료 시각',
-    created_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (id),
-
-    UNIQUE INDEX uq_settlements_buncheol_id (buncheol_id),
-    INDEX idx_settlements_status (status),
-
-    CONSTRAINT fk_settlements_buncheol
-        FOREIGN KEY (buncheol_id)
-            REFERENCES buncheols (id) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -355,16 +376,19 @@ CREATE TABLE IF NOT EXISTS user_recent_searches
 -- 공지(NOTICE)는 전체 대상이라 recipient_id NULL, 알림(NOTIFICATION)은 수신자별 1:1 생성.
 CREATE TABLE IF NOT EXISTS inbox_messages
 (
-    id           BIGINT       NOT NULL AUTO_INCREMENT,
-    type         VARCHAR(20)  NOT NULL COMMENT 'NOTICE | NOTIFICATION',
-    recipient_id BIGINT       NULL COMMENT '알림 수신자 (공지는 NULL)',
-    title        VARCHAR(200) NOT NULL COMMENT '제목',
-    reference    VARCHAR(200) NULL COMMENT '보조 텍스트(참고)',
-    description  TEXT         NOT NULL COMMENT '설명(본문)',
-    pinned       BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '상단 고정 여부 (공지만 사용)',
-    link_path    VARCHAR(500) NULL COMMENT '연관 화면 in-app 경로',
-    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id               BIGINT       NOT NULL AUTO_INCREMENT,
+    type             VARCHAR(20)  NOT NULL COMMENT 'NOTICE | NOTIFICATION',
+    recipient_id     BIGINT       NULL COMMENT '알림 수신자 (공지는 NULL)',
+    title            VARCHAR(200) NOT NULL COMMENT '제목',
+    reference        VARCHAR(200) NULL COMMENT '보조 텍스트(참고)',
+    description      TEXT         NOT NULL COMMENT '설명(본문)',
+    pinned           BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '상단 고정 여부 (공지만 사용)',
+    link_path        VARCHAR(500) NULL COMMENT '연관 화면 in-app 경로',
+    image_url        VARCHAR(500) NULL COMMENT '공지 본문 이미지 URL (공지만 사용)',
+    banner_title     VARCHAR(200) NULL COMMENT '홈 배너 제목 (공지만 사용)',
+    banner_image_url VARCHAR(500) NULL COMMENT '홈 배너 이미지 URL (공지만 사용)',
+    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -372,6 +396,8 @@ CREATE TABLE IF NOT EXISTS inbox_messages
     INDEX idx_inbox_recipient_created (recipient_id, created_at DESC, id DESC),
     -- 공지 피드(pinned = false) 및 상단 고정 공지(pinned = true) 조회용
     INDEX idx_inbox_type_pinned_created (type, pinned, created_at DESC, id DESC),
+    -- 홈 배너 조회용 (배너 등록 공지 = banner_image_url IS NOT NULL 시크)
+    INDEX idx_inbox_banner (banner_image_url),
 
     CONSTRAINT fk_inbox_messages_recipient
         FOREIGN KEY (recipient_id)

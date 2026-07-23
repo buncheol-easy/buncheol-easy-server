@@ -2,15 +2,26 @@ package buncheoleasy.buncheol.application.participation;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.response.HostAccountResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +36,9 @@ public class MyParticipationQueryService {
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final BuncheolImageRepository buncheolImageRepository;
+  private final DeliveryRepository deliveryRepository;
+  private final UserRepository userRepository;
 
   @Transactional(readOnly = true)
   public List<MyParticipationResponse> getMyParticipations(final Long participantId) {
@@ -63,9 +77,51 @@ public class MyParticipationQueryService {
         groupMemberRepository.findAllByIds(participatedGroupMemberIds).stream()
             .collect(Collectors.toMap(GroupMember::getId, GroupMember::getName));
 
+    Map<Long, String> thumbnailByBuncheolId =
+        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+            .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
+
+    List<Long> participationIds = participations.stream().map(Participation::getId).toList();
+    Map<Long, Delivery> deliveryByParticipationId =
+        deliveryRepository.findAllByParticipationIds(participationIds).stream()
+            .collect(Collectors.toMap(Delivery::getParticipationId, d -> d));
+
+    Map<Long, HostAccountResponse> hostAccountByHostId =
+        findHostAccountsForAwaitingPayments(participations, buncheolById);
+
     return participations.stream()
-        .map(p -> toResponse(p, buncheolById, buncheolMemberById, slotCountByBuncheolId, groupMemberNameById))
+        .map(
+            p ->
+                toResponse(
+                    p,
+                    buncheolById,
+                    buncheolMemberById,
+                    slotCountByBuncheolId,
+                    groupMemberNameById,
+                    thumbnailByBuncheolId,
+                    deliveryByParticipationId,
+                    hostAccountByHostId))
         .toList();
+  }
+
+  // 참여 상세와 동일한 규칙: 입금확인중(AWAITING_PAYMENT) 참여에만 개최자 계좌를 노출한다.
+  private Map<Long, HostAccountResponse> findHostAccountsForAwaitingPayments(
+      final List<Participation> participations, final Map<Long, Buncheol> buncheolById) {
+    List<Long> awaitingHostIds =
+        participations.stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.AWAITING_PAYMENT)
+            .map(p -> buncheolById.get(p.getBuncheolId()))
+            .filter(Objects::nonNull)
+            .map(Buncheol::getHostId)
+            .distinct()
+            .toList();
+    if (awaitingHostIds.isEmpty()) {
+      return Map.of();
+    }
+    return userRepository.findAllByIds(awaitingHostIds).stream()
+        .filter(user -> user.getBankAccount() != null)
+        .collect(
+            Collectors.toMap(User::getId, user -> HostAccountResponse.from(user.getBankAccount())));
   }
 
   private MyParticipationResponse toResponse(
@@ -73,23 +129,36 @@ public class MyParticipationQueryService {
       final Map<Long, Buncheol> buncheolById,
       final Map<Long, BuncheolMember> buncheolMemberById,
       final Map<Long, Long> slotCountByBuncheolId,
-      final Map<Long, String> groupMemberNameById) {
+      final Map<Long, String> groupMemberNameById,
+      final Map<Long, String> thumbnailByBuncheolId,
+      final Map<Long, Delivery> deliveryByParticipationId,
+      final Map<Long, HostAccountResponse> hostAccountByHostId) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
+    Delivery delivery = deliveryByParticipationId.get(participation.getId());
+    HostAccountResponse hostAccount =
+        participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
+            ? hostAccountByHostId.get(buncheol.getHostId())
+            : null;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
         buncheol.getTitle(),
         slotCount,
         groupMemberNameById.get(buncheolMember.getMemberId()),
-        participation.getAmount(),
+        participation.getTotalAmount(),
+        participation.getShippingFee(),
         participation.getStatus(),
         participation.getCancelReason(),
         buncheol.getStatus(),
         buncheol.getDeadline(),
         participation.getDueAt(),
-        participation.getConfirmedAt());
+        participation.getConfirmedAt(),
+        thumbnailByBuncheolId.get(participation.getBuncheolId()),
+        ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy()),
+        hostAccount,
+        delivery == null ? null : MyParticipationDeliveryResponse.from(delivery));
   }
 }

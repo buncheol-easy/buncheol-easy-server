@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -24,14 +25,32 @@ public class BuncheolMemberNameResolver {
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final GroupMemberRepository groupMemberRepository;
 
+  /** 분철별 전체 멤버 이름과 아직 안 팔린 멤버 이름. */
+  public record MemberNames(Map<Long, List<String>> all, Map<Long, List<String>> available) {
+    private static MemberNames empty() {
+      return new MemberNames(Map.of(), Map.of());
+    }
+  }
+
+  /** 분철별 전체 멤버 이름. */
   public Map<Long, List<String>> findNamesByBuncheolIds(final List<Long> buncheolIds) {
+    return resolveNames(buncheolIds, Set.of()).all();
+  }
+
+  /**
+   * 분철별 전체 멤버 이름과 "아직 안 팔린"(활성 참여가 없는) 멤버 이름을 한 번의 조회로 함께 만든다. {@code takenBuncheolMemberIds} 는 활성
+   * 참여가 점유한 멤버 슬롯({@link BuncheolMember#getId()}) 집합이며, available 은 여기 포함되지 않은 슬롯만 모은다. available 은 all 의
+   * 부분집합이라 별도 조회 없이 같은 패스에서 함께 만든다.
+   */
+  public MemberNames resolveNames(
+      final List<Long> buncheolIds, final Set<Long> takenBuncheolMemberIds) {
     if (buncheolIds.isEmpty()) {
-      return Map.of();
+      return MemberNames.empty();
     }
     final List<BuncheolMember> buncheolMembers =
         buncheolMemberRepository.findAllByBuncheolIds(buncheolIds);
     if (buncheolMembers.isEmpty()) {
-      return Map.of();
+      return MemberNames.empty();
     }
 
     final List<Long> groupMemberIds =
@@ -40,7 +59,8 @@ public class BuncheolMemberNameResolver {
         groupMemberRepository.findAllByIds(groupMemberIds).stream()
             .collect(Collectors.toMap(GroupMember::getId, GroupMember::getName));
 
-    final Map<Long, List<String>> result = new HashMap<>();
+    final Map<Long, List<String>> all = new HashMap<>();
+    final Map<Long, List<String>> available = new HashMap<>();
     buncheolMembers.stream()
         .sorted(Comparator.comparing(BuncheolMember::getId))
         .forEach(
@@ -49,8 +69,11 @@ public class BuncheolMemberNameResolver {
               if (name == null) {
                 return;
               }
-              result.computeIfAbsent(bm.getBuncheolId(), k -> new ArrayList<>()).add(name);
+              all.computeIfAbsent(bm.getBuncheolId(), k -> new ArrayList<>()).add(name);
+              if (!takenBuncheolMemberIds.contains(bm.getId())) {
+                available.computeIfAbsent(bm.getBuncheolId(), k -> new ArrayList<>()).add(name);
+              }
             });
-    return result;
+    return new MemberNames(all, available);
   }
 }

@@ -51,6 +51,17 @@ public class BuncheolDomainService {
   }
 
   /**
+   * 전 슬롯 입금확인 시 조기 진행확정 CAS (RECRUITING → CONFIRMED). 입금확인 수·최소인원 판정을 UPDATE WHERE 서브쿼리로 원자화해,
+   * 마지막 슬롯을 동시에 입금확인하는 경합에서도 조기 확정을 놓치지 않는다. 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 조기 확정에 성공하면 true, 아직 매진 아님/최소인원 미달/이미 마감이면 false
+   */
+  public boolean confirmIfAllSlotsConfirmed(
+      final Long buncheolId, final long totalSlots, final Instant now) {
+    return buncheolRepository.confirmIfAllSlotsConfirmed(buncheolId, totalSlots, now) > 0;
+  }
+
+  /**
    * 호스트의 분철 취소 (RECRUITING → HOST_CANCELLED CAS). 모집 중이 아니면 상태 위반으로 막는다. 인원 미달 자동취소(CANCELLED)와 달리 목록·상세에서
    * 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측에서 동일하게 처리한다.
    */

@@ -51,4 +51,10 @@ interface JpaInboxMessageRepository extends JpaRepository<InboxMessage, Long> {
       @Param("id") Long id,
       @Param("userId") Long userId,
       @Param("noticeType") InboxMessageType noticeType);
+
+  @Query(
+      "SELECT m FROM InboxMessage m "
+          + "WHERE m.type = :noticeType AND m.bannerImageUrl IS NOT NULL "
+          + "ORDER BY m.id DESC")
+  List<InboxMessage> findBanners(@Param("noticeType") InboxMessageType noticeType);
 }

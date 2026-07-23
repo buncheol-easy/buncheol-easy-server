@@ -49,4 +49,5 @@ jobs:
             Use `gh pr comment` for top-level feedback.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
+            --model opus
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

@@ -6,9 +6,11 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
+import buncheoleasy.global.query.LikeEscaper;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import java.util.List;
@@ -42,6 +44,7 @@ public class BuncheolListQueryService {
   private final BuncheolBookmarkRepository buncheolBookmarkRepository;
   private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
+  private final ParticipationRepository participationRepository;
   private final ApplicationEventPublisher eventPublisher;
 
   @Transactional(readOnly = true)
@@ -54,7 +57,7 @@ public class BuncheolListQueryService {
     final String trimmedKeyword = trimKeyword(condition.keyword());
     final BuncheolSearchCondition normalized =
         new BuncheolSearchCondition(
-            condition.groupId(), condition.memberId(), escapeForLike(trimmedKeyword));
+            condition.groupId(), condition.memberId(), LikeEscaper.escape(trimmedKeyword));
 
     final List<Buncheol> fetched = buncheolRepository.search(normalized, cursor, safeSize + 1);
     final boolean hasNext = fetched.size() > safeSize;
@@ -76,8 +79,11 @@ public class BuncheolListQueryService {
     final Map<Long, String> thumbnailByBuncheolId =
         buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
-    final Map<Long, List<String>> memberNamesByBuncheolId =
-        buncheolMemberNameResolver.findNamesByBuncheolIds(buncheolIds);
+    // 활성 참여가 점유한 슬롯을 빼면 "아직 안 팔린" 멤버. 전체/잔여 이름을 한 번의 조회로 함께 만든다.
+    final Set<Long> takenBuncheolMemberIds =
+        Set.copyOf(participationRepository.findActiveBuncheolMemberIds(buncheolIds));
+    final BuncheolMemberNameResolver.MemberNames memberNames =
+        buncheolMemberNameResolver.resolveNames(buncheolIds, takenBuncheolMemberIds);
     final Set<Long> bookmarkedBuncheolIds =
         userId == null
             ? Set.of()
@@ -92,10 +98,12 @@ public class BuncheolListQueryService {
                         b.getTitle(),
                         b.getStatus(),
                         b.getDeadline(),
+                        b.getMinHeadcount(),
                         bookmarkedBuncheolIds.contains(b.getId()),
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),
-                        memberNamesByBuncheolId.getOrDefault(b.getId(), List.of())))
+                        memberNames.all().getOrDefault(b.getId(), List.of()),
+                        memberNames.available().getOrDefault(b.getId(), List.of())))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;
@@ -119,15 +127,5 @@ public class BuncheolListQueryService {
       return null;
     }
     return keyword.trim();
-  }
-
-  // LIKE 와일드카드(`%`, `_`) 와 이스케이프 문자 자체(`\`)를 리터럴로 매칭하도록 이스케이프한다.
-  // 호출 측 JPQL 의 ESCAPE 절은 Java 리터럴 `"ESCAPE '\\'"` 로 작성한다
-  // (실제 SQL 로 전달되는 이스케이프 문자는 단일 역슬래시 `\`).
-  private static String escapeForLike(final String trimmed) {
-    if (trimmed == null) {
-      return null;
-    }
-    return trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
   }
 }

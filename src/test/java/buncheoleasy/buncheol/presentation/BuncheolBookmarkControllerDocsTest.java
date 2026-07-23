@@ -190,7 +190,7 @@ class BuncheolBookmarkControllerDocsTest {
                               - `DEADLINE` (마감 임박순): **모집중(`RECRUITING`) 을 마감 임박순(`deadline` 오름차순) 으로 먼저**, 그 뒤에 **마감(`CONFIRMED`) 을 마감일 내림차순(`deadline` 내림차순, 현재와 가까운 마감일 우선)** 으로 잇는다. 두 그룹 모두 동일 시각이면 찜 ID 내림차순(더 최근에 찜한 분철이 위)
                             - `hideClosed` — 마감된 분철 숨김
                               - `false` (기본): 모든 분철 포함
-                              - `true`: 분철 status 가 `RECRUITING` 인 것만 (마감 = `CONFIRMED`). 참고로 `CANCELLED` 분철은 이 옵션과 무관하게 찜 목록에서 항상 숨겨진다
+                              - `true`: 분철 status 가 `RECRUITING` 인 것만. `false`: 마감(`CONFIRMED`)·인원미달 자동취소(`CANCELLED`)도 포함. 참고로 개최자 직접 취소(`HOST_CANCELLED`)는 이 옵션과 무관하게 찜 목록에서 항상 숨겨진다
                             - `onlyFavoriteGroups` — 최애 그룹 필터
                               - `false` (기본): 모든 분철 포함
                               - `true`: 분철의 그룹이 사용자 최애 그룹(`UserFavoriteGroup`) 에 등록된 것만 포함
@@ -222,7 +222,7 @@ class BuncheolBookmarkControllerDocsTest {
                             fieldWithPath("[].title").description("분철 제목"),
                             fieldWithPath("[].status")
                                 .description(
-                                    "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감·진행확정). `CANCELLED` 은 찜 목록에 노출되지 않음"),
+                                    "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감·진행확정) | `CANCELLED`(인원미달 자동취소). `HOST_CANCELLED`(개최자 취소)는 찜 목록에 노출되지 않음"),
                             fieldWithPath("[].deadline")
                                 .description(
                                     "분철 모집 마감 시각 (UTC ISO-8601, 예: `2026-06-01T12:00:00Z`)"),

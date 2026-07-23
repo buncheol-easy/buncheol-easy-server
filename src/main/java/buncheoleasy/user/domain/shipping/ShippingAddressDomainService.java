@@ -70,13 +70,15 @@ public class ShippingAddressDomainService {
     shippingAddress.update(shippingMethod, storeName, alias, isDefault);
   }
 
-  public void deleteShippingAddress(final Long userId, final Long id) {
+  public void validateOwnership(final Long userId, final Long id) {
     ShippingAddress shippingAddress = getShippingAddress(id);
-
     if (!shippingAddress.isOwnedBy(userId)) {
       throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
     }
+  }
 
+  public void deleteShippingAddress(final Long userId, final Long id) {
+    validateOwnership(userId, id);
     shippingAddressRepository.delete(id);
   }
 

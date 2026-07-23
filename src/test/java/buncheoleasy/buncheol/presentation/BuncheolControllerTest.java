@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
@@ -514,7 +515,15 @@ class BuncheolControllerTest {
       Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
       MyHostedBuncheolResponse response =
           new MyHostedBuncheolResponse(
-              10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);
+              10L,
+              "뉴진스 1집 분철",
+              "뉴진스",
+              BuncheolStatus.RECRUITING,
+              deadline,
+              5,
+              7L,
+              createdAt,
+              "https://cdn.example.com/buncheol-10-thumb.jpg");
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -526,7 +535,10 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$[0].groupName").value("뉴진스"))
           .andExpect(jsonPath("$[0].status").value("RECRUITING"))
           .andExpect(jsonPath("$[0].memberSlotCount").value(5))
-          .andExpect(jsonPath("$[0].activeParticipationCount").value(7));
+          .andExpect(jsonPath("$[0].activeParticipationCount").value(7))
+          .andExpect(
+              jsonPath("$[0].thumbnailUrl")
+                  .value("https://cdn.example.com/buncheol-10-thumb.jpg"));
     }
 
     @Test
@@ -560,7 +572,12 @@ class BuncheolControllerTest {
               1,
               List.of("https://cdn/img1.jpg"),
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
-              List.of(new BuncheolMemberDetailResponse(101L, 1001L, "민지", "minji.png", 50_000L, false)),
+              List.of(
+                  new BuncheolMemberDetailResponse(
+                      101L, 1001L, "민지", "minji.png", 50_000L,
+                      BuncheolMemberSaleStatus.AWAITING_PAYMENT,
+                      Instant.parse("2026-05-20T10:30:00Z"),
+                      true)),
               true,
               new MyParticipationSummaryResponse(
                   1,
@@ -583,7 +600,9 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.shippingOptions[0].fee").value(3000))
           .andExpect(jsonPath("$.members[0].buncheolMemberId").value(101))
           .andExpect(jsonPath("$.members[0].price").value(50000))
-          .andExpect(jsonPath("$.members[0].available").value(false))
+          .andExpect(jsonPath("$.members[0].saleStatus").value("AWAITING_PAYMENT"))
+          .andExpect(jsonPath("$.members[0].paymentDueAt").value("2026-05-20T10:30:00Z"))
+          .andExpect(jsonPath("$.members[0].participatedByMe").value(true))
           .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))

@@ -10,6 +10,8 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -30,6 +32,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -64,6 +67,8 @@ class ParticipationServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -83,11 +88,15 @@ class ParticipationServiceTest {
   }
 
   private BuncheolMember buncheolMember() {
+    return buncheolMember(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+  }
+
+  private BuncheolMember buncheolMember(final Long id, final long price) {
     BuncheolMember member = newInstance(BuncheolMember.class);
-    setField(member, "id", BUNCHEOL_MEMBER_ID);
+    setField(member, "id", id);
     setField(member, "buncheolId", BUNCHEOL_ID);
     setField(member, "memberId", 1001L);
-    setField(member, "price", MEMBER_PRICE);
+    setField(member, "price", price);
     return member;
   }
 
@@ -110,7 +119,13 @@ class ParticipationServiceTest {
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
           .willReturn(shippingAddress());
-      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(true);
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                // 저장 성공 시 영속화로 id 가 채워지는 것을 흉내낸다.
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
       User host = mock(User.class);
       given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
       given(userDomainService.getUser(HOST_ID)).willReturn(host);
@@ -120,10 +135,12 @@ class ParticipationServiceTest {
 
       // 30분 창이 deadline 보다 빠르므로 dueAt = now + 30분.
       Instant expectedDueAt = NOW.plus(Duration.ofMinutes(30));
-      assertThat(result.amount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(result.dueAt()).isEqualTo(expectedDueAt);
       assertThat(result.hostAccount()).isEqualTo(HOST_ACCOUNT);
 
+      // 가드 호출이 실수로 제거되는 회귀를 잡는다.
+      then(userDomainService).should().requireProfileCompleted(PARTICIPANT_ID);
       then(buncheol).should().validateRecruiting(NOW);
       then(participationDomainService)
           .should()
@@ -133,8 +150,83 @@ class ParticipationServiceTest {
       assertThat(saved.getBuncheolMemberId()).isEqualTo(BUNCHEOL_MEMBER_ID);
       assertThat(saved.getParticipantId()).isEqualTo(PARTICIPANT_ID);
       assertThat(saved.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
-      assertThat(saved.getAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      // 멤버 금액과 배송비는 분리 저장되고, 총액(getTotalAmount)에만 합산된다.
+      assertThat(saved.getAmount()).isEqualTo(MEMBER_PRICE);
+      assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
+      assertThat(saved.getTotalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(saved.getDueAt()).isEqualTo(expectedDueAt);
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+    }
+
+    @Test
+    void 같은_분철에_이미_활성_참여가_있으면_저장하지_않고_예외가_발생한다() {
+      // 오픈 이벤트 운영 정책: 분철당 참여 1건(멤버 1명). 취소·만료된 참여는 재참여를 막지 않는다(mock 기본 false).
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(
+              participationDomainService.hasActiveParticipationInBuncheol(
+                  BUNCHEOL_ID, PARTICIPANT_ID))
+          .willReturn(true);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    @Test
+    void 멤버_지정이_없으면_저장하지_않고_예외가_발생한다() {
+      // DTO @NotNull 검증과 별개로 서비스 방어 검증을 확인한다.
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+
+      ParticipateRequest emptyRequest =
+          new ParticipateRequest(
+              null, SHIPPING_ADDRESS_ID, new RefundAccountRequest("국민", "12345678", "홍길동"));
+
+      assertThatThrownBy(
+              () -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, emptyRequest))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    @Test
+    void 슬롯_점유에_실패하면_예외가_발생한다() {
+      Instant deadline = NOW.plus(Duration.ofDays(7));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getDeadline()).willReturn(deadline);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      // 저장 시점 재확인에서 모집중이 아니면 false → 롤백 의도.
+      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      // 호스트 계좌 조회까지 가지 않는다.
+      then(userDomainService).should(never()).getUser(anyLong());
     }
 
     @Test
@@ -152,7 +244,13 @@ class ParticipationServiceTest {
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
           .willReturn(shippingAddress());
-      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(true);
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                // 저장 성공 시 영속화로 id 가 채워지는 것을 흉내낸다.
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
       User host = mock(User.class);
       given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
       given(userDomainService.getUser(HOST_ID)).willReturn(host);
@@ -175,6 +273,23 @@ class ParticipationServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    @Test
+    void 프로필_미완료_유저가_참여하면_예외가_발생한다() {
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(PARTICIPANT_ID);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
 
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
@@ -254,18 +369,49 @@ class ParticipationServiceTest {
   class ConfirmPaymentTest {
 
     @Test
-    void 입금확인에_성공하면_입금확인_이벤트를_발행한다() {
+    void 입금확인에_성공하면_배송_스냅샷을_만들고_입금확인_이벤트를_발행한다() {
       Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      // 아직 전 슬롯 확정 아님 → 조기확정 CAS 미전이.
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
 
       participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
 
       then(buncheol).should().validateOwner(HOST_ID);
       then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      // 입금확인 시점에 참여 시점 배송지로 스냅샷이 생성된다(배송지는 변경 불가).
+      then(deliverySnapshotCreator).should().create(participation);
+      then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
+    }
+
+    @Test
+    void 관리자_입금확인은_소유권_검증_없이_수행된다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
+
+      participationService.confirmPaymentByAdmin(PARTICIPATION_ID);
+
+      then(buncheol).should(never()).validateOwner(anyLong());
+      then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      then(deliverySnapshotCreator).should().create(participation);
       then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
     }
 
@@ -293,6 +439,7 @@ class ParticipationServiceTest {
     @Test
     void 입금확인_도메인_전이가_실패하면_예외를_전파한다() {
       Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
@@ -308,6 +455,45 @@ class ParticipationServiceTest {
           .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_DUE_PASSED);
 
       then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 전_슬롯이_입금확인되면_조기확정_CAS_가_전이하고_후속처리가_수행된다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      // 슬롯 5개. 매진·최소인원 판정은 CAS 내부 서브쿼리가 담당하고, 여기선 CAS 전이(true)만 stub.
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(true);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(buncheolDomainService).should().confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW);
+      then(buncheolConfirmedFinalizer).should().finalizeConfirmed(BUNCHEOL_ID);
+    }
+
+    @Test
+    void 조기확정_CAS_가_전이하지_않으면_진행확정_후속처리를_하지_않는다() {
+      // 아직 매진 아님 / 최소인원 미달 등의 판정은 CAS(어댑터 테스트)가 담당한다. 서비스는 CAS 결과(false)만 본다.
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
     }
   }
 

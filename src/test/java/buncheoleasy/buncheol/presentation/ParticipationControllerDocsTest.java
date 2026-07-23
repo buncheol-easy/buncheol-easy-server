@@ -21,9 +21,13 @@ import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
@@ -99,8 +103,7 @@ class ParticipationControllerDocsTest {
     // given
     Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     ParticipateResult result =
-        new ParticipateResult(
-            500L, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
+        new ParticipateResult(500L, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
     given(participationService.participate(eq(10L), eq(PARTICIPANT_ID), any()))
         .willReturn(result);
 
@@ -133,15 +136,22 @@ class ParticipationControllerDocsTest {
                         .summary("분철 참여 신청")
                         .description(
                             """
-                            멤버 슬롯을 선착순으로 점유한다. 점유에 성공하면 입금확인중(AWAITING_PAYMENT) 상태로 등록되고,
-                            응답으로 개최자 계좌·입금 총액·입금 만료 시각(`dueAt`)을 받는다. 참여와 동시에 분철 취소 시
-                            환불받을 본인 계좌(`refundAccount`)를 입력한다.
+                            멤버 슬롯을 선착순으로 점유한다. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이고,
+                            오픈 이벤트 운영 정책으로 **분철당 참여는 1회(멤버 1명)로 제한**된다 — 같은 분철에
+                            활성(입금확인중·확정) 참여가 있으면 중복 참여가 거부되며, 취소·만료된 참여는 재참여할 수
+                            있다. `buncheolMemberId` 로 슬롯 하나를 지정하고, 점유에 성공하면
+                            입금확인중(AWAITING_PAYMENT) 상태로 등록되며 응답으로 생성된 참여
+                            ID(`participationId`)·개최자 계좌·입금 총액·입금 만료 시각(`dueAt`)을 받는다.
+                            `amount` 는 (멤버 가격 + 배송비)다. 참여와 동시에 분철 취소 시 환불받을 본인
+                            계좌(`refundAccount`)를 입력한다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님 |
                             | 403 | `BCH-065` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
+                            | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |
                             """)
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
@@ -149,15 +159,16 @@ class ParticipationControllerDocsTest {
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .requestSchema(Schema.schema("ParticipateRequest"))
                         .requestFields(
-                            fieldWithPath("buncheolMemberId").description("참여할 분철 멤버 슬롯 ID"),
+                            fieldWithPath("buncheolMemberId")
+                                .description("참여할 분철 멤버 슬롯 ID (단일 선택 정책)"),
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
                             fieldWithPath("refundAccount").description("분철 취소 시 환불받을 본인 계좌"),
                             fieldWithPath("refundAccount.bank").description("은행명"),
-                            fieldWithPath("refundAccount.account").description("계좌번호 (숫자만)"),
+                            fieldWithPath("refundAccount.account").description("계좌번호 (숫자·하이픈)"),
                             fieldWithPath("refundAccount.holder").description("예금주"))
                         .responseSchema(Schema.schema("ParticipateResponse"))
                         .responseFields(
-                            fieldWithPath("participationId").description("참여 ID"),
+                            fieldWithPath("participationId").description("생성된 참여 ID"),
                             fieldWithPath("amount").description("입금할 총액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("dueAt").description("입금 만료 시각 (UTC ISO-8601)"),
                             fieldWithPath("hostAccount").description("참여자가 입금할 개최자 계좌"),
@@ -172,7 +183,7 @@ class ParticipationControllerDocsTest {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     Instant confirmedAt = Instant.parse("2026-06-01T13:00:00Z");
-    MyParticipationResponse response =
+    MyParticipationResponse confirmed =
         new MyParticipationResponse(
             500L,
             10L,
@@ -180,14 +191,39 @@ class ParticipationControllerDocsTest {
             5,
             "민지",
             53_000L,
+            3_000L,
             ParticipationStatus.CONFIRMED,
             null,
             BuncheolStatus.CONFIRMED,
             deadline,
             dueAt,
-            confirmedAt);
+            confirmedAt,
+            "https://cdn.example.com/buncheols/10/main.jpg",
+            List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
+            null,
+            new MyParticipationDeliveryResponse(
+                900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING));
+    MyParticipationResponse awaitingPayment =
+        new MyParticipationResponse(
+            501L,
+            20L,
+            "에스파 시즌그리팅 분철",
+            4,
+            "카리나",
+            41_000L,
+            2_000L,
+            ParticipationStatus.AWAITING_PAYMENT,
+            null,
+            BuncheolStatus.RECRUITING,
+            deadline,
+            dueAt,
+            null,
+            "https://cdn.example.com/buncheols/20/main.jpg",
+            List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 2_000)),
+            new HostAccountResponse("국민은행", "98765432", "개최자"),
+            null);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
-        .willReturn(List.of(response));
+        .willReturn(List.of(confirmed, awaitingPayment));
 
     mockMvc
         .perform(
@@ -213,6 +249,8 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("[].buncheolMemberCount").description("분철에 포함된 멤버 슬롯 수"),
                             fieldWithPath("[].memberName").description("내가 참여한 멤버 이름"),
                             fieldWithPath("[].amount").description("참여 금액 (멤버 가격 + 배송비, 원)"),
+                            fieldWithPath("[].shippingFee")
+                                .description("이 참여에 부과된 배송비 (원). 멤버 가격 = amount - shippingFee"),
                             fieldWithPath("[].participationStatus")
                                 .description(
                                     "내 참여 상태 (AWAITING_PAYMENT | CONFIRMED | CANCELLED)"),
@@ -228,6 +266,42 @@ class ParticipationControllerDocsTest {
                                 .optional(),
                             fieldWithPath("[].confirmedAt")
                                 .description("입금확인 시각. 미확인 시 null")
+                                .optional(),
+                            fieldWithPath("[].thumbnailUrl")
+                                .description("분철 대표 이미지 URL. 이미지가 없으면 null")
+                                .optional(),
+                            fieldWithPath("[].shippingOptions")
+                                .description("분철이 지원하는 배송방법·배송비 목록"),
+                            fieldWithPath("[].shippingOptions[].method")
+                                .description("배송방법 (GS25_HALF | CU_HALF)"),
+                            fieldWithPath("[].shippingOptions[].fee").description("배송비 (원)"),
+                            fieldWithPath("[].hostAccount")
+                                .description(
+                                    "입금할 개최자 계좌. 입금확인중(AWAITING_PAYMENT)이 아니거나 개최자 계좌 미등록이면 null")
+                                .optional(),
+                            fieldWithPath("[].hostAccount.bank").description("개최자 은행명").optional(),
+                            fieldWithPath("[].hostAccount.account")
+                                .description("개최자 계좌번호")
+                                .optional(),
+                            fieldWithPath("[].hostAccount.holder")
+                                .description("개최자 예금주")
+                                .optional(),
+                            fieldWithPath("[].delivery")
+                                .description("배송 스냅샷. 입금확인 시 생성되며 그 전에는 null")
+                                .optional(),
+                            fieldWithPath("[].delivery.deliveryId").description("배송 ID").optional(),
+                            fieldWithPath("[].delivery.shippingMethod")
+                                .description("마감 시점에 확정된 배송방법 스냅샷")
+                                .optional(),
+                            fieldWithPath("[].delivery.storeName")
+                                .description("마감 시점에 확정된 편의점 지점명 스냅샷")
+                                .optional(),
+                            fieldWithPath("[].delivery.trackingNumber")
+                                .description("운송장 번호. 등록 전에는 null")
+                                .optional(),
+                            fieldWithPath("[].delivery.status")
+                                .description(
+                                    "배송 상태 (SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED)")
                                 .optional())
                         .build())));
   }

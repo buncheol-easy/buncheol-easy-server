@@ -138,4 +138,27 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
       @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
+
+  // 조기 진행확정 전용 CAS: 입금확인(CONFIRMED) 참여 수가 전체 슬롯 수 이상(매진+전원확정)이고 minHeadcount 도 충족할 때만
+  // RECRUITING → CONFIRMED. count 를 UPDATE WHERE 서브쿼리로 current-read 로 세므로, 마지막 슬롯들을 동시에 입금확인하는
+  // 경합에서도 non-locking COUNT 를 미리 읽고 판정하는 read-then-act 갭 없이 즉시 확정한다(이 CAS 가 확정하면 이후 deadline 스케줄러는
+  // status 불일치로 이중 확정하지 않는다).
+  // totalSlots=0 이면 minHeadcount(≥1) <= 0 이 거짓이라 전이하지 않는다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :confirmedStatus, b.finalizedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus "
+          + "AND b.minHeadcount <= :totalSlots "
+          + "AND ("
+          + "  SELECT COUNT(p) FROM Participation p "
+          + "  WHERE p.buncheolId = b.id AND p.status = :confirmedParticipationStatus"
+          + ") >= :totalSlots")
+  int confirmIfAllSlotsConfirmed(
+      @Param("buncheolId") Long buncheolId,
+      @Param("totalSlots") long totalSlots,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("now") Instant now);
 }

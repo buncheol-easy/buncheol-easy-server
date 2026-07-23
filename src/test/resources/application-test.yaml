@@ -36,6 +36,14 @@ jwt:
   access-token-expiration-seconds: 1800
   refresh-token-expiration-seconds: 1209600
 
+admin:
+  bootstrap:
+    # 테스트에서는 관리자 계정 부트스트랩을 항상 비활성화한다. 개발자 셸에 ADMIN_LOGIN_ID/ADMIN_PASSWORD 가
+    # 설정돼 있으면 ApplicationRunner 가 컨텍스트 기동 시 계정을 커밋해 테스트의 insertAdmin 과
+    # 유니크 제약(uq_admins_login_id) 충돌이 났다 — 빈 값으로 고정해 셸 환경과 무관하게 만든다.
+    login-id: ""
+    password: ""
+
 app:
   base-url: http://localhost:8080
   buncheol:

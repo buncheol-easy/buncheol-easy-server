@@ -38,7 +38,12 @@ public class UserDomainService {
   }
 
   @Transactional
-  public void updateProfile(final Long id, final String nickname, final String phoneNumber) {
+  public void updateProfile(
+      final Long id,
+      final String nickname,
+      final String phoneNumber,
+      final String name,
+      final Boolean marketingAgreed) {
     User user = getUser(id);
 
     if (userRepository.existsByNicknameExcludingId(nickname, id)) {
@@ -47,6 +52,14 @@ public class UserDomainService {
 
     user.updateNickname(nickname);
     user.updatePhoneNumber(phoneNumber);
+    // null 이면 기존 실명을 유지한다 (실명 필드 없는 기존 호출 호환).
+    if (name != null) {
+      user.updateName(name);
+    }
+    // null 이면 동의 상태를 건드리지 않는다 (동의 필드 없이 프로필만 수정하는 기존 호출 호환).
+    if (marketingAgreed != null) {
+      user.updateMarketingAgreement(marketingAgreed, Instant.now(clock));
+    }
   }
 
   @Transactional
@@ -58,6 +71,14 @@ public class UserDomainService {
 
   public void requireBankAccountRegistered(final Long id) {
     getUser(id).requireBankAccount();
+  }
+
+  public void requireProfileCompleted(final Long id) {
+    getUser(id).requireProfileCompleted();
+  }
+
+  public void requireCanHost(final Long id) {
+    getUser(id).requireCanHost();
   }
 
   public boolean isNicknameDuplicate(final String nickname, final Long excludeId) {

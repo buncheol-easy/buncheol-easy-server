@@ -2,9 +2,13 @@ package buncheoleasy.user.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.UserDomainService;
@@ -32,6 +36,8 @@ class ShippingAddressServiceTest {
 
   @Mock private UserDomainService userDomainService;
 
+  @Mock private ParticipationDomainService participationDomainService;
+
   private ShippingAddress savedAddress(
       Long id, Long userId, String method, String storeName, String alias, boolean isDefault) {
     return new ShippingAddress(id, userId, ShippingMethod.of(method), storeName, alias, isDefault);
@@ -47,12 +53,12 @@ class ShippingAddressServiceTest {
       Long userId = 1L;
       ShippingAddressRequest request =
           new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", "회사 근처", true);
-      given(userDomainService.isValidUser(userId)).willReturn(true);
 
       // when
       shippingAddressService.registerShippingAddress(userId, request);
 
       // then
+      then(userDomainService).should().requireProfileCompleted(userId);
       then(shippingAddressDomainService)
           .should()
           .createShippingAddress(userId, "GS25_HALF", "GS25 강남역점", "회사 근처", true);
@@ -64,13 +70,34 @@ class ShippingAddressServiceTest {
       Long userId = 1L;
       ShippingAddressRequest request =
           new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", null, false);
-      given(userDomainService.isValidUser(userId)).willReturn(false);
+      willThrow(new BusinessException(ErrorCode.USER_NOT_FOUND))
+          .given(userDomainService)
+          .requireProfileCompleted(userId);
 
       // when & then
       assertThatThrownBy(() -> shippingAddressService.registerShippingAddress(userId, request))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+      then(shippingAddressDomainService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 프로필_미완료_유저면_예외가_발생하고_등록하지_않는다() {
+      // given
+      Long userId = 1L;
+      ShippingAddressRequest request =
+          new ShippingAddressRequest("GS25_HALF", "GS25 강남역점", null, false);
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(userId);
+
+      // when & then
+      assertThatThrownBy(() -> shippingAddressService.registerShippingAddress(userId, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
 
       then(shippingAddressDomainService).shouldHaveNoInteractions();
     }
@@ -134,6 +161,47 @@ class ShippingAddressServiceTest {
 
       // then
       then(shippingAddressDomainService).should().deleteShippingAddress(userId, addressId);
+    }
+
+    @Test
+    void 활성_참여가_사용_중인_배송지면_삭제하지_않고_예외가_발생한다() {
+      // given
+      Long userId = 1L;
+      Long addressId = 10L;
+      given(userDomainService.isValidUser(userId)).willReturn(true);
+      given(participationDomainService.hasActiveParticipationByShippingAddress(addressId))
+          .willReturn(true);
+
+      // when & then
+      assertThatThrownBy(() -> shippingAddressService.removeShippingAddress(userId, addressId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_DELETE_BLOCKED_BY_ACTIVE_PARTICIPATION);
+
+      then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
+    }
+
+    @Test
+    void 본인_소유가_아니면_참여_조회_전에_예외가_발생한다() {
+      // given
+      Long userId = 1L;
+      Long addressId = 10L;
+      given(userDomainService.isValidUser(userId)).willReturn(true);
+      willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN))
+          .given(shippingAddressDomainService)
+          .validateOwnership(userId, addressId);
+
+      // when & then
+      assertThatThrownBy(() -> shippingAddressService.removeShippingAddress(userId, addressId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN);
+
+      // 소유권 검증이 먼저라 참여 참조 조회·삭제까지 가지 않는다(참조 여부 정보 노출 방지).
+      then(participationDomainService)
+          .should(never())
+          .hasActiveParticipationByShippingAddress(anyLong());
+      then(shippingAddressDomainService).should(never()).deleteShippingAddress(anyLong(), anyLong());
     }
 
     @Test

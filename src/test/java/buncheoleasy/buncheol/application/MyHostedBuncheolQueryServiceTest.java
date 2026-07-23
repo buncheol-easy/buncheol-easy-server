@@ -6,6 +6,8 @@ import static org.mockito.BDDMockito.given;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
@@ -35,6 +37,7 @@ class MyHostedBuncheolQueryServiceTest {
   @Mock private BuncheolMemberRepository buncheolMemberRepository;
   @Mock private ParticipationRepository participationRepository;
   @Mock private GroupRepository groupRepository;
+  @Mock private BuncheolImageRepository buncheolImageRepository;
 
   private static final Long HOST_ID = 1L;
 
@@ -70,6 +73,8 @@ class MyHostedBuncheolQueryServiceTest {
       given(participationRepository.countActiveByBuncheolIds(List.of(10L)))
           .willReturn(List.of(new BuncheolActiveParticipationCount(10L, 7L)));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
@@ -84,6 +89,7 @@ class MyHostedBuncheolQueryServiceTest {
       assertThat(response.memberSlotCount()).isEqualTo(3);
       assertThat(response.activeParticipationCount()).isEqualTo(7L);
       assertThat(response.createdAt()).isEqualTo(createdAt);
+      assertThat(response.thumbnailUrl()).isEqualTo("https://cdn.example.com/10-thumb.jpg");
     }
 
     @Test
@@ -99,12 +105,15 @@ class MyHostedBuncheolQueryServiceTest {
           .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
       given(participationRepository.countActiveByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
 
       assertThat(result).hasSize(1);
       assertThat(result.get(0).activeParticipationCount()).isZero();
+      // 이미지가 없는 분철은 썸네일 없이 내려간다.
+      assertThat(result.get(0).thumbnailUrl()).isNull();
     }
 
     @Test
@@ -137,6 +146,11 @@ class MyHostedBuncheolQueryServiceTest {
                   new BuncheolActiveParticipationCount(10L, 1L)));
       given(groupRepository.findAllByIds(List.of(200L, 100L)))
           .willReturn(List.of(group(200L, "에스파"), group(100L, "뉴진스")));
+      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L, 10L)))
+          .willReturn(
+              List.of(
+                  BuncheolImage.create(20L, "https://cdn.example.com/20-thumb.jpg"),
+                  BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
@@ -150,6 +164,8 @@ class MyHostedBuncheolQueryServiceTest {
       assertThat(result.get(1).groupName()).isEqualTo("뉴진스");
       assertThat(result.get(1).memberSlotCount()).isEqualTo(1);
       assertThat(result.get(1).activeParticipationCount()).isEqualTo(1L);
+      assertThat(result.get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/20-thumb.jpg");
+      assertThat(result.get(1).thumbnailUrl()).isEqualTo("https://cdn.example.com/10-thumb.jpg");
     }
   }
 

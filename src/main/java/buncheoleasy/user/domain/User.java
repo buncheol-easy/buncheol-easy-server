@@ -42,6 +42,10 @@ public class User extends TimestampedEntity {
   @Column(name = "nickname", nullable = false, length = 20)
   private Nickname nickname;
 
+  // 실명. 입금내역 대조·배송 연락 시 참조용. 기존 회원은 NULL 이며 마이페이지에서 수시 입력한다.
+  @Column(name = "name", length = 30)
+  private String name;
+
   @Convert(converter = PhoneNumberConverter.class)
   @Column(name = "phone_number", length = 15)
   private PhoneNumber phoneNumber;
@@ -52,6 +56,15 @@ public class User extends TimestampedEntity {
   // 프로필 설정 완료 여부. 첫 phoneNumber 등록 시 true 로 전이. 소셜 가입 직후엔 false (전화번호 미입력 상태).
   @Column(name = "profile_completed", nullable = false)
   private boolean profileCompleted;
+
+  // 분철 개최 허용 여부. 개최 오픈 전이라 운영이 지정한 계정만 true (부여는 현재 DB 직접 UPDATE).
+  @Column(name = "can_host", nullable = false)
+  private boolean canHost;
+
+  // 마케팅 정보 수신 동의 일시. NULL 이면 미동의(또는 철회).
+  // 광고성 정보 수신동의는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장한다.
+  @Column(name = "marketing_agreed_at")
+  private Instant marketingAgreedAt;
 
   // 회원 탈퇴 soft delete 시각. NULL 이면 활성 유저. @SQLRestriction 으로 모든 조회에서 자동 제외.
   @Column(name = "deleted_at")
@@ -69,6 +82,7 @@ public class User extends TimestampedEntity {
     this.email = email;
     this.nickname = nickname;
     this.profileCompleted = false;
+    this.canHost = false;
   }
 
   private static String generateRandomNickname() {
@@ -93,13 +107,41 @@ public class User extends TimestampedEntity {
     this.nickname = Nickname.of(newValue);
   }
 
+  public void updateName(final String newValue) {
+    this.name = newValue;
+  }
+
   public void updateBankAccount(final String bank, final String account, final String holder) {
     this.bankAccount = BankAccount.of(bank, account, holder);
+  }
+
+  // 같은 상태 재요청은 no-op 으로 두어 최초 동의 일시를 보존한다.
+  public void updateMarketingAgreement(final boolean agreed, final Instant now) {
+    if (agreed == (this.marketingAgreedAt != null)) {
+      return;
+    }
+    this.marketingAgreedAt = agreed ? now : null;
   }
 
   public void requireBankAccount() {
     if (this.bankAccount == null) {
       throw new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
+
+  public void requireProfileCompleted() {
+    if (!this.profileCompleted) {
+      throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+  }
+
+  public void allowHosting() {
+    this.canHost = true;
+  }
+
+  public void requireCanHost() {
+    if (!this.canHost) {
+      throw new BusinessException(ErrorCode.USER_CANNOT_HOST);
     }
   }
 

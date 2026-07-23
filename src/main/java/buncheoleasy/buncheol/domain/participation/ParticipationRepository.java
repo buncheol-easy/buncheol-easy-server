@@ -22,8 +22,26 @@ public interface ParticipationRepository {
   /** 참여자에게 활성({@link ParticipationStatus#active()}) 참여가 하나라도 있는지 (회원탈퇴 가드용). */
   boolean existsActiveByParticipantId(Long participantId);
 
+  /**
+   * 해당 분철에 참여자의 활성({@link ParticipationStatus#active()}) 참여가 있는지 (분철당 중복 참여 가드용). 취소·만료된 참여는
+   * 재참여를 막지 않는다.
+   */
+  boolean existsActiveByBuncheolIdAndParticipantId(Long buncheolId, Long participantId);
+
+  /**
+   * 해당 배송지를 참조하는 활성({@link ParticipationStatus#active()}) 참여가 있는지 (배송지 삭제 가드용). 종료된 참여는 FK ON
+   * DELETE SET NULL 로 정리되므로 삭제를 막지 않는다.
+   */
+  boolean existsActiveByShippingAddressId(Long shippingAddressId);
+
   /** 여러 분철의 활성 참여 수 집계 (공개 목록의 참여자 수 표시용). */
   List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(List<Long> buncheolIds);
+
+  /**
+   * 여러 분철에서 활성({@link ParticipationStatus#active()}) 참여가 점유한 멤버 슬롯 ID({@code buncheol_member_id})
+   * 전체 (공개 목록의 "안 팔린 멤버" 계산용). 슬롯 ID 는 분철 간에도 유일하므로 분철별 그룹핑 없이 평면 리스트로 돌려준다.
+   */
+  List<Long> findActiveBuncheolMemberIds(List<Long> buncheolIds);
 
   /** 단일 분철의 활성 참여 전체 (호스트 관리 화면 + 분철 취소 시 알림 대상). */
   List<Participation> findActiveByBuncheolId(Long buncheolId);

@@ -20,6 +20,12 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   boolean existsByParticipantIdAndStatusIn(
       Long participantId, Collection<ParticipationStatus> statuses);
 
+  boolean existsByBuncheolIdAndParticipantIdAndStatusIn(
+      Long buncheolId, Long participantId, Collection<ParticipationStatus> statuses);
+
+  boolean existsByShippingAddressIdAndStatusIn(
+      Long shippingAddressId, Collection<ParticipationStatus> statuses);
+
   @Query(
       "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount("
           + "p.buncheolId, COUNT(p)) "
@@ -37,6 +43,13 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   List<Participation> findByBuncheolIdAndStatusIn(
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
+
+  @Query(
+      "SELECT p.buncheolMemberId FROM Participation p "
+          + "WHERE p.buncheolId IN :buncheolIds AND p.status IN :activeStatuses")
+  List<Long> findActiveBuncheolMemberIds(
+      @Param("buncheolIds") List<Long> buncheolIds,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
 
   List<Participation> findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
       Long buncheolId, ParticipationStatus status);

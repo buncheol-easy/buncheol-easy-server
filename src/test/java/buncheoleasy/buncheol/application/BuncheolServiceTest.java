@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
@@ -69,6 +70,8 @@ class BuncheolServiceTest {
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
 
   @Mock private ParticipationDomainService participationDomainService;
+
+  @Mock private DeliveryDomainService deliveryDomainService;
 
   @Mock private GroupDomainService groupDomainService;
 
@@ -250,6 +253,23 @@ class BuncheolServiceTest {
     }
 
     @Test
+    void 개최_권한이_없는_유저면_예외가_발생한다() {
+      // given
+      willThrow(new BusinessException(ErrorCode.USER_CANNOT_HOST))
+          .given(userDomainService)
+          .requireCanHost(HOST_ID);
+
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+    }
+
+    @Test
     void 호스트가_정산_계좌를_등록하지_않았으면_예외가_발생한다() {
       // given
       willThrow(new BusinessException(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED))
@@ -427,6 +447,8 @@ class BuncheolServiceTest {
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // 취소된 참여의 배송 스냅샷을 정리한다.
+      then(deliveryDomainService).should().deleteByParticipationIds(List.of(50L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
     }
 

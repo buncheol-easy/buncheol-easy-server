@@ -1,6 +1,7 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
 DROP TABLE IF EXISTS inbox_messages;
+DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS deliveries;
 DROP TABLE IF EXISTS participations;
 DROP TABLE IF EXISTS buncheol_images;
@@ -21,11 +22,14 @@ CREATE TABLE users
     provider_id         VARCHAR(100) NOT NULL,
     email               VARCHAR(320) NOT NULL,
     nickname            VARCHAR(20)  NOT NULL,
+    name                VARCHAR(30)  NULL,
     phone_number        VARCHAR(15)  NULL,
     settlement_bank     VARCHAR(50)  NULL,
     settlement_account  VARCHAR(50)  NULL,
     settlement_holder   VARCHAR(50)  NULL,
     profile_completed   BOOLEAN      NOT NULL DEFAULT FALSE,
+    can_host            BOOLEAN      NOT NULL DEFAULT FALSE,
+    marketing_agreed_at TIMESTAMP    NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP    NULL,
@@ -157,8 +161,9 @@ CREATE TABLE participations
     buncheol_id         BIGINT       NOT NULL,
     buncheol_member_id  BIGINT       NOT NULL,
     participant_id      BIGINT       NOT NULL,
-    shipping_address_id BIGINT       NOT NULL,
+    shipping_address_id BIGINT       NULL,
     amount              BIGINT       NOT NULL,
+    shipping_fee        BIGINT       NOT NULL DEFAULT 0,
     refund_bank         VARCHAR(50)  NOT NULL,
     refund_account      VARCHAR(50)  NOT NULL,
     refund_holder       VARCHAR(50)  NOT NULL,
@@ -169,6 +174,8 @@ CREATE TABLE participations
     status              VARCHAR(30)  NOT NULL,
     -- 활성 상태일 때만 멤버 슬롯 id 값을 갖는 가상 컬럼 (선착순 유니크용). users 테이블과 동일하게 H2 computed column 사용.
     active_member_id    BIGINT AS (CASE WHEN status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN buncheol_member_id END),
+    -- 활성 상태일 때만 참여자 id 값을 갖는 가상 컬럼 (분철당 중복 참여 방지 유니크용).
+    active_participant_id BIGINT AS (CASE WHEN status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN participant_id END),
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -176,13 +183,29 @@ CREATE TABLE participations
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
     CONSTRAINT fk_participations_buncheol_member FOREIGN KEY (buncheol_member_id) REFERENCES buncheol_members (id),
     CONSTRAINT fk_participations_user FOREIGN KEY (participant_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE CASCADE
+    CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_member_id);
+CREATE UNIQUE INDEX uq_participations_active_participant ON participations (buncheol_id, active_participant_id);
 CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
 CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);
+CREATE INDEX idx_participations_created ON participations (created_at DESC, id DESC);
+
+-- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)
+CREATE TABLE admins
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    login_id   VARCHAR(50)  NOT NULL,
+    password   VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uq_admins_login_id ON admins (login_id);
 
 CREATE TABLE deliveries
 (
@@ -258,10 +281,13 @@ CREATE TABLE inbox_messages
     title        VARCHAR(200) NOT NULL,
     reference    VARCHAR(200) NULL,
     description  TEXT         NOT NULL,
-    pinned       BOOLEAN      NOT NULL DEFAULT FALSE,
-    link_path    VARCHAR(500) NULL,
-    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    pinned           BOOLEAN      NOT NULL DEFAULT FALSE,
+    link_path        VARCHAR(500) NULL,
+    image_url        VARCHAR(500) NULL,
+    banner_title     VARCHAR(200) NULL,
+    banner_image_url VARCHAR(500) NULL,
+    created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_inbox_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users (id) ON DELETE CASCADE
@@ -269,3 +295,4 @@ CREATE TABLE inbox_messages
 
 CREATE INDEX idx_inbox_recipient_created ON inbox_messages (recipient_id, created_at DESC, id DESC);
 CREATE INDEX idx_inbox_type_pinned_created ON inbox_messages (type, pinned, created_at DESC, id DESC);
+CREATE INDEX idx_inbox_banner ON inbox_messages (banner_image_url);

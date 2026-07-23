@@ -69,7 +69,8 @@ class UserControllerTest {
   void 내_프로필_조회가_성공하면_200과_응답본문을_반환한다() throws Exception {
     given(userService.getUserProfile(USER_ID))
         .willReturn(
-            UserProfileResponse.of("KAKAO", "test@example.com", "테스트닉", "01012345678", null));
+            UserProfileResponse.of(
+                "KAKAO", "test@example.com", "테스트닉", "김실명", "01012345678", null, false));
 
     mockMvc
         .perform(get("/v1/users/me").with(mockAuth()))
@@ -77,7 +78,9 @@ class UserControllerTest {
         .andExpect(jsonPath("$.provider").value("KAKAO"))
         .andExpect(jsonPath("$.email").value("test@example.com"))
         .andExpect(jsonPath("$.nickname").value("테스트닉"))
-        .andExpect(jsonPath("$.phoneNumber").value("01012345678"));
+        .andExpect(jsonPath("$.name").value("김실명"))
+        .andExpect(jsonPath("$.phoneNumber").value("01012345678"))
+        .andExpect(jsonPath("$.canHost").value(false));
   }
 
   @Test
@@ -176,13 +179,26 @@ class UserControllerTest {
   }
 
   @Test
-  void 정산_계좌번호에_숫자_외_문자가_포함되면_400을_반환한다() throws Exception {
+  void 정산_계좌번호에_하이픈이_포함돼도_등록에_성공한다() throws Exception {
     mockMvc
         .perform(
             put("/v1/users/me/bank-account")
                 .with(mockAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"bank\":\"국민은행\",\"account\":\"123-456-789012\",\"holder\":\"홍길동\"}"))
+        .andExpect(status().isNoContent());
+
+    then(userService).should().updateBankAccount(eq(USER_ID), any(BankAccountRequest.class));
+  }
+
+  @Test
+  void 정산_계좌번호가_숫자와_하이픈_형식이_아니면_400을_반환한다() throws Exception {
+    mockMvc
+        .perform(
+            put("/v1/users/me/bank-account")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"bank\":\"국민은행\",\"account\":\"123-456-abc\",\"holder\":\"홍길동\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
   }

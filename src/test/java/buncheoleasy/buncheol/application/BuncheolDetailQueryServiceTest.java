@@ -18,6 +18,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -57,6 +58,7 @@ class BuncheolDetailQueryServiceTest {
   private static final Long OTHER_USER = 888L;
   private static final Long HOST_ID = 777L;
   private static final Instant DEADLINE = Instant.parse("2026-06-01T12:00:00Z");
+  private static final Instant PAYMENT_DUE_AT = Instant.parse("2026-05-20T10:30:00Z");
 
   @Nested
   @DisplayName("분철 단건 상세 조회")
@@ -113,6 +115,26 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
+    void 비로그인_호출이면_선점된_슬롯도_participatedByMe_는_false() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(
+              List.of(active(501L, 101L, OTHER_USER, ParticipationStatus.AWAITING_PAYMENT)));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AWAITING_PAYMENT);
+      assertThat(response.members().get(0).participatedByMe()).isFalse();
+    }
+
+    @Test
     void 호스트_본인이_조회하면_hostedByMe_가_true() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
@@ -159,12 +181,16 @@ class BuncheolDetailQueryServiceTest {
       assertThat(response.myParticipation()).isNotNull();
       assertThat(response.myParticipation().participatedMemberCount()).isZero();
       assertThat(response.myParticipation().participations()).isEmpty();
-      // 활성 참여가 있는 멤버 슬롯은 '마감(available=false)' 으로 표시된다.
-      assertThat(response.members().get(0).available()).isFalse();
+      // 입금 확인을 기다리는 활성 참여가 점유한 멤버 슬롯은 AWAITING_PAYMENT + 입금 기한으로 표시된다.
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AWAITING_PAYMENT);
+      assertThat(response.members().get(0).paymentDueAt()).isEqualTo(PAYMENT_DUE_AT);
+      // 다른 유저의 선점이므로 내 참여 아님.
+      assertThat(response.members().get(0).participatedByMe()).isFalse();
     }
 
     @Test
-    void 멤버별_가격과_점유_여부_그리고_내_참여_요약을_계산한다() {
+    void 멤버별_가격과_판매_상태_그리고_내_참여_요약을_계산한다() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
@@ -196,11 +222,17 @@ class BuncheolDetailQueryServiceTest {
               BuncheolMemberDetailResponse::buncheolMemberId,
               BuncheolMemberDetailResponse::memberName,
               BuncheolMemberDetailResponse::price,
-              BuncheolMemberDetailResponse::available)
+              BuncheolMemberDetailResponse::saleStatus,
+              BuncheolMemberDetailResponse::paymentDueAt,
+              BuncheolMemberDetailResponse::participatedByMe)
           .containsExactly(
-              tuple(101L, "민지", 40_000L, false),
-              tuple(102L, "해린", 30_000L, false),
-              tuple(103L, "혜인", 20_000L, false));
+              tuple(
+                  101L, "민지", 40_000L, BuncheolMemberSaleStatus.AWAITING_PAYMENT, PAYMENT_DUE_AT,
+                  true),
+              tuple(102L, "해린", 30_000L, BuncheolMemberSaleStatus.SOLD, null, true),
+              tuple(
+                  103L, "혜인", 20_000L, BuncheolMemberSaleStatus.AWAITING_PAYMENT, PAYMENT_DUE_AT,
+                  false));
 
       assertThat(response.myParticipation().participatedMemberCount()).isEqualTo(2);
       assertThat(response.myParticipation().participations())
@@ -214,7 +246,7 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
-    void 활성_참여가_없는_멤버_슬롯은_available_true() {
+    void 활성_참여가_없는_멤버_슬롯은_AVAILABLE() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
@@ -226,7 +258,9 @@ class BuncheolDetailQueryServiceTest {
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
-      assertThat(response.members().get(0).available()).isTrue();
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+      assertThat(response.members().get(0).paymentDueAt()).isNull();
       assertThat(response.confirmedCount()).isZero();
     }
 
@@ -346,6 +380,7 @@ class BuncheolDetailQueryServiceTest {
     setField(p, "buncheolMemberId", buncheolMemberId);
     setField(p, "participantId", participantId);
     setField(p, "status", status);
+    setField(p, "dueAt", PAYMENT_DUE_AT);
     return p;
   }
 

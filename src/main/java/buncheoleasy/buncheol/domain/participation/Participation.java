@@ -50,13 +50,21 @@ public class Participation extends TimestampedEntity {
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
 
-  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다.
-  @Column(name = "shipping_address_id", nullable = false, updatable = false)
+  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다. 참여 후에는 변경할 수 없다(updatable=false).
+  // 종료(취소·만료)된 참여가 참조하던 배송지를 사용자가 삭제하면 FK ON DELETE SET NULL 로 이 값이 NULL 이 된다
+  // (활성 참여가 참조 중이면 앱에서 삭제를 막으므로, 활성 참여의 배송지가 NULL 이 되는 일은 없다).
+  @Column(name = "shipping_address_id", updatable = false)
   private Long shippingAddressId;
 
-  // 참여자가 입금해야 할 총액 (멤버 금액 + 선택한 배송수단 배송비). 점유 시점 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다.
+  // 멤버 금액(굿즈 가격). 점유 시점 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다. 배송비는 shippingFee 로 분리 보관한다.
   @Column(nullable = false, updatable = false)
   private long amount;
+
+  // 선택한 배송수단의 배송비. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)라 참여마다 부과된다.
+  // 단, 다중 선택 시절 생성된 기존 행은 묶음 첫 슬롯에만 부과되고(>0) 나머지는 0 일 수 있다.
+  // 실제 입금 총액은 amount + shippingFee 다(getTotalAmount).
+  @Column(name = "shipping_fee", nullable = false, updatable = false)
+  private long shippingFee;
 
   // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 참여와 동시에 입력받는다.
   @Embedded private RefundAccount refundAccount;
@@ -87,10 +95,18 @@ public class Participation extends TimestampedEntity {
       final Long participantId,
       final Long shippingAddressId,
       final long amount,
+      final long shippingFee,
       final RefundAccount refundAccount,
       final Instant dueAt) {
     return new Participation(
-        buncheolId, buncheolMemberId, participantId, shippingAddressId, amount, refundAccount, dueAt);
+        buncheolId,
+        buncheolMemberId,
+        participantId,
+        shippingAddressId,
+        amount,
+        shippingFee,
+        refundAccount,
+        dueAt);
   }
 
   private Participation(
@@ -99,6 +115,7 @@ public class Participation extends TimestampedEntity {
       final Long participantId,
       final Long shippingAddressId,
       final long amount,
+      final long shippingFee,
       final RefundAccount refundAccount,
       final Instant dueAt) {
     validate(refundAccount, dueAt);
@@ -107,9 +124,15 @@ public class Participation extends TimestampedEntity {
     this.participantId = participantId;
     this.shippingAddressId = shippingAddressId;
     this.amount = amount;
+    this.shippingFee = shippingFee;
     this.refundAccount = refundAccount;
     this.dueAt = dueAt;
     this.status = ParticipationStatus.AWAITING_PAYMENT;
+  }
+
+  /** 실제 입금 총액 = 멤버 금액 + 배송비. */
+  public long getTotalAmount() {
+    return amount + shippingFee;
   }
 
   public void validateOwnedBy(final Long participantId) {

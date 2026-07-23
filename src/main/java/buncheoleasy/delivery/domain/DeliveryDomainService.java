@@ -2,6 +2,7 @@ package buncheoleasy.delivery.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -27,10 +28,8 @@ public class DeliveryDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
   }
 
-  public void updateDeliveryStatus(final Delivery delivery, final DeliveryStatus expectedStatus) {
-    boolean updated = deliveryRepository.updateStatus(delivery, expectedStatus);
-    if (!updated) {
-      throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
+  /** 취소된 참여들의 배송 스냅샷을 일괄 삭제한다 (분철 취소 cascade 시 고아 스냅샷 정리). 호출 측 {@code @Transactional} 필수. */
+  public void deleteByParticipationIds(final List<Long> participationIds) {
+    deliveryRepository.deleteByParticipationIds(participationIds);
   }
 }

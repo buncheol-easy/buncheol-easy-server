@@ -29,6 +29,12 @@ class BankAccountTest {
       assertThat(account.holder()).isEqualTo("홍길동");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"110-123-456789", "3333-01-1234567", "123456789012"})
+    void 하이픈이_포함된_계좌번호도_허용된다(String account) {
+      assertThatCode(() -> BankAccount.of("국민은행", account, "홍길동")).doesNotThrowAnyException();
+    }
+
     @Test
     void 최대_길이_경계값까지_허용된다() {
       String maxLengthText = "가".repeat(50);
@@ -104,8 +110,8 @@ class BankAccountTest {
   class AccountFormatTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"123-456", "123 456", "123.456", "abc", "12a34", "１２３"})
-    void 계좌번호에_숫자_외_문자가_포함되면_예외가_발생한다(String invalidAccount) {
+    @ValueSource(strings = {"123 456", "123.456", "abc", "12a34", "１２３", "-123", "123-", "1--2"})
+    void 계좌번호가_숫자와_하이픈_형식이_아니면_예외가_발생한다(String invalidAccount) {
       assertThatThrownBy(() -> BankAccount.of("국민은행", invalidAccount, "홍길동"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")

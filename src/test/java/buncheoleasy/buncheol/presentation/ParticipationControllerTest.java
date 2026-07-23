@@ -20,11 +20,15 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
+import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -124,6 +128,32 @@ class ParticipationControllerTest {
     }
 
     @Test
+    void 멤버_슬롯을_지정하지_않으면_400을_반환한다() throws Exception {
+      // 참여 1건 = 멤버 슬롯 1개(단일 선택 정책). buncheolMemberId 는 @NotNull 검증에서 걸러진다.
+      String missingMemberJson =
+          """
+          {
+            "shippingAddressId": 200,
+            "refundAccount": {
+              "bank": "국민은행",
+              "account": "12345678",
+              "holder": "홍길동"
+            }
+          }
+          """;
+
+      mockMvc
+          .perform(
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(missingMemberJson)
+                  .with(mockAuth()))
+          .andExpect(status().isBadRequest());
+
+      then(participationService).shouldHaveNoInteractions();
+    }
+
+    @Test
     void 모집중이_아닌_분철이면_409를_반환한다() throws Exception {
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
           .given(participationService)
@@ -159,6 +189,26 @@ class ParticipationControllerTest {
                   .string(
                       Matchers.containsString(
                           ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE.getCode())));
+    }
+
+    @Test
+    void 같은_분철에_이미_참여_중이면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL))
+          .given(participationService)
+          .participate(eq(BUNCHEOL_ID), eq(PARTICIPANT_ID), any(ParticipateRequest.class));
+
+      mockMvc
+          .perform(
+              post("/v1/buncheols/{buncheolId}/participations", BUNCHEOL_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(VALID_REQUEST_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      Matchers.containsString(
+                          ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL.getCode())));
     }
 
     @Test
@@ -216,12 +266,18 @@ class ParticipationControllerTest {
               5,
               "민지",
               53_000L,
+              3_000L,
               ParticipationStatus.CONFIRMED,
               null,
               BuncheolStatus.CONFIRMED,
               deadline,
               dueAt,
-              confirmedAt);
+              confirmedAt,
+              "https://cdn.example.com/buncheols/10/main.jpg",
+              List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
+              null,
+              new MyParticipationDeliveryResponse(
+                  900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING));
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
           .willReturn(List.of(response));
@@ -235,9 +291,18 @@ class ParticipationControllerTest {
           .andExpect(jsonPath("$[0].buncheolMemberCount").value(5))
           .andExpect(jsonPath("$[0].memberName").value("민지"))
           .andExpect(jsonPath("$[0].amount").value(53_000))
+          .andExpect(jsonPath("$[0].shippingFee").value(3_000))
           .andExpect(jsonPath("$[0].participationStatus").value("CONFIRMED"))
           .andExpect(jsonPath("$[0].buncheolStatus").value("CONFIRMED"))
-          .andExpect(jsonPath("$[0].confirmedAt").value("2026-06-01T13:00:00Z"));
+          .andExpect(jsonPath("$[0].confirmedAt").value("2026-06-01T13:00:00Z"))
+          .andExpect(
+              jsonPath("$[0].thumbnailUrl").value("https://cdn.example.com/buncheols/10/main.jpg"))
+          .andExpect(jsonPath("$[0].shippingOptions[0].method").value("GS25_HALF"))
+          .andExpect(jsonPath("$[0].shippingOptions[0].fee").value(1_800))
+          .andExpect(jsonPath("$[0].hostAccount").doesNotExist())
+          .andExpect(jsonPath("$[0].delivery.deliveryId").value(900))
+          .andExpect(jsonPath("$[0].delivery.status").value("SHIPPING"))
+          .andExpect(jsonPath("$[0].delivery.trackingNumber").value("1234567890"));
     }
 
     @Test

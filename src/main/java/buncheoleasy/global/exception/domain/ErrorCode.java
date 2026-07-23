@@ -41,6 +41,8 @@ public enum ErrorCode {
       "USR-028", "진행 중인 분철이 있어 탈퇴할 수 없습니다.", HttpStatus.CONFLICT),
   USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION(
       "USR-029", "진행 중인 분철 참여가 있어 탈퇴할 수 없습니다.", HttpStatus.CONFLICT),
+  SHIPPING_ADDRESS_DELETE_BLOCKED_BY_ACTIVE_PARTICIPATION(
+      "USR-030", "진행 중인 참여가 사용 중인 배송지는 삭제할 수 없습니다.", HttpStatus.CONFLICT),
 
   SHIPPING_ADDRESS_NOT_FOUND("USR-019", "배송지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   SHIPPING_ADDRESS_LIMIT_EXCEEDED("USR-020", "배송지는 최대 5개까지 등록할 수 있습니다.", HttpStatus.BAD_REQUEST),
@@ -51,9 +53,13 @@ public enum ErrorCode {
   USER_BANK_ACCOUNT_LENGTH_INVALID(
       "USR-024", "정산 계좌 정보 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
   USER_BANK_ACCOUNT_NOT_REGISTERED("USR-025", "정산 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
-  USER_BANK_ACCOUNT_FORMAT_INVALID("USR-026", "정산 계좌번호는 숫자만 입력 가능합니다.", HttpStatus.BAD_REQUEST),
+  USER_BANK_ACCOUNT_FORMAT_INVALID(
+      "USR-026", "계좌번호는 숫자와 하이픈(-)만 입력 가능합니다.", HttpStatus.BAD_REQUEST),
 
   SHIPPING_ADDRESS_ALIAS_TOO_LONG("USR-027", "배송지 별칭은 10자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
+
+  // 개최 오픈 전 — 운영이 지정한 계정(can_host)만 분철을 개최할 수 있다.
+  USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
@@ -107,6 +113,9 @@ public enum ErrorCode {
   PARTICIPATION_NO_PERMISSION("BCH-069", "해당 참여에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
   PARTICIPATION_ALREADY_EXISTS("BCH-070", "같은 멤버 슬롯에 이미 진행 중인 참여가 존재합니다.", HttpStatus.CONFLICT),
   PARTICIPATION_PAYMENT_DUE_PASSED("BCH-073", "입금 기한이 지났습니다.", HttpStatus.CONFLICT),
+  // BCH-074 는 다중 선택 시절의 중복 멤버 선택 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
+  PARTICIPATION_ALREADY_JOINED_BUNCHEOL(
+      "BCH-075", "이미 참여 중인 분철입니다. 오픈 이벤트 기간에는 분철당 멤버 1명에만 참여할 수 있습니다.", HttpStatus.CONFLICT),
 
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),
@@ -121,6 +130,8 @@ public enum ErrorCode {
   DELIVERY_STATE_TRANSITION_INVALID(
       "DLV-007", "현재 배송 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
   DELIVERY_NO_PERMISSION("DLV-008", "배송 정보에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
+  DELIVERY_BUNCHEOL_NOT_CONFIRMED(
+      "DLV-009", "진행확정된 분철만 운송장을 등록할 수 있습니다.", HttpStatus.CONFLICT),
 
   /** GRP - 그룹 관련 에러 */
   GROUP_NOT_FOUND("GRP-001", "존재하지 않는 그룹입니다.", HttpStatus.NOT_FOUND),
@@ -138,6 +149,14 @@ public enum ErrorCode {
   INBOX_PIN_NOT_ALLOWED("INB-004", "공지만 상단 고정할 수 있습니다.", HttpStatus.CONFLICT),
   INBOX_LINK_PATH_INVALID(
       "INB-005", "연결 경로는 '//' 로 시작하지 않는 상대 경로(/...)여야 합니다.", HttpStatus.BAD_REQUEST),
+  NOTICE_BANNER_INCOMPLETE(
+      "INB-006", "배너는 제목과 이미지를 함께 입력해야 합니다.", HttpStatus.BAD_REQUEST),
+
+  /** ADM - 관리자 관련 에러 */
+  // 인증된 토큰이지만 관리자 계정이 (더 이상) 없는 경우. 404 가 아니라 403 인 것은 의도 — 계정 존재 여부를 노출하지 않는다.
+  ADMIN_NOT_FOUND("ADM-001", "관리자 권한이 없습니다.", HttpStatus.FORBIDDEN),
+  // 아이디 없음/비밀번호 불일치를 구분하지 않는다 — 계정 존재 여부 열거(enumeration)를 막기 위함.
+  ADMIN_LOGIN_FAILED("ADM-002", "아이디 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
 
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),

@@ -28,6 +28,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
@@ -271,7 +272,15 @@ class BuncheolControllerDocsTest {
     Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
     MyHostedBuncheolResponse response =
         new MyHostedBuncheolResponse(
-            10L, "뉴진스 1집 분철", "뉴진스", BuncheolStatus.RECRUITING, deadline, 5, 7L, createdAt);
+            10L,
+            "뉴진스 1집 분철",
+            "뉴진스",
+            BuncheolStatus.RECRUITING,
+            deadline,
+            5,
+            7L,
+            createdAt,
+            "https://cdn.example.com/buncheol-10-thumb.jpg");
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -301,7 +310,10 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("[].memberSlotCount").description("분철에 포함된 멤버 슬롯 수"),
                             fieldWithPath("[].activeParticipationCount")
                                 .description("활성 참여자 수 (AWAITING_PAYMENT/CONFIRMED)"),
-                            fieldWithPath("[].createdAt").description("분철 개최 일시"))
+                            fieldWithPath("[].createdAt").description("분철 개최 일시"),
+                            fieldWithPath("[].thumbnailUrl")
+                                .description("분철 대표 이미지 URL. 이미지가 없으면 null")
+                                .optional())
                         .build())));
   }
 
@@ -314,10 +326,12 @@ class BuncheolControllerDocsTest {
             "뉴진스 1집 분철",
             BuncheolStatus.RECRUITING,
             deadline,
+            3,
             true,
             "뉴진스",
             "https://cdn.example.com/buncheol-10-thumb.jpg",
-            List.of("민지", "혜인"));
+            List.of("민지", "혜인"),
+            List.of("혜인"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -398,6 +412,7 @@ class BuncheolControllerDocsTest {
                                     "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감). 목록은 `CANCELLED` 를 제외하므로 이 둘만 내려간다"),
                             fieldWithPath("items[].deadline")
                                 .description("분철 모집 마감 시각 (UTC ISO-8601)"),
+                            fieldWithPath("items[].minHeadcount").description("분철 진행 최소 인원"),
                             fieldWithPath("items[].bookmarked")
                                 .description("호출 사용자의 본인 찜 여부 (비로그인이면 항상 false)"),
                             fieldWithPath("items[].groupName").description("대상 K-pop 그룹명"),
@@ -405,7 +420,9 @@ class BuncheolControllerDocsTest {
                                 .description("대표이미지 URL — 분철에 등록된 첫 이미지. 이미지 없으면 null")
                                 .optional(),
                             fieldWithPath("items[].memberNames")
-                                .description("분철에 포함된 멤버 이름 (호스트 등록 슬롯 순)"),
+                                .description("분철에 포함된 전체 멤버 이름 (호스트 등록 슬롯 순)"),
+                            fieldWithPath("items[].availableMemberNames")
+                                .description("아직 안 팔린(참여 가능한) 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -431,7 +448,16 @@ class BuncheolControllerDocsTest {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     BuncheolSummaryResponse item =
         new BuncheolSummaryResponse(
-            10L, "뉴진스 1집 분철", BuncheolStatus.RECRUITING, deadline, false, "뉴진스", null, List.of("민지"));
+            10L,
+            "뉴진스 1집 분철",
+            BuncheolStatus.RECRUITING,
+            deadline,
+            3,
+            false,
+            "뉴진스",
+            null,
+            List.of("민지"),
+            List.of("민지"));
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), null, false);
 
@@ -468,9 +494,13 @@ class BuncheolControllerDocsTest {
                 new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
             List.of(
                 new BuncheolMemberDetailResponse(
-                    101L, 1001L, "민지", "https://cdn.example.com/minji.png", 40_000L, false),
+                    101L, 1001L, "민지", "https://cdn.example.com/minji.png", 40_000L,
+                    BuncheolMemberSaleStatus.AWAITING_PAYMENT,
+                    Instant.parse("2026-05-20T10:30:00Z"),
+                    true),
                 new BuncheolMemberDetailResponse(
-                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", 30_000L, true)),
+                    102L, 1002L, "해린", "https://cdn.example.com/haerin.png", 30_000L,
+                    BuncheolMemberSaleStatus.AVAILABLE, null, false)),
             true,
             new MyParticipationSummaryResponse(
                 1,
@@ -501,7 +531,12 @@ class BuncheolControllerDocsTest {
                             - `CANCELLED` 상태 분철도 200 으로 응답하며 `status` 로 구분
                             - `minHeadcount` 는 분철 진행 최소 인원, `confirmedCount` 는 현재 입금확인된 참여자 수
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, 양수)
-                            - 멤버별 `available` 은 현재 참여 가능 여부 (활성 참여가 없으면 true=판매중, 있으면 false=마감)
+                            - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) /
+                              `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료)
+                            - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
+                              내려가며, 이 시각이 지나면 슬롯이 다시 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용
+                            - 멤버별 `participatedByMe` 는 그 슬롯을 점유한 활성 참여(선점·구매)가 호출 유저의 것인지 여부.
+                              내 선점("내가 입금 대기중")과 타인 선점("입금 대기중") UI 워딩 구분용. 비로그인 호출이면 항상 false
                             - `hostedByMe` 는 호출 유저가 개최자인지 여부 (비로그인 호출이면 항상 false)
                             - 로그인 유저 한정: `myParticipation.participations[]` 는 내 활성 참여 목록 (멤버 슬롯별 1건)
                             - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 멤버 슬롯 수
@@ -531,7 +566,9 @@ class BuncheolControllerDocsTest {
                                   "memberName": "민지",
                                   "memberImage": "https://cdn.example.com/minji.png",
                                   "price": 40000,
-                                  "available": false
+                                  "saleStatus": "AWAITING_PAYMENT",
+                                  "paymentDueAt": "2026-05-20T10:30:00Z",
+                                  "participatedByMe": true
                                 },
                                 {
                                   "buncheolMemberId": 102,
@@ -539,7 +576,9 @@ class BuncheolControllerDocsTest {
                                   "memberName": "해린",
                                   "memberImage": "https://cdn.example.com/haerin.png",
                                   "price": 30000,
-                                  "available": true
+                                  "saleStatus": "AVAILABLE",
+                                  "paymentDueAt": null,
+                                  "participatedByMe": false
                                 }
                               ],
                               "hostedByMe": true,
@@ -589,8 +628,18 @@ class BuncheolControllerDocsTest {
                                 .optional(),
                             fieldWithPath("members[].price")
                                 .description("호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원)"),
-                            fieldWithPath("members[].available")
-                                .description("현재 참여 가능 여부 (true=판매중 / false=마감)"),
+                            fieldWithPath("members[].saleStatus")
+                                .description(
+                                    "판매 상태 (AVAILABLE=공석 | AWAITING_PAYMENT=입금 확인 대기 중 | SOLD=판매 완료)"),
+                            fieldWithPath("members[].paymentDueAt")
+                                .description(
+                                    "선점한 참여의 입금 기한 (UTC ISO-8601). AWAITING_PAYMENT 일 때만 값이 있고,"
+                                        + " 이 시각이 지나면 슬롯이 다시 공석으로 풀린다")
+                                .optional(),
+                            fieldWithPath("members[].participatedByMe")
+                                .description(
+                                    "그 슬롯을 점유한 활성 참여(선점·구매)가 호출 유저의 것인지 여부"
+                                        + " (비로그인 호출이면 항상 false)"),
                             fieldWithPath("hostedByMe")
                                 .description("호출 유저가 개최자인지 여부 (비로그인은 false)"),
                             fieldWithPath("myParticipation")

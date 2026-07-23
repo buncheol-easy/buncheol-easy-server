@@ -33,8 +33,12 @@ class JwtTokenProviderTest {
   @Mock private RefreshTokenStore refreshTokenStore;
 
   private JwtTokenProvider createProvider(long accessExp, long refreshExp) {
+    return createProvider(accessExp, refreshExp, 43200);
+  }
+
+  private JwtTokenProvider createProvider(long accessExp, long refreshExp, long adminExp) {
     return new JwtTokenProvider(
-        ACCESS_SECRET, REFRESH_SECRET, accessExp, refreshExp, refreshTokenStore);
+        ACCESS_SECRET, REFRESH_SECRET, accessExp, refreshExp, adminExp, refreshTokenStore);
   }
 
   @Nested
@@ -54,6 +58,47 @@ class JwtTokenProviderTest {
       assertThat(provider.parseUserIdFromAccessToken(tokenPair.accessToken())).isEqualTo(userId);
       assertThat(provider.parseUserIdFromRefreshToken(tokenPair.refreshToken())).isEqualTo(userId);
       then(refreshTokenStore).should().save(userId, tokenPair.refreshToken(), 604800);
+    }
+
+    @Test
+    void 관리자_토큰을_발급하면_role_claim을_파싱할_수_있다() {
+      // given
+      JwtTokenProvider provider = createProvider(3600, 604800);
+
+      // when
+      String adminToken = provider.createAdminAccessToken(1L);
+
+      // then
+      AccessTokenClaims claims = provider.parseAccessTokenClaims(adminToken);
+      assertThat(claims.userId()).isEqualTo(1L);
+      assertThat(claims.role()).isEqualTo("ADMIN");
+    }
+
+    @Test
+    void 유저_토큰은_role_claim이_null이다() {
+      // given
+      JwtTokenProvider provider = createProvider(3600, 604800);
+
+      // when
+      TokenPair tokenPair = provider.issueTokens(1L);
+
+      // then
+      AccessTokenClaims claims = provider.parseAccessTokenClaims(tokenPair.accessToken());
+      assertThat(claims.userId()).isEqualTo(1L);
+      assertThat(claims.role()).isNull();
+    }
+
+    @Test
+    void 만료된_관리자_토큰이면_예외가_발생한다() {
+      // given
+      JwtTokenProvider provider = createProvider(3600, 604800, -1);
+      String expiredAdminToken = provider.createAdminAccessToken(1L);
+
+      // when & then
+      assertThatThrownBy(() -> provider.parseAccessTokenClaims(expiredAdminToken))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.AUTH_EXPIRED_TOKEN);
     }
 
     @Test

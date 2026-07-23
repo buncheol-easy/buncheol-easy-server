@@ -426,8 +426,8 @@ class BuncheolControllerDocsTest {
                                 .description("아직 안 팔린(참여 가능한) 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("items[].shippingFeePaybackTarget")
                                 .description(
-                                    "오픈 이벤트 배송비 환급 대상 분철 여부 (전 슬롯 0원 + 이벤트 기간 내 개최 +"
-                                        + " 이벤트 활성). 무료 분철 배지 판정용"),
+                                    "오픈 이벤트 배송비 환급 대상 분철 여부 (전 슬롯 0원 + 이벤트 활성)."
+                                        + " 무료 분철 배지 판정용"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")

@@ -1,7 +1,5 @@
 package buncheoleasy.buncheol.application.payback;
 
-import buncheoleasy.buncheol.domain.Buncheol;
-import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -24,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class ShippingFeePaybackService {
 
   private final ParticipationDomainService participationDomainService;
-  private final BuncheolDomainService buncheolDomainService;
   private final DeliveryRepository deliveryRepository;
   private final ShippingFeePaybackPolicy policy;
   private final ApplicationEventPublisher eventPublisher;
@@ -52,10 +49,9 @@ public class ShippingFeePaybackService {
       throw new BusinessException(ErrorCode.PAYBACK_REFUND_ACCOUNT_MISSING);
     }
 
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     Delivery delivery =
         deliveryRepository.findByParticipationId(participationId).orElse(null);
-    PaybackStatus derived = policy.deriveStatus(participation, buncheol, delivery, now);
+    PaybackStatus derived = policy.deriveStatus(participation, delivery, now);
     if (derived != PaybackStatus.ELIGIBLE && derived != PaybackStatus.REJECTED) {
       // NONE(비대상·배송 전)·EXPIRED(마감)는 대상 아님, REQUESTED/COMPLETED 는 이미 진행된 신청과의 상태 충돌로 구분한다.
       throw new BusinessException(

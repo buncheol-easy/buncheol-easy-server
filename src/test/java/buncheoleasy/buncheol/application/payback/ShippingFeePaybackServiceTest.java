@@ -7,8 +7,6 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
-import buncheoleasy.buncheol.domain.Buncheol;
-import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -40,20 +38,17 @@ class ShippingFeePaybackServiceTest {
 
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long PARTICIPATION_ID = 500L;
-  private static final Long BUNCHEOL_ID = 10L;
   private static final Instant NOW = Instant.parse("2026-07-16T09:00:00Z");
   private static final String TWEET_URL = "https://x.com/fan/status/1234567890";
   private static final ShippingFeePaybackRequest REQUEST =
       new ShippingFeePaybackRequest(TWEET_URL + "?s=20");
 
   @Mock private ParticipationDomainService participationDomainService;
-  @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private DeliveryRepository deliveryRepository;
   @Mock private ShippingFeePaybackPolicy policy;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Mock private Participation participation;
-  @Mock private Buncheol buncheol;
   @Mock private Delivery delivery;
 
   private ShippingFeePaybackService service;
@@ -63,19 +58,16 @@ class ShippingFeePaybackServiceTest {
     service =
         new ShippingFeePaybackService(
             participationDomainService,
-            buncheolDomainService,
             deliveryRepository,
             policy,
             eventPublisher,
             Clock.fixed(NOW, ZoneOffset.UTC));
     given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
-    given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
     given(participation.getRefundAccount())
         .willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
-    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
     given(deliveryRepository.findByParticipationId(PARTICIPATION_ID))
         .willReturn(Optional.of(delivery));
-    given(policy.deriveStatus(participation, buncheol, delivery, NOW))
+    given(policy.deriveStatus(participation, delivery, NOW))
         .willReturn(PaybackStatus.ELIGIBLE);
     given(
             participationDomainService.isPaybackTweetUrlUsedByOther(
@@ -98,7 +90,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 반려_상태에서도_재신청할_수_있다() {
-    given(policy.deriveStatus(participation, buncheol, delivery, NOW))
+    given(policy.deriveStatus(participation, delivery, NOW))
         .willReturn(PaybackStatus.REJECTED);
 
     service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST);
@@ -125,7 +117,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 환급_대상이_아니면_PAYBACK_NOT_ELIGIBLE_예외가_발생한다() {
-    given(policy.deriveStatus(participation, buncheol, delivery, NOW))
+    given(policy.deriveStatus(participation, delivery, NOW))
         .willReturn(PaybackStatus.NONE);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -136,7 +128,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 신청_마감이_지나면_PAYBACK_NOT_ELIGIBLE_예외가_발생한다() {
-    given(policy.deriveStatus(participation, buncheol, delivery, NOW))
+    given(policy.deriveStatus(participation, delivery, NOW))
         .willReturn(PaybackStatus.EXPIRED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -147,7 +139,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 이미_신청된_건이면_상태_충돌_예외가_발생한다() {
-    given(policy.deriveStatus(participation, buncheol, delivery, NOW))
+    given(policy.deriveStatus(participation, delivery, NOW))
         .willReturn(PaybackStatus.REQUESTED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))

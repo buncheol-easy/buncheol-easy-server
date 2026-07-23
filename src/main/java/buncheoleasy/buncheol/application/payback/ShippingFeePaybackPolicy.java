@@ -1,6 +1,5 @@
 package buncheoleasy.buncheol.application.payback;
 
-import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -28,21 +27,18 @@ public class ShippingFeePaybackPolicy {
   }
 
   /**
-   * 참여 단위 환급 대상 여부 = 이벤트 활성 + 0원 슬롯 참여 + 이벤트 기간 내 개최 분철 + 입금확인(CONFIRMED)된 참여.
-   * {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다. 분철 개최 시각은 별도 필드가 없어 created_at 으로 판정한다.
+   * 참여 단위 환급 대상 여부 = 이벤트 활성 + 0원 슬롯 참여 + 입금확인(CONFIRMED)된 참여. 0원 슬롯 분철은 운영진만 발행하므로 별도의 이벤트
+   * 기간 판정은 두지 않는다. {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다.
    */
-  public boolean isEventTarget(final Participation participation, final Buncheol buncheol) {
+  public boolean isEventTarget(final Participation participation) {
     return properties.enabled()
         && participation.getAmount() == 0
-        && participation.getStatus() == ParticipationStatus.CONFIRMED
-        && properties.isHostedInEventPeriod(buncheol.getCreatedAt());
+        && participation.getStatus() == ParticipationStatus.CONFIRMED;
   }
 
   /** 분철 단위(참여 전) 이벤트 대상 여부 — 목록 카드 배지용. 전 슬롯 0원 여부는 호출 측이 조회해 넘긴다. */
-  public boolean isEventTargetBuncheol(final Buncheol buncheol, final boolean allSlotsFree) {
-    return properties.enabled()
-        && allSlotsFree
-        && properties.isHostedInEventPeriod(buncheol.getCreatedAt());
+  public boolean isEventTargetBuncheol(final boolean allSlotsFree) {
+    return properties.enabled() && allSlotsFree;
   }
 
   /**
@@ -55,10 +51,7 @@ public class ShippingFeePaybackPolicy {
    * </ul>
    */
   public PaybackStatus deriveStatus(
-      final Participation participation,
-      final Buncheol buncheol,
-      final Delivery delivery,
-      final Instant now) {
+      final Participation participation, final Delivery delivery, final Instant now) {
     PaybackStatus stored = participation.getPaybackStatus();
     if (stored == PaybackStatus.REJECTED && isSubmitClosed(delivery, now)) {
       return PaybackStatus.EXPIRED;
@@ -66,7 +59,7 @@ public class ShippingFeePaybackPolicy {
     if (stored != PaybackStatus.NONE) {
       return stored;
     }
-    if (!isEventTarget(participation, buncheol)) {
+    if (!isEventTarget(participation)) {
       return PaybackStatus.NONE;
     }
     if (!isDeliveryCompleted(delivery)) {

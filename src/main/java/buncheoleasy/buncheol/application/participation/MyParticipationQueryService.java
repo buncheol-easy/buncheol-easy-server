@@ -169,9 +169,8 @@ public class MyParticipationQueryService {
         ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy()),
         hostAccount,
         delivery == null ? null : MyParticipationDeliveryResponse.from(delivery),
-        // 이미 배치 로딩된 분철·배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
+        // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(
-            participation,
-            shippingFeePaybackPolicy.deriveStatus(participation, buncheol, delivery, now)));
+            participation, shippingFeePaybackPolicy.deriveStatus(participation, delivery, now)));
   }
 }

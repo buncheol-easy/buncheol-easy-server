@@ -75,6 +75,20 @@ class AdminAuthorizationTest {
       mockMvc
           .perform(get("/v1/admin/payments").header(HttpHeaders.AUTHORIZATION, userBearer()))
           .andExpect(status().isForbidden());
+
+      mockMvc
+          .perform(
+              get("/v1/admin/shipping-fee-paybacks").header(HttpHeaders.AUTHORIZATION, userBearer()))
+          .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 배송비_환급_검수_API_도_관리자_토큰으로_접근할_수_있다() throws Exception {
+      mockMvc
+          .perform(
+              get("/v1/admin/shipping-fee-paybacks")
+                  .header(HttpHeaders.AUTHORIZATION, adminBearer()))
+          .andExpect(status().isOk());
     }
 
     @Test

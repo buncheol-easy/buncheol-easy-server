@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
@@ -209,7 +210,13 @@ class ParticipationControllerDocsTest {
             new MyParticipationDeliveryResponse(
                 900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
             new ShippingFeePaybackResponse(
-                PaybackStatus.ELIGIBLE, null, null, null, null, null));
+                PaybackStatus.ELIGIBLE,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")));
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -229,7 +236,14 @@ class ParticipationControllerDocsTest {
             List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 2_000)),
             new HostAccountResponse("국민은행", "98765432", "개최자"),
             null,
-            new ShippingFeePaybackResponse(PaybackStatus.NONE, null, null, null, null, null));
+            new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -331,7 +345,14 @@ class ParticipationControllerDocsTest {
                                 .optional(),
                             fieldWithPath("[].payback.amount")
                                 .description("환급액 (신청 시점 배송비 스냅샷, 원). 신청 전에는 null")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].payback.refundAccount")
+                                .description("환급 입금받을 계좌 (참여 시 등록한 환불계좌)"),
+                            fieldWithPath("[].payback.refundAccount.bank").description("은행명"),
+                            fieldWithPath("[].payback.refundAccount.account")
+                                .description("계좌번호"),
+                            fieldWithPath("[].payback.refundAccount.holder")
+                                .description("예금주"))
                         .build())));
   }
 
@@ -350,7 +371,14 @@ class ParticipationControllerDocsTest {
             dueAt,
             null,
             new HostAccountResponse("국민은행", "98765432", "개최자"),
-            new ShippingFeePaybackResponse(PaybackStatus.NONE, null, null, null, null, null));
+            new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -418,7 +446,12 @@ class ParticipationControllerDocsTest {
                                 .optional(),
                             fieldWithPath("payback.amount")
                                 .description("환급액 (신청 시점 배송비 스냅샷, 원). 신청 전에는 null")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("payback.refundAccount")
+                                .description("환급 입금받을 계좌 (참여 시 등록한 환불계좌)"),
+                            fieldWithPath("payback.refundAccount.bank").description("은행명"),
+                            fieldWithPath("payback.refundAccount.account").description("계좌번호"),
+                            fieldWithPath("payback.refundAccount.holder").description("예금주"))
                         .build())));
   }
 

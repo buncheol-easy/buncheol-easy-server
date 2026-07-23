@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
@@ -284,7 +285,14 @@ class ParticipationControllerTest {
               null,
               new MyParticipationDeliveryResponse(
                   900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
-              new ShippingFeePaybackResponse(PaybackStatus.NONE, null, null, null, null, null));
+              new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
           .willReturn(List.of(response));
@@ -343,7 +351,14 @@ class ParticipationControllerTest {
               dueAt,
               null,
               new HostAccountResponse("국민은행", "98765432", "개최자"),
-              new ShippingFeePaybackResponse(PaybackStatus.NONE, null, null, null, null, null));
+              new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
 
       given(participationDetailQueryService.getDetail(PARTICIPANT_ID, PARTICIPATION_ID))
           .willReturn(response);

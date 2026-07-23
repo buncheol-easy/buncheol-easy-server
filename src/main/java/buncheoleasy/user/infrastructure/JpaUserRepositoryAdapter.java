@@ -40,6 +40,11 @@ public class JpaUserRepositoryAdapter implements UserRepository {
   }
 
   @Override
+  public boolean existsByNickname(String nickname) {
+    return jpaUserRepository.existsByNickname(Nickname.of(nickname));
+  }
+
+  @Override
   public java.util.List<User> findAllByIds(java.util.Collection<Long> ids) {
     return jpaUserRepository.findAllById(ids);
   }

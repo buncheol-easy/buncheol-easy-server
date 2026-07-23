@@ -1,9 +1,12 @@
 package buncheoleasy.auth.infrastructure.oauth;
 
 import buncheoleasy.auth.TokenPair;
+import buncheoleasy.auth.application.SocialLoginCommand;
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.SocialProvider;
+import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -12,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
@@ -25,16 +30,22 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
   private final List<OAuth2UserProfileExtractor> profileExtractors;
   private final SocialLoginService socialLoginService;
   private final RefreshTokenCookieFactory refreshTokenCookieFactory;
+  private final OAuth2AuthorizedClientService authorizedClientService;
+  private final KakaoApiClient kakaoApiClient;
   private final String loginCallbackUrl;
 
   public OAuth2LoginSuccessHandler(
       final List<OAuth2UserProfileExtractor> profileExtractors,
       final SocialLoginService socialLoginService,
       final RefreshTokenCookieFactory refreshTokenCookieFactory,
+      final OAuth2AuthorizedClientService authorizedClientService,
+      final KakaoApiClient kakaoApiClient,
       @Value("${app.frontend.login-callback-url}") final String loginCallbackUrl) {
     this.profileExtractors = profileExtractors;
     this.socialLoginService = socialLoginService;
     this.refreshTokenCookieFactory = refreshTokenCookieFactory;
+    this.authorizedClientService = authorizedClientService;
+    this.kakaoApiClient = kakaoApiClient;
     this.loginCallbackUrl = loginCallbackUrl;
   }
 
@@ -46,8 +57,24 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     OAuth2UserProfile profile = getUserProfile(oauthToken);
     validateSocialEmail(profile.email());
 
+    List<ServiceTermAgreement> serviceTerms = List.of();
+    if (profile.provider() == SocialProvider.KAKAO) {
+      String kakaoAccessToken = loadKakaoAccessToken(oauthToken);
+      if (kakaoAccessToken != null) {
+        profile = enrichFromKakaoApi(profile, kakaoAccessToken);
+        serviceTerms = fetchServiceTerms(kakaoAccessToken);
+      }
+    }
+
     TokenPair token =
-        socialLoginService.login(profile.provider().name(), profile.providerId(), profile.email());
+        socialLoginService.login(
+            new SocialLoginCommand(
+                profile.provider().name(),
+                profile.providerId(),
+                profile.email(),
+                profile.name(),
+                profile.phoneNumber(),
+                serviceTerms));
     log.debug(
         "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
 
@@ -60,6 +87,44 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             .build()
             .toUriString();
     response.sendRedirect(redirectUrl);
+  }
+
+  /** 카카오 access token 조회. 실패해도 로그인은 계속 진행한다(보강 정보만 포기). */
+  private String loadKakaoAccessToken(final OAuth2AuthenticationToken oauthToken) {
+    try {
+      OAuth2AuthorizedClient authorizedClient =
+          authorizedClientService.loadAuthorizedClient(
+              oauthToken.getAuthorizedClientRegistrationId(), oauthToken.getName());
+      return authorizedClient != null ? authorizedClient.getAccessToken().getTokenValue() : null;
+    } catch (RuntimeException exception) {
+      log.warn("카카오 access token 조회 실패: {}", exception.getMessage());
+      return null;
+    }
+  }
+
+  /** 이름·전화번호가 클레임에 없으면 카카오 API 로 보강한다. 실패는 로깅만 하고 가입을 막지 않는다. */
+  private OAuth2UserProfile enrichFromKakaoApi(
+      final OAuth2UserProfile profile, final String kakaoAccessToken) {
+    if (profile.name() != null && profile.phoneNumber() != null) {
+      return profile;
+    }
+    try {
+      KakaoApiClient.KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
+      return profile.withUserInfo(userInfo.name(), userInfo.phoneNumber());
+    } catch (RuntimeException exception) {
+      log.warn("카카오 사용자 정보 보강 조회 실패: {}", exception.getMessage());
+      return profile;
+    }
+  }
+
+  /** 간편가입 약관 동의 내역 조회. 실패는 로깅만 하고 가입을 막지 않는다. */
+  private List<ServiceTermAgreement> fetchServiceTerms(final String kakaoAccessToken) {
+    try {
+      return kakaoApiClient.getServiceTerms(kakaoAccessToken);
+    } catch (RuntimeException exception) {
+      log.warn("카카오 약관 동의 내역 조회 실패: {}", exception.getMessage());
+      return List.of();
+    }
   }
 
   private OAuth2UserProfile getUserProfile(final OAuth2AuthenticationToken oauthToken) {

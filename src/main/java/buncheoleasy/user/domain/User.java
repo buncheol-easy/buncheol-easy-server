@@ -77,6 +77,12 @@ public class User extends TimestampedEntity {
         Nickname.of(generateRandomNickname()));
   }
 
+  /** 닉네임을 지정해 생성한다 (카카오싱크 전환 후 기본 조합값 닉네임 — RandomNicknameGenerator 산출값). */
+  public static User create(
+      final String provider, final String providerId, final String email, final String nickname) {
+    return new User(SocialInfo.of(provider, providerId), Email.of(email), Nickname.of(nickname));
+  }
+
   private User(final SocialInfo socialInfo, final Email email, final Nickname nickname) {
     this.socialInfo = socialInfo;
     this.email = email;

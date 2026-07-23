@@ -20,4 +20,7 @@ interface JpaUserRepository extends JpaRepository<User, Long> {
   @Query("SELECT COUNT(u) > 0 FROM User u " + "WHERE u.nickname = :nickname AND u.id <> :excludeId")
   boolean existsByNicknameAndIdNot(
       @Param("nickname") Nickname nickname, @Param("excludeId") Long excludeId);
+
+  @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.nickname = :nickname")
+  boolean existsByNickname(@Param("nickname") Nickname nickname);
 }

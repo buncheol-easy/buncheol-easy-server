@@ -3,9 +3,14 @@ package buncheoleasy.auth.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 
 import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.domain.RefreshTokenStore;
@@ -15,12 +20,15 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.SocialInfo;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
+import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
+import java.time.Instant;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -29,13 +37,22 @@ import org.springframework.test.util.ReflectionTestUtils;
 @DisplayName("SocialLoginService 단위 테스트")
 class SocialLoginServiceTest {
 
-  @InjectMocks private SocialLoginService socialLoginService;
+  private static final String MARKETING_TAG = "marketing";
+
+  private SocialLoginService socialLoginService;
 
   @Mock private JwtTokenProvider jwtTokenProvider;
 
   @Mock private UserDomainService userDomainService;
 
   @Mock private RefreshTokenStore refreshTokenStore;
+
+  @BeforeEach
+  void setUp() {
+    socialLoginService =
+        new SocialLoginService(
+            jwtTokenProvider, userDomainService, refreshTokenStore, MARKETING_TAG);
+  }
 
   @Nested
   @DisplayName("login 테스트")
@@ -52,20 +69,81 @@ class SocialLoginServiceTest {
       ReflectionTestUtils.setField(user, "id", userId);
       TokenPair expected = new TokenPair("access-token", "refresh-token");
 
-      given(userDomainService.getOrCreateBySocialLogin(any(SocialInfo.class), eq(email)))
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), eq(email), isNull(), isNull()))
           .willReturn(user);
       given(jwtTokenProvider.issueTokens(userId)).willReturn(expected);
 
       // when
-      TokenPair result = socialLoginService.login(provider, providerId, email);
+      TokenPair result = socialLoginService.login(SocialLoginCommand.of(provider, providerId, email));
 
       // then
       ArgumentCaptor<SocialInfo> captor = ArgumentCaptor.forClass(SocialInfo.class);
-      then(userDomainService).should().getOrCreateBySocialLogin(captor.capture(), eq(email));
+      then(userDomainService)
+          .should()
+          .getOrCreateBySocialLogin(captor.capture(), eq(email), isNull(), isNull());
       assertThat(captor.getValue().provider().name()).isEqualTo("KAKAO");
       assertThat(captor.getValue().providerId()).isEqualTo(providerId);
 
       then(jwtTokenProvider).should().issueTokens(userId);
+      assertThat(result).isEqualTo(expected);
+      then(userDomainService)
+          .should(org.mockito.Mockito.never())
+          .updateServiceTermAgreements(anyLong(), anyList(), anyString());
+    }
+
+    @Test
+    void 카카오싱크_가입은_이름_전화번호를_전달하고_약관_동의_내역을_저장한다() {
+      // given
+      Long userId = 2L;
+      User user = User.create("KAKAO", "sync_1", "sync@example.com");
+      ReflectionTestUtils.setField(user, "id", userId);
+      List<ServiceTermAgreement> terms =
+          List.of(new ServiceTermAgreement("service_terms", true, Instant.now()));
+
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), eq("sync@example.com"), eq("김실명"), eq("01012345678")))
+          .willReturn(user);
+      given(jwtTokenProvider.issueTokens(userId))
+          .willReturn(new TokenPair("access", "refresh"));
+
+      // when
+      socialLoginService.login(
+          new SocialLoginCommand("KAKAO", "sync_1", "sync@example.com", "김실명", "01012345678", terms));
+
+      // then
+      then(userDomainService)
+          .should()
+          .updateServiceTermAgreements(userId, terms, MARKETING_TAG);
+    }
+
+    @Test
+    void 약관_동의_내역_저장이_실패해도_로그인은_성공한다() {
+      // given
+      Long userId = 3L;
+      User user = User.create("KAKAO", "sync_2", "sync2@example.com");
+      ReflectionTestUtils.setField(user, "id", userId);
+      List<ServiceTermAgreement> terms =
+          List.of(new ServiceTermAgreement("service_terms", true, Instant.now()));
+      TokenPair expected = new TokenPair("access", "refresh");
+
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), eq("sync2@example.com"), isNull(), isNull()))
+          .willReturn(user);
+      willThrow(new RuntimeException("DB 오류"))
+          .given(userDomainService)
+          .updateServiceTermAgreements(userId, terms, MARKETING_TAG);
+      given(jwtTokenProvider.issueTokens(userId)).willReturn(expected);
+
+      // when
+      TokenPair result =
+          socialLoginService.login(
+              new SocialLoginCommand("KAKAO", "sync_2", "sync2@example.com", null, null, terms));
+
+      // then
       assertThat(result).isEqualTo(expected);
     }
   }

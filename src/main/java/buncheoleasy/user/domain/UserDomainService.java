@@ -2,8 +2,12 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
+import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
+import buncheoleasy.user.domain.serviceterm.UserServiceTermRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,12 +17,22 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserDomainService {
 
   private final UserRepository userRepository;
+  private final UserServiceTermRepository userServiceTermRepository;
+  private final RandomNicknameGenerator nicknameGenerator;
   private final Clock clock;
 
-  public User getOrCreateBySocialLogin(final SocialInfo socialInfo, final String email) {
+  /**
+   * 소셜 로그인 회원 조회/생성. name·phoneNumber 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지 않는다 —
+   * 마이페이지에서 수정한 값을 보호한다.
+   */
+  public User getOrCreateBySocialLogin(
+      final SocialInfo socialInfo,
+      final String email,
+      final String name,
+      final String phoneNumber) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .orElseGet(() -> createNewSocialUser(socialInfo, email));
+        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber));
   }
 
   public boolean isValidUser(final Long id) {
@@ -85,8 +99,51 @@ public class UserDomainService {
     return userRepository.existsByNicknameExcludingId(nickname, excludeId);
   }
 
-  private User createNewSocialUser(final SocialInfo socialInfo, final String email) {
-    User newUser = User.create(socialInfo.provider().name(), socialInfo.providerId(), email);
+  /**
+   * 간편가입 약관 동의 내역을 (userId, tag) 단위로 upsert 하고, 마케팅 태그면 수신 동의 상태도 함께 갱신한다. 재로그인 시 최신 동의 상태로
+   * 덮어쓴다.
+   */
+  @Transactional
+  public void updateServiceTermAgreements(
+      final Long userId,
+      final List<ServiceTermAgreement> agreements,
+      final String marketingTermTag) {
+    User user = getUser(userId);
+
+    for (ServiceTermAgreement agreement : agreements) {
+      userServiceTermRepository
+          .findByUserIdAndTag(userId, agreement.tag())
+          .ifPresentOrElse(
+              term -> term.update(agreement.agreed(), agreement.agreedAt()),
+              () ->
+                  userServiceTermRepository.save(
+                      UserServiceTerm.of(
+                          userId, agreement.tag(), agreement.agreed(), agreement.agreedAt())));
+
+      if (agreement.tag().equals(marketingTermTag)) {
+        user.updateMarketingAgreement(agreement.agreed(), Instant.now(clock));
+      }
+    }
+  }
+
+  private User createNewSocialUser(
+      final SocialInfo socialInfo,
+      final String email,
+      final String name,
+      final String phoneNumber) {
+    User newUser =
+        User.create(
+            socialInfo.provider().name(),
+            socialInfo.providerId(),
+            email,
+            nicknameGenerator.generate());
+    if (name != null) {
+      newUser.updateName(name);
+    }
+    // 동의창에서 전화번호까지 받은 경우 profileCompleted 로 전이되어 추가정보 화면 없이 가입이 완결된다.
+    if (phoneNumber != null) {
+      newUser.updatePhoneNumber(phoneNumber);
+    }
     return userRepository.save(newUser);
   }
 }

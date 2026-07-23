@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS user_favorite_groups;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS `groups`;
 DROP TABLE IF EXISTS shipping_addresses;
+DROP TABLE IF EXISTS user_service_terms;
 DROP TABLE IF EXISTS users;
 
 CREATE TABLE users
@@ -45,6 +46,23 @@ CREATE TABLE users
 -- soft delete 패턴의 유니크 제약 (탈퇴 후 재가입 허용 여부를 DB 레벨에서 보장)
 CREATE UNIQUE INDEX uq_users_active_social_account ON users (_active_provider, _active_provider_id);
 CREATE UNIQUE INDEX uq_users_active_nickname ON users (_active_nickname);
+
+-- Test H2 Database용 user_service_terms 테이블 생성 (카카오 간편가입 약관 동의 내역)
+CREATE TABLE user_service_terms
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT       NOT NULL,
+    tag        VARCHAR(100) NOT NULL,
+    agreed     BOOLEAN      NOT NULL,
+    agreed_at  TIMESTAMP    NULL,
+    created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_user_service_terms_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX uq_user_service_terms_user_tag ON user_service_terms (user_id, tag);
 
 -- Test H2 Database용 shipping_addresses 테이블 생성
 CREATE TABLE shipping_addresses

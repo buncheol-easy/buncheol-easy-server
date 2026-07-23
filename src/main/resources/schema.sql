@@ -37,6 +37,29 @@ CREATE TABLE IF NOT EXISTS users
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- user_service_terms 테이블 생성 (카카오 간편가입 약관 동의 내역 — (user_id, tag) 당 1행, 재로그인 시 갱신)
+-- 기존 배포 DB 에는 수동 CREATE 필요 (배포 체크리스트 참조).
+CREATE TABLE IF NOT EXISTS user_service_terms
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT       NOT NULL,
+    tag        VARCHAR(100) NOT NULL COMMENT '카카오 간편가입 약관 태그',
+    agreed     TINYINT(1)   NOT NULL COMMENT '동의 여부',
+    agreed_at  DATETIME     NULL COMMENT '동의 일시 (카카오 동의창 기준)',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE INDEX uq_user_service_terms_user_tag (user_id, tag),
+
+    CONSTRAINT fk_user_service_terms_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
 -- admins 테이블 생성 (관리자 계정 — 서비스 유저와 무관한 독립 ID/PW 계정)
 -- 계정 생성은 배포 환경변수 부트스트랩(AdminAccountInitializer) 또는 운영자의 직접 INSERT(BCrypt 해시)로 한다.
 -- 직접 INSERT 시 해시는 기본 cost(10)로 생성할 것 — cost 가 다르면 로그인 타이밍 방어가 약해진다 (Admin javadoc 참고).

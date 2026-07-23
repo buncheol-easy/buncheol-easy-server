@@ -49,7 +49,7 @@ public class UserService {
 
   public void updateProfile(final Long userId, final UpdateUserProfileRequest request) {
     userDomainService.updateProfile(
-        userId, request.nickname(), request.phoneNumber(), request.marketingAgreed());
+        userId, request.nickname(), request.phoneNumber(), request.name(), request.marketingAgreed());
   }
 
   public ProfileStatusResponse getProfileStatus(final Long userId) {
@@ -77,6 +77,7 @@ public class UserService {
         user.getSocialInfo().provider().name(),
         user.getEmail().value(),
         user.getNickname().value(),
+        user.getName(),
         user.getPhoneNumber() != null ? user.getPhoneNumber().value() : null,
         toBankAccountInfo(user.getBankAccount()),
         user.isCanHost());

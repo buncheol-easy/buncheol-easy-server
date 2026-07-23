@@ -48,7 +48,7 @@ public class SlackNotificationListener {
             .formatted(
                 view.buncheol().getTitle(),
                 view.buncheol().getId(),
-                view.participant().getNickname().value(),
+                formatParticipant(view),
                 refundAccount.bank(),
                 refundAccount.account(),
                 refundAccount.holder(),
@@ -56,5 +56,12 @@ public class SlackNotificationListener {
                 AlimtalkFormats.amount(view.paymentAmount()),
                 DUE_AT_FORMAT.format(view.participation().getDueAt()));
     slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, message);
+  }
+
+  // 입금내역 대조용으로 실명이 있으면 "닉네임(실명)" 으로 병기한다 (기존 회원은 실명이 없을 수 있음).
+  private String formatParticipant(final ParticipationView view) {
+    String nickname = view.participant().getNickname().value();
+    String name = view.participant().getName();
+    return name == null ? nickname : "%s(%s)".formatted(nickname, name);
   }
 }

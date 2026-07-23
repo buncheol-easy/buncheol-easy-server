@@ -112,13 +112,15 @@ class UserServiceTest {
       // given
       Long userId = 1L;
       UpdateUserProfileRequest request =
-          new UpdateUserProfileRequest("새닉네임", "01012345678", true);
+          new UpdateUserProfileRequest("새닉네임", "01012345678", "김실명", true);
 
       // when
       userService.updateProfile(userId, request);
 
       // then
-      then(userDomainService).should().updateProfile(userId, "새닉네임", "01012345678", true);
+      then(userDomainService)
+          .should()
+          .updateProfile(userId, "새닉네임", "01012345678", "김실명", true);
     }
   }
 

@@ -20,6 +20,7 @@ import java.time.Instant;
 public record AdminPaymentRecordResponse(
     Long participationId,
     String participantNickname,
+    String participantName,
     String memberName,
     long amount,
     AdminPaymentStatus paymentStatus,
@@ -42,6 +43,7 @@ public record AdminPaymentRecordResponse(
     return new AdminPaymentRecordResponse(
         view.participation().getId(),
         view.participant() == null ? null : view.participant().getNickname().value(),
+        view.participant() == null ? null : view.participant().getName(),
         view.member() == null ? null : view.member().getName(),
         view.participation().getTotalAmount(),
         AdminPaymentStatus.from(view.participation()),

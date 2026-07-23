@@ -42,6 +42,10 @@ public class User extends TimestampedEntity {
   @Column(name = "nickname", nullable = false, length = 20)
   private Nickname nickname;
 
+  // 실명. 입금내역 대조·배송 연락 시 참조용. 기존 회원은 NULL 이며 마이페이지에서 수시 입력한다.
+  @Column(name = "name", length = 30)
+  private String name;
+
   @Convert(converter = PhoneNumberConverter.class)
   @Column(name = "phone_number", length = 15)
   private PhoneNumber phoneNumber;
@@ -101,6 +105,10 @@ public class User extends TimestampedEntity {
 
   public void updateNickname(final String newValue) {
     this.nickname = Nickname.of(newValue);
+  }
+
+  public void updateName(final String newValue) {
+    this.name = newValue;
   }
 
   public void updateBankAccount(final String bank, final String account, final String holder) {

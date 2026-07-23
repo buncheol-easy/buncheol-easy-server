@@ -90,6 +90,7 @@ class UserControllerDocsTest {
                 "KAKAO",
                 "user@example.com",
                 "에이지",
+                "채아진",
                 "01012345678",
                 new BankAccountInfo("국민", "12345678901234", "채아진"),
                 false));
@@ -114,6 +115,9 @@ class UserControllerDocsTest {
                             fieldWithPath("provider").description("OAuth Provider (KAKAO)"),
                             fieldWithPath("email").description("이메일"),
                             fieldWithPath("nickname").description("닉네임"),
+                            fieldWithPath("name")
+                                .description("실명 (기존 회원은 미입력 시 null)")
+                                .optional(),
                             fieldWithPath("phoneNumber").description("휴대폰 번호").optional(),
                             fieldWithPath("bankAccount").description("정산 계좌 (없으면 null)").optional(),
                             fieldWithPath("bankAccount.bank").description("은행명").optional(),
@@ -195,7 +199,7 @@ class UserControllerDocsTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01098765432\","
-                        + "\"marketingAgreed\":true}"))
+                        + "\"name\":\"김실명\",\"marketingAgreed\":true}"))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -212,6 +216,9 @@ class UserControllerDocsTest {
                             fieldWithPath("nickname").description("닉네임 (1~20자, 한글/영문/숫자)"),
                             fieldWithPath("phoneNumber")
                                 .description("휴대폰 번호 (01x로 시작하는 10~11자리 숫자)"),
+                            fieldWithPath("name")
+                                .optional()
+                                .description("실명 (1~30자, 한글/영문 — 생략하면 기존 값 유지)"),
                             fieldWithPath("marketingAgreed")
                                 .optional()
                                 .description("마케팅 정보 수신 동의 여부 (생략하면 기존 동의 상태 유지)"))

@@ -22,6 +22,7 @@ CREATE TABLE users
     provider_id         VARCHAR(100) NOT NULL,
     email               VARCHAR(320) NOT NULL,
     nickname            VARCHAR(20)  NOT NULL,
+    name                VARCHAR(30)  NULL,
     phone_number        VARCHAR(15)  NULL,
     settlement_bank     VARCHAR(50)  NULL,
     settlement_account  VARCHAR(50)  NULL,

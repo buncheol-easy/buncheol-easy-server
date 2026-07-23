@@ -50,6 +50,7 @@ class SlackNotificationListenerTest {
       given(buncheol.getId()).willReturn(7L);
       User participant = mock(User.class);
       given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
+      given(participant.getName()).willReturn("김실명");
       Participation participation = mock(Participation.class);
       given(participation.getRefundAccount())
           .willReturn(RefundAccount.of("국민은행", "11012345678", "김참여"));
@@ -66,11 +67,38 @@ class SlackNotificationListenerTest {
           .send(eq(SlackChannel.NEW_PARTICIPATION), messageCaptor.capture());
       assertThat(messageCaptor.getValue())
           .contains("엔믹스 앨범 (분철 #7)")
-          .contains("참여자닉")
+          .contains("참여자닉(김실명)")
           .contains("국민은행 11012345678 (예금주 김참여)")
           .contains("설윤")
           .contains("23,000")
           .contains("7/6 12:30");
+    }
+
+    @Test
+    @DisplayName("실명이 없는 기존 회원은 닉네임만 표기한다")
+    void sendsNicknameOnlyWhenNameMissing() {
+      given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(true);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("엔믹스 앨범");
+      given(buncheol.getId()).willReturn(7L);
+      User participant = mock(User.class);
+      given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
+      given(participant.getName()).willReturn(null);
+      Participation participation = mock(Participation.class);
+      given(participation.getRefundAccount())
+          .willReturn(RefundAccount.of("국민은행", "11012345678", "김참여"));
+      given(participation.getDueAt()).willReturn(Instant.parse("2026-07-06T03:30:00Z"));
+      given(assembler.loadByParticipation(1L))
+          .willReturn(
+              new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
+
+      listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
+
+      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      then(slackWebhookClient)
+          .should()
+          .send(eq(SlackChannel.NEW_PARTICIPATION), messageCaptor.capture());
+      assertThat(messageCaptor.getValue()).contains("참여자: 참여자닉\n").doesNotContain("(김실명)");
     }
 
     @Test

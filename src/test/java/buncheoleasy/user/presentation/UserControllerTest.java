@@ -70,7 +70,7 @@ class UserControllerTest {
     given(userService.getUserProfile(USER_ID))
         .willReturn(
             UserProfileResponse.of(
-                "KAKAO", "test@example.com", "테스트닉", "01012345678", null, false));
+                "KAKAO", "test@example.com", "테스트닉", "김실명", "01012345678", null, false));
 
     mockMvc
         .perform(get("/v1/users/me").with(mockAuth()))
@@ -78,6 +78,7 @@ class UserControllerTest {
         .andExpect(jsonPath("$.provider").value("KAKAO"))
         .andExpect(jsonPath("$.email").value("test@example.com"))
         .andExpect(jsonPath("$.nickname").value("테스트닉"))
+        .andExpect(jsonPath("$.name").value("김실명"))
         .andExpect(jsonPath("$.phoneNumber").value("01012345678"))
         .andExpect(jsonPath("$.canHost").value(false));
   }

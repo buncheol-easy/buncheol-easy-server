@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users
     provider_id         VARCHAR(100) NOT NULL COMMENT '소셜 제공자 고유 ID',
     email               VARCHAR(320) NOT NULL COMMENT '소셜 계정 이메일',
     nickname            VARCHAR(20)  NOT NULL COMMENT '닉네임',
+    -- NULL 허용: 기존 회원은 값이 없고 마이페이지에서 수시 입력한다 (신규 가입은 FE 에서 필수 강제).
+    -- 기존 배포 DB 에는 수동 ALTER 필요.
+    name                VARCHAR(30)  NULL COMMENT '실명 (입금 대조·배송 연락 참조)',
     phone_number        VARCHAR(15)  NULL COMMENT '연락처',
     settlement_bank     VARCHAR(50)  NULL COMMENT '정산 은행',
     settlement_account  VARCHAR(50)  NULL COMMENT '정산 계좌번호',

@@ -42,6 +42,7 @@ public class UserDomainService {
       final Long id,
       final String nickname,
       final String phoneNumber,
+      final String name,
       final Boolean marketingAgreed) {
     User user = getUser(id);
 
@@ -51,6 +52,10 @@ public class UserDomainService {
 
     user.updateNickname(nickname);
     user.updatePhoneNumber(phoneNumber);
+    // null 이면 기존 실명을 유지한다 (실명 필드 없는 기존 호출 호환).
+    if (name != null) {
+      user.updateName(name);
+    }
     // null 이면 동의 상태를 건드리지 않는다 (동의 필드 없이 프로필만 수정하는 기존 호출 호환).
     if (marketingAgreed != null) {
       user.updateMarketingAgreement(marketingAgreed, Instant.now(clock));

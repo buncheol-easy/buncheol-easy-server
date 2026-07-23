@@ -82,6 +82,7 @@ class AdminPaymentControllerDocsTest {
         new AdminPaymentRecordResponse(
             42L,
             "김참여",
+            "김실명",
             "장원영",
             13000L,
             AdminPaymentStatus.CONFIRMED,
@@ -128,7 +129,7 @@ class AdminPaymentControllerDocsTest {
                             """
                             전체 분철의 결제(참여)를 최신 참여순 커서 페이지네이션으로 조회한다 (ROLE_ADMIN 전용).
                             paymentStatus 는 파생 상태로, 입금확인 후 분철이 취소된 건은 REFUND_REQUIRED 로 내려간다.
-                            keyword 는 분철 제목·그룹명·멤버명·참여자 닉네임 부분 일치 검색이다.""")
+                            keyword 는 분철 제목·그룹명·멤버명·참여자 닉네임·실명 부분 일치 검색이다.""")
                         .requestHeaders(
                             headerWithName("Authorization").description("Bearer {accessToken}"))
                         .queryParameters(
@@ -137,7 +138,7 @@ class AdminPaymentControllerDocsTest {
                                     "파생 상태 필터: AWAITING_CONFIRMATION | CONFIRMED | REFUND_REQUIRED | CANCELLED, 미지정 시 전체")
                                 .optional(),
                             parameterWithName("keyword")
-                                .description("검색어(분철 제목·그룹명·멤버명·참여자 닉네임 부분 일치)")
+                                .description("검색어(분철 제목·그룹명·멤버명·참여자 닉네임·실명 부분 일치)")
                                 .optional(),
                             parameterWithName("cursor")
                                 .description("다음 페이지 커서(이전 응답의 nextCursor). 첫 페이지는 생략")
@@ -150,6 +151,9 @@ class AdminPaymentControllerDocsTest {
                             fieldWithPath("items[].participationId").description("참여 ID"),
                             fieldWithPath("items[].participantNickname")
                                 .description("참여자 닉네임(탈퇴 시 null)")
+                                .optional(),
+                            fieldWithPath("items[].participantName")
+                                .description("참여자 실명(미입력·탈퇴 시 null) — 입금내역 대조용")
                                 .optional(),
                             fieldWithPath("items[].memberName")
                                 .description("참여한 멤버명")

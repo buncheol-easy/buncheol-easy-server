@@ -6,12 +6,14 @@ import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
@@ -19,6 +21,8 @@ import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,6 +43,8 @@ public class MyParticipationQueryService {
   private final BuncheolImageRepository buncheolImageRepository;
   private final DeliveryRepository deliveryRepository;
   private final UserRepository userRepository;
+  private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public List<MyParticipationResponse> getMyParticipations(final Long participantId) {
@@ -89,6 +95,7 @@ public class MyParticipationQueryService {
     Map<Long, HostAccountResponse> hostAccountByHostId =
         findHostAccountsForAwaitingPayments(participations, buncheolById);
 
+    final Instant now = Instant.now(clock);
     return participations.stream()
         .map(
             p ->
@@ -100,7 +107,8 @@ public class MyParticipationQueryService {
                     groupMemberNameById,
                     thumbnailByBuncheolId,
                     deliveryByParticipationId,
-                    hostAccountByHostId))
+                    hostAccountByHostId,
+                    now))
         .toList();
   }
 
@@ -132,7 +140,8 @@ public class MyParticipationQueryService {
       final Map<Long, String> groupMemberNameById,
       final Map<Long, String> thumbnailByBuncheolId,
       final Map<Long, Delivery> deliveryByParticipationId,
-      final Map<Long, HostAccountResponse> hostAccountByHostId) {
+      final Map<Long, HostAccountResponse> hostAccountByHostId,
+      final Instant now) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
@@ -159,6 +168,10 @@ public class MyParticipationQueryService {
         thumbnailByBuncheolId.get(participation.getBuncheolId()),
         ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy()),
         hostAccount,
-        delivery == null ? null : MyParticipationDeliveryResponse.from(delivery));
+        delivery == null ? null : MyParticipationDeliveryResponse.from(delivery),
+        // 이미 배치 로딩된 분철·배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
+        ShippingFeePaybackResponse.of(
+            participation,
+            shippingFeePaybackPolicy.deriveStatus(participation, buncheol, delivery, now)));
   }
 }

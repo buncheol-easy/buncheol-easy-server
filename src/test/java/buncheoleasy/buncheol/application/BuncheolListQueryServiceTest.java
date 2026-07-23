@@ -18,7 +18,9 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
@@ -51,7 +53,9 @@ class BuncheolListQueryServiceTest {
   @Mock private BuncheolBookmarkRepository buncheolBookmarkRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
+  @Mock private BuncheolMemberRepository buncheolMemberRepository;
   @Mock private ParticipationRepository participationRepository;
+  @Mock private ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Nested

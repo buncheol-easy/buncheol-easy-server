@@ -13,6 +13,8 @@ import java.util.List;
  *
  * <p>{@code amount} 는 배송비 포함 입금 총액이고, 이 참여에 부과된 배송비를 {@code shippingFee} 로 분리 노출해
  * 프론트가 멤버 가격(= amount - shippingFee)과 배송비를 나눠 그릴 수 있게 한다.
+ *
+ * <p>{@code payback} 은 오픈 이벤트 배송비 환급(배송비 돌려받기) 상태로, 비대상이어도 status=NONE 으로 항상 내려준다.
  */
 public record MyParticipationResponse(
     Long participationId,
@@ -31,4 +33,5 @@ public record MyParticipationResponse(
     String thumbnailUrl,
     List<ShippingOptionResponse> shippingOptions,
     HostAccountResponse hostAccount,
-    MyParticipationDeliveryResponse delivery) {}
+    MyParticipationDeliveryResponse delivery,
+    ShippingFeePaybackResponse payback) {}

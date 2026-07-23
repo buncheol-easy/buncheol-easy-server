@@ -1,11 +1,13 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
@@ -44,7 +46,9 @@ public class BuncheolListQueryService {
   private final BuncheolBookmarkRepository buncheolBookmarkRepository;
   private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
+  private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
+  private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   private final ApplicationEventPublisher eventPublisher;
 
   @Transactional(readOnly = true)
@@ -88,6 +92,11 @@ public class BuncheolListQueryService {
         userId == null
             ? Set.of()
             : buncheolBookmarkRepository.findBookmarkedBuncheolIds(userId, buncheolIds);
+    // 오픈 이벤트 무료 분철 배지 판정용. 이벤트 비활성 환경에서는 조회 자체를 건너뛴다 (전 카드 false).
+    final Set<Long> freeSlotBuncheolIds =
+        shippingFeePaybackPolicy.isEnabled()
+            ? Set.copyOf(buncheolMemberRepository.findAllFreeSlotBuncheolIds(buncheolIds))
+            : Set.of();
 
     final List<BuncheolSummaryResponse> items =
         visible.stream()
@@ -103,7 +112,9 @@ public class BuncheolListQueryService {
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),
                         memberNames.all().getOrDefault(b.getId(), List.of()),
-                        memberNames.available().getOrDefault(b.getId(), List.of())))
+                        memberNames.available().getOrDefault(b.getId(), List.of()),
+                        shippingFeePaybackPolicy.isEventTargetBuncheol(
+                            b, freeSlotBuncheolIds.contains(b.getId()))))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;

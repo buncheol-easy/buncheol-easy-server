@@ -18,5 +18,8 @@ public interface BuncheolMemberRepository {
 
   List<BuncheolMember> findAllByBuncheolIds(List<Long> buncheolIds);
 
+  /** 전 멤버 슬롯이 0원인 분철 ID (오픈 이벤트 무료 분철 배지 판정용). */
+  List<Long> findAllFreeSlotBuncheolIds(List<Long> buncheolIds);
+
   void deleteById(Long id);
 }

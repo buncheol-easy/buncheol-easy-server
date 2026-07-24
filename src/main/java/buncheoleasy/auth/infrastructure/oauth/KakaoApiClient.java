@@ -17,7 +17,7 @@ import org.springframework.web.client.RestClient;
  *
  * <ul>
  *   <li>{@code /v2/user/me}: kakao_account 의 name·phone_number (검수 승인된 동의항목만 내려옴)
- *   <li>{@code /v1/user/service_terms}: 간편가입 동의창에서 받은 약관 동의 내역
+ *   <li>{@code /v2/user/service_terms}: 간편가입 동의창에서 받은 약관 동의 내역
  * </ul>
  */
 @Component
@@ -61,7 +61,7 @@ public class KakaoApiClient {
     KakaoServiceTermsResponse response =
         restClient
             .get()
-            .uri("/v1/user/service_terms")
+            .uri("/v2/user/service_terms")
             .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
             .retrieve()
             .body(KakaoServiceTermsResponse.class);

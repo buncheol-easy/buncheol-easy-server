@@ -121,7 +121,10 @@ public class UserDomainService {
                           userId, agreement.tag(), agreement.agreed(), agreement.agreedAt())));
 
       if (agreement.tag().equals(marketingTermTag)) {
-        user.updateMarketingAgreement(agreement.agreed(), Instant.now(clock));
+        // 광고성 수신 동의 증적은 카카오 동의창의 실제 동의 시각을 남긴다 (2년 주기 재확인 기산점).
+        Instant marketingAgreedAt =
+            agreement.agreedAt() != null ? agreement.agreedAt() : Instant.now(clock);
+        user.updateMarketingAgreement(agreement.agreed(), marketingAgreedAt);
       }
     }
   }

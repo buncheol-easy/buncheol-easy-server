@@ -16,6 +16,7 @@ import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * 분철 멤버 슬롯에 대한 참여. 한 멤버 슬롯에는 활성({@link ParticipationStatus#active()}) 참여가 최대 1개만 존재한다 (선착순) —
@@ -25,12 +26,21 @@ import lombok.NoArgsConstructor;
  * 입금확인이 동시에 경합하므로, 엔티티를 in-memory 로 변경한 뒤 dirty-checking 으로 커밋하지 않고 status 를 WHERE 조건으로 둔
  * compare-and-swap 으로만 전이해 lost update 를 막는다. 따라서 이 엔티티는 생성·조회용 데이터 홀더로 둔다.
  *
+ * <p>예외로 배송비 환급(payback) 전이는 도메인 메서드 + dirty-checking 으로 한다 — 참여 본체 전이와 달리 스케줄러 경합 주체가 없고(신청은
+ * 참여자 본인, 검수는 운영진 한 명뿐), 유일한 실질 경합인 같은 트윗 URL 의 동시 신청은 {@code payback_tweet_url} 유니크 인덱스가 커밋
+ * 시점에 차단한다. payback 전이 트랜잭션에서는 참여 status CAS 를 함께 수행하지 않으므로 더티체킹+CAS 혼용 문제도 없다.
+ *
+ * <p>{@code @DynamicUpdate} 는 payback dirty flush 가 변경된 payback 컬럼만 UPDATE 하게 한다. 없으면 flush 가 행
+ * 전체(status/cancel 컬럼 포함)를 다시 써서, 로드~커밋 사이에 분철 취소 CAS 가 전이해 둔 CANCELLED 를 stale 값(CONFIRMED)으로
+ * 되돌리는 lost update 가 생길 수 있다.
+ *
  * <p>참여 INSERT 는 분철이 모집중인지 원자적으로 확인해야 하므로 JPA save 가 아니라 {@code
  * JpaParticipationRepositoryAdapter} 의 conditional INSERT 로 수행하고, generated PK 를 리플렉션으로 {@code id}
  * 필드에 주입한다. 필드명·타입 변경 시 어댑터의 정적 {@code ID_FIELD} 초기화도 함께 갱신할 것.
  */
 @Entity
 @Table(name = "participations")
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Participation extends TimestampedEntity {
@@ -89,6 +99,31 @@ public class Participation extends TimestampedEntity {
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
 
+  // --- 오픈 이벤트 배송비 환급(배송비 돌려받기) ---
+  // 저장 값은 NONE/REQUESTED/COMPLETED/REJECTED 뿐이다. 신청 가능(ELIGIBLE)·만료(EXPIRED)는 이벤트
+  // 설정(환경변수)+배송 상태로 조회 시 파생한다 (PaybackStatus javadoc 참고).
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "payback_status", nullable = false, length = 20)
+  private PaybackStatus paybackStatus = PaybackStatus.NONE;
+
+  // 신청 시 제출한 후기 트윗 URL (PaybackTweetUrl 로 정규화된 퍼머링크). 유니크 인덱스로 타 참여 중복 사용을 막는다.
+  @Column(name = "payback_tweet_url")
+  private String paybackTweetUrl;
+
+  @Column(name = "payback_requested_at")
+  private Instant paybackRequestedAt;
+
+  @Column(name = "payback_completed_at")
+  private Instant paybackCompletedAt;
+
+  @Column(name = "payback_reject_reason", length = 200)
+  private String paybackRejectReason;
+
+  // 신청 시점의 배송비 스냅샷. 이후 배송비 정책이 바뀌어도 환급액은 고정된다.
+  @Column(name = "payback_amount")
+  private Long paybackAmount;
+
   public static Participation create(
       final Long buncheolId,
       final Long buncheolMemberId,
@@ -133,6 +168,43 @@ public class Participation extends TimestampedEntity {
   /** 실제 입금 총액 = 멤버 금액 + 배송비. */
   public long getTotalAmount() {
     return amount + shippingFee;
+  }
+
+  /**
+   * 배송비 환급 신청 (NONE/REJECTED/REQUESTED → REQUESTED). 반려 후 재신청이면 이전 반려 사유를 지우고, 검수 전(REQUESTED)
+   * 재제출은 잘못 올린 트윗 링크 수정으로 동작한다. 환급액은 신청 시점의 배송비를 스냅샷해 이후 배송비 정책 변경에 영향받지 않는다. 신청
+   * 자격(이벤트 대상·배송 완료·마감 전)은 호출 측 {@code ShippingFeePaybackService} 가 검증한다.
+   */
+  public void requestPayback(final PaybackTweetUrl tweetUrl, final Instant now) {
+    if (!paybackStatus.requestable()) {
+      throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
+    }
+    this.paybackStatus = PaybackStatus.REQUESTED;
+    this.paybackTweetUrl = tweetUrl.value();
+    this.paybackRequestedAt = now;
+    this.paybackRejectReason = null;
+    this.paybackAmount = shippingFee;
+  }
+
+  /** 운영진의 환급 입금 완료 처리 (REQUESTED → COMPLETED). 승인·입금완료를 한 번에 처리한다. */
+  public void completePayback(final Instant now) {
+    if (paybackStatus != PaybackStatus.REQUESTED) {
+      throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
+    }
+    this.paybackStatus = PaybackStatus.COMPLETED;
+    this.paybackCompletedAt = now;
+  }
+
+  /** 운영진의 후기 반려 (REQUESTED → REJECTED). 유저는 반려 사유를 보고 재신청할 수 있다. */
+  public void rejectPayback(final String rejectReason) {
+    if (rejectReason == null || rejectReason.isBlank()) {
+      throw new BusinessException(ErrorCode.PAYBACK_REJECT_REASON_REQUIRED);
+    }
+    if (paybackStatus != PaybackStatus.REQUESTED) {
+      throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
+    }
+    this.paybackStatus = PaybackStatus.REJECTED;
+    this.paybackRejectReason = rejectReason;
   }
 
   public void validateOwnedBy(final Long participantId) {

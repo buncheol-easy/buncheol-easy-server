@@ -16,13 +16,18 @@ import buncheoleasy.buncheol.application.participation.MyParticipationQueryServi
 import buncheoleasy.buncheol.application.participation.ParticipateResult;
 import buncheoleasy.buncheol.application.participation.ParticipationDetailQueryService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
+import buncheoleasy.buncheol.dto.request.ShippingFeePaybackRequest;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
+import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -66,6 +71,8 @@ class ParticipationControllerTest {
   @MockitoBean private ParticipationDetailQueryService participationDetailQueryService;
 
   @MockitoBean private MyParticipationQueryService myParticipationQueryService;
+
+  @MockitoBean private ShippingFeePaybackService shippingFeePaybackService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -277,7 +284,15 @@ class ParticipationControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
               null,
               new MyParticipationDeliveryResponse(
-                  900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING));
+                  900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
+              new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
           .willReturn(List.of(response));
@@ -302,7 +317,8 @@ class ParticipationControllerTest {
           .andExpect(jsonPath("$[0].hostAccount").doesNotExist())
           .andExpect(jsonPath("$[0].delivery.deliveryId").value(900))
           .andExpect(jsonPath("$[0].delivery.status").value("SHIPPING"))
-          .andExpect(jsonPath("$[0].delivery.trackingNumber").value("1234567890"));
+          .andExpect(jsonPath("$[0].delivery.trackingNumber").value("1234567890"))
+          .andExpect(jsonPath("$[0].payback.status").value("NONE"));
     }
 
     @Test
@@ -334,7 +350,15 @@ class ParticipationControllerTest {
               null,
               dueAt,
               null,
-              new HostAccountResponse("국민은행", "98765432", "개최자"));
+              new HostAccountResponse("국민은행", "98765432", "개최자"),
+              new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
 
       given(participationDetailQueryService.getDetail(PARTICIPANT_ID, PARTICIPATION_ID))
           .willReturn(response);
@@ -378,6 +402,77 @@ class ParticipationControllerTest {
               content()
                   .string(
                       Matchers.containsString(ErrorCode.PARTICIPATION_NO_PERMISSION.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("배송비 환급 신청 API 테스트")
+  class RequestShippingFeePaybackTest {
+
+    private static final String PAYBACK_REQUEST_BODY =
+        """
+        { "tweetUrl": "https://x.com/fan/status/1234567890" }
+        """;
+
+    @Test
+    void 환급_신청에_성공하면_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/participations/{participationId}/shipping-fee-payback", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(PAYBACK_REQUEST_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(shippingFeePaybackService)
+          .should()
+          .request(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID), any(ShippingFeePaybackRequest.class));
+    }
+
+    @Test
+    void 트윗_URL_이_비어있으면_400을_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/participations/{participationId}/shipping-fee-payback", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{ \"tweetUrl\": \"\" }")
+                  .with(mockAuth()))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 환급_대상이_아니면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PAYBACK_NOT_ELIGIBLE))
+          .given(shippingFeePaybackService)
+          .request(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID), any(ShippingFeePaybackRequest.class));
+
+      mockMvc
+          .perform(
+              post("/v1/participations/{participationId}/shipping-fee-payback", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(PAYBACK_REQUEST_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content().string(Matchers.containsString(ErrorCode.PAYBACK_NOT_ELIGIBLE.getCode())));
+    }
+
+    @Test
+    void 이미_사용된_트윗_URL_이면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE))
+          .given(shippingFeePaybackService)
+          .request(eq(PARTICIPANT_ID), eq(PARTICIPATION_ID), any(ShippingFeePaybackRequest.class));
+
+      mockMvc
+          .perform(
+              post("/v1/participations/{participationId}/shipping-fee-payback", PARTICIPATION_ID)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(PAYBACK_REQUEST_BODY)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(Matchers.containsString(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE.getCode())));
     }
   }
 

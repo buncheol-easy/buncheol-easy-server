@@ -91,4 +91,30 @@ public class ParticipationDomainService {
   public List<Participation> findCascadeCancelledByBuncheolId(final Long buncheolId) {
     return participationRepository.findCascadeCancelledByBuncheolId(buncheolId);
   }
+
+  /** 같은 후기 트윗 URL 이 다른 참여의 환급 신청에 이미 쓰였는지 (중복 신청 사전 체크). */
+  public boolean isPaybackTweetUrlUsedByOther(final String tweetUrl, final Long participationId) {
+    return participationRepository.existsPaybackTweetUrlUsedByOther(tweetUrl, participationId);
+  }
+
+  /**
+   * 배송비 환급 신청 전이 + 즉시 저장. 상태 위반은 엔티티가 {@link
+   * ErrorCode#PAYBACK_STATE_TRANSITION_INVALID}, 트윗 URL 중복은 어댑터가 유니크 위반을 {@link
+   * ErrorCode#PAYBACK_TWEET_URL_DUPLICATE} 로 던진다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void requestPayback(
+      final Participation participation, final PaybackTweetUrl tweetUrl, final Instant now) {
+    participation.requestPayback(tweetUrl, now);
+    participationRepository.savePaybackRequest(participation);
+  }
+
+  /** 운영진의 환급 입금 완료 처리. dirty-checking 커밋이므로 호출 측 {@code @Transactional} 필수. */
+  public void completePayback(final Long participationId, final Instant now) {
+    getParticipation(participationId).completePayback(now);
+  }
+
+  /** 운영진의 후기 반려. dirty-checking 커밋이므로 호출 측 {@code @Transactional} 필수. */
+  public void rejectPayback(final Long participationId, final String rejectReason) {
+    getParticipation(participationId).rejectPayback(rejectReason);
+  }
 }

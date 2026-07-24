@@ -50,6 +50,14 @@ public class JpaBuncheolMemberRepositoryAdapter implements BuncheolMemberReposit
   }
 
   @Override
+  public List<Long> findAllFreeSlotBuncheolIds(List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaBuncheolMemberRepository.findAllFreeSlotBuncheolIds(buncheolIds);
+  }
+
+  @Override
   public void deleteById(Long id) {
     jpaBuncheolMemberRepository.deleteById(id);
   }

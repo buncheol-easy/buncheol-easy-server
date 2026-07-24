@@ -7,5 +7,8 @@ package buncheoleasy.notification.domain;
 public enum SlackChannel {
 
   /** 신규 참여 접수 알림 채널. 운영자가 입금 기한 내에 확인·입금확인해야 하는 참여 접수를 받는다. */
-  NEW_PARTICIPATION
+  NEW_PARTICIPATION,
+
+  /** 배송비 환급(배송비 돌려받기) 신청 알림 채널. 운영자가 후기 트윗을 검수하고 입금 완료/반려 처리한다. */
+  SHIPPING_FEE_PAYBACK
 }

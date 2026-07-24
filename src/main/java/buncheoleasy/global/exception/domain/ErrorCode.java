@@ -87,7 +87,7 @@ public enum ErrorCode {
   BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_PRICE_INVALID(
-      "BCH-027", "멤버 금액은 100원 단위의 0보다 큰 값이어야 합니다.", HttpStatus.BAD_REQUEST),
+      "BCH-027", "멤버 금액은 100원 단위의 0 이상인 값이어야 합니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 5개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_REQUIRED("BCH-041", "이미지 URL은 필수입니다.", HttpStatus.BAD_REQUEST),
@@ -116,6 +116,16 @@ public enum ErrorCode {
   // BCH-074 는 다중 선택 시절의 중복 멤버 선택 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
   PARTICIPATION_ALREADY_JOINED_BUNCHEOL(
       "BCH-075", "이미 참여 중인 분철입니다. 오픈 이벤트 기간에는 분철당 멤버 1명에만 참여할 수 있습니다.", HttpStatus.CONFLICT),
+
+  // 배송비 환급(배송비 돌려받기, 오픈 이벤트)
+  PAYBACK_NOT_ELIGIBLE("BCH-076", "배송비 환급 신청 대상이 아닙니다.", HttpStatus.CONFLICT),
+  PAYBACK_STATE_TRANSITION_INVALID(
+      "BCH-077", "현재 환급 상태에서는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
+  PAYBACK_TWEET_URL_INVALID("BCH-078", "올바른 X(트위터) 트윗 URL 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+  PAYBACK_TWEET_URL_DUPLICATE(
+      "BCH-079", "이미 다른 환급 신청에 사용된 트윗 URL 입니다.", HttpStatus.CONFLICT),
+  PAYBACK_REFUND_ACCOUNT_MISSING("BCH-080", "환급받을 환불 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
+  PAYBACK_REJECT_REASON_REQUIRED("BCH-081", "반려 사유는 필수입니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),

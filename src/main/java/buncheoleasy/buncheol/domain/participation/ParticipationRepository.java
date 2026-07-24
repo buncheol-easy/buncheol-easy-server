@@ -86,4 +86,14 @@ public interface ParticipationRepository {
    * 취소된" 참여에만 알림을 발행하는 데 쓴다.
    */
   List<Participation> findCascadeCancelledByBuncheolId(Long buncheolId);
+
+  /** 같은 후기 트윗 URL 이 다른 참여의 환급 신청에 이미 쓰였는지 (중복 신청 사전 체크용). */
+  boolean existsPaybackTweetUrlUsedByOther(String tweetUrl, Long participationId);
+
+  /**
+   * 환급 신청({@link Participation#requestPayback}) 변경분을 즉시 flush 해 저장한다. 사전 중복 체크의 check-then-update
+   * 갭에서 같은 트윗 URL 이 먼저 커밋됐으면 {@code payback_tweet_url} 유니크 위반을 {@link
+   * buncheoleasy.global.exception.domain.ErrorCode#PAYBACK_TWEET_URL_DUPLICATE} 로 변환해 던진다.
+   */
+  void savePaybackRequest(Participation participation);
 }

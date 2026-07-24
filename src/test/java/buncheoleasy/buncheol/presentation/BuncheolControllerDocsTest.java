@@ -331,7 +331,8 @@ class BuncheolControllerDocsTest {
             "뉴진스",
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             List.of("민지", "혜인"),
-            List.of("혜인"));
+            List.of("혜인"),
+            false);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -423,6 +424,10 @@ class BuncheolControllerDocsTest {
                                 .description("분철에 포함된 전체 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("items[].availableMemberNames")
                                 .description("아직 안 팔린(참여 가능한) 멤버 이름 (호스트 등록 슬롯 순)"),
+                            fieldWithPath("items[].shippingFeePaybackTarget")
+                                .description(
+                                    "오픈 이벤트 배송비 환급 대상 분철 여부 (전 슬롯 0원 + 이벤트 활성)."
+                                        + " 무료 분철 배지 판정용"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -457,7 +462,8 @@ class BuncheolControllerDocsTest {
             "뉴진스",
             null,
             List.of("민지"),
-            List.of("민지"));
+            List.of("민지"),
+            false);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), null, false);
 

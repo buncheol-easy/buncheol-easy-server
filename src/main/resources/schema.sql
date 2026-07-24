@@ -246,6 +246,13 @@ CREATE TABLE IF NOT EXISTS participations
     cancelled_at        DATETIME     NULL COMMENT '참여 취소 시각',
     cancel_reason       VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED',
     status              VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED',
+    -- 오픈 이벤트 배송비 환급(배송비 돌려받기). ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc 참고).
+    payback_status        VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
+    payback_tweet_url     VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
+    payback_requested_at  DATETIME     NULL COMMENT '환급 신청(재신청 포함) 시각',
+    payback_completed_at  DATETIME     NULL COMMENT '환급 입금 완료 시각',
+    payback_reject_reason VARCHAR(200) NULL COMMENT '환급 반려 사유 (재신청 시 초기화)',
+    payback_amount        BIGINT       NULL COMMENT '신청 시점 배송비 스냅샷 (환급액 고정)',
     -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용 가상 컬럼: 활성 상태일 때만 멤버 슬롯 id 값을 갖고, 취소/만료되면 NULL 이 되어 슬롯이 다시 열린다.
     active_member_id    BIGINT GENERATED ALWAYS AS (
                             IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), buncheol_member_id, NULL)
@@ -262,13 +269,6 @@ CREATE TABLE IF NOT EXISTS participations
     -- 멤버 슬롯당 활성 참여 1건 (선착순). 동시 참여 시 두 번째 INSERT 가 이 제약에 막혀 DuplicateKey 로 떨어진다.
     UNIQUE INDEX uq_participations_active_member (active_member_id),
     -- 분철당 참여자 1명 (중복 참여 금지, 오픈 이벤트 정책). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
-    -- 기존 배포 DB 에는 아래 수동 ALTER 필요. 다중 선택 시절 같은 분철에 활성 참여가 여러 건인 유저가 있으면 인덱스 생성이
-    -- 실패하므로 적용 전 중복 활성 참여를 정리(취소)하고, STORED 생성 컬럼 추가는 테이블 리빌드(쓰기 블로킹)라
-    -- 저트래픽 시간대에 컬럼+인덱스를 한 문장으로 적용한다 (정리~인덱스 생성 사이 신규 중복 유입 창 최소화):
-    --   ALTER TABLE participations
-    --     ADD COLUMN active_participant_id BIGINT GENERATED ALWAYS AS
-    --       (IF(status IN ('AWAITING_PAYMENT','CONFIRMED'), participant_id, NULL)) STORED,
-    --     ADD UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id);
     UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
@@ -279,6 +279,11 @@ CREATE TABLE IF NOT EXISTS participations
     -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요
     -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 인덱스를 추가하지 않는다).
     INDEX idx_participations_created (created_at DESC, id DESC),
+    -- 같은 후기 트윗의 타 참여 중복 신청 방지 (서비스 사전 체크의 check-then-update 갭을 DB 가 최종 차단).
+    -- NULL(미신청)은 MySQL 유니크에서 중복 허용이라 문제없다.
+    UNIQUE INDEX uq_participations_payback_tweet_url (payback_tweet_url),
+    -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용.
+    INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC),
 
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)

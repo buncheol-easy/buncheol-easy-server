@@ -72,8 +72,9 @@ public class BuncheolMember extends TimestampedEntity {
     }
   }
 
+  // 0원은 오픈 이벤트 무료 분철(운영진 발행) 슬롯으로 허용한다.
   private void validatePrice(final long price) {
-    if (price <= 0 || price % PRICE_UNIT != 0) {
+    if (price < 0 || price % PRICE_UNIT != 0) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
     }
   }

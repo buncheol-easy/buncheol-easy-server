@@ -13,7 +13,11 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
@@ -1195,4 +1199,90 @@ class JpaParticipationRepositoryAdapterTest {
     }
   }
 
+  @Nested
+  @DisplayName("배송비 환급 테스트")
+  class PaybackTest {
+
+    private static final String TWEET_URL = "https://x.com/fan/status/1234567890";
+
+    // 확정 참여 두 건(서로 다른 유저)을 깔고 id 쌍을 반환한다.
+    private Long[] insertTwoConfirmedParticipations() {
+      Long buncheolId = createBuncheol();
+      Long slot1 = createBuncheolMember(buncheolId);
+      Long member2 = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "환급멤버2");
+      Long slot2 = createBuncheolMember(buncheolId, member2);
+      Long shipping1 = insertShippingAddress(participantId, "환급매장1");
+      Long shipping2 = insertShippingAddress(secondParticipantId, "환급매장2");
+      Long first =
+          insertParticipation(
+              buncheolId,
+              slot1,
+              participantId,
+              shipping1,
+              30_000L,
+              Instant.now().plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      Long second =
+          insertParticipation(
+              buncheolId,
+              slot2,
+              secondParticipantId,
+              shipping2,
+              30_000L,
+              Instant.now().plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      return new Long[] {first, second};
+    }
+
+    private Participation requestPayback(final Long participationId, final String tweetUrl) {
+      Participation participation = participationRepository.findById(participationId).orElseThrow();
+      participation.requestPayback(PaybackTweetUrl.parse(tweetUrl), Instant.now());
+      participationRepository.savePaybackRequest(participation);
+      return participation;
+    }
+
+    @Test
+    void 환급_신청을_저장하면_상태와_스냅샷이_DB_에_반영된다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+
+      requestPayback(ids[0], TWEET_URL);
+      em.clear();
+
+      Participation saved = participationRepository.findById(ids[0]).orElseThrow();
+      assertThat(saved.getPaybackStatus()).isEqualTo(PaybackStatus.REQUESTED);
+      assertThat(saved.getPaybackTweetUrl()).isEqualTo(TWEET_URL);
+      assertThat(saved.getPaybackAmount()).isEqualTo(saved.getShippingFee());
+    }
+
+    @Test
+    void 같은_트윗_URL_로_다른_참여가_신청하면_유니크_위반이_중복_에러로_변환된다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+
+      Participation second = participationRepository.findById(ids[1]).orElseThrow();
+      second.requestPayback(PaybackTweetUrl.parse(TWEET_URL), Instant.now());
+
+      assertThatThrownBy(() -> participationRepository.savePaybackRequest(second))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE);
+    }
+
+    @Test
+    void 트윗_URL_중복_사전_체크는_본인_참여를_제외한다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+
+      assertThat(participationRepository.existsPaybackTweetUrlUsedByOther(TWEET_URL, ids[1]))
+          .isTrue();
+      assertThat(participationRepository.existsPaybackTweetUrlUsedByOther(TWEET_URL, ids[0]))
+          .isFalse();
+      assertThat(
+              participationRepository.existsPaybackTweetUrlUsedByOther(
+                  "https://x.com/fan/status/999", ids[1]))
+          .isFalse();
+    }
+  }
 }

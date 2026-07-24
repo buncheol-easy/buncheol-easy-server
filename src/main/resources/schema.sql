@@ -246,13 +246,6 @@ CREATE TABLE IF NOT EXISTS participations
     -- 멤버 슬롯당 활성 참여 1건 (선착순). 동시 참여 시 두 번째 INSERT 가 이 제약에 막혀 DuplicateKey 로 떨어진다.
     UNIQUE INDEX uq_participations_active_member (active_member_id),
     -- 분철당 참여자 1명 (중복 참여 금지, 오픈 이벤트 정책). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
-    -- 기존 배포 DB 에는 아래 수동 ALTER 필요. 다중 선택 시절 같은 분철에 활성 참여가 여러 건인 유저가 있으면 인덱스 생성이
-    -- 실패하므로 적용 전 중복 활성 참여를 정리(취소)하고, STORED 생성 컬럼 추가는 테이블 리빌드(쓰기 블로킹)라
-    -- 저트래픽 시간대에 컬럼+인덱스를 한 문장으로 적용한다 (정리~인덱스 생성 사이 신규 중복 유입 창 최소화):
-    --   ALTER TABLE participations
-    --     ADD COLUMN active_participant_id BIGINT GENERATED ALWAYS AS
-    --       (IF(status IN ('AWAITING_PAYMENT','CONFIRMED'), participant_id, NULL)) STORED,
-    --     ADD UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id);
     UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
@@ -267,16 +260,6 @@ CREATE TABLE IF NOT EXISTS participations
     -- NULL(미신청)은 MySQL 유니크에서 중복 허용이라 문제없다.
     UNIQUE INDEX uq_participations_payback_tweet_url (payback_tweet_url),
     -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용.
-    -- 기존 배포 DB 에는 아래 수동 ALTER 필요 (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 컬럼/인덱스를 추가하지 않는다):
-    --   ALTER TABLE participations
-    --     ADD COLUMN payback_status VARCHAR(20) NOT NULL DEFAULT 'NONE',
-    --     ADD COLUMN payback_tweet_url VARCHAR(255) NULL,
-    --     ADD COLUMN payback_requested_at DATETIME NULL,
-    --     ADD COLUMN payback_completed_at DATETIME NULL,
-    --     ADD COLUMN payback_reject_reason VARCHAR(200) NULL,
-    --     ADD COLUMN payback_amount BIGINT NULL,
-    --     ADD UNIQUE INDEX uq_participations_payback_tweet_url (payback_tweet_url),
-    --     ADD INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC);
     INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC),
 
     CONSTRAINT fk_participations_buncheol

@@ -190,6 +190,13 @@ CREATE TABLE participations
     cancelled_at        TIMESTAMP    NULL,
     cancel_reason       VARCHAR(30)  NULL,
     status              VARCHAR(30)  NOT NULL,
+    -- 오픈 이벤트 배송비 환급 (schema.sql participations 와 동일 구성)
+    payback_status        VARCHAR(20)  NOT NULL DEFAULT 'NONE',
+    payback_tweet_url     VARCHAR(255) NULL,
+    payback_requested_at  TIMESTAMP    NULL,
+    payback_completed_at  TIMESTAMP    NULL,
+    payback_reject_reason VARCHAR(200) NULL,
+    payback_amount        BIGINT       NULL,
     -- 활성 상태일 때만 멤버 슬롯 id 값을 갖는 가상 컬럼 (선착순 유니크용). users 테이블과 동일하게 H2 computed column 사용.
     active_member_id    BIGINT AS (CASE WHEN status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN buncheol_member_id END),
     -- 활성 상태일 때만 참여자 id 값을 갖는 가상 컬럼 (분철당 중복 참여 방지 유니크용).
@@ -210,6 +217,8 @@ CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, 
 CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);
 CREATE INDEX idx_participations_created ON participations (created_at DESC, id DESC);
+CREATE UNIQUE INDEX uq_participations_payback_tweet_url ON participations (payback_tweet_url);
+CREATE INDEX idx_participations_payback_requested ON participations (payback_status, payback_requested_at DESC, id DESC);
 
 -- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)
 CREATE TABLE admins

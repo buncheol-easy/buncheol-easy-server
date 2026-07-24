@@ -27,8 +27,11 @@ import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +40,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,6 +56,10 @@ class MyParticipationQueryServiceTest {
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private DeliveryRepository deliveryRepository;
   @Mock private UserRepository userRepository;
+  @Mock private ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+
+  // Instant.now(clock) 가 실제 시각을 돌려주도록 고정 Clock 을 @Spy 로 주입한다 (mock Clock 은 NPE).
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long HOST_ID = 900L;

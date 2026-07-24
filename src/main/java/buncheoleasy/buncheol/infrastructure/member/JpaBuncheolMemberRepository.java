@@ -19,6 +19,12 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
   @Query("SELECT m FROM BuncheolMember m WHERE m.buncheolId IN :buncheolIds")
   List<BuncheolMember> findAllByBuncheolIds(@Param("buncheolIds") List<Long> buncheolIds);
 
+  /** 전 슬롯 0원 = 최고가 슬롯이 0원. */
+  @Query(
+      "SELECT m.buncheolId FROM BuncheolMember m WHERE m.buncheolId IN :buncheolIds "
+          + "GROUP BY m.buncheolId HAVING MAX(m.price) = 0")
+  List<Long> findAllFreeSlotBuncheolIds(@Param("buncheolIds") List<Long> buncheolIds);
+
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM BuncheolMember m WHERE m.buncheolId = :buncheolId")
   void deleteAllByBuncheolId(@Param("buncheolId") Long buncheolId);

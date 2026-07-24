@@ -18,12 +18,16 @@ import buncheoleasy.buncheol.application.participation.MyParticipationQueryServi
 import buncheoleasy.buncheol.application.participation.ParticipateResult;
 import buncheoleasy.buncheol.application.participation.ParticipationDetailQueryService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
+import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
+import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.user.domain.BankAccount;
@@ -72,6 +76,8 @@ class ParticipationControllerDocsTest {
   @MockitoBean private ParticipationDetailQueryService participationDetailQueryService;
 
   @MockitoBean private MyParticipationQueryService myParticipationQueryService;
+
+  @MockitoBean private ShippingFeePaybackService shippingFeePaybackService;
 
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
 
@@ -202,7 +208,15 @@ class ParticipationControllerDocsTest {
             List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
             null,
             new MyParticipationDeliveryResponse(
-                900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING));
+                900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
+            new ShippingFeePaybackResponse(
+                PaybackStatus.ELIGIBLE,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")));
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -221,7 +235,15 @@ class ParticipationControllerDocsTest {
             "https://cdn.example.com/buncheols/20/main.jpg",
             List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 2_000)),
             new HostAccountResponse("국민은행", "98765432", "개최자"),
-            null);
+            null,
+            new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -302,7 +324,35 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("[].delivery.status")
                                 .description(
                                     "배송 상태 (SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED)")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].payback")
+                                .description("오픈 이벤트 배송비 환급(배송비 돌려받기) 상태. 비대상이어도 항상 내려간다"),
+                            fieldWithPath("[].payback.status")
+                                .description(
+                                    "환급 상태 (NONE | ELIGIBLE | REQUESTED | COMPLETED | REJECTED |"
+                                        + " EXPIRED). ELIGIBLE/EXPIRED 는 조회 시점 파생값"),
+                            fieldWithPath("[].payback.tweetUrl")
+                                .description("신청 시 제출한 후기 트윗 URL. 신청 전에는 null")
+                                .optional(),
+                            fieldWithPath("[].payback.requestedAt")
+                                .description("환급 신청 시각. 신청 전에는 null")
+                                .optional(),
+                            fieldWithPath("[].payback.completedAt")
+                                .description("환급 입금 완료 시각. 완료 전에는 null")
+                                .optional(),
+                            fieldWithPath("[].payback.rejectReason")
+                                .description("반려 사유. REJECTED 외에는 null")
+                                .optional(),
+                            fieldWithPath("[].payback.amount")
+                                .description("환급액 (신청 시점 배송비 스냅샷, 원). 신청 전에는 null")
+                                .optional(),
+                            fieldWithPath("[].payback.refundAccount")
+                                .description("환급 입금받을 계좌 (참여 시 등록한 환불계좌)"),
+                            fieldWithPath("[].payback.refundAccount.bank").description("은행명"),
+                            fieldWithPath("[].payback.refundAccount.account")
+                                .description("계좌번호"),
+                            fieldWithPath("[].payback.refundAccount.holder")
+                                .description("예금주"))
                         .build())));
   }
 
@@ -320,7 +370,15 @@ class ParticipationControllerDocsTest {
             null,
             dueAt,
             null,
-            new HostAccountResponse("국민은행", "98765432", "개최자"));
+            new HostAccountResponse("국민은행", "98765432", "개최자"),
+            new ShippingFeePaybackResponse(
+                  PaybackStatus.NONE,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -367,7 +425,77 @@ class ParticipationControllerDocsTest {
                             fieldWithPath("hostAccount.account")
                                 .description("개최자 계좌번호")
                                 .optional(),
-                            fieldWithPath("hostAccount.holder").description("개최자 예금주").optional())
+                            fieldWithPath("hostAccount.holder").description("개최자 예금주").optional(),
+                            fieldWithPath("payback")
+                                .description("오픈 이벤트 배송비 환급(배송비 돌려받기) 상태. 비대상이어도 항상 내려간다"),
+                            fieldWithPath("payback.status")
+                                .description(
+                                    "환급 상태 (NONE | ELIGIBLE | REQUESTED | COMPLETED | REJECTED |"
+                                        + " EXPIRED). ELIGIBLE/EXPIRED 는 조회 시점 파생값"),
+                            fieldWithPath("payback.tweetUrl")
+                                .description("신청 시 제출한 후기 트윗 URL. 신청 전에는 null")
+                                .optional(),
+                            fieldWithPath("payback.requestedAt")
+                                .description("환급 신청 시각. 신청 전에는 null")
+                                .optional(),
+                            fieldWithPath("payback.completedAt")
+                                .description("환급 입금 완료 시각. 완료 전에는 null")
+                                .optional(),
+                            fieldWithPath("payback.rejectReason")
+                                .description("반려 사유. REJECTED 외에는 null")
+                                .optional(),
+                            fieldWithPath("payback.amount")
+                                .description("환급액 (신청 시점 배송비 스냅샷, 원). 신청 전에는 null")
+                                .optional(),
+                            fieldWithPath("payback.refundAccount")
+                                .description("환급 입금받을 계좌 (참여 시 등록한 환불계좌)"),
+                            fieldWithPath("payback.refundAccount.bank").description("은행명"),
+                            fieldWithPath("payback.refundAccount.account").description("계좌번호"),
+                            fieldWithPath("payback.refundAccount.holder").description("예금주"))
+                        .build())));
+  }
+
+  @Test
+  void 배송비_환급_신청() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participations/{participationId}/shipping-fee-payback", 500L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"tweetUrl\": \"https://x.com/fan/status/1234567890?s=20\" }")
+                .header("Authorization", "Bearer {accessToken}")
+                .with(mockAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-shipping-fee-payback",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("배송비 환급(배송비 돌려받기) 신청")
+                        .description(
+                            """
+                            오픈 이벤트 분철(0원 슬롯) 참여의 배송 완료 후, X(트위터) 후기 트윗 URL 을 제출해 배송비 환급을 신청한다.
+                            반려(REJECTED)된 신청의 재신청, 검수 전(REQUESTED) 잘못 올린 링크의 수정도 같은 엔드포인트를 사용한다 —
+                            재신청 시 이전 반려 사유는 초기화되고, 제출할 때마다 운영자 슬랙 알림이 다시 발송된다.
+                            제출한 URL 은 쿼리스트링을 제거한 퍼머링크로 정규화해 저장한다.
+
+                            | 상태 | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `BCH-078` (`PAYBACK_TWEET_URL_INVALID`) | 트윗 퍼머링크 형식이 아님 |
+                            | 403 | `BCH-069` (`PARTICIPATION_NO_PERMISSION`) | 참여자 본인이 아님 |
+                            | 409 | `BCH-076` (`PAYBACK_NOT_ELIGIBLE`) | 환급 대상 아님 (비이벤트 분철·배송 완료 전·신청 마감) |
+                            | 409 | `BCH-077` (`PAYBACK_STATE_TRANSITION_INVALID`) | 이미 입금 완료(COMPLETED)된 건 |
+                            | 409 | `BCH-079` (`PAYBACK_TWEET_URL_DUPLICATE`) | 다른 참여의 환급 신청에 이미 사용된 트윗 URL |
+                            """)
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .requestHeaders(
+                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestSchema(Schema.schema("ShippingFeePaybackRequest"))
+                        .requestFields(
+                            fieldWithPath("tweetUrl")
+                                .description(
+                                    "후기 트윗 URL (https://x.com/{handle}/status/{id} 또는"
+                                        + " twitter.com. 쿼리스트링 허용)"))
                         .build())));
   }
 

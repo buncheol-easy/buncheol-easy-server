@@ -14,5 +14,7 @@ public interface UserRepository {
 
   boolean existsByNicknameExcludingId(String nickname, Long excludeId);
 
+  boolean existsByNickname(String nickname);
+
   java.util.List<User> findAllByIds(java.util.Collection<Long> ids);
 }

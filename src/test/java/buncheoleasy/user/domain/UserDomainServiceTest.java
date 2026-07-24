@@ -3,6 +3,7 @@ package buncheoleasy.user.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -30,6 +31,10 @@ class UserDomainServiceTest {
 
   @Mock private UserRepository userRepository;
 
+  @Mock private buncheoleasy.user.domain.serviceterm.UserServiceTermRepository userServiceTermRepository;
+
+  @Mock private RandomNicknameGenerator nicknameGenerator;
+
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
   @Nested
@@ -37,35 +42,119 @@ class UserDomainServiceTest {
   class GetOrCreateBySocialLoginTest {
 
     @Test
-    void 기존_유저가_있으면_해당_유저를_반환한다() {
+    void 기존_유저가_있으면_해당_유저를_반환하고_카카오_값으로_덮어쓰지_않는다() {
       // given
       SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
       User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      existingUser.updateName("김기존");
       given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
 
       // when
-      User result = userDomainService.getOrCreateBySocialLogin(socialInfo, "test@example.com");
+      User result =
+          userDomainService.getOrCreateBySocialLogin(
+              socialInfo, "test@example.com", "김카카오", "01099998888");
 
       // then
       assertThat(result).isEqualTo(existingUser);
+      assertThat(result.getName()).isEqualTo("김기존");
+      assertThat(result.getPhoneNumber()).isNull();
       then(userRepository).should(never()).save(any());
     }
 
     @Test
-    void 기존_유저가_없으면_새_유저를_생성하고_저장한다() {
+    void 기존_유저가_없으면_조합_닉네임으로_새_유저를_생성하고_저장한다() {
       // given
       SocialInfo socialInfo = SocialInfo.of("KAKAO", "new_user");
       String email = "new@example.com";
+      given(nicknameGenerator.generate()).willReturn("용감한까마귀12");
       given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.empty());
       given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
       // when
-      User result = userDomainService.getOrCreateBySocialLogin(socialInfo, email);
+      User result = userDomainService.getOrCreateBySocialLogin(socialInfo, email, null, null);
 
       // then
       assertThat(result.getEmail().value()).isEqualTo(email);
       assertThat(result.getSocialInfo().provider()).isEqualTo(SocialProvider.KAKAO);
+      assertThat(result.getNickname().value()).isEqualTo("용감한까마귀12");
+      assertThat(result.isProfileCompleted()).isFalse();
       then(userRepository).should().save(any(User.class));
+    }
+
+    @Test
+    void 동의창에서_이름_전화번호를_받으면_완성_회원으로_생성된다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "sync_user");
+      given(nicknameGenerator.generate()).willReturn("포근한수달7");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.empty());
+      given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
+
+      // when
+      User result =
+          userDomainService.getOrCreateBySocialLogin(
+              socialInfo, "sync@example.com", "김실명", "01012345678");
+
+      // then
+      assertThat(result.getName()).isEqualTo("김실명");
+      assertThat(result.getPhoneNumber().value()).isEqualTo("01012345678");
+      assertThat(result.isProfileCompleted()).isTrue();
+    }
+  }
+
+  @Nested
+  @DisplayName("약관 동의 내역 갱신 테스트")
+  class UpdateServiceTermAgreementsTest {
+
+    @Test
+    void 신규_태그는_저장하고_마케팅_태그는_수신_동의도_갱신한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userServiceTermRepository.findByUserIdAndTag(eq(1L), any()))
+          .willReturn(Optional.empty());
+      Instant agreedAt = Instant.parse("2026-07-23T00:00:00Z");
+
+      // when
+      userDomainService.updateServiceTermAgreements(
+          1L,
+          java.util.List.of(
+              new buncheoleasy.user.domain.serviceterm.ServiceTermAgreement(
+                  "service_terms", true, agreedAt),
+              new buncheoleasy.user.domain.serviceterm.ServiceTermAgreement(
+                  "marketing", true, agreedAt)),
+          "marketing");
+
+      // then
+      then(userServiceTermRepository)
+          .should(org.mockito.Mockito.times(2))
+          .save(any(buncheoleasy.user.domain.serviceterm.UserServiceTerm.class));
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(Instant.now(clock));
+    }
+
+    @Test
+    void 기존_태그는_동의_상태를_갱신한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      buncheoleasy.user.domain.serviceterm.UserServiceTerm existing =
+          buncheoleasy.user.domain.serviceterm.UserServiceTerm.of(
+              1L, "service_terms", false, null);
+      given(userServiceTermRepository.findByUserIdAndTag(1L, "service_terms"))
+          .willReturn(Optional.of(existing));
+      Instant agreedAt = Instant.parse("2026-07-23T00:00:00Z");
+
+      // when
+      userDomainService.updateServiceTermAgreements(
+          1L,
+          java.util.List.of(
+              new buncheoleasy.user.domain.serviceterm.ServiceTermAgreement(
+                  "service_terms", true, agreedAt)),
+          "marketing");
+
+      // then
+      assertThat(existing.isAgreed()).isTrue();
+      assertThat(existing.getAgreedAt()).isEqualTo(agreedAt);
+      then(userServiceTermRepository).should(never()).save(any());
     }
   }
 

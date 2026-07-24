@@ -101,8 +101,12 @@ app:
   kakao:
     # 카카오 REST API 호스트 (테스트에서 스텁 서버로 교체 가능).
     api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}
+    # 로그인 요청 스레드에서 동기 호출되므로 타임아웃 필수 (Slack/Aligo 클라이언트와 동일 컨벤션).
+    connect-timeout: 3s
+    read-timeout: 5s
     # 간편가입 약관 목록에 등록한 '마케팅 수신 동의' 항목의 태그 — 콘솔 등록값과 반드시 일치시킬 것.
-    marketing-term-tag: ${KAKAO_MARKETING_TERM_TAG:marketing}
+    # 기본값은 2026-07-24 디벨로퍼스 콘솔에 등록한 실제 태그(marketing-consent)와 맞춰둠.
+    marketing-term-tag: ${KAKAO_MARKETING_TERM_TAG:marketing-consent}
   frontend:
     # 사용자 웹앱(프론트) origin. 알림톡 버튼·인앱 링크의 절대 URL base 로 사용한다(환경별로 다름).
     base-url: ${FRONTEND_BASE_URL:http://localhost:3000}

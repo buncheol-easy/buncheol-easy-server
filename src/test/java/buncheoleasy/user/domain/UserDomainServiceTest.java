@@ -128,6 +128,26 @@ class UserDomainServiceTest {
       then(userServiceTermRepository)
           .should(org.mockito.Mockito.times(2))
           .save(any(buncheoleasy.user.domain.serviceterm.UserServiceTerm.class));
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(agreedAt);
+    }
+
+    @Test
+    void 마케팅_태그의_동의_시각이_없으면_현재_시각으로_기록한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userServiceTermRepository.findByUserIdAndTag(eq(1L), any()))
+          .willReturn(Optional.empty());
+
+      // when
+      userDomainService.updateServiceTermAgreements(
+          1L,
+          java.util.List.of(
+              new buncheoleasy.user.domain.serviceterm.ServiceTermAgreement(
+                  "marketing", true, null)),
+          "marketing");
+
+      // then
       assertThat(user.getMarketingAgreedAt()).isEqualTo(Instant.now(clock));
     }
 

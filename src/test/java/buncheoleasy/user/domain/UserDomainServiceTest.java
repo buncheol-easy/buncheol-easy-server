@@ -132,6 +132,28 @@ class UserDomainServiceTest {
     }
 
     @Test
+    void 이미_동의_상태의_재로그인은_최초_동의_시각을_보존한다() {
+      // given
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      Instant firstAgreedAt = Instant.parse("2026-01-01T00:00:00Z");
+      user.updateMarketingAgreement(true, firstAgreedAt);
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userServiceTermRepository.findByUserIdAndTag(eq(1L), any()))
+          .willReturn(Optional.empty());
+
+      // when — 재로그인에서 카카오가 새로운 동의 시각을 내려줘도
+      userDomainService.updateServiceTermAgreements(
+          1L,
+          java.util.List.of(
+              new buncheoleasy.user.domain.serviceterm.ServiceTermAgreement(
+                  "marketing", true, Instant.parse("2026-07-24T00:00:00Z"))),
+          "marketing");
+
+      // then — no-op 가드가 최초 동의 시각을 보존한다
+      assertThat(user.getMarketingAgreedAt()).isEqualTo(firstAgreedAt);
+    }
+
+    @Test
     void 마케팅_태그의_동의_시각이_없으면_현재_시각으로_기록한다() {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");

@@ -4,8 +4,6 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,72 +11,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.user.application.ShippingAddressService;
 import buncheoleasy.user.dto.response.ShippingAddressResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
-import java.util.Collections;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("ShippingAddressController 문서화 테스트")
-class ShippingAddressControllerDocsTest {
-
-  private static final Long USER_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class ShippingAddressControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private ShippingAddressService shippingAddressService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(USER_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   @Test
   void 배송지_등록() throws Exception {
@@ -86,8 +33,7 @@ class ShippingAddressControllerDocsTest {
     mockMvc
         .perform(
             post("/v1/users/me/shipping-addresses")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth())
+                .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 강남점\",\"alias\":\"회사\",\"isDefault\":true}"))
@@ -99,9 +45,12 @@ class ShippingAddressControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("ShippingAddress")
                         .summary("배송지 등록")
-                        .description("최대 5개까지 등록 가능. isDefault=true 시 기존 기본 배송지는 해제된다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .description(
+                            "최대 5개까지 등록 가능하며 6개째는 400 `USR-020` (`SHIPPING_ADDRESS_LIMIT_EXCEEDED`) 로 거부된다. "
+                                + "isDefault=true 시 같은 배송 방식(shippingMethod) 내의 기존 기본 배송지가 해제된다. "
+                                + "프로필 미완료 유저는 403 `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`), "
+                                + "같은 배송 방식+매장 조합이 이미 등록돼 있으면 409 `USR-021` (`SHIPPING_ADDRESS_DUPLICATE`) 로 거부된다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .requestSchema(Schema.schema("ShippingAddressRequest"))
                         .requestFields(
                             fieldWithPath("shippingMethod")
@@ -125,10 +74,7 @@ class ShippingAddressControllerDocsTest {
 
     // when & then
     mockMvc
-        .perform(
-            get("/v1/users/me/shipping-addresses")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(get("/v1/users/me/shipping-addresses").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -138,8 +84,7 @@ class ShippingAddressControllerDocsTest {
                         .tag("ShippingAddress")
                         .summary("배송지 목록 조회")
                         .description("로그인 사용자가 등록한 배송지 목록을 반환한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .responseSchema(Schema.schema("ShippingAddressListResponse"))
                         .responseFields(
                             fieldWithPath("[].id").description("배송지 ID"),
@@ -156,8 +101,7 @@ class ShippingAddressControllerDocsTest {
     mockMvc
         .perform(
             put("/v1/users/me/shipping-addresses/{id}", 1L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth())
+                .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 광화문점\",\"alias\":\"회사\",\"isDefault\":false}"))
@@ -169,9 +113,12 @@ class ShippingAddressControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("ShippingAddress")
                         .summary("배송지 수정")
+                        .description(
+                            "배송지 정보를 수정한다. isDefault=true 시 같은 배송 방식(shippingMethod) 내의 기존 기본 배송지가 해제된다. "
+                                + "본인 배송지가 아니면 403 `USR-022` (`SHIPPING_ADDRESS_FORBIDDEN`), "
+                                + "같은 배송 방식+매장 조합이 이미 등록돼 있으면 409 `USR-021` (`SHIPPING_ADDRESS_DUPLICATE`) 로 거부된다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("배송지 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .requestSchema(Schema.schema("ShippingAddressRequest"))
                         .requestFields(
                             fieldWithPath("shippingMethod")
@@ -188,10 +135,7 @@ class ShippingAddressControllerDocsTest {
   void 배송지_삭제() throws Exception {
     // when & then
     mockMvc
-        .perform(
-            delete("/v1/users/me/shipping-addresses/{id}", 1L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(delete("/v1/users/me/shipping-addresses/{id}", 1L).with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -200,9 +144,12 @@ class ShippingAddressControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("ShippingAddress")
                         .summary("배송지 삭제")
+                        .description(
+                            "배송지를 삭제한다. 본인 배송지가 아니면 403 `USR-022` (`SHIPPING_ADDRESS_FORBIDDEN`), "
+                                + "활성(입금대기중·입금확인됨) 참여가 참조 중인 배송지면 409 `USR-030` "
+                                + "(`SHIPPING_ADDRESS_DELETE_BLOCKED_BY_ACTIVE_PARTICIPATION`) 로 거부된다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("배송지 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 }

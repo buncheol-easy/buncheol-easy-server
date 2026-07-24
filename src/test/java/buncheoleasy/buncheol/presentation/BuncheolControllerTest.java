@@ -17,16 +17,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
+import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
+import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
@@ -36,6 +40,7 @@ import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -72,6 +77,8 @@ class BuncheolControllerTest {
   @MockitoBean private BuncheolService buncheolService;
 
   @MockitoBean private MyHostedBuncheolQueryService myHostedBuncheolQueryService;
+
+  @MockitoBean private BuncheolListQueryService buncheolListQueryService;
 
   @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
 
@@ -154,7 +161,7 @@ class BuncheolControllerTest {
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).with(mockAuth()))
           .andExpect(status().isBadRequest())
-          .andExpect(jsonPath("$.code").value("C-001"));
+          .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_INPUT_VALUE.getCode()));
 
       then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
     }
@@ -549,6 +556,62 @@ class BuncheolControllerTest {
           .perform(get("/v1/buncheols/me").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(content().string("[]"));
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 목록 조회 API 테스트")
+  class SearchBuncheolsTest {
+
+    @Test
+    void keyword_가_100자_초과면_400과_INVALID_INPUT_VALUE를_반환한다() throws Exception {
+      // given
+      String overLimit = "a".repeat(101);
+
+      // when & then
+      mockMvc
+          .perform(get("/v1/buncheols").queryParam("keyword", overLimit))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_INPUT_VALUE.getCode()));
+
+      then(buncheolListQueryService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 비로그인_호출은_userId_null_로_전달되고_bookmarked_가_false_로_내려간다() throws Exception {
+      // given
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      BuncheolSummaryResponse item =
+          new BuncheolSummaryResponse(
+              10L,
+              "뉴진스 1집 분철",
+              BuncheolStatus.RECRUITING,
+              deadline,
+              3,
+              false,
+              "뉴진스",
+              null,
+              List.of("민지"),
+              List.of("민지"),
+              false);
+      CursorResponse<BuncheolSummaryResponse> response =
+          new CursorResponse<>(List.of(item), null, false);
+
+      given(
+              buncheolListQueryService.search(
+                  null,
+                  new BuncheolSearchCondition(null, null, null),
+                  BuncheolListCursor.firstPage(),
+                  20))
+          .willReturn(response);
+
+      // when & then
+      mockMvc
+          .perform(get("/v1/buncheols"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.items[0].bookmarked").value(false))
+          .andExpect(jsonPath("$.hasNext").value(false))
+          .andExpect(jsonPath("$.nextCursor").doesNotExist());
     }
   }
 

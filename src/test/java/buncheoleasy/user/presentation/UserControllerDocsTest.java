@@ -4,15 +4,13 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.user.application.UserService;
 import buncheoleasy.user.dto.response.NicknameDuplicateResponse;
 import buncheoleasy.user.dto.response.ProfileStatusResponse;
@@ -20,66 +18,15 @@ import buncheoleasy.user.dto.response.UserProfileResponse;
 import buncheoleasy.user.dto.response.UserProfileResponse.BankAccountInfo;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
-import java.util.Collections;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("UserController 문서화 테스트")
-class UserControllerDocsTest {
-
-  private static final Long USER_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class UserControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private UserService userService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(USER_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   @Test
   void 회원_프로필_조회() throws Exception {
@@ -97,8 +44,7 @@ class UserControllerDocsTest {
 
     // when & then
     mockMvc
-        .perform(
-            get("/v1/users/me").header("Authorization", "Bearer {accessToken}").with(mockAuth()))
+        .perform(get("/v1/users/me").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -107,9 +53,10 @@ class UserControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("User")
                         .summary("회원 프로필 조회")
-                        .description("로그인한 사용자의 프로필 정보를 반환한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .description(
+                            "로그인한 사용자의 프로필 정보를 반환한다. "
+                                + "프로필 미완료 유저가 호출하면 403 `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) 로 거부된다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .responseSchema(Schema.schema("UserProfileResponse"))
                         .responseFields(
                             fieldWithPath("provider").description("OAuth Provider (KAKAO)"),
@@ -135,10 +82,7 @@ class UserControllerDocsTest {
 
     // when & then
     mockMvc
-        .perform(
-            get("/v1/users/me/profile/status")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(get("/v1/users/me/profile/status").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -148,8 +92,7 @@ class UserControllerDocsTest {
                         .tag("User")
                         .summary("프로필 완료 여부 조회")
                         .description("로그인 직후 클라이언트가 프로필 설정 완료 여부를 확인한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .responseSchema(Schema.schema("ProfileStatusResponse"))
                         .responseFields(
                             fieldWithPath("profileCompleted").description("프로필 설정 완료 여부"))
@@ -167,8 +110,7 @@ class UserControllerDocsTest {
         .perform(
             get("/v1/users/nickname/duplicate")
                 .param("nickname", "새닉네임")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+                .with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -178,8 +120,7 @@ class UserControllerDocsTest {
                         .tag("User")
                         .summary("닉네임 중복 조회")
                         .description("입력한 닉네임을 다른 유저가 이미 쓰고 있는지 확인한다. 본인 현재 닉네임은 중복으로 보지 않는다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .queryParameters(
                             parameterWithName("nickname").description("확인할 닉네임 (1~20자, 한글/영문/숫자)"))
                         .responseSchema(Schema.schema("NicknameDuplicateResponse"))
@@ -194,8 +135,7 @@ class UserControllerDocsTest {
     mockMvc
         .perform(
             put("/v1/users/me")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth())
+                .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"nickname\":\"새닉네임\",\"phoneNumber\":\"01098765432\","
@@ -207,10 +147,11 @@ class UserControllerDocsTest {
                 resource(
                     ResourceSnippetParameters.builder()
                         .tag("User")
-                        .summary("회원 프로필 등록/수정")
-                        .description("닉네임/휴대폰 번호를 등록 또는 수정한다. 미완료 유저가 호출하면 자동으로 프로필 완료 상태로 전이된다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .summary("회원 프로필(닉네임·휴대폰·실명·마케팅 동의) 등록/수정")
+                        .description(
+                            "닉네임·휴대폰 번호와 선택적으로 실명·마케팅 수신 동의 여부를 등록 또는 수정한다. "
+                                + "미완료 유저가 호출하면 자동으로 프로필 완료 상태로 전이된다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .requestSchema(Schema.schema("UpdateUserProfileRequest"))
                         .requestFields(
                             fieldWithPath("nickname").description("닉네임 (1~20자, 한글/영문/숫자)"),
@@ -231,8 +172,7 @@ class UserControllerDocsTest {
     mockMvc
         .perform(
             put("/v1/users/me/bank-account")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth())
+                .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"bank\":\"국민\",\"account\":\"12345678901234\",\"holder\":\"채아진\"}"))
         .andExpect(status().isNoContent())
@@ -244,8 +184,7 @@ class UserControllerDocsTest {
                         .tag("User")
                         .summary("정산 계좌 등록/수정")
                         .description("호스트가 정산받을 계좌 정보를 등록 또는 수정한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .requestSchema(Schema.schema("BankAccountRequest"))
                         .requestFields(
                             fieldWithPath("bank").description("은행명 (1~50자)"),
@@ -258,8 +197,7 @@ class UserControllerDocsTest {
   void 회원_탈퇴() throws Exception {
     // when & then
     mockMvc
-        .perform(
-            delete("/v1/users/me").header("Authorization", "Bearer {accessToken}").with(mockAuth()))
+        .perform(delete("/v1/users/me").with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -268,9 +206,11 @@ class UserControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("User")
                         .summary("회원 탈퇴")
-                        .description("로그인한 사용자를 탈퇴 처리한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .description(
+                            "로그인한 사용자를 탈퇴 처리한다. "
+                                + "활성 개최 분철이 있으면 409 `USR-028` (`USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL`), "
+                                + "활성 참여가 있으면 409 `USR-029` (`USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION`) 로 거부된다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .build())));
   }
 }

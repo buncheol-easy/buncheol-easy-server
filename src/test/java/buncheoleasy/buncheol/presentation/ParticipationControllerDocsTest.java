@@ -6,14 +6,11 @@ import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.participation.MyParticipationQueryService;
 import buncheoleasy.buncheol.application.participation.ParticipateResult;
 import buncheoleasy.buncheol.application.participation.ParticipationDetailQueryService;
@@ -30,46 +27,22 @@ import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("Participation 관련 컨트롤러 문서화 테스트")
-class ParticipationControllerDocsTest {
+class ParticipationControllerDocsTest extends DocsTestSupport {
 
-  private static final Long PARTICIPANT_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+  private static final Long PARTICIPANT_ID = USER_ID;
 
   @MockitoBean private ParticipationService participationService;
 
@@ -78,31 +51,6 @@ class ParticipationControllerDocsTest {
   @MockitoBean private MyParticipationQueryService myParticipationQueryService;
 
   @MockitoBean private ShippingFeePaybackService shippingFeePaybackService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(
-                  PARTICIPANT_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   @Test
   void 분철_참여() throws Exception {
@@ -117,8 +65,7 @@ class ParticipationControllerDocsTest {
     mockMvc
         .perform(
             post("/v1/buncheols/{buncheolId}/participations", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth())
+                .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
@@ -155,14 +102,17 @@ class ParticipationControllerDocsTest {
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
+                            | 400 | `BCH-062` (`PARTICIPATION_REQUIRED_FIELD_MISSING`) | 참여 필수 항목 누락 (도메인 방어 검증 — 정상 HTTP 요청에서는 `C-001` 이 먼저 잡는다) |
+                            | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 선택한 수령지의 배송방법을 이 분철이 지원하지 않음 |
+                            | 403 | `BCH-066` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님 |
-                            | 403 | `BCH-065` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .requestSchema(Schema.schema("ParticipateRequest"))
                         .requestFields(
                             fieldWithPath("buncheolMemberId")
@@ -248,10 +198,7 @@ class ParticipationControllerDocsTest {
         .willReturn(List.of(confirmed, awaitingPayment));
 
     mockMvc
-        .perform(
-            get("/v1/participations/me")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(get("/v1/participations/me").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -261,8 +208,7 @@ class ParticipationControllerDocsTest {
                         .tag("Participation")
                         .summary("내가 참여한 분철 목록 조회")
                         .description("마이페이지에서 사용자가 참여한 분철 목록을 최신 참여 순으로 조회한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .responseSchema(Schema.schema("MyParticipationListResponse"))
                         .responseFields(
                             fieldWithPath("[].participationId").description("참여 ID"),
@@ -383,9 +329,7 @@ class ParticipationControllerDocsTest {
 
     mockMvc
         .perform(
-            get("/v1/participations/{participationId}", 500L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            get("/v1/participations/{participationId}", 500L).with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -397,9 +341,8 @@ class ParticipationControllerDocsTest {
                         .description(
                             "참여자 본인이 참여 상세를 조회한다. 입금확인중(AWAITING_PAYMENT) 단계에서만 입금할 개최자"
                                 + " 계좌(`hostAccount`)·총액·만료 시각을 노출하며, 그 외 상태에서는 `hostAccount` 가 null 이다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .responseSchema(Schema.schema("ParticipationDetailResponse"))
                         .responseFields(
                             fieldWithPath("participationId").description("참여 ID"),
@@ -462,8 +405,7 @@ class ParticipationControllerDocsTest {
             post("/v1/participations/{participationId}/shipping-fee-payback", 500L)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{ \"tweetUrl\": \"https://x.com/fan/status/1234567890?s=20\" }")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+                .with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -487,9 +429,8 @@ class ParticipationControllerDocsTest {
                             | 409 | `BCH-077` (`PAYBACK_STATE_TRANSITION_INVALID`) | 이미 입금 완료(COMPLETED)된 건 |
                             | 409 | `BCH-079` (`PAYBACK_TWEET_URL_DUPLICATE`) | 다른 참여의 환급 신청에 이미 사용된 트윗 URL |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .requestSchema(Schema.schema("ShippingFeePaybackRequest"))
                         .requestFields(
                             fieldWithPath("tweetUrl")
@@ -503,9 +444,7 @@ class ParticipationControllerDocsTest {
   void 개최자_입금확인() throws Exception {
     mockMvc
         .perform(
-            post("/v1/participations/{participationId}/confirm", 500L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            post("/v1/participations/{participationId}/confirm", 500L).with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -517,10 +456,8 @@ class ParticipationControllerDocsTest {
                         .description(
                             "개최자가 실제 입금을 확인해 입금확인중(AWAITING_PAYMENT) 참여를 CONFIRMED 로 전환한다. 입금 기한 내에만"
                                 + " 가능하며, 개최자 본인만 호출할 수 있다.")
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
-
 }

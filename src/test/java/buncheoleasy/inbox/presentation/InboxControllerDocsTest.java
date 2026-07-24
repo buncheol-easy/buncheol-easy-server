@@ -6,12 +6,11 @@ import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.inbox.application.InboxQueryService;
 import buncheoleasy.inbox.domain.InboxMessageType;
@@ -22,43 +21,14 @@ import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
 import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("InboxController 문서화 테스트")
-class InboxControllerDocsTest {
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class InboxControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private InboxQueryService inboxQueryService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
 
   @Test
   void 수신함_목록_조회() throws Exception {
@@ -76,7 +46,7 @@ class InboxControllerDocsTest {
                 List.of(
                     new InboxMessageSummaryResponse(
                         9L,
-                        "분철 낙찰 안내",
+                        "분철 진행 확정 안내",
                         false,
                         InboxMessageType.NOTIFICATION,
                         Instant.parse("2026-06-14T09:00:00Z")),
@@ -92,7 +62,8 @@ class InboxControllerDocsTest {
 
     // when & then
     mockMvc
-        .perform(get("/v1/inbox").param("type", "NOTICE").param("size", "20"))
+        .perform(
+            get("/v1/inbox").param("size", "20").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -107,6 +78,7 @@ class InboxControllerDocsTest {
                             type 미지정 시 전체(공지 + 본인 알림), NOTICE/NOTIFICATION 으로 필터링한다.
                             상단 고정 공지는 첫 페이지 응답의 pinned 로 분리해 내려가고(2페이지부터 빈 배열),
                             본문 피드 feed 는 커서 기반 무한스크롤이다.""")
+                        .requestHeaders(optionalUserAuthorizationHeader("로그인 시 본인 알림이 포함된다"))
                         .queryParameters(
                             parameterWithName("type")
                                 .description("필터: NOTICE(공지만) | NOTIFICATION(알림만), 미지정 시 전체")
@@ -154,7 +126,8 @@ class InboxControllerDocsTest {
 
     // when & then
     mockMvc
-        .perform(get("/v1/inbox/{messageId}", 8L))
+        .perform(
+            get("/v1/inbox/{messageId}", 8L).with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -165,6 +138,7 @@ class InboxControllerDocsTest {
                         .summary("수신함 단건 상세 조회")
                         .description(
                             "공지이거나 본인 알림이면 상세를 반환한다. 그 외(타인 알림 등)는 404. 비로그인은 공지만 조회 가능.")
+                        .requestHeaders(optionalUserAuthorizationHeader("로그인 시 본인 알림이 포함된다"))
                         .pathParameters(parameterWithName("messageId").description("메시지 ID"))
                         .responseSchema(Schema.schema("InboxMessageDetailResponse"))
                         .responseFields(

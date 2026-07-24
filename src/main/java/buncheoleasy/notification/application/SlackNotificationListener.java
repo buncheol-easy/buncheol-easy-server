@@ -39,7 +39,10 @@ public class SlackNotificationListener {
     this.frontendBaseUrl = frontendBaseUrl;
   }
 
-  /** (운영자) 신규 참여 접수. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)라 참여 한 건이 메시지 한 건이다. */
+  /**
+   * (운영자) 신규 참여 접수. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)라 참여 한 건이 메시지 한 건이다. 환급 알림과 같은 Block Kit
+   * 구조(헤더 + bold 필드 + 링크)로 조립한다.
+   */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
@@ -50,25 +53,46 @@ public class SlackNotificationListener {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
     RefundAccount refundAccount = view.participation().getRefundAccount();
 
-    String message =
-        """
-        🔔 [신규 참여] %s (분철 #%d)
-        참여자: %s
-        환불계좌: %s %s (예금주 %s)
-        멤버: %s
-        입금 예정 금액: %s원
-        ⏰ 입금 기한: %s (기한 내 입금확인 필요)"""
+    String fallbackText =
+        "🔔 [신규 참여] %s (분철 #%d) - %s"
             .formatted(
-                view.buncheol().getTitle(),
-                view.buncheol().getId(),
-                formatParticipant(view),
-                refundAccount.bank(),
-                refundAccount.account(),
-                refundAccount.holder(),
-                view.memberName(),
-                AlimtalkFormats.amount(view.paymentAmount()),
-                DUE_AT_FORMAT.format(view.participation().getDueAt()));
-    slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, message);
+                view.buncheol().getTitle(), view.buncheol().getId(), formatParticipant(view));
+    List<Map<String, Object>> blocks =
+        List.of(
+            Map.of(
+                "type", "header",
+                "text", Map.of("type", "plain_text", "text", "🔔 새로운 참여가 들어왔어요!")),
+            Map.of(
+                "type",
+                "section",
+                "fields",
+                List.of(
+                    markdown("*참여자*\n%s".formatted(formatParticipant(view))),
+                    markdown(
+                        "*분철*\n%s (#%d)"
+                            .formatted(view.buncheol().getTitle(), view.buncheol().getId())),
+                    markdown("*멤버*\n%s".formatted(view.memberName())),
+                    markdown(
+                        "*입금 예정 금액*\n%s원"
+                            .formatted(AlimtalkFormats.amount(view.paymentAmount()))),
+                    markdown(
+                        "*환불계좌*\n%s %s (예금주 %s)"
+                            .formatted(
+                                refundAccount.bank(),
+                                refundAccount.account(),
+                                refundAccount.holder())),
+                    markdown(
+                        "*입금 기한*\n%s (기한 내 입금확인 필요)"
+                            .formatted(DUE_AT_FORMAT.format(view.participation().getDueAt()))))),
+            Map.of(
+                "type",
+                "section",
+                "text",
+                markdown(
+                    "<%s/products/%d|분철 상세 보기> · <%s/admin|어드민에서 처리>"
+                        .formatted(
+                            frontendBaseUrl, view.buncheol().getId(), frontendBaseUrl))));
+    slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, fallbackText, blocks);
   }
 
   /**
@@ -94,7 +118,8 @@ public class SlackNotificationListener {
         List.of(
             Map.of(
                 "type", "header",
-                "text", Map.of("type", "plain_text", "text", "💸 배송비 돌려받기 신청")),
+                "text",
+                    Map.of("type", "plain_text", "text", "💸 새로운 배송비 환급 요청이 들어왔어요!")),
             Map.of(
                 "type",
                 "section",

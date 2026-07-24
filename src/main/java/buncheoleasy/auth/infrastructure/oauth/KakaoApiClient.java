@@ -3,10 +3,12 @@ package buncheoleasy.auth.infrastructure.oauth;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -24,8 +26,16 @@ public class KakaoApiClient {
   private final RestClient restClient;
 
   public KakaoApiClient(
-      @Value("${app.kakao.api-base-url:https://kapi.kakao.com}") final String apiBaseUrl) {
-    this.restClient = RestClient.builder().baseUrl(apiBaseUrl).build();
+      @Value("${app.kakao.api-base-url:https://kapi.kakao.com}") final String apiBaseUrl,
+      @Value("${app.kakao.connect-timeout:3s}") final Duration connectTimeout,
+      @Value("${app.kakao.read-timeout:5s}") final Duration readTimeout) {
+    // 로그인 성공 핸들러의 요청 스레드에서 동기 호출되므로, kapi 무응답 시 스레드가 물리지 않게
+    // 타임아웃으로 fail-fast 한다 (호출부는 실패를 가입 비블로킹으로 처리).
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout(Math.toIntExact(connectTimeout.toMillis()));
+    requestFactory.setReadTimeout(Math.toIntExact(readTimeout.toMillis()));
+    this.restClient =
+        RestClient.builder().baseUrl(apiBaseUrl).requestFactory(requestFactory).build();
   }
 
   /** 이름·전화번호 보강 조회. 전화번호는 서비스 표준 형식(01x…)으로 정규화해 반환한다. */

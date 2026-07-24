@@ -88,6 +88,8 @@ public enum ErrorCode {
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_PRICE_INVALID(
       "BCH-027", "멤버 금액은 100원 단위의 0 이상인 값이어야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_MEMBER_FREE_PRICE_MIXED(
+      "BCH-082", "무료(0원) 멤버 슬롯은 유료 슬롯과 함께 구성할 수 없습니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_IMAGE_LIMIT_EXCEEDED("BCH-040", "이미지는 최대 5개까지 업로드할 수 있습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_IMAGE_URL_REQUIRED("BCH-041", "이미지 URL은 필수입니다.", HttpStatus.BAD_REQUEST),

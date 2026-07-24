@@ -171,8 +171,9 @@ public class Participation extends TimestampedEntity {
   }
 
   /**
-   * 배송비 환급 신청 (NONE/REJECTED → REQUESTED). 재신청이면 이전 반려 사유를 지운다. 환급액은 신청 시점의 배송비를 스냅샷해 이후 배송비
-   * 정책 변경에 영향받지 않는다. 신청 자격(이벤트 대상·배송 완료·마감 전)은 호출 측 {@code ShippingFeePaybackService} 가 검증한다.
+   * 배송비 환급 신청 (NONE/REJECTED/REQUESTED → REQUESTED). 반려 후 재신청이면 이전 반려 사유를 지우고, 검수 전(REQUESTED)
+   * 재제출은 잘못 올린 트윗 링크 수정으로 동작한다. 환급액은 신청 시점의 배송비를 스냅샷해 이후 배송비 정책 변경에 영향받지 않는다. 신청
+   * 자격(이벤트 대상·배송 완료·마감 전)은 호출 측 {@code ShippingFeePaybackService} 가 검증한다.
    */
   public void requestPayback(final PaybackTweetUrl tweetUrl, final Instant now) {
     if (!paybackStatus.requestable()) {

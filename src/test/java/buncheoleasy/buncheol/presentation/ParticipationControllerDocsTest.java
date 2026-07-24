@@ -475,7 +475,8 @@ class ParticipationControllerDocsTest {
                         .description(
                             """
                             오픈 이벤트 분철(0원 슬롯) 참여의 배송 완료 후, X(트위터) 후기 트윗 URL 을 제출해 배송비 환급을 신청한다.
-                            반려(REJECTED)된 신청의 재신청도 같은 엔드포인트를 사용하며, 신청 시 이전 반려 사유는 초기화된다.
+                            반려(REJECTED)된 신청의 재신청, 검수 전(REQUESTED) 잘못 올린 링크의 수정도 같은 엔드포인트를 사용한다 —
+                            재신청 시 이전 반려 사유는 초기화되고, 제출할 때마다 운영자 슬랙 알림이 다시 발송된다.
                             제출한 URL 은 쿼리스트링을 제거한 퍼머링크로 정규화해 저장한다.
 
                             | 상태 | 코드 | 의미 |
@@ -483,7 +484,7 @@ class ParticipationControllerDocsTest {
                             | 400 | `BCH-078` (`PAYBACK_TWEET_URL_INVALID`) | 트윗 퍼머링크 형식이 아님 |
                             | 403 | `BCH-069` (`PARTICIPATION_NO_PERMISSION`) | 참여자 본인이 아님 |
                             | 409 | `BCH-076` (`PAYBACK_NOT_ELIGIBLE`) | 환급 대상 아님 (비이벤트 분철·배송 완료 전·신청 마감) |
-                            | 409 | `BCH-077` (`PAYBACK_STATE_TRANSITION_INVALID`) | 이미 신청(REQUESTED)·완료(COMPLETED)된 건 |
+                            | 409 | `BCH-077` (`PAYBACK_STATE_TRANSITION_INVALID`) | 이미 입금 완료(COMPLETED)된 건 |
                             | 409 | `BCH-079` (`PAYBACK_TWEET_URL_DUPLICATE`) | 다른 참여의 환급 신청에 이미 사용된 트윗 URL |
                             """)
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))

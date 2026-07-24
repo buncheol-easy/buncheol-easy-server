@@ -34,8 +34,11 @@ public enum PaybackStatus {
 
   private final String description;
 
-  /** 유저가 환급 신청을 넣을 수 있는 저장 상태인지 (신규 신청 = NONE, 반려 후 재신청 = REJECTED). */
+  /**
+   * 유저가 후기 트윗 URL 을 제출할 수 있는 저장 상태인지 (신규 신청 = NONE, 반려 후 재신청 = REJECTED, 잘못 올린 링크 수정 =
+   * REQUESTED). 입금이 끝난 COMPLETED 만 제출을 닫는다.
+   */
   public boolean requestable() {
-    return this == NONE || this == REJECTED;
+    return this == NONE || this == REJECTED || this == REQUESTED;
   }
 }

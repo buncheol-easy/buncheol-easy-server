@@ -138,9 +138,24 @@ class ParticipationTest {
     }
 
     @Test
-    void 확인중_상태에서_다시_신청하면_예외가_발생한다() {
+    void 확인중_상태에서_다시_제출하면_트윗_링크가_수정된다() {
       Participation participation = newParticipation();
       participation.requestPayback(TWEET_URL, NOW);
+
+      PaybackTweetUrl fixedUrl = PaybackTweetUrl.parse("https://x.com/fan/status/789");
+      Instant editedAt = NOW.plusSeconds(600);
+      participation.requestPayback(fixedUrl, editedAt);
+
+      assertThat(participation.getPaybackStatus()).isEqualTo(PaybackStatus.REQUESTED);
+      assertThat(participation.getPaybackTweetUrl()).isEqualTo(fixedUrl.value());
+      assertThat(participation.getPaybackRequestedAt()).isEqualTo(editedAt);
+    }
+
+    @Test
+    void 입금_완료된_신청은_다시_제출할_수_없다() {
+      Participation participation = newParticipation();
+      participation.requestPayback(TWEET_URL, NOW);
+      participation.completePayback(NOW);
 
       assertThatThrownBy(() -> participation.requestPayback(TWEET_URL, NOW))
           .isInstanceOf(BusinessException.class)

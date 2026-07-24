@@ -138,9 +138,24 @@ class ShippingFeePaybackServiceTest {
   }
 
   @Test
-  void 이미_신청된_건이면_상태_충돌_예외가_발생한다() {
+  void 확인중_상태에서는_트윗_링크_수정으로_재제출할_수_있다() {
     given(policy.deriveStatus(participation, delivery, NOW))
         .willReturn(PaybackStatus.REQUESTED);
+
+    service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST);
+
+    then(participationDomainService)
+        .should()
+        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW));
+    then(eventPublisher)
+        .should()
+        .publishEvent(new ShippingFeePaybackRequestedEvent(PARTICIPATION_ID));
+  }
+
+  @Test
+  void 입금_완료된_건이면_상태_충돌_예외가_발생한다() {
+    given(policy.deriveStatus(participation, delivery, NOW))
+        .willReturn(PaybackStatus.COMPLETED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
         .isInstanceOf(BusinessException.class)

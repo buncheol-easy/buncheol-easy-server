@@ -52,7 +52,7 @@ class SlackNotificationListenerTest {
   class ParticipationCreated {
 
     @Test
-    @DisplayName("참여 1건을 메시지 한 건으로 발송 - 분철 ID·환불계좌·멤버명·입금액·입금 기한(KST) 포함")
+    @DisplayName("참여 1건을 blocks 메시지 한 건으로 발송 - 분철·환불계좌·멤버·입금액·입금 기한(KST)·링크 포함")
     void sendsMessageForParticipation() {
       given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(true);
       // KST 로 7/6 12:30
@@ -73,17 +73,27 @@ class SlackNotificationListenerTest {
 
       listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
 
-      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<List<Map<String, Object>>> blocksCaptor =
+          ArgumentCaptor.forClass((Class) List.class);
+      ArgumentCaptor<String> fallbackCaptor = ArgumentCaptor.forClass(String.class);
       then(slackWebhookClient)
           .should()
-          .send(eq(SlackChannel.NEW_PARTICIPATION), messageCaptor.capture());
-      assertThat(messageCaptor.getValue())
-          .contains("엔믹스 앨범 (분철 #7)")
+          .send(
+              eq(SlackChannel.NEW_PARTICIPATION),
+              fallbackCaptor.capture(),
+              blocksCaptor.capture());
+      assertThat(fallbackCaptor.getValue()).contains("신규 참여").contains("엔믹스 앨범");
+      assertThat(blocksCaptor.getValue().toString())
+          .contains("새로운 참여가 들어왔어요")
+          .contains("엔믹스 앨범 (#7)")
           .contains("참여자닉(김실명)")
           .contains("국민은행 11012345678 (예금주 김참여)")
           .contains("설윤")
           .contains("23,000")
-          .contains("7/6 12:30");
+          .contains("7/6 12:30")
+          .contains(FRONTEND_BASE_URL + "/products/7")
+          .contains(FRONTEND_BASE_URL + "/admin");
     }
 
     @Test
@@ -106,11 +116,15 @@ class SlackNotificationListenerTest {
 
       listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
 
-      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<List<Map<String, Object>>> blocksCaptor =
+          ArgumentCaptor.forClass((Class) List.class);
       then(slackWebhookClient)
           .should()
-          .send(eq(SlackChannel.NEW_PARTICIPATION), messageCaptor.capture());
-      assertThat(messageCaptor.getValue()).contains("참여자: 참여자닉\n").doesNotContain("(김실명)");
+          .send(eq(SlackChannel.NEW_PARTICIPATION), anyString(), blocksCaptor.capture());
+      assertThat(blocksCaptor.getValue().toString())
+          .contains("*참여자*\n참여자닉")
+          .doesNotContain("(김실명)");
     }
 
     @Test
@@ -121,7 +135,7 @@ class SlackNotificationListenerTest {
       listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
 
       then(assembler).should(never()).loadByParticipation(any());
-      then(slackWebhookClient).should(never()).send(any(), any());
+      then(slackWebhookClient).should(never()).send(any(), anyString(), anyList());
     }
   }
 

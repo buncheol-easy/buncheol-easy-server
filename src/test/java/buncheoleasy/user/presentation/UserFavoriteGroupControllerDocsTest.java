@@ -4,88 +4,34 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.user.application.MyFavoriteGroupQueryService;
 import buncheoleasy.user.application.UserFavoriteGroupService;
 import buncheoleasy.user.dto.response.MyFavoriteGroupResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
-import java.util.Collections;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("UserFavoriteGroupController 문서화 테스트")
-class UserFavoriteGroupControllerDocsTest {
-
-  private static final Long USER_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class UserFavoriteGroupControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private UserFavoriteGroupService userFavoriteGroupService;
   @MockitoBean private MyFavoriteGroupQueryService myFavoriteGroupQueryService;
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(USER_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   @Test
   void 최애_그룹_등록() throws Exception {
+    // when & then
     mockMvc
-        .perform(
-            post("/v1/groups/{groupId}/favorite", 100L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(post("/v1/groups/{groupId}/favorite", 100L).with(userAuth()))
         .andExpect(status().isCreated())
         .andDo(
             document(
@@ -99,28 +45,25 @@ class UserFavoriteGroupControllerDocsTest {
                             사용자의 최애 그룹 목록에 K-pop 그룹을 추가한다.
 
                             **제한**
-                            - 사용자당 **최대 5개**까지 등록 가능. 6번째 등록 시 400 반환
+                            - 사용자당 **최대 5개**까지 등록 가능. 6번째 등록 시 409 반환
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 404 | `GRP-001` (`GROUP_NOT_FOUND`) | 존재하지 않는 그룹 |
                             | 409 | `GRP-003` (`FAVORITE_GROUP_ALREADY_EXISTS`) | 이미 최애로 등록된 그룹 |
-                            | 400 | `GRP-005` (`FAVORITE_GROUP_LIMIT_EXCEEDED`) | 최애 그룹 등록 상한(5개) 초과 |
+                            | 409 | `GRP-005` (`FAVORITE_GROUP_LIMIT_EXCEEDED`) | 최애 그룹 등록 상한(5개) 초과 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("groupId").description("그룹 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 
   @Test
   void 최애_그룹_해제() throws Exception {
+    // when & then
     mockMvc
-        .perform(
-            delete("/v1/groups/{groupId}/favorite", 100L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(delete("/v1/groups/{groupId}/favorite", 100L).with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -138,23 +81,21 @@ class UserFavoriteGroupControllerDocsTest {
                             |------|------|------|
                             | 404 | `GRP-004` (`FAVORITE_GROUP_NOT_FOUND`) | 해당 그룹을 최애로 등록한 상태가 아님 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("groupId").description("그룹 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 
   @Test
   void 내_최애_그룹_목록_조회() throws Exception {
+    // given
     MyFavoriteGroupResponse response =
         new MyFavoriteGroupResponse(700L, 100L, "뉴진스", "https://cdn.example.com/newjeans.jpg");
     given(myFavoriteGroupQueryService.getMyFavoriteGroups(USER_ID)).willReturn(List.of(response));
 
+    // when & then
     mockMvc
-        .perform(
-            get("/v1/groups/favorites/me")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(get("/v1/groups/favorites/me").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -172,8 +113,7 @@ class UserFavoriteGroupControllerDocsTest {
                             - 결과 개수는 **0~5개** (등록 상한 5개)
                             - `imageUrl` 은 그룹 엔티티에 등록된 대표 이미지 URL. 그룹에 이미지가 없으면 `null`
                             """)
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .responseSchema(Schema.schema("MyFavoriteGroupListResponse"))
                         .responseFields(
                             fieldWithPath("[].favoriteId").description("최애 등록 ID"),

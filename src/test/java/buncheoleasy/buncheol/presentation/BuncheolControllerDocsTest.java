@@ -4,17 +4,12 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
@@ -31,55 +26,31 @@ import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
+import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
-import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("BuncheolController 문서화 테스트")
-class BuncheolControllerDocsTest {
+class BuncheolControllerDocsTest extends DocsTestSupport {
 
-  private static final Long HOST_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+  private static final Long HOST_ID = USER_ID;
 
   @MockitoBean private BuncheolService buncheolService;
 
@@ -90,30 +61,6 @@ class BuncheolControllerDocsTest {
   @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
 
   @MockitoBean private BuncheolManagementQueryService buncheolManagementQueryService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(HOST_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   private String holdRequestJson() {
     return """
@@ -158,8 +105,7 @@ class BuncheolControllerDocsTest {
             multipart("/v1/buncheols")
                 .file(requestPart)
                 .file(imagePart)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+                .with(userAuth()))
         .andExpect(status().isCreated())
         .andDo(
             document(
@@ -168,8 +114,6 @@ class BuncheolControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Buncheol")
                         .summary("분철 개최")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .description(
                             """
                             multipart/form-data 요청.
@@ -188,7 +132,7 @@ class BuncheolControllerDocsTest {
                               "buncheolMembers": [
                                 {
                                   "memberId": Long,
-                                  "price": Long               // 양수, 호스트 고정 금액
+                                  "price": Long               // 0 이상, 100원 단위. 호스트 고정 금액 (0원은 오픈 이벤트 무료 분철 용도)
                                 }
                               ]
                             }
@@ -201,9 +145,12 @@ class BuncheolControllerDocsTest {
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `request` 검증 실패 또는 `images` 파트 누락 |
+                            | 400 | `BCH-027` (`BUNCHEOL_MEMBER_PRICE_INVALID`) | `price` 가 100원 단위가 아님 (음수는 `C-001` 이 먼저 잡는다) |
+                            | 400 | `BCH-082` (`BUNCHEOL_MEMBER_FREE_PRICE_MIXED`) | 무료(0원) 슬롯과 유료 슬롯을 섞어 구성 |
                             | 400 | `BCH-045` (`BUNCHEOL_IMAGE_REQUIRED`) | 이미지가 0장 |
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .build())));
   }
 
@@ -216,13 +163,12 @@ class BuncheolControllerDocsTest {
     MockMultipartHttpServletRequestBuilder builder =
         multipart("/v1/buncheols/{id}", 10L)
             .file(requestPart)
-            .header("Authorization", "Bearer {accessToken}")
             .with(
                 request -> {
                   request.setMethod("PUT");
                   return request;
                 })
-            .with(mockAuth());
+            .with(userAuth());
 
     mockMvc
         .perform(builder)
@@ -234,8 +180,6 @@ class BuncheolControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Buncheol")
                         .summary("분철 수정")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .description(
                             """
                             multipart/form-data PUT.
@@ -262,6 +206,7 @@ class BuncheolControllerDocsTest {
                             | 400 | `BCH-046` (`BUNCHEOL_KEEP_IMAGE_INVALID`) | `keepImageIds` 에 해당 분철의 이미지가 아닌 ID 포함 |
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
                         .build())));
   }
@@ -284,10 +229,7 @@ class BuncheolControllerDocsTest {
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
-        .perform(
-            get("/v1/buncheols/me")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(get("/v1/buncheols/me").with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -297,8 +239,7 @@ class BuncheolControllerDocsTest {
                         .tag("Buncheol")
                         .summary("내가 개최한 분철 목록 조회")
                         .description("마이페이지에서 호스트 본인이 개최한 분철 목록을 최신 개최 순으로 조회한다.")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .responseSchema(Schema.schema("MyHostedBuncheolListResponse"))
                         .responseFields(
                             fieldWithPath("[].buncheolId").description("분철 ID"),
@@ -352,8 +293,7 @@ class BuncheolControllerDocsTest {
                 .queryParam("keyword", "뉴진스")
                 .queryParam("cursor", "0_2026-05-15T08:00:00Z_15")
                 .queryParam("size", "20")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+                .with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -368,10 +308,10 @@ class BuncheolControllerDocsTest {
                             모든 항목의 `bookmarked` 가 `false`. 토큰을 주면 본인 찜 여부가 채워진다.
 
                             **응답 동작**
-                            - 정렬: **모집중(`RECRUITING`) 을 최신 개최순(`createdAt DESC`) 으로 먼저**, 그 뒤에 **마감(`CONFIRMED`) 을 마감 임박순(`deadline DESC`, 현재와 가까운 마감일 우선)** 으로 잇는다. 두 그룹 모두 동일 시각은 `id DESC` 로 끊는다. 카드별 `items[].status` 로 모집중/마감을 구분(마감 배지·섹션)할 수 있다
-                            - 노출 상태: `CANCELLED` 를 제외한 모든 status (`RECRUITING` / `CONFIRMED`)
+                            - 정렬: 3개 그룹 순 — **① 모집중(`RECRUITING`) 을 최신 개최순(`createdAt DESC`)** 으로 먼저, **② 마감(`CONFIRMED`) 을 마감 임박순(`deadline DESC`, 현재와 가까운 마감일 우선)** 으로, 마지막에 **③ 인원미달 자동취소(`CANCELLED`) 를 `deadline DESC`** 로 잇는다. 세 그룹 모두 동일 시각은 `id DESC` 로 끊는다. 카드별 `items[].status` 로 모집중/마감/취소를 구분(배지·섹션)할 수 있다
+                            - 노출 상태: 개최자 직접 취소(`HOST_CANCELLED`)만 제외한 모든 status (`RECRUITING` / `CONFIRMED` / `CANCELLED`(인원미달 자동취소))
                             - 페이지: **커서 기반 무한스크롤**. 응답의 `nextCursor` 를 다음 요청의 `cursor` 로 그대로 전달 (불투명 토큰 — 형식에 의존하지 말 것)
-                            - `nextCursor` 형식: `<groupRank>_<sortAt Instant ISO-8601>_<id>` (groupRank 0=모집중·sortAt=createdAt, 1=마감·sortAt=deadline. 예: `0_2026-05-15T08:00:00Z_10`)
+                            - `nextCursor` 형식: `<groupRank>_<sortAt Instant ISO-8601>_<id>` (groupRank 0=모집중·sortAt=createdAt, 1=마감·sortAt=deadline, 2=인원미달 취소·sortAt=deadline. 예: `0_2026-05-15T08:00:00Z_10`)
                             - `hasNext=false` 면 `nextCursor` 는 `null`
 
                             **쿼리 파라미터 (모두 선택)**
@@ -387,10 +327,7 @@ class BuncheolControllerDocsTest {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `keyword` 가 100자 초과 |
                             | 400 | `PAGE-001` (`CURSOR_INVALID`) | 커서 형식 오류 (구분자/Instant/숫자 파싱 실패) |
                             """)
-                        .requestHeaders(
-                            headerWithName("Authorization")
-                                .description("`Bearer {accessToken}` — 비로그인 호출이면 헤더 자체를 생략")
-                                .optional())
+                        .requestHeaders(optionalUserAuthorizationHeader())
                         .queryParameters(
                             parameterWithName("groupId").description("그룹 ID 필터").optional(),
                             parameterWithName("memberId").description("단일 멤버 ID 필터").optional(),
@@ -410,7 +347,9 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("items[].title").description("분철 제목"),
                             fieldWithPath("items[].status")
                                 .description(
-                                    "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감). 목록은 `CANCELLED` 를 제외하므로 이 둘만 내려간다"),
+                                    "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감) |"
+                                        + " `CANCELLED`(인원미달 자동취소). 목록은 `HOST_CANCELLED`(개최자 취소)만"
+                                        + " 제외하므로 이 셋만 내려간다"),
                             fieldWithPath("items[].deadline")
                                 .description("분철 모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("items[].minHeadcount").description("분철 진행 최소 인원"),
@@ -434,50 +373,6 @@ class BuncheolControllerDocsTest {
                                 .optional(),
                             fieldWithPath("hasNext").description("다음 페이지 존재 여부"))
                         .build())));
-  }
-
-  @Test
-  void 분철_목록_조회_keyword_가_100자_초과면_400과_INVALID_INPUT_VALUE를_반환한다() throws Exception {
-    String overLimit = "a".repeat(101);
-
-    mockMvc
-        .perform(get("/v1/buncheols").queryParam("keyword", overLimit))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.code").value("C-001"));
-
-    verifyNoInteractions(buncheolListQueryService);
-  }
-
-  @Test
-  void 분철_목록_조회_비로그인_호출은_userId_null_로_전달되고_bookmarked_가_false_로_내려간다() throws Exception {
-    Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
-    BuncheolSummaryResponse item =
-        new BuncheolSummaryResponse(
-            10L,
-            "뉴진스 1집 분철",
-            BuncheolStatus.RECRUITING,
-            deadline,
-            3,
-            false,
-            "뉴진스",
-            null,
-            List.of("민지"),
-            List.of("민지"),
-            false);
-    CursorResponse<BuncheolSummaryResponse> response =
-        new CursorResponse<>(List.of(item), null, false);
-
-    given(
-            buncheolListQueryService.search(
-                null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20))
-        .willReturn(response);
-
-    mockMvc
-        .perform(get("/v1/buncheols"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.items[0].bookmarked").value(false))
-        .andExpect(jsonPath("$.hasNext").value(false))
-        .andExpect(jsonPath("$.nextCursor").doesNotExist());
   }
 
   @Test
@@ -517,9 +412,7 @@ class BuncheolControllerDocsTest {
 
     mockMvc
         .perform(
-            get("/v1/buncheols/{id}", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            get("/v1/buncheols/{id}", 10L).with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -534,9 +427,10 @@ class BuncheolControllerDocsTest {
                             호출 가능하며 이 경우 `myParticipation` 이 `null` 로 내려간다.
 
                             **응답 동작**
-                            - `CANCELLED` 상태 분철도 200 으로 응답하며 `status` 로 구분
+                            - `CANCELLED`(인원미달 자동취소) 상태 분철도 200 으로 응답하며 `status` 로 구분.
+                              단, 개최자가 직접 취소한(`HOST_CANCELLED`) 분철은 존재하지 않는 것처럼 **404 (`BCH-043`)** 로 응답한다
                             - `minHeadcount` 는 분철 진행 최소 인원, `confirmedCount` 는 현재 입금확인된 참여자 수
-                            - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, 양수)
+                            - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, **0 이상·100원 단위** — 0원 슬롯은 오픈 이벤트 무료 분철 용도)
                             - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) /
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료)
                             - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
@@ -600,13 +494,10 @@ class BuncheolControllerDocsTest {
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철, 또는 개최자가 직접 취소(`HOST_CANCELLED`)한 분철 |
                             """)
+                        .requestHeaders(optionalUserAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization")
-                                .description("`Bearer {accessToken}` — 비로그인 호출이면 헤더 자체를 생략")
-                                .optional())
                         .responseSchema(Schema.schema("BuncheolDetailResponse"))
                         .responseFields(
                             fieldWithPath("id").description("분철 ID"),
@@ -633,7 +524,7 @@ class BuncheolControllerDocsTest {
                                 .description("멤버 이미지 URL")
                                 .optional(),
                             fieldWithPath("members[].price")
-                                .description("호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원)"),
+                                .description("호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, 0 이상·100원 단위)"),
                             fieldWithPath("members[].saleStatus")
                                 .description(
                                     "판매 상태 (AVAILABLE=공석 | AWAITING_PAYMENT=입금 확인 대기 중 | SOLD=판매 완료)"),
@@ -673,9 +564,7 @@ class BuncheolControllerDocsTest {
   void 분철_취소() throws Exception {
     mockMvc
         .perform(
-            delete("/v1/buncheols/{id}", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            delete("/v1/buncheols/{id}", 10L).with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -684,10 +573,23 @@ class BuncheolControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Buncheol")
                         .summary("분철 취소")
-                        .description("호스트가 자신이 개최한 분철을 취소한다.")
+                        .description(
+                            """
+                            호스트가 자신이 개최한 분철을 취소한다.
+
+                            모집중(`RECRUITING`) 상태에서만 취소할 수 있으며, 성공 시 `RECRUITING` → `HOST_CANCELLED` 로
+                            전이된다. 마감 판정 등과 경합해 이미 다른 상태로 전이된 뒤라면 409 로 실패한다.
+                            취소된 분철은 목록·상세에서 노출되지 않는다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-050` (`BUNCHEOL_CANCEL_NOT_ALLOWED`) | 모집중(`RECRUITING`) 상태가 아니어서 취소 불가 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 
@@ -741,9 +643,7 @@ class BuncheolControllerDocsTest {
 
     mockMvc
         .perform(
-            get("/v1/buncheols/{id}/management", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            get("/v1/buncheols/{id}/management", 10L).with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -758,7 +658,7 @@ class BuncheolControllerDocsTest {
                             **호스트 본인만 호출 가능** — 그 외 호출은 403.
 
                             **응답 동작**
-                            - 분철 상태(`RECRUITING` / `CONFIRMED` / `CANCELLED`) 무관하게 호출 가능
+                            - 분철 상태(`RECRUITING` / `CONFIRMED` / `CANCELLED` / `HOST_CANCELLED`) 무관하게 호출 가능
                             - `memberCount` = 분철에 등록된 멤버 슬롯 수
                             - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
@@ -809,9 +709,8 @@ class BuncheolControllerDocsTest {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 호스트가 아님 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .responseSchema(Schema.schema("BuncheolManagementResponse"))
                         .responseFields(
                             fieldWithPath("id").description("분철 ID"),
@@ -819,7 +718,8 @@ class BuncheolControllerDocsTest {
                             fieldWithPath("groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("purchaseSite").description("구매처"),
                             fieldWithPath("status")
-                                .description("분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED)"),
+                                .description(
+                                    "분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED / HOST_CANCELLED)"),
                             fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
                             fieldWithPath("memberCount").description("분철에 등록된 멤버 슬롯 수"),

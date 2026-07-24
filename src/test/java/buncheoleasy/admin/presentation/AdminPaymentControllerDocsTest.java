@@ -7,8 +7,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -21,59 +19,30 @@ import buncheoleasy.admin.dto.response.AdminBulkResultResponse;
 import buncheoleasy.admin.dto.response.AdminPaymentRecordResponse;
 import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
 import buncheoleasy.admin.dto.response.AdminRequestedShippingAddressResponse;
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
 import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
 import org.springframework.restdocs.payload.JsonFieldType;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("AdminPaymentController 문서화 테스트")
-class AdminPaymentControllerDocsTest {
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class AdminPaymentControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private AdminPaymentQueryService adminPaymentQueryService;
 
   @MockitoBean private AdminPaymentCommandService adminPaymentCommandService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
 
   @Test
   void 관리자_결제_목록_조회() throws Exception {
@@ -113,7 +82,7 @@ class AdminPaymentControllerDocsTest {
     mockMvc
         .perform(
             get("/v1/admin/payments")
-                .header("Authorization", "Bearer {accessToken}")
+                .with(adminAuth())
                 .param("status", "CONFIRMED")
                 .param("keyword", "아이브")
                 .param("size", "20"))
@@ -130,8 +99,7 @@ class AdminPaymentControllerDocsTest {
                             전체 분철의 결제(참여)를 최신 참여순 커서 페이지네이션으로 조회한다 (ROLE_ADMIN 전용).
                             paymentStatus 는 파생 상태로, 입금확인 후 분철이 취소된 건은 REFUND_REQUIRED 로 내려간다.
                             keyword 는 분철 제목·그룹명·멤버명·참여자 닉네임·실명 부분 일치 검색이다.""")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(adminAuthorizationHeader())
                         .queryParameters(
                             parameterWithName("status")
                                 .description(
@@ -176,21 +144,32 @@ class AdminPaymentControllerDocsTest {
                             fieldWithPath("items[].refundAccount.bank").description("환불 은행"),
                             fieldWithPath("items[].refundAccount.account").description("환불 계좌번호"),
                             fieldWithPath("items[].refundAccount.holder").description("환불 예금주"),
-                            fieldWithPath("items[].delivery.deliveryId").description("배송 ID"),
+                            fieldWithPath("items[].delivery")
+                                .description("확정 배송 스냅샷 — 입금확인 전에는 null")
+                                .optional(),
+                            fieldWithPath("items[].delivery.deliveryId")
+                                .description("배송 ID")
+                                .optional(),
                             fieldWithPath("items[].delivery.shippingMethod")
-                                .description("배송 방법: GS25_HALF | CU_HALF"),
-                            fieldWithPath("items[].delivery.storeName").description("편의점 지점명"),
+                                .description("배송 방법: GS25_HALF | CU_HALF")
+                                .optional(),
+                            fieldWithPath("items[].delivery.storeName")
+                                .description("편의점 지점명")
+                                .optional(),
                             fieldWithPath("items[].delivery.receiverNickname")
-                                .description("수령인 닉네임 스냅샷"),
+                                .description("수령인 닉네임 스냅샷")
+                                .optional(),
                             fieldWithPath("items[].delivery.receiverPhoneNumber")
-                                .description("수령인 연락처 스냅샷"),
+                                .description("수령인 연락처 스냅샷")
+                                .optional(),
                             fieldWithPath("items[].delivery.trackingNumber")
                                 .description("운송장 번호(등록 전 null)")
                                 .type(JsonFieldType.STRING)
                                 .optional(),
                             fieldWithPath("items[].delivery.status")
                                 .description(
-                                    "배송 상태: SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED"),
+                                    "배송 상태: SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED")
+                                .optional(),
                             fieldWithPath("items[].requestedShippingAddress")
                                 .description(
                                     "결제 요청 배송지 — 참여가 선택한 배송지의 현재 원본. 입금확인 전에도 확인용으로 내려가며, 배송지 미지정(레거시 행)이거나 원본 삭제(종료된 참여 한정) 시 null")
@@ -225,8 +204,7 @@ class AdminPaymentControllerDocsTest {
 
     // when & then
     mockMvc
-        .perform(
-            get("/v1/admin/payments/summary").header("Authorization", "Bearer {accessToken}"))
+        .perform(get("/v1/admin/payments/summary").with(adminAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -236,8 +214,7 @@ class AdminPaymentControllerDocsTest {
                         .tag("Admin")
                         .summary("관리자 결제 통계 조회")
                         .description("결제 대시보드 상단 통계. 파생 상태별 건수와 확인 대기 금액 합계 (ROLE_ADMIN 전용).")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(adminAuthorizationHeader())
                         .responseSchema(Schema.schema("AdminPaymentSummaryResponse"))
                         .responseFields(
                             fieldWithPath("awaitingCount").description("입금확인 대기 건수"),
@@ -264,7 +241,7 @@ class AdminPaymentControllerDocsTest {
     mockMvc
         .perform(
             post("/v1/admin/payments/confirm")
-                .header("Authorization", "Bearer {accessToken}")
+                .with(adminAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"participationIds\": [1, 2, 3]}"))
         .andExpect(status().isOk())
@@ -279,11 +256,11 @@ class AdminPaymentControllerDocsTest {
                             """
                             묶음 입금된 여러 참여를 한 번에 입금확인한다 (ROLE_ADMIN 전용). 개최자 소유권 검증 없이 전체 분철에 적용된다.
                             건별로 독립 처리하므로 일부 실패(이미 확정/취소 등)가 나머지 성공을 되돌리지 않으며, 실패 건은 사유와 함께 내려간다.""")
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(adminAuthorizationHeader())
                         .requestSchema(Schema.schema("AdminPaymentConfirmRequest"))
                         .requestFields(
-                            fieldWithPath("participationIds").description("입금확인할 참여 ID 목록"))
+                            fieldWithPath("participationIds")
+                                .description("입금확인할 참여 ID 목록 (한 번에 최대 100건)"))
                         .responseSchema(Schema.schema("AdminBulkResultResponse"))
                         .responseFields(
                             fieldWithPath("succeededIds").description("입금확인에 성공한 참여 ID 목록"),

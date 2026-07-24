@@ -4,91 +4,37 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.application.bookmark.BuncheolBookmarkService;
 import buncheoleasy.buncheol.application.bookmark.MyBookmarkedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
+import buncheoleasy.global.docs.DocsTestSupport;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("BuncheolBookmarkController 문서화 테스트")
-class BuncheolBookmarkControllerDocsTest {
-
-  private static final Long USER_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private BuncheolBookmarkService buncheolBookmarkService;
   @MockitoBean private MyBookmarkedBuncheolQueryService myBookmarkedBuncheolQueryService;
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(USER_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   @Test
   void 분철_찜_등록() throws Exception {
     mockMvc
         .perform(
-            post("/v1/buncheols/{buncheolId}/bookmark", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            post("/v1/buncheols/{buncheolId}/bookmark", 10L).with(userAuth()))
         .andExpect(status().isCreated())
         .andDo(
             document(
@@ -111,9 +57,8 @@ class BuncheolBookmarkControllerDocsTest {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-071` (`BUNCHEOL_BOOKMARK_ALREADY_EXISTS`) | 이미 찜한 분철 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 
@@ -121,9 +66,7 @@ class BuncheolBookmarkControllerDocsTest {
   void 분철_찜_해제() throws Exception {
     mockMvc
         .perform(
-            delete("/v1/buncheols/{buncheolId}/bookmark", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+            delete("/v1/buncheols/{buncheolId}/bookmark", 10L).with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -141,9 +84,8 @@ class BuncheolBookmarkControllerDocsTest {
                             |------|------|------|
                             | 404 | `BCH-072` (`BUNCHEOL_BOOKMARK_NOT_FOUND`) | 해당 분철을 찜하지 않은 상태 (다른 유저 찜 정보는 노출하지 않음) |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 
@@ -170,8 +112,7 @@ class BuncheolBookmarkControllerDocsTest {
                 .param("sort", "LATEST")
                 .param("hideClosed", "false")
                 .param("onlyFavoriteGroups", "false")
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+                .with(userAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -202,8 +143,7 @@ class BuncheolBookmarkControllerDocsTest {
                             - `deadline` 은 UTC ISO-8601 (예: `2026-06-01T12:00:00Z`)
                             - `memberNames` 는 분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 분철에 멤버 슬롯을 **등록한 순서** 로 정렬 (`BuncheolMember.id` ASC). 멤버가 없으면 빈 배열
                             """)
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(userAuthorizationHeader())
                         .queryParameters(
                             parameterWithName("sort")
                                 .description("정렬 기준 — `LATEST` | `DEADLINE`. 기본값 `LATEST`")

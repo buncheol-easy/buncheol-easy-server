@@ -4,12 +4,11 @@ import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.docume
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.group.application.GroupService;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
@@ -17,43 +16,14 @@ import buncheoleasy.group.dto.response.GroupWithMembersResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("GroupController 문서화 테스트")
-class GroupControllerDocsTest {
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class GroupControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private GroupService groupService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
 
   @Test
   void 그룹_검색() throws Exception {
@@ -115,7 +85,7 @@ class GroupControllerDocsTest {
                         .summary("멤버 이름으로 그룹 검색")
                         .description("멤버 이름과 keyword 가 정확히 일치하는 멤버가 속한 그룹과 그 그룹의 전 멤버를 함께 반환한다.")
                         .queryParameters(
-                            parameterWithName("keyword").description("정확히 일치시킬 멤버 이름"))
+                            parameterWithName("keyword").description("정확히 일치시킬 멤버 이름 (최대 100자)"))
                         .responseSchema(Schema.schema("GroupWithMembersListResponse"))
                         .responseFields(
                             fieldWithPath("[].id").description("그룹 ID"),
@@ -150,7 +120,9 @@ class GroupControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Group")
                         .summary("인기 아티스트 조회")
-                        .description("최근 30일간 분철 등록 수가 많은 순으로 그룹 상위 5개를 반환한다. CANCELLED 분철은 집계에서 제외.")
+                        .description(
+                            "최근 30일간 분철 등록 수가 많은 순으로 그룹 상위 5개를 반환한다. "
+                                + "모집중(RECRUITING)·진행확정(CONFIRMED) 분철만 집계한다 (취소된 분철 제외).")
                         .responseSchema(Schema.schema("GroupListResponse"))
                         .responseFields(
                             fieldWithPath("[].id").description("그룹 ID"),
@@ -179,7 +151,9 @@ class GroupControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Group")
                         .summary("그룹 멤버 조회")
-                        .description("그룹에 속한 멤버 목록을 조회한다.")
+                        .description(
+                            "그룹에 속한 멤버 목록을 조회한다. "
+                                + "존재하지 않는 그룹이면 404 `GRP-001` (`GROUP_NOT_FOUND`) 이 발생한다.")
                         .pathParameters(parameterWithName("groupId").description("그룹 ID"))
                         .responseSchema(Schema.schema("GroupMemberListResponse"))
                         .responseFields(

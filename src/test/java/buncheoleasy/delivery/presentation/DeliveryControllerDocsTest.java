@@ -3,86 +3,34 @@ package buncheoleasy.delivery.presentation;
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.delivery.application.DeliveryService;
+import buncheoleasy.global.docs.DocsTestSupport;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
-import java.util.Collections;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("DeliveryController 문서화 테스트")
-class DeliveryControllerDocsTest {
-
-  private static final Long USER_ID = 1L;
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class DeliveryControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private DeliveryService deliveryService;
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
-  @AfterEach
-  void tearDown() {
-    SecurityContextHolder.clearContext();
-  }
-
-  private RequestPostProcessor mockAuth() {
-    return (MockHttpServletRequest request) -> {
-      SecurityContextHolder.getContext()
-          .setAuthentication(
-              new UsernamePasswordAuthenticationToken(USER_ID, null, Collections.emptyList()));
-      return request;
-    };
-  }
 
   @Test
   void 운송장_등록() throws Exception {
+    // when & then
     mockMvc
         .perform(
             patch("/v1/deliveries/{id}/tracking", 10L)
-                .header("Authorization", "Bearer {accessToken}")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"trackingNumber\": \"6079123456789\"}")
-                .with(mockAuth()))
+                .with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -98,6 +46,9 @@ class DeliveryControllerDocsTest {
                             분철이 진행확정(CONFIRMED)된 뒤에만 등록할 수 있다 — 모집중 발송을 허용하면 마감 시점
                             취소(최소 인원 미달)와 이미 발송된 물건이 모순되기 때문.
 
+                            이미 `SHIPPING` 상태인 배송 건에 다시 호출하면 상태 전이 없이 운송장 번호만 갱신된다
+                            (재등록 허용, 참여자에게 운송장 등록 알림이 다시 발송된다).
+
                             **권한**: 해당 배송이 속한 분철의 **개최자 본인만** 호출 가능.
 
                             **발생 가능한 에러**
@@ -109,22 +60,19 @@ class DeliveryControllerDocsTest {
                             | 409 | `DLV-009` (`DELIVERY_BUNCHEOL_NOT_CONFIRMED`) | 분철이 아직 진행확정 전 |
                             | 409 | `DLV-007` (`DELIVERY_STATE_TRANSITION_INVALID`) | 현재 배송 상태에서 운송장을 등록할 수 없음 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("배송 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestSchema(Schema.schema("TrackingRegistrationRequest"))
                         .requestFields(
                             fieldWithPath("trackingNumber").description("운송장 번호 (공백 불가)"))
-                        .requestSchema(Schema.schema("TrackingRegistrationRequest"))
                         .build())));
   }
 
   @Test
   void 수령_확인() throws Exception {
+    // when & then
     mockMvc
-        .perform(
-            post("/v1/deliveries/{id}/receipt", 10L)
-                .header("Authorization", "Bearer {accessToken}")
-                .with(mockAuth()))
+        .perform(post("/v1/deliveries/{id}/receipt", 10L).with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -136,6 +84,9 @@ class DeliveryControllerDocsTest {
                         .description(
                             """
                             참여자가 상품 수령을 확인한다. 배송 상태가 `RECEIVED` 로 전이된다.
+                            수령 확인은 배송 상태가 `SHIPPING`(배송중) 또는 `DELIVERED`(배송완료)일 때만 가능하다 —
+                            그 외 상태(운송장 등록 전 `SNAPSHOTTED`, 이미 수령 확인된 `RECEIVED`)에서는
+                            `DLV-007` 이 발생한다.
 
                             **권한**: 해당 배송의 **참여자 본인만** 호출 가능.
 
@@ -146,9 +97,8 @@ class DeliveryControllerDocsTest {
                             | 404 | `DLV-006` (`DELIVERY_NOT_FOUND`) | 존재하지 않는 배송 정보 |
                             | 409 | `DLV-007` (`DELIVERY_STATE_TRANSITION_INVALID`) | 현재 배송 상태에서 수령 확인을 할 수 없음 |
                             """)
+                        .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("배송 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 }

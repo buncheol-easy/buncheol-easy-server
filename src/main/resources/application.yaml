@@ -147,7 +147,6 @@ aligo:
       TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
 
 # 오픈 이벤트 배송비 환급(배송비 돌려받기). 이벤트 종료 시 enabled=false 로 내린다.
-# 0원 슬롯 분철은 운영진만 발행하므로 별도의 이벤트 기간 설정은 두지 않는다.
 shipping-fee-payback:
   enabled: ${SHIPPING_FEE_PAYBACK_ENABLED:false}
   # 신청 마감 = 기준 시점(배송 완료) + N일. 분철·참여마다 기준 시점이 달라 상대 일수로 관리한다.

@@ -54,8 +54,8 @@ class BuncheolMemberTest {
   class ValidatePriceTest {
 
     @ParameterizedTest
-    @ValueSource(longs = {0L, -1L, -50_000L})
-    void 금액이_0_이하면_예외가_발생한다(long price) {
+    @ValueSource(longs = {-1L, -100L, -50_000L})
+    void 금액이_음수면_예외가_발생한다(long price) {
       assertThatThrownBy(() -> BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, price))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
@@ -71,9 +71,10 @@ class BuncheolMemberTest {
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
     }
 
+    // 0원은 오픈 이벤트 무료 분철(운영진 발행) 슬롯으로 허용한다.
     @ParameterizedTest
-    @ValueSource(longs = {100L, 10_000L, 31_900L})
-    void 금액이_100원_단위의_양수면_유효하다(long price) {
+    @ValueSource(longs = {0L, 100L, 10_000L, 31_900L})
+    void 금액이_100원_단위의_0_이상이면_유효하다(long price) {
       assertThatCode(() -> BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, price))
           .doesNotThrowAnyException();
     }
@@ -93,7 +94,7 @@ class BuncheolMemberTest {
     }
 
     @ParameterizedTest
-    @ValueSource(longs = {0L, -1L, 150L})
+    @ValueSource(longs = {-1L, -100L, 150L})
     void 수정_금액이_유효하지_않으면_예외가_발생한다(long price) {
       BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, MEMBER_ID, PRICE);
 

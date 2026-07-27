@@ -577,16 +577,16 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             """
                             호스트가 자신이 개최한 분철을 취소한다.
 
-                            모집중(`RECRUITING`) 상태에서만 취소할 수 있으며, 성공 시 `RECRUITING` → `HOST_CANCELLED` 로
-                            전이된다. 마감 판정 등과 경합해 이미 다른 상태로 전이된 뒤라면 409 로 실패한다.
-                            취소된 분철은 목록·상세에서 노출되지 않는다.
+                            모집중(`RECRUITING`)·인원미달 자동취소(`CANCELLED`) 상태에서 취소할 수 있으며, 성공 시
+                            `HOST_CANCELLED` 로 전이된다. 진행확정(`CONFIRMED`) 등 그 외 상태이거나 마감 판정과 경합해
+                            이미 전이된 뒤라면 409 로 실패한다. 취소된 분철은 목록·상세에서 노출되지 않는다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
-                            | 409 | `BCH-050` (`BUNCHEOL_CANCEL_NOT_ALLOWED`) | 모집중(`RECRUITING`) 상태가 아니어서 취소 불가 |
+                            | 409 | `BCH-050` (`BUNCHEOL_CANCEL_NOT_ALLOWED`) | 모집중·인원미달 자동취소 상태가 아니어서 취소 불가 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

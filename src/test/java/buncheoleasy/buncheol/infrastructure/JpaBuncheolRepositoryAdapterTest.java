@@ -175,12 +175,12 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void finalizeIfRecruiting_으로_RECRUITING_분철을_CANCELLED_로_전이한다() {
+    void finalizeIfStatus_으로_RECRUITING_분철을_CANCELLED_로_전이한다() {
       Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
       int affected =
-          buncheolRepository.finalizeIfRecruiting(
-              buncheol.getId(), BuncheolStatus.CANCELLED, Instant.now());
+          buncheolRepository.finalizeIfStatus(
+              buncheol.getId(), BuncheolStatus.RECRUITING, BuncheolStatus.CANCELLED, Instant.now());
       em.clear();
 
       assertThat(affected).isEqualTo(1);
@@ -190,15 +190,41 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
-    void finalizeIfRecruiting_은_RECRUITING_이_아니면_전이하지_않는다() {
+    void finalizeIfStatus_으로_인원미달_CANCELLED_분철을_HOST_CANCELLED_로_전이한다() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(buncheol.getId(), BuncheolStatus.CANCELLED);
+
+      int affected =
+          buncheolRepository.finalizeIfStatus(
+              buncheol.getId(),
+              BuncheolStatus.CANCELLED,
+              BuncheolStatus.HOST_CANCELLED,
+              Instant.now());
+      em.clear();
+
+      assertThat(affected).isEqualTo(1);
+      Buncheol found = buncheolRepository.findById(buncheol.getId()).orElseThrow();
+      assertThat(found.getStatus()).isEqualTo(BuncheolStatus.HOST_CANCELLED);
+      assertThat(found.getFinalizedAt()).isNotNull();
+    }
+
+    @Test
+    void finalizeIfStatus_은_기대_상태와_다르면_전이하지_않는다() {
       Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
       forceStatus(buncheol.getId(), BuncheolStatus.CONFIRMED);
 
-      int affected =
-          buncheolRepository.finalizeIfRecruiting(
-              buncheol.getId(), BuncheolStatus.CANCELLED, Instant.now());
+      int affectedFromRecruiting =
+          buncheolRepository.finalizeIfStatus(
+              buncheol.getId(), BuncheolStatus.RECRUITING, BuncheolStatus.CANCELLED, Instant.now());
+      int affectedFromCancelled =
+          buncheolRepository.finalizeIfStatus(
+              buncheol.getId(),
+              BuncheolStatus.CANCELLED,
+              BuncheolStatus.HOST_CANCELLED,
+              Instant.now());
 
-      assertThat(affected).isZero();
+      assertThat(affectedFromRecruiting).isZero();
+      assertThat(affectedFromCancelled).isZero();
     }
   }
 

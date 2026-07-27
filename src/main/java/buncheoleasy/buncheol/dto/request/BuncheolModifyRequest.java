@@ -7,5 +7,5 @@ import java.util.List;
 
 public record BuncheolModifyRequest(
     @NotBlank @Size(max = 200) String title,
-    @Size(max = 300) String description,
+    @Size(max = 700) String description,
     @NotNull List<Long> keepImageIds) {}

@@ -18,6 +18,7 @@ import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -431,10 +432,12 @@ class BuncheolServiceTest {
   class CancelBuncheolTest {
 
     @Test
-    void 분철_취소에_성공하고_활성_참여도_일괄_CANCELLED_되며_알림_이벤트가_발행된다() {
+    void 모집중_분철_취소에_성공하고_활성_참여도_일괄_CANCELLED_되며_알림_이벤트가_발행된다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.RECRUITING);
       Participation participation = mock(Participation.class);
       given(participation.getId()).willReturn(50L);
       given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
@@ -450,6 +453,26 @@ class BuncheolServiceTest {
       // 취소된 참여의 배송 스냅샷을 정리한다.
       then(deliveryDomainService).should().deleteByParticipationIds(List.of(50L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
+    }
+
+    @Test
+    void 인원미달_자동취소_분철_취소시_참여_케스케이드와_알림이_생략된다() {
+      // given — 자동취소 시 마감 스케줄러가 참여 취소·배송 정리·알림을 이미 끝냈으므로 재실행하면 취소 알림이 중복 발송된다.
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.CANCELLED);
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+      then(participationDomainService).should(never()).findCascadeCancelledByBuncheolId(anyLong());
+      then(deliveryDomainService).should(never()).deleteByParticipationIds(anyList());
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolCancelledEvent.class));
     }
 
     @Test

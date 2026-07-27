@@ -140,10 +140,12 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int finalizeIfRecruiting(
-      final Long buncheolId, final BuncheolStatus newStatus, final Instant now) {
-    return jpaBuncheolRepository.finalizeIfRecruiting(
-        buncheolId, newStatus, BuncheolStatus.RECRUITING, now);
+  public int finalizeIfStatus(
+      final Long buncheolId,
+      final BuncheolStatus expectedStatus,
+      final BuncheolStatus newStatus,
+      final Instant now) {
+    return jpaBuncheolRepository.finalizeIfStatus(buncheolId, expectedStatus, newStatus, now);
   }
 
   @Override

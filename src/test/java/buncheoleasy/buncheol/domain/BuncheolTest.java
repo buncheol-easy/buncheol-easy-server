@@ -132,7 +132,7 @@ class BuncheolTest {
     @Test
     void 설명이_최대_길이를_초과하면_예외가_발생한다() {
       // given
-      String longDescription = "가".repeat(301);
+      String longDescription = "가".repeat(701);
       BuncheolParams params =
           new BuncheolParams(
               1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);

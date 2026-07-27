@@ -123,7 +123,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             {
                               "groupId": Long,                // 그룹 ID
                               "title": String,                // 1~200자
-                              "description": String?,         // 선택, 300자 이하
+                              "description": String?,         // 선택, 700자 이하
                               "purchaseSite": String,         // 1~200자
                               "deadline": Instant,            // 미래 시점 (UTC ISO-8601, 예: 2026-06-01T03:00:00Z)
                               "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
@@ -190,7 +190,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             ```json
                             {
                               "title": String,                // 1~200자
-                              "description": String?,         // 선택, 300자 이하
+                              "description": String?,         // 선택, 700자 이하
                               "keepImageIds": [Long]          // 유지할 기존 이미지 ID
                             }
                             ```

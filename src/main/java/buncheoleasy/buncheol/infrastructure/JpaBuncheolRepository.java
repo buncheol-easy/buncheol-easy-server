@@ -104,17 +104,17 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Long> findIdsByStatusAndDeadlineBefore(
       @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
-  // RECRUITING → CONFIRMED/CANCELLED CAS UPDATE (마감 판정·호스트 취소 공용). 선점한 단일 인스턴스만 1 을 회수해
-  // 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.
+  // expectedStatus → newStatus CAS UPDATE (호스트 취소 공용: RECRUITING/CANCELLED → HOST_CANCELLED).
+  // 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Buncheol b "
           + "SET b.status = :newStatus, b.finalizedAt = :now, b.updatedAt = :now "
-          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus")
-  int finalizeIfRecruiting(
+          + "WHERE b.id = :buncheolId AND b.status = :expectedStatus")
+  int finalizeIfStatus(
       @Param("buncheolId") Long buncheolId,
+      @Param("expectedStatus") BuncheolStatus expectedStatus,
       @Param("newStatus") BuncheolStatus newStatus,
-      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
       @Param("now") Instant now);
 
   // 마감 판정 전용 CAS: 입금확인된(CONFIRMED) 참여 수를 서브쿼리로 세어 minHeadcount 충족 여부에 따라 CONFIRMED/CANCELLED 로

@@ -5,55 +5,24 @@ import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithNam
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.inbox.application.NoticeCommandService;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("NoticeController 문서화 테스트")
-class NoticeControllerDocsTest {
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class NoticeControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private NoticeCommandService noticeCommandService;
-
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
 
   private String noticeRequestJson() {
     return """
@@ -70,6 +39,7 @@ class NoticeControllerDocsTest {
 
   @Test
   void 공지_작성() throws Exception {
+    // given
     given(noticeCommandService.createNotice(any(), any(), any())).willReturn(1L);
 
     MockMultipartFile requestPart =
@@ -82,13 +52,14 @@ class NoticeControllerDocsTest {
         new MockMultipartFile(
             "bannerImage", "banner.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {4, 5, 6});
 
+    // when & then
     mockMvc
         .perform(
             multipart("/v1/notices")
                 .file(requestPart)
                 .file(imagePart)
                 .file(bannerImagePart)
-                .header("Authorization", "Bearer {accessToken}"))
+                .with(adminAuth()))
         .andExpect(status().isCreated())
         .andDo(
             document(
@@ -99,7 +70,7 @@ class NoticeControllerDocsTest {
                         .summary("공지 작성")
                         .description(
                             """
-                            multipart/form-data 요청. 인증된 사용자면 작성 가능(소유권/관리자 인가는 추후).
+                            multipart/form-data 요청. **관리자(ROLE_ADMIN) 전용.**
                             생성 시 Location 으로 상세 경로(`/v1/inbox/{id}`)를 반환한다.
 
                             **request 파트** (application/json, 필수)
@@ -109,7 +80,7 @@ class NoticeControllerDocsTest {
                               "reference": String?,   // 참고(보조 텍스트, 200자 이하)
                               "description": String,  // 설명(본문, 필수, 5000자 이하)
                               "pinned": boolean,      // 상단 고정 여부
-                              "linkPath": String?,    // 연관 화면 in-app 경로(/로 시작, 500자 이하)
+                              "linkPath": String?,    // 연관 화면 in-app 경로(`/` 로 시작하되 `//`·`/\\` 시작은 금지, 500자 이하)
                               "banner": {             // 홈 배너(선택). 넣으면 bannerImage 파트도 함께 필요
                                 "title": String       // 배너 제목(필수, 200자 이하)
                               }
@@ -124,19 +95,20 @@ class NoticeControllerDocsTest {
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `request` 검증 실패(제목/본문 누락 등) |
+                            | 400 | `INB-005` (`INBOX_LINK_PATH_INVALID`) | `linkPath` 가 `/` 로 시작하지 않거나 `//`·`/\\` 로 시작 (도메인 방어 검증 — 정상 HTTP 요청에서는 `C-001` 이 먼저 잡는다) |
                             | 400 | `INB-006` (`NOTICE_BANNER_INCOMPLETE`) | 배너 제목/이미지 중 한쪽만 입력 |
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | jpg/jpeg/png/webp 외 확장자 (비동기 업로드 단계) |
                             """)
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
+                        .requestHeaders(adminAuthorizationHeader())
                         .build())));
   }
 
   @Test
   void 공지_상단_고정() throws Exception {
+    // when & then
     mockMvc
         .perform(
-            put("/v1/notices/{noticeId}/pin", 1L).header("Authorization", "Bearer {accessToken}"))
+            put("/v1/notices/{noticeId}/pin", 1L).with(adminAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -145,19 +117,20 @@ class NoticeControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Notice")
                         .summary("공지 상단 고정")
-                        .description("공지를 상단 고정한다. 공지가 아니면 409(INB-004). 멱등.")
+                        .description(
+                            "공지를 상단 고정한다. **관리자(ROLE_ADMIN) 전용.** "
+                                + "없는 공지면 404(INB-003), 공지가 아니면 409(INB-004). 멱등.")
+                        .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(parameterWithName("noticeId").description("공지(메시지) ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 
   @Test
   void 공지_상단_고정_해제() throws Exception {
+    // when & then
     mockMvc
         .perform(
-            delete("/v1/notices/{noticeId}/pin", 1L)
-                .header("Authorization", "Bearer {accessToken}"))
+            delete("/v1/notices/{noticeId}/pin", 1L).with(adminAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -166,10 +139,11 @@ class NoticeControllerDocsTest {
                     ResourceSnippetParameters.builder()
                         .tag("Notice")
                         .summary("공지 상단 고정 해제")
-                        .description("공지의 상단 고정을 해제한다. 공지가 아니면 409(INB-004). 멱등.")
+                        .description(
+                            "공지의 상단 고정을 해제한다. **관리자(ROLE_ADMIN) 전용.** "
+                                + "없는 공지면 404(INB-003), 공지가 아니면 409(INB-004). 멱등.")
+                        .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(parameterWithName("noticeId").description("공지(메시지) ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {accessToken}"))
                         .build())));
   }
 }

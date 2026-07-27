@@ -3,13 +3,12 @@ package buncheoleasy.admin.presentation;
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
-import static org.springframework.restdocs.headers.HeaderDocumentation.headerWithName;
-import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -19,59 +18,30 @@ import buncheoleasy.admin.application.AdminShippingFeePaybackCommandService;
 import buncheoleasy.admin.application.AdminShippingFeePaybackQueryService;
 import buncheoleasy.admin.dto.request.AdminShippingFeePaybackActionRequest;
 import buncheoleasy.admin.dto.response.AdminShippingFeePaybackResponse;
-import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
+import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.global.page.CursorResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
 import java.time.Instant;
 import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.restdocs.RestDocumentationContextProvider;
-import org.springframework.restdocs.RestDocumentationExtension;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
-import org.assertj.core.api.Assertions;
 
-@SpringBootTest
-@AutoConfigureMockMvc(addFilters = false)
-@ActiveProfiles("test")
-@ExtendWith(RestDocumentationExtension.class)
 @DisplayName("AdminShippingFeePaybackController 문서화 테스트")
-class AdminShippingFeePaybackControllerDocsTest {
-
-  private MockMvc mockMvc;
-
-  @Autowired private WebApplicationContext context;
+class AdminShippingFeePaybackControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private AdminShippingFeePaybackQueryService adminShippingFeePaybackQueryService;
 
   @MockitoBean private AdminShippingFeePaybackCommandService adminShippingFeePaybackCommandService;
 
-  @MockitoBean private JwtTokenProvider jwtTokenProvider;
-
-  @BeforeEach
-  void setUp(final RestDocumentationContextProvider restDocumentation) {
-    mockMvc =
-        MockMvcBuilders.webAppContextSetup(context)
-            .apply(documentationConfiguration(restDocumentation))
-            .build();
-  }
-
   @Test
   void 관리자_배송비_환급_신청_목록_조회() throws Exception {
+    // given
     AdminShippingFeePaybackResponse item =
         new AdminShippingFeePaybackResponse(
             500L,
@@ -92,12 +62,13 @@ class AdminShippingFeePaybackControllerDocsTest {
                 eq(PaybackStatus.REQUESTED), any(), anyInt()))
         .willReturn(new CursorResponse<>(List.of(item), "2026-07-16T09:00:00Z_500", true));
 
+    // when & then
     mockMvc
         .perform(
             get("/v1/admin/shipping-fee-paybacks")
+                .with(adminAuth())
                 .queryParam("status", "REQUESTED")
-                .queryParam("size", "20")
-                .header("Authorization", "Bearer {accessToken}"))
+                .queryParam("size", "20"))
         .andExpect(status().isOk())
         .andDo(
             document(
@@ -110,6 +81,7 @@ class AdminShippingFeePaybackControllerDocsTest {
                             """
                             오픈 이벤트 배송비 환급(배송비 돌려받기) 신청 이력이 있는 참여 목록을 신청 최신순으로 조회한다 (ROLE_ADMIN 전용).
                             운영진은 후기 트윗을 확인한 뒤 건별 PATCH 로 입금 완료/반려 처리한다.""")
+                        .requestHeaders(adminAuthorizationHeader())
                         .queryParameters(
                             parameterWithName("status")
                                 .description(
@@ -119,8 +91,6 @@ class AdminShippingFeePaybackControllerDocsTest {
                                 .description("이전 응답의 nextCursor. 첫 페이지는 생략")
                                 .optional(),
                             parameterWithName("size").description("페이지 크기 (기본 20, 최대 100)").optional())
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {adminAccessToken}"))
                         .responseSchema(Schema.schema("AdminShippingFeePaybackListResponse"))
                         .responseFields(
                             fieldWithPath("items[].participationId").description("참여 ID (검수 처리 시 사용)"),
@@ -161,10 +131,11 @@ class AdminShippingFeePaybackControllerDocsTest {
 
   @Test
   void 관리자_배송비_환급_검수_처리() throws Exception {
+    // when & then
     mockMvc
         .perform(
             patch("/v1/admin/shipping-fee-paybacks/{participationId}", 500L)
-                .header("Authorization", "Bearer {accessToken}")
+                .with(adminAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"action\": \"REJECT\", \"rejectReason\": \"비공개 계정이라 후기를 확인할 수 없어요.\"}"))
         .andExpect(status().isNoContent())
@@ -188,9 +159,8 @@ class AdminShippingFeePaybackControllerDocsTest {
                             | 404 | `BCH-068` (`PARTICIPATION_NOT_FOUND`) | 참여 없음 |
                             | 409 | `BCH-077` (`PAYBACK_STATE_TRANSITION_INVALID`) | 현재 상태에서 불가한 전이 |
                             """)
+                        .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .requestHeaders(
-                            headerWithName("Authorization").description("Bearer {adminAccessToken}"))
                         .requestSchema(Schema.schema("AdminShippingFeePaybackActionRequest"))
                         .requestFields(
                             fieldWithPath("action").description("처리 액션 (COMPLETE | REJECT)"),
@@ -202,7 +172,7 @@ class AdminShippingFeePaybackControllerDocsTest {
     ArgumentCaptor<AdminShippingFeePaybackActionRequest> captor =
         ArgumentCaptor.forClass(AdminShippingFeePaybackActionRequest.class);
     then(adminShippingFeePaybackCommandService).should().process(eq(500L), captor.capture());
-    Assertions.assertThat(captor.getValue().action())
+    assertThat(captor.getValue().action())
         .isEqualTo(AdminShippingFeePaybackActionRequest.Action.REJECT);
   }
 }

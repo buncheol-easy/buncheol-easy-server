@@ -68,5 +68,60 @@ class BuncheolMemberDomainServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REQUIRED);
     }
+
+    @Test
+    void 무료_슬롯과_유료_슬롯이_섞여_있으면_예외가_발생한다() {
+      // given
+      Long buncheolId = 1L;
+      List<BuncheolMemberParams> params =
+          List.of(new BuncheolMemberParams(1L, 0L), new BuncheolMemberParams(2L, 5_000L));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolMemberDomainService.createBuncheolMembers(buncheolId, params))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_FREE_PRICE_MIXED);
+    }
+
+    @Test
+    void 전_슬롯이_무료면_저장에_성공한다() {
+      // given
+      Long buncheolId = 1L;
+      List<BuncheolMemberParams> params =
+          List.of(new BuncheolMemberParams(1L, 0L), new BuncheolMemberParams(2L, 0L));
+
+      // when
+      buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);
+
+      // then
+      then(buncheolMemberRepository).should().saveAll(anyList());
+    }
+
+    @Test
+    void 단일_무료_슬롯이면_저장에_성공한다() {
+      // given
+      Long buncheolId = 1L;
+      List<BuncheolMemberParams> params = List.of(new BuncheolMemberParams(1L, 0L));
+
+      // when
+      buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);
+
+      // then
+      then(buncheolMemberRepository).should().saveAll(anyList());
+    }
+
+    @Test
+    void 전_슬롯이_유료면_저장에_성공한다() {
+      // given
+      Long buncheolId = 1L;
+      List<BuncheolMemberParams> params =
+          List.of(new BuncheolMemberParams(1L, 10_000L), new BuncheolMemberParams(2L, 5_000L));
+
+      // when
+      buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);
+
+      // then
+      then(buncheolMemberRepository).should().saveAll(anyList());
+    }
   }
 }

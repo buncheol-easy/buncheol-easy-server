@@ -26,7 +26,7 @@ import lombok.NoArgsConstructor;
 public class Buncheol extends TimestampedEntity implements Cursorable {
 
   private static final int TITLE_MAX_LENGTH = 200;
-  private static final int DESCRIPTION_MAX_LENGTH = 300;
+  private static final int DESCRIPTION_MAX_LENGTH = 700;
   private static final int PURCHASE_SITE_MAX_LENGTH = 200;
 
   @Id

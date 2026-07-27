@@ -30,17 +30,6 @@ public class BuncheolDomainService {
   }
 
   /**
-   * 분철을 RECRUITING 일 때만 {@code newStatus}(CONFIRMED 또는 CANCELLED) 로 전이하는 CAS. 마감 스케줄러가 다중 인스턴스 환경에서
-   * 중복 판정하지 않도록, 선점에 성공한 한쪽만 true 를 받는다.
-   *
-   * @return 전이에 성공하면 true, 이미 마감 판정됐거나 RECRUITING 이 아니면 false
-   */
-  public boolean finalizeBuncheol(
-      final Long buncheolId, final BuncheolStatus newStatus, final Instant now) {
-    return buncheolRepository.finalizeIfRecruiting(buncheolId, newStatus, now) > 0;
-  }
-
-  /**
    * 마감 판정(진행확정/취소)을 단일 CAS 로 원자 전이한다. 입금확인 인원이 최소 인원 이상이면 CONFIRMED, 미만이면 CANCELLED. 카운트·비교·전이를 한
    * UPDATE 로 묶어, 카운트 조회와 전이 사이에 입금확인이 커밋돼 발생하는 오판(stale count)을 방지한다.
    *
@@ -62,13 +51,26 @@ public class BuncheolDomainService {
   }
 
   /**
-   * 호스트의 분철 취소 (RECRUITING → HOST_CANCELLED CAS). 모집 중이 아니면 상태 위반으로 막는다. 인원 미달 자동취소(CANCELLED)와 달리 목록·상세에서
-   * 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측에서 동일하게 처리한다.
+   * 호스트의 분철 취소 (RECRUITING/CANCELLED → HOST_CANCELLED CAS). 진행확정(CONFIRMED)·이미 개최자 취소된 분철은 상태 위반으로
+   * 막는다. 목록·상세에서 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측이 반환된 직전 상태로 판단해 처리한다.
+   *
+   * <p>상태별 CAS 를 순차 시도해 마감 스케줄러와 경합해도 성공한 시도로 직전 상태가 확정된다 — 허용 상태 IN 단일 CAS 로는 어느 상태에서 전이됐는지 알 수 없어,
+   * 자동취소 직후 케스케이드를 중복 실행(취소 알림 재발송)할 수 있다.
+   *
+   * @return 전이 직전 상태 (RECRUITING 이면 케스케이드 필요, CANCELLED 면 자동취소 시 이미 완료됨)
    */
-  public void cancelBuncheol(final Long buncheolId, final Instant now) {
-    if (!finalizeBuncheol(buncheolId, BuncheolStatus.HOST_CANCELLED, now)) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+  public BuncheolStatus cancelBuncheol(final Long buncheolId, final Instant now) {
+    if (buncheolRepository.finalizeIfStatus(
+            buncheolId, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, now)
+        > 0) {
+      return BuncheolStatus.RECRUITING;
     }
+    if (buncheolRepository.finalizeIfStatus(
+            buncheolId, BuncheolStatus.CANCELLED, BuncheolStatus.HOST_CANCELLED, now)
+        > 0) {
+      return BuncheolStatus.CANCELLED;
+    }
+    throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
   }
 
   public boolean hasActiveBuncheolHostedBy(final Long hostId) {

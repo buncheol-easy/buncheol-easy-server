@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
 import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -93,8 +94,15 @@ public class BuncheolService {
     buncheol.validateOwner(hostId);
     final Instant now = Instant.now(clock);
 
-    // 모집 중일 때만 취소 (RECRUITING → HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
-    buncheolDomainService.cancelBuncheol(buncheolId, now);
+    // 모집중·인원미달 자동취소 상태에서만 취소 (RECRUITING/CANCELLED → HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
+    BuncheolStatus priorStatus = buncheolDomainService.cancelBuncheol(buncheolId, now);
+
+    // 자동취소(CANCELLED)된 분철은 마감 스케줄러가 같은 트랜잭션에서 참여 취소·배송 스냅샷 정리·취소 알림까지 이미 끝냈다.
+    // 케스케이드를 재실행하면 알림 대상 재조회(findCascadeCancelledByBuncheolId)가 그때 전이된 참여를 다시 집어
+    // 취소 알림이 중복 발송되므로 여기서 종료한다. (CANCELLED 상태에선 새 참여가 생길 수 없어 잔여 활성 참여도 없다.)
+    if (priorStatus == BuncheolStatus.CANCELLED) {
+      return;
+    }
 
     // 취소 확정 후 같은 트랜잭션에서 활성 참여(입금확인중·입금확인됨)를 모두 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이한다.
     // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이

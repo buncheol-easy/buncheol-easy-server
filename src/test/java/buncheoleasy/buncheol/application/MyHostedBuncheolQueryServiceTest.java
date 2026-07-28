@@ -73,8 +73,8 @@ class MyHostedBuncheolQueryServiceTest {
       given(participationRepository.countActiveByBuncheolIds(List.of(10L)))
           .willReturn(List.of(new BuncheolActiveParticipationCount(10L, 7L)));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L)))
-          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
@@ -105,7 +105,7 @@ class MyHostedBuncheolQueryServiceTest {
           .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
       given(participationRepository.countActiveByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
@@ -146,11 +146,11 @@ class MyHostedBuncheolQueryServiceTest {
                   new BuncheolActiveParticipationCount(10L, 1L)));
       given(groupRepository.findAllByIds(List.of(200L, 100L)))
           .willReturn(List.of(group(200L, "에스파"), group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L, 10L)))
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(20L, 10L)))
           .willReturn(
               List.of(
-                  BuncheolImage.create(20L, "https://cdn.example.com/20-thumb.jpg"),
-                  BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
+                  BuncheolImage.create(20L, "https://cdn.example.com/20-thumb.jpg", false),
+                  BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
 
       List<MyHostedBuncheolResponse> result =
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);

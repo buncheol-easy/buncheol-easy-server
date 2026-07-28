@@ -9,6 +9,7 @@ import java.util.List;
  *
  * @param minHeadcount 분철 진행 최소 인원
  * @param confirmedCount 현재 입금확인된 참여자 수
+ * @param images 등록 순(업로드 순) 이미지 목록 — 대표사진 순서 우대 없음. 이미지가 있으면 정확히 1장이 {@code thumbnail=true}
  * @param hostedByMe 호출 유저가 이 분철의 개최자인지 여부. 비로그인 호출이면 항상 false
  * @param myParticipation 비로그인 호출 시 null
  */
@@ -22,7 +23,7 @@ public record BuncheolDetailResponse(
     BuncheolStatus status,
     int minHeadcount,
     int confirmedCount,
-    List<String> imageUrls,
+    List<BuncheolImageResponse> images,
     List<ShippingOptionResponse> shippingOptions,
     List<BuncheolMemberDetailResponse> members,
     boolean hostedByMe,

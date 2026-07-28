@@ -17,6 +17,7 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
@@ -107,7 +108,9 @@ class BuncheolDetailQueryServiceTest {
 
       assertThat(response.myParticipation()).isNull();
       assertThat(response.hostedByMe()).isFalse();
-      assertThat(response.imageUrls()).containsExactly("img-a.jpg", "img-b.jpg");
+      assertThat(response.images())
+          .extracting(BuncheolImageResponse::url)
+          .containsExactly("img-a.jpg", "img-b.jpg");
       assertThat(response.shippingOptions())
           .extracting("method", "fee")
           .containsExactly(
@@ -297,6 +300,55 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
+    void 대표사진_플래그가_있으면_이미지는_등록순을_유지하고_플래그_이미지만_thumbnail이_true다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      // 두 번째 이미지가 대표사진 — 순서는 바뀌지 않고 thumbnail 플래그로만 식별된다.
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(image(1L, "img-a.jpg"), image(2L, "img-b.jpg", true)));
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.images())
+          .extracting(
+              BuncheolImageResponse::id, BuncheolImageResponse::url, BuncheolImageResponse::thumbnail)
+          .containsExactly(tuple(1L, "img-a.jpg", false), tuple(2L, "img-b.jpg", true));
+    }
+
+    @Test
+    void 대표사진_플래그가_없으면_첫_이미지가_thumbnail_true로_폴백된다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(image(1L, "img-a.jpg"), image(2L, "img-b.jpg")));
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.images())
+          .extracting(
+              BuncheolImageResponse::id, BuncheolImageResponse::url, BuncheolImageResponse::thumbnail)
+          .containsExactly(tuple(1L, "img-a.jpg", true), tuple(2L, "img-b.jpg", false));
+    }
+
+    @Test
+    void 이미지가_없으면_images는_빈_리스트다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.images()).isEmpty();
+    }
+
+    @Test
     void 개최자가_취소한_HOST_CANCELLED_분철은_BUNCHEOL_NOT_FOUND() {
       Buncheol hostCancelled =
           buncheol(
@@ -351,9 +403,14 @@ class BuncheolDetailQueryServiceTest {
   }
 
   private BuncheolImage image(Long id, String url) {
+    return image(id, url, false);
+  }
+
+  private BuncheolImage image(Long id, String url, boolean thumbnail) {
     BuncheolImage image = newInstance(BuncheolImage.class);
     setField(image, "id", id);
     setField(image, "imageUrl", url);
+    setField(image, "thumbnail", thumbnail);
     return image;
   }
 

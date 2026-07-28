@@ -213,10 +213,11 @@ CREATE TABLE IF NOT EXISTS buncheol_members
 
 CREATE TABLE IF NOT EXISTS buncheol_images
 (
-    id          BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id BIGINT       NOT NULL,
-    image_url   VARCHAR(500) NOT NULL COMMENT '이미지 URL',
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id  BIGINT       NOT NULL,
+    image_url    VARCHAR(500) NOT NULL COMMENT '이미지 URL',
+    is_thumbnail TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '대표사진 여부 (분철당 최대 1장, 없으면 MIN(id) 폴백)',
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 

@@ -64,6 +64,9 @@ public class SecurityConfig {
   /** 관리자 ID/PW 로그인. ADMIN_PATHS(/v1/admin/**)보다 먼저 permitAll 로 열어야 한다. */
   private static final String ADMIN_LOGIN_PATH = "/v1/admin/auth/login";
 
+  /** 의견 보내기(POST 한정 공개). 로그인 실패·가입 이탈처럼 <b>로그인할 수 없는 상태의 의견</b>이 가장 받고 싶은 종류라 비로그인도 허용한다. */
+  private static final String FEEDBACK_PATH = "/v1/feedbacks";
+
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -91,6 +94,8 @@ public class SecurityConfig {
                     .hasRole("ADMIN") // 관리자 전용 API
                     .requestMatchers(HttpMethod.POST, "/v1/notices")
                     .hasRole("ADMIN") // 공지 작성 — 관리자 전용
+                    .requestMatchers(HttpMethod.POST, FEEDBACK_PATH)
+                    .permitAll() // 의견 보내기 — 로그인이 안 돼서 남기는 의견도 받는다(도배는 서버 rate limit 으로 방어)
                     .requestMatchers(HttpMethod.GET, AUTH_REQUIRED_GET_PATHS)
                     .hasRole("USER") // PUBLIC_GET_PATHS 단일 세그먼트 매처보다 우선 적용
                     .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS)

@@ -3,6 +3,7 @@ package buncheoleasy.notification.application;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEvent;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.feedback.application.FeedbackSubmittedEvent;
 import buncheoleasy.notification.domain.SlackChannel;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
 import java.time.ZoneId;
@@ -10,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -24,6 +26,9 @@ public class SlackNotificationListener {
 
   private static final DateTimeFormatter DUE_AT_FORMAT =
       DateTimeFormatter.ofPattern("M/d HH:mm").withZone(ZoneId.of("Asia/Seoul"));
+
+  /** 알림 미리보기용 대체 텍스트에 실을 사용자 입력 길이 상한. 본문 전체는 blocks 에 그대로 실린다. */
+  private static final int FALLBACK_TEXT_MAX_LENGTH = 100;
 
   private final NotificationAssembler assembler;
   private final SlackWebhookClient slackWebhookClient;
@@ -154,8 +159,60 @@ public class SlackNotificationListener {
     slackWebhookClient.send(SlackChannel.SHIPPING_FEE_PAYBACK, fallbackText, blocks);
   }
 
+  /**
+   * (운영자) 사용자 의견 접수. 의견은 저장하지 않고 슬랙으로만 흘려보내므로 DB 조회 없이 이벤트에 실린 값만으로 조립한다.
+   *
+   * <p>다른 핸들러와 달리 {@code @TransactionalEventListener} 가 아니라 {@code @EventListener} 다 — 의견 접수는 DB
+   * 트랜잭션 안에서 발행되지 않아 AFTER_COMMIT 이 영영 오지 않는다.
+   */
+  @Async
+  @EventListener
+  public void onFeedbackSubmitted(final FeedbackSubmittedEvent event) {
+    if (!slackWebhookClient.isEnabled(SlackChannel.FEEDBACK)) {
+      return;
+    }
+    String author =
+        event.userId() == null
+            ? "비로그인"
+            : "%s (회원 #%d)".formatted(event.nickname() == null ? "닉네임 미상" : event.nickname(), event.userId());
+    String meta =
+        event.screenPath() == null || event.screenPath().isBlank()
+            ? author
+            : "%s · %s".formatted(author, event.screenPath());
+
+    // 최상위 text 는 blocks 와 달리 mrkdwn 으로 해석된다(푸시·데스크톱 알림 미리보기 경로).
+    // plain_text 블록으로 막아둔 링크 렌더링이 여기서 새지 않도록 이스케이프하고, 미리보기 길이에 맞춰 자른다.
+    String fallbackText =
+        "💬 [새 의견] %s - %s".formatted(author, escapeAndAbbreviate(event.content()));
+    List<Map<String, Object>> blocks =
+        List.of(
+            Map.of(
+                "type", "header",
+                "text", Map.of("type", "plain_text", "text", "💬 새 의견이 도착했어요")),
+            // 사용자 입력은 plain_text 로 싣는다 — mrkdwn 이면 본문의 <http://...|링크> 가 실제 링크로 렌더링된다.
+            Map.of("type", "section", "text", plainText(event.content())),
+            Map.of("type", "context", "elements", List.of(plainText(meta))));
+    slackWebhookClient.send(SlackChannel.FEEDBACK, fallbackText, blocks);
+  }
+
   private static Map<String, Object> markdown(final String text) {
     return Map.of("type", "mrkdwn", "text", text);
+  }
+
+  private static Map<String, Object> plainText(final String text) {
+    return Map.of("type", "plain_text", "text", text);
+  }
+
+  /**
+   * 슬랙 최상위 {@code text}(mrkdwn 해석) 에 사용자 입력을 실을 때만 쓴다. 슬랙은 {@code &}, {@code <}, {@code >} 를 이스케이프한
+   * 텍스트를 요구하며, 이스케이프하지 않으면 본문에 적은 {@code <http://…|링크>} 가 알림 미리보기에서 링크로 렌더링된다.
+   */
+  private static String escapeAndAbbreviate(final String text) {
+    String escaped =
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    return escaped.length() <= FALLBACK_TEXT_MAX_LENGTH
+        ? escaped
+        : escaped.substring(0, FALLBACK_TEXT_MAX_LENGTH) + "…";
   }
 
   // 입금내역 대조용으로 실명이 있으면 "닉네임(실명)" 으로 병기한다 (기존 회원은 실명이 없을 수 있음).

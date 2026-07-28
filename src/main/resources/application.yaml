@@ -133,8 +133,10 @@ app:
       initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:10000} # 10초
   feedback:
     rate-limit: # 의견 보내기 도배 방지 (비로그인 허용 엔드포인트라 필수)
-      # 제출 주체(회원 ID 또는 IP) 1개당 한도
-      max-submissions: ${FEEDBACK_RATE_LIMIT_MAX:5}
+      # 제출 주체(회원 ID 또는 IP) 1개당 한도.
+      # ⚠️ 비로그인 제출은 프론트 프록시를 거쳐 오면 IP 가 프록시 하나로 수렴해 이 한도를 '공유'한다.
+      # 개인당 한도가 아니라 '비로그인 전체 예산'으로 동작할 수 있어 여유 있게 잡는다.
+      max-submissions: ${FEEDBACK_RATE_LIMIT_MAX:20}
       # 전체 합산 한도 — 헤더 조작으로 주체 키를 바꿔도 슬랙 도배량을 묶는 백스톱
       global-max-submissions: ${FEEDBACK_RATE_LIMIT_GLOBAL_MAX:60}
       # 단위를 붙이지 않으면 '분'으로 읽는다(@DurationUnit) — 10m 처럼 명시하는 것을 권장

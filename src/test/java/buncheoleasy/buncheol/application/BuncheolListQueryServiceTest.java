@@ -68,7 +68,7 @@ class BuncheolListQueryServiceTest {
       Buncheol b2 = buncheol(11L, 100L, "분철 B", Instant.parse("2026-05-14T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 11L)))
           .willReturn(List.of(image(10L, "https://cdn.example.com/a.jpg")));
       given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
           .willReturn(
@@ -100,7 +100,7 @@ class BuncheolListQueryServiceTest {
       Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
       // 슬롯 501(민지)은 활성 참여로 점유됨 → available 에서 제외.
       given(participationRepository.findActiveBuncheolMemberIds(List.of(10L)))
           .willReturn(List.of(501L));
@@ -124,7 +124,7 @@ class BuncheolListQueryServiceTest {
       Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(participationRepository.findActiveBuncheolMemberIds(List.of(10L)))
           .willReturn(List.of(501L, 502L));
       // 매진: all 에는 전체 멤버가 있지만 available 맵에는 해당 분철 key 자체가 없다 → getOrDefault 폴백.
@@ -155,7 +155,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt()))
           .willReturn(List.of(b1, b2, bDropped));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 11L))).willReturn(List.of());
       given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
           .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L, 11L)))
@@ -187,7 +187,7 @@ class BuncheolListQueryServiceTest {
       Buncheol dropped = confirmedBuncheol(22L, 100L, "마감 C", deadline3);
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(c1, c2, dropped));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L, 21L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(20L, 21L))).willReturn(List.of());
       given(buncheolMemberNameResolver.resolveNames(eq(List.of(20L, 21L)), any()))
           .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(20L, 21L)))
@@ -231,7 +231,7 @@ class BuncheolListQueryServiceTest {
       Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L)), any()))
           .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
@@ -256,7 +256,7 @@ class BuncheolListQueryServiceTest {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       // 10L 만 이미지 등록, 11L 은 미등록
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 11L)))
           .willReturn(List.of(image(10L, "https://cdn.example.com/a.jpg")));
       given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L)), any()))
           .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
@@ -275,7 +275,7 @@ class BuncheolListQueryServiceTest {
       Buncheol b2 = buncheol(11L, 100L, "분철 B", Instant.parse("2026-05-14T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 11L)))
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 11L)))
           .willReturn(
               List.of(
                   image(10L, "https://cdn.example.com/a.jpg"),

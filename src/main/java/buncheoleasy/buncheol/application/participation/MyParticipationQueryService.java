@@ -84,7 +84,7 @@ public class MyParticipationQueryService {
             .collect(Collectors.toMap(GroupMember::getId, GroupMember::getName));
 
     Map<Long, String> thumbnailByBuncheolId =
-        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+        buncheolImageRepository.findThumbnailsByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
     List<Long> participationIds = participations.stream().map(Participation::getId).toList();

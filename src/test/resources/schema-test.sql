@@ -162,10 +162,11 @@ CREATE INDEX idx_buncheol_members_member ON buncheol_members (member_id, buncheo
 
 CREATE TABLE buncheol_images
 (
-    id          BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id BIGINT       NOT NULL,
-    image_url   VARCHAR(500) NOT NULL,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id  BIGINT       NOT NULL,
+    image_url    VARCHAR(500) NOT NULL,
+    is_thumbnail BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_images_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE

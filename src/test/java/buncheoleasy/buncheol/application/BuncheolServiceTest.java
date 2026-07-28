@@ -88,11 +88,18 @@ class BuncheolServiceTest {
 
   @Captor private ArgumentCaptor<List<Long>> keepImageIdsCaptor;
 
+  @Captor private ArgumentCaptor<BuncheolImageUploadEvent> imageUploadEventCaptor;
+
   private static GroupMember groupMember(Long memberId) {
     return new GroupMember(memberId, GROUP_ID, MEMBER_NAME, MEMBER_IMAGE);
   }
 
   private HoldBuncheolRequest holdRequest(List<BuncheolMemberRequest> members) {
+    return holdRequest(members, null);
+  }
+
+  private HoldBuncheolRequest holdRequest(
+      List<BuncheolMemberRequest> members, Integer thumbnailIndex) {
     return new HoldBuncheolRequest(
         GROUP_ID,
         "테스트 분철 제목",
@@ -102,11 +109,12 @@ class BuncheolServiceTest {
         3,
         3000,
         null,
+        thumbnailIndex,
         members);
   }
 
   private BuncheolModifyRequest modifyRequest() {
-    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of());
+    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, null);
   }
 
   @Nested
@@ -190,6 +198,80 @@ class BuncheolServiceTest {
 
       // then
       then(eventPublisher).should().publishEvent(any(BuncheolImageUploadEvent.class));
+    }
+
+    @Test
+    void thumbnailIndex를_지정하면_업로드_이벤트에_그대로_전달된다() {
+      // given
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), 1);
+      List<ImageFile> images =
+          List.of(
+              new ImageFile("image1.jpg", "image/jpeg", new byte[] {1}),
+              new ImageFile("image2.jpg", "image/jpeg", new byte[] {2}));
+
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(buncheolImageDomainService).should().validateThumbnailIndex(2, 1);
+      then(eventPublisher).should().publishEvent(imageUploadEventCaptor.capture());
+      BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
+      assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
+      assertThat(event.thumbnailIndex()).isEqualTo(1);
+    }
+
+    @Test
+    void thumbnailIndex를_생략하면_첫_번째_이미지_인덱스_0이_이벤트에_전달된다() {
+      // given
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(buncheolImageDomainService).should().validateThumbnailIndex(1, 0);
+      then(eventPublisher).should().publishEvent(imageUploadEventCaptor.capture());
+      assertThat(imageUploadEventCaptor.getValue().thumbnailIndex()).isZero();
+    }
+
+    @Test
+    void thumbnailIndex가_이미지_범위를_벗어나면_예외가_발생하고_분철이_저장되지_않는다() {
+      // given
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), 5);
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_THUMBNAIL_INDEX_INVALID))
+          .given(buncheolImageDomainService)
+          .validateThumbnailIndex(1, 5);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_THUMBNAIL_INDEX_INVALID);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(eventPublisher).should(never()).publishEvent(any());
     }
 
     @Test
@@ -297,7 +379,8 @@ class BuncheolServiceTest {
     @Test
     void 제목과_설명만_갱신되고_이미지는_keepImageIds_기준으로_정리된다() {
       // given
-      BuncheolModifyRequest request = new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L));
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), null, null);
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -336,6 +419,65 @@ class BuncheolServiceTest {
 
       // then
       then(eventPublisher).should().publishEvent(any(BuncheolImageUploadEvent.class));
+    }
+
+    @Test
+    void thumbnailImageId를_지정하면_기존_이미지로_대표사진을_교체한다() {
+      // given
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 2L, null);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
+
+      // then
+      then(buncheolImageDomainService)
+          .should()
+          .validateThumbnailSelection(List.of(1L, 2L), 0, 2L, null);
+      then(buncheolImageDomainService).should().changeThumbnail(BUNCHEOL_ID, 2L);
+      then(buncheolImageDomainService).should(never()).clearThumbnail(anyLong());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void thumbnailIndex를_지정하면_기존_플래그를_해제하고_이벤트에_인덱스를_전달한다() {
+      // given — 신규 업로드 이미지가 대표가 될 예정이므로 기존 플래그만 해제하고, 지정은 커밋 후 리스너가 수행한다.
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, 0);
+      List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images);
+
+      // then
+      then(buncheolImageDomainService).should().clearThumbnail(BUNCHEOL_ID);
+      then(buncheolImageDomainService).should(never()).changeThumbnail(anyLong(), anyLong());
+      then(eventPublisher).should().publishEvent(imageUploadEventCaptor.capture());
+      BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
+      assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
+      assertThat(event.thumbnailIndex()).isZero();
+    }
+
+    @Test
+    void 대표사진을_지정하지_않으면_플래그_변경_없이_이벤트_인덱스도_null이다() {
+      // given — 둘 다 생략하면 기존 대표사진을 유지한다.
+      BuncheolModifyRequest request = modifyRequest();
+      List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images);
+
+      // then
+      then(buncheolImageDomainService).should(never()).changeThumbnail(anyLong(), anyLong());
+      then(buncheolImageDomainService).should(never()).clearThumbnail(anyLong());
+      then(eventPublisher).should().publishEvent(imageUploadEventCaptor.capture());
+      assertThat(imageUploadEventCaptor.getValue().thumbnailIndex()).isNull();
     }
 
     @Test

@@ -86,7 +86,7 @@ public class MyBookmarkedBuncheolQueryService {
     List<Long> visibleBuncheolIds =
         filtered.stream().map(BuncheolBookmark::getBuncheolId).distinct().toList();
     Map<Long, String> thumbnailByBuncheolId =
-        buncheolImageRepository.findFirstByBuncheolIds(visibleBuncheolIds).stream()
+        buncheolImageRepository.findThumbnailsByBuncheolIds(visibleBuncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
     Map<Long, List<String>> memberNamesByBuncheolId =

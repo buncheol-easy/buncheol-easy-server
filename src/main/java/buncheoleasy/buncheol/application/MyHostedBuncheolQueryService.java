@@ -54,7 +54,7 @@ public class MyHostedBuncheolQueryService {
             .collect(Collectors.toMap(Group::getId, Group::getName));
 
     Map<Long, String> thumbnailByBuncheolId =
-        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+        buncheolImageRepository.findThumbnailsByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
     return buncheols.stream()

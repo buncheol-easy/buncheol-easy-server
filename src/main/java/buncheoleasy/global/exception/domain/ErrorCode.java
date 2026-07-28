@@ -97,6 +97,12 @@ public enum ErrorCode {
   BUNCHEOL_IMAGE_REQUIRED("BCH-045", "이미지는 최소 1장 이상 등록해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_KEEP_IMAGE_INVALID(
       "BCH-046", "유지할 이미지 중 해당 분철의 이미지가 아닌 항목이 있습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_INDEX_INVALID(
+      "BCH-047", "대표사진 인덱스가 이미지 목록 범위를 벗어났습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_IMAGE_INVALID(
+      "BCH-048", "대표사진으로 지정한 이미지가 유지할 이미지 목록에 없습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED(
+      "BCH-049", "대표사진은 유지 이미지와 신규 이미지 중 한 곳에서만 지정할 수 있습니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),

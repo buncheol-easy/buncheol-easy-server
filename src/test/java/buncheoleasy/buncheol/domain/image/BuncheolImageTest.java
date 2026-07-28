@@ -26,7 +26,7 @@ class BuncheolImageTest {
     @Test
     void 유효한_파라미터로_이미지_생성에_성공한다() {
       // when
-      BuncheolImage image = BuncheolImage.create(BUNCHEOL_ID, VALID_URL);
+      BuncheolImage image = BuncheolImage.create(BUNCHEOL_ID, VALID_URL, false);
 
       // then
       assertThat(image.getBuncheolId()).isEqualTo(BUNCHEOL_ID);
@@ -36,7 +36,7 @@ class BuncheolImageTest {
     @Test
     void buncheolId가_null이면_예외가_발생한다() {
       // when & then
-      assertThatThrownBy(() -> BuncheolImage.create(null, VALID_URL))
+      assertThatThrownBy(() -> BuncheolImage.create(null, VALID_URL, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
@@ -52,7 +52,7 @@ class BuncheolImageTest {
     @ValueSource(strings = {"   "})
     void 이미지_URL이_null이거나_빈_값이면_예외가_발생한다(String imageUrl) {
       // when & then
-      assertThatThrownBy(() -> BuncheolImage.create(BUNCHEOL_ID, imageUrl))
+      assertThatThrownBy(() -> BuncheolImage.create(BUNCHEOL_ID, imageUrl, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_URL_REQUIRED);
@@ -64,7 +64,7 @@ class BuncheolImageTest {
       String longUrl = "https://cdn.example.com/" + "a".repeat(500);
 
       // when & then
-      assertThatThrownBy(() -> BuncheolImage.create(BUNCHEOL_ID, longUrl))
+      assertThatThrownBy(() -> BuncheolImage.create(BUNCHEOL_ID, longUrl, false))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_URL_LENGTH_INVALID);
@@ -76,7 +76,7 @@ class BuncheolImageTest {
       String maxLengthUrl = "https://cdn.example.com/" + "a".repeat(476);
 
       // when & then
-      assertThatCode(() -> BuncheolImage.create(BUNCHEOL_ID, maxLengthUrl))
+      assertThatCode(() -> BuncheolImage.create(BUNCHEOL_ID, maxLengthUrl, false))
           .doesNotThrowAnyException();
     }
   }

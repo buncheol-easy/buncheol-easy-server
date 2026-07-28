@@ -107,8 +107,8 @@ class MyParticipationQueryServiceTest {
       // 참여한 슬롯(102) 의 멤버(1002) 만 조회된다.
       given(groupMemberRepository.findAllByIds(List.of(1002L)))
           .willReturn(List.of(groupMember(1002L, "민지")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L)))
-          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
       given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
       // 입금확인중 참여가 있으므로 개최자 계좌를 배치 조회한다.
       given(userRepository.findAllByIds(List.of(HOST_ID)))
@@ -157,7 +157,7 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
       given(groupMemberRepository.findAllByIds(List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "민지")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
       // 계좌 미등록 개최자.
       given(userRepository.findAllByIds(List.of(HOST_ID)))
@@ -194,7 +194,7 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(buncheolMember(201L, 20L, 2001L)));
       given(groupMemberRepository.findAllByIds(List.of(2001L)))
           .willReturn(List.of(groupMember(2001L, "지수")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(20L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(20L))).willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of(600L))).willReturn(List.of());
 
       List<MyParticipationResponse> result =
@@ -246,8 +246,8 @@ class MyParticipationQueryServiceTest {
       // 참여한 슬롯(201, 301) 의 멤버(2001, 3001) 만 조회된다.
       given(groupMemberRepository.findAllByIds(List.of(2001L, 3001L)))
           .willReturn(List.of(groupMember(2001L, "지수"), groupMember(3001L, "제니")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 20L)))
-          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
       // 확정된 pA 에만 배송 스냅샷이 생성돼 있다.
       given(deliveryRepository.findAllByParticipationIds(List.of(500L, 600L)))
           .willReturn(List.of(delivery(900L, 500L, "1234567890", DeliveryStatus.SHIPPING)));

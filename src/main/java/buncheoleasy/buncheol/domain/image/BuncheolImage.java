@@ -31,14 +31,20 @@ public class BuncheolImage extends CreatedAtEntity {
   @Column(name = "image_url", nullable = false, length = 500, updatable = false)
   private String imageUrl;
 
-  public static BuncheolImage create(final Long buncheolId, final String imageUrl) {
-    return new BuncheolImage(buncheolId, imageUrl);
+  // 목록 카드에 노출되는 대표사진 여부. 분철당 최대 1장만 true 를 갖는다(플래그가 없으면 조회 쿼리가 MIN(id) 로 폴백).
+  @Column(name = "is_thumbnail", nullable = false)
+  private boolean thumbnail;
+
+  public static BuncheolImage create(
+      final Long buncheolId, final String imageUrl, final boolean thumbnail) {
+    return new BuncheolImage(buncheolId, imageUrl, thumbnail);
   }
 
-  private BuncheolImage(final Long buncheolId, final String imageUrl) {
+  private BuncheolImage(final Long buncheolId, final String imageUrl, final boolean thumbnail) {
     validate(buncheolId, imageUrl);
     this.buncheolId = buncheolId;
     this.imageUrl = imageUrl;
+    this.thumbnail = thumbnail;
   }
 
   private void validate(final Long buncheolId, final String imageUrl) {

@@ -81,7 +81,7 @@ public class BuncheolListQueryService {
         groupRepository.findAllByIds(groupIds).stream()
             .collect(Collectors.toMap(Group::getId, Group::getName));
     final Map<Long, String> thumbnailByBuncheolId =
-        buncheolImageRepository.findFirstByBuncheolIds(buncheolIds).stream()
+        buncheolImageRepository.findThumbnailsByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
     // 활성 참여가 점유한 슬롯을 빼면 "아직 안 팔린" 멤버. 전체/잔여 이름을 한 번의 조회로 함께 만든다.
     final Set<Long> takenBuncheolMemberIds =

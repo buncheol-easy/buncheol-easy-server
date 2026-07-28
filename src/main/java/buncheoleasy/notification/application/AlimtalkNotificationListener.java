@@ -4,6 +4,8 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
@@ -117,6 +119,46 @@ public class AlimtalkNotificationListener {
             "운송장번호", delivery.getTrackingNumber());
     recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);
+  }
+
+  /** (참여자) 운영진이 배송비 환급 입금을 완료함. 환급액은 신청 시점에 스냅샷된 배송비다. */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onShippingFeePaybackCompleted(final ShippingFeePaybackCompletedEvent event) {
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.participant().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "멤버명", view.memberName(),
+            "환급금액", AlimtalkFormats.amount(view.participation().getPaybackAmount()));
+    recordSafely(view.participant().getId(), AlimtalkTemplate.PAYBACK_COMPLETED, variables);
+    sender.send(
+        AlimtalkTemplate.PAYBACK_COMPLETED,
+        view.participant().getPhoneNumber().value(),
+        variables);
+  }
+
+  /**
+   * (참여자) 운영진이 배송비 환급 후기를 반려함. 사유를 보고 기한 내 재신청할 수 있다. 반려 사유는 재신청이 끼어들면 엔티티에서 지워지므로 재조회하지 않고
+   * 이벤트 스냅샷을 쓴다(환급액은 재신청해도 같은 배송비 스냅샷이 다시 세팅되므로 재조회해도 안전).
+   */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onShippingFeePaybackRejected(final ShippingFeePaybackRejectedEvent event) {
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.participant().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "멤버명", view.memberName(),
+            "반려사유", event.rejectReason(),
+            "환급금액", AlimtalkFormats.amount(view.participation().getPaybackAmount()));
+    recordSafely(view.participant().getId(), AlimtalkTemplate.PAYBACK_REJECTED, variables);
+    sender.send(
+        AlimtalkTemplate.PAYBACK_REJECTED,
+        view.participant().getPhoneNumber().value(),
+        variables);
   }
 
   // in-app 알림 기록 실패가 알림톡 발송을 막지 않도록 격리한다(로깅만). 발송 실패도 비즈니스에 영향을 주지 않는다는 정책과 동일.

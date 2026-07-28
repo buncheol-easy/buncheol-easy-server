@@ -159,6 +159,8 @@ aligo:
       BUNCHEOL_CANCELLED: ${ALIGO_TPL_BUNCHEOL_CANCELLED:}
       TRACKING_CU: ${ALIGO_TPL_TRACKING_CU:}
       TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
+      PAYBACK_COMPLETED: ${ALIGO_TPL_PAYBACK_COMPLETED:}
+      PAYBACK_REJECTED: ${ALIGO_TPL_PAYBACK_REJECTED:}
 
 # 오픈 이벤트 배송비 환급(배송비 돌려받기). 이벤트 종료 시 enabled=false 로 내린다.
 shipping-fee-payback:

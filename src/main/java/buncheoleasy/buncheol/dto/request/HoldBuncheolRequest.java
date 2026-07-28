@@ -13,8 +13,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * @param thumbnailIndex 대표사진으로 쓸 이미지의 images 파트 내 인덱스(0-base). 생략 시 첫 번째 이미지. 이미지 저장 순서는 업로드 순서를 그대로
- *     따르고, 대표사진 여부만 별도 플래그로 기록된다.
+ * @param thumbnailIndex 대표사진으로 쓸 이미지의 images 파트 내 인덱스(0-base, 필수). 이미지 저장 순서는 업로드 순서를 그대로 따르고, 대표사진
+ *     여부만 별도 플래그로 기록된다.
  */
 public record HoldBuncheolRequest(
     @NotNull Long groupId,
@@ -25,7 +25,7 @@ public record HoldBuncheolRequest(
     @NotNull @Positive Integer minHeadcount,
     @Positive Integer gs25ShippingFee,
     @Positive Integer cuShippingFee,
-    @PositiveOrZero Integer thumbnailIndex,
+    @NotNull @PositiveOrZero Integer thumbnailIndex,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
   public BuncheolParams toParams() {

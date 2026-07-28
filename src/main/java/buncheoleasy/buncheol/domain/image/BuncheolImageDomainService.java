@@ -65,14 +65,17 @@ public class BuncheolImageDomainService {
   }
 
   /**
-   * 수정 시 대표사진 지정 검증. 기존 이미지 지정({@code thumbnailImageId})과 신규 이미지 지정({@code thumbnailIndex})은 동시에 쓸 수
-   * 없고, 각각 유지 목록/신규 이미지 범위 안이어야 한다.
+   * 수정 시 대표사진 지정 검증. 기존 이미지 지정({@code thumbnailImageId})과 신규 이미지 지정({@code thumbnailIndex}) 중 정확히 하나가
+   * 필수이며, 각각 유지 목록/신규 이미지 범위 안이어야 한다.
    */
   public void validateThumbnailSelection(
       final List<Long> keepImageIds,
       final int newImageCount,
       final Long thumbnailImageId,
       final Integer thumbnailIndex) {
+    if (thumbnailImageId == null && thumbnailIndex == null) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_THUMBNAIL_REQUIRED);
+    }
     if (thumbnailImageId != null && thumbnailIndex != null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED);
     }

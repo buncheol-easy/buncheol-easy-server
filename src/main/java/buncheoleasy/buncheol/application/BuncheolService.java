@@ -48,9 +48,8 @@ public class BuncheolService {
 
     buncheolImageDomainService.validateImageCount(images.size());
 
-    // 대표사진은 이미지 저장 순서를 바꾸지 않고 인덱스 플래그로만 지정한다. 생략 시 첫 번째 이미지.
-    int thumbnailIndex = request.thumbnailIndex() == null ? 0 : request.thumbnailIndex();
-    buncheolImageDomainService.validateThumbnailIndex(images.size(), thumbnailIndex);
+    // 대표사진은 이미지 저장 순서를 바꾸지 않고 인덱스 플래그로만 지정한다 (필수 — DTO @NotNull 검증).
+    buncheolImageDomainService.validateThumbnailIndex(images.size(), request.thumbnailIndex());
 
     // 정산 계좌가 등록된 호스트만 분철을 개최할 수 있다.
     userDomainService.requireBankAccountRegistered(hostId);
@@ -68,7 +67,7 @@ public class BuncheolService {
 
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
-          new BuncheolImageUploadEvent(buncheol.getId(), images, thumbnailIndex));
+          new BuncheolImageUploadEvent(buncheol.getId(), images, request.thumbnailIndex()));
     }
   }
 
@@ -91,10 +90,11 @@ public class BuncheolService {
 
     buncheolImageDomainService.deleteImagesExcluding(buncheolId, request.keepImageIds());
 
+    // 대표사진 지정은 필수 — validateThumbnailSelection 이 둘 중 정확히 하나만 있음을 보장한다.
     if (request.thumbnailImageId() != null) {
       // 유지하는 기존 이미지를 대표사진으로 교체한다.
       buncheolImageDomainService.changeThumbnail(buncheolId, request.thumbnailImageId());
-    } else if (request.thumbnailIndex() != null) {
+    } else {
       // 신규 업로드 이미지가 대표사진이 될 예정 — 기존 플래그만 해제하고, 지정은 커밋 후 업로드 리스너가 수행한다.
       // 업로드가 실패해도 조회 쿼리가 MIN(id) 로 폴백하므로 대표사진이 비지 않는다.
       buncheolImageDomainService.clearThumbnail(buncheolId);

@@ -268,6 +268,18 @@ class BuncheolImageDomainServiceTest {
     }
 
     @Test
+    void 대표사진을_지정하지_않으면_예외가_발생한다() {
+      // when & then — 대표사진 지정은 필수(둘 중 정확히 하나)다.
+      assertThatThrownBy(
+              () ->
+                  buncheolImageDomainService.validateThumbnailSelection(
+                      List.of(1L, 2L), 2, null, null))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_THUMBNAIL_REQUIRED);
+    }
+
+    @Test
     void 기존_이미지와_신규_인덱스를_동시에_지정하면_예외가_발생한다() {
       // when & then
       assertThatThrownBy(

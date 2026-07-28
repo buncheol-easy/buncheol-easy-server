@@ -110,6 +110,7 @@ class BuncheolControllerTest {
                   "deadline": "%s",
                   "minHeadcount": 3,
                   "gs25ShippingFee": 3000,
+                  "thumbnailIndex": 0,
                   "buncheolMembers": [
                     {
                       "memberId": 200,
@@ -126,7 +127,8 @@ class BuncheolControllerTest {
                 {
                   "title": "수정 분철 제목",
                   "description": "수정 설명",
-                  "keepImageIds": [1, 2]
+                  "keepImageIds": [1, 2],
+                  "thumbnailImageId": 1
                 }
                 """;
   }
@@ -194,6 +196,7 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "minHeadcount": 3,
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -224,6 +227,7 @@ class BuncheolControllerTest {
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -254,6 +258,7 @@ class BuncheolControllerTest {
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "minHeadcount": 3,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -289,6 +294,7 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "minHeadcount": 3,
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -320,6 +326,7 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "minHeadcount": 3,
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]

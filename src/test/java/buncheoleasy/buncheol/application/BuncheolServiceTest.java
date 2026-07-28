@@ -94,8 +94,9 @@ class BuncheolServiceTest {
     return new GroupMember(memberId, GROUP_ID, MEMBER_NAME, MEMBER_IMAGE);
   }
 
+  // 대표사진 지정은 필수(DTO @NotNull)라 기본 픽스처는 첫 번째 이미지를 지정한다.
   private HoldBuncheolRequest holdRequest(List<BuncheolMemberRequest> members) {
-    return holdRequest(members, null);
+    return holdRequest(members, 0);
   }
 
   private HoldBuncheolRequest holdRequest(
@@ -113,8 +114,9 @@ class BuncheolServiceTest {
         members);
   }
 
+  // 대표사진 지정은 필수라 기본 픽스처는 신규 이미지 0번을 지정한다.
   private BuncheolModifyRequest modifyRequest() {
-    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, null);
+    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, 0);
   }
 
   @Nested
@@ -226,30 +228,6 @@ class BuncheolServiceTest {
       BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
       assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
       assertThat(event.thumbnailIndex()).isEqualTo(1);
-    }
-
-    @Test
-    void thumbnailIndex를_생략하면_첫_번째_이미지_인덱스_0이_이벤트에_전달된다() {
-      // given
-      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
-          .willReturn(List.of(groupMember(MEMBER_ID)));
-
-      HoldBuncheolRequest request =
-          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
-      List<ImageFile> images =
-          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
-
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
-      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
-
-      // when
-      buncheolService.holdBuncheol(HOST_ID, request, images);
-
-      // then
-      then(buncheolImageDomainService).should().validateThumbnailIndex(1, 0);
-      then(eventPublisher).should().publishEvent(imageUploadEventCaptor.capture());
-      assertThat(imageUploadEventCaptor.getValue().thumbnailIndex()).isZero();
     }
 
     @Test
@@ -380,7 +358,7 @@ class BuncheolServiceTest {
     void 제목과_설명만_갱신되고_이미지는_keepImageIds_기준으로_정리된다() {
       // given
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), null, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 1L, null);
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -463,21 +441,26 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 대표사진을_지정하지_않으면_플래그_변경_없이_이벤트_인덱스도_null이다() {
-      // given — 둘 다 생략하면 기존 대표사진을 유지한다.
-      BuncheolModifyRequest request = modifyRequest();
+    void 대표사진을_지정하지_않으면_예외가_발생하고_이미지_변경이_진행되지_않는다() {
+      // given — 대표사진 지정은 필수(둘 중 정확히 하나)다.
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_THUMBNAIL_REQUIRED))
+          .given(buncheolImageDomainService)
+          .validateThumbnailSelection(List.of(1L), 1, null, null);
 
-      // when
-      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images);
+      // when & then
+      assertThatThrownBy(
+              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_THUMBNAIL_REQUIRED);
 
-      // then
-      then(buncheolImageDomainService).should(never()).changeThumbnail(anyLong(), anyLong());
-      then(buncheolImageDomainService).should(never()).clearThumbnail(anyLong());
-      then(eventPublisher).should().publishEvent(imageUploadEventCaptor.capture());
-      assertThat(imageUploadEventCaptor.getValue().thumbnailIndex()).isNull();
+      then(buncheolImageDomainService).should(never()).deleteImagesExcluding(anyLong(), anyList());
+      then(eventPublisher).should(never()).publishEvent(any());
     }
 
     @Test

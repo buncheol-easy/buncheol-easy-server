@@ -131,7 +131,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
                               "gs25ShippingFee": Integer?,    // 양수, gs25/cu 중 최소 1개 필수
                               "cuShippingFee": Integer?,      // 양수, gs25/cu 중 최소 1개 필수
-                              "thumbnailIndex": Integer?,     // 선택, 대표사진으로 쓸 images 파트 내 인덱스(0-base). 생략 시 첫 이미지
+                              "thumbnailIndex": Integer,      // 필수, 대표사진으로 쓸 images 파트 내 인덱스(0-base)
                               "buncheolMembers": [
                                 {
                                   "memberId": Long,
@@ -145,7 +145,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             0장이면 `400 BCH-045`
 
                             이미지는 **업로드한 순서 그대로 저장·노출**된다. 대표사진은 순서를 바꾸지 않고 `thumbnailIndex`
-                            로 지정하며(생략 시 첫 이미지), 목록 카드의 `thumbnailUrl` 에만 반영된다.
+                            로 **반드시 지정**하며(누락 시 `400 C-001`), 목록 카드의 `thumbnailUrl` 에만 반영된다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
@@ -199,8 +199,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "title": String,                // 1~200자
                               "description": String?,         // 선택, 700자 이하
                               "keepImageIds": [Long],         // 유지할 기존 이미지 ID
-                              "thumbnailImageId": Long?,      // 선택, 유지 이미지 중 대표사진으로 지정할 ID (keepImageIds 에 포함돼야 함)
-                              "thumbnailIndex": Integer?      // 선택, 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base)
+                              "thumbnailImageId": Long?,      // 유지 이미지 중 대표사진으로 지정할 ID (keepImageIds 에 포함돼야 함)
+                              "thumbnailIndex": Integer?      // 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base) — 둘 중 정확히 하나 필수
                             }
                             ```
 
@@ -209,8 +209,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             이미지가 0장이 되도록 둘 다 비울 수 없다.
 
                             이미지 순서는 항상 **등록 순(기존 이미지 → 새 이미지 업로드 순)** 으로 유지된다. 대표사진은
-                            `thumbnailImageId`(기존 이미지) 또는 `thumbnailIndex`(신규 이미지) 중 **하나로만** 지정하며,
-                            둘 다 생략하면 기존 대표사진이 유지된다(대표사진을 삭제한 경우 첫 이미지로 폴백).
+                            `thumbnailImageId`(기존 이미지)와 `thumbnailIndex`(신규 이미지) 중 **정확히 하나를 반드시
+                            지정**해야 한다 (둘 다 누락 시 `BCH-083`, 동시 지정 시 `BCH-049`).
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
@@ -221,6 +221,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 신규 images 파트 범위를 벗어남 |
                             | 400 | `BCH-048` (`BUNCHEOL_THUMBNAIL_IMAGE_INVALID`) | `thumbnailImageId` 가 `keepImageIds` 에 없음 |
                             | 400 | `BCH-049` (`BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED`) | `thumbnailImageId` 와 `thumbnailIndex` 동시 지정 |
+                            | 400 | `BCH-083` (`BUNCHEOL_THUMBNAIL_REQUIRED`) | 대표사진 지정(`thumbnailImageId`/`thumbnailIndex`) 누락 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
@@ -538,7 +539,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("imageIds")
                                 .description("imageUrls 와 같은 순서의 이미지 ID 배열 (수정 시 keepImageIds 로 사용)"),
                             fieldWithPath("thumbnailImageId")
-                                .description("대표사진 이미지 ID. 지정이 없으면 첫 이미지, 이미지가 없으면 null")
+                                .description("대표사진 이미지 ID (개최/수정 시 필수 지정. 플래그 유실 시 첫 이미지로 폴백, 이미지가 없으면 null)")
                                 .optional(),
                             fieldWithPath("shippingOptions").description("지원 배송방법 + 배송비 배열"),
                             fieldWithPath("shippingOptions[].method")

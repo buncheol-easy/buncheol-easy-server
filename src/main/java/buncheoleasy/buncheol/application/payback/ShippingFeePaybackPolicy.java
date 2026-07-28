@@ -74,18 +74,31 @@ public class ShippingFeePaybackPolicy {
             || delivery.getStatus() == DeliveryStatus.RECEIVED);
   }
 
-  // 신청 마감 = 마감 기준 시점 + submitWindowDays. 기준 시점은 임시로 배송 완료 시각(delivered_at, 없으면 received_at)
+  /**
+   * 유저에게 노출하는 신청 마감 시각. 이벤트 비대상 참여(유료 슬롯 등)는 null — 비대상인데 마감 안내가 그려지는 불일치를 막는다. 대상이어도
+   * 마감 미적용(배송 미완료·기준 시각 없음)이면 null. 마감 판정({@link #deriveStatus})과 같은 계산을 공유한다.
+   */
+  public Instant submitDeadline(final Participation participation, final Delivery delivery) {
+    return isEventTarget(participation) ? submitDeadline(delivery) : null;
+  }
+
+  // 신청 마감 시각 = 마감 기준 시점 + submitWindowDays. 기준 시점은 임시로 배송 완료 시각(delivered_at, 없으면 received_at)
   // 이다 — 분철 마감/운송장 등록 기준 등으로 바꾸는 정책 확정 시 이 메서드만 수정한다. 기준 시각이 없으면(상태만 완료) 마감을 적용하지
   // 않는다(유저에게 유리한 쪽).
-  private boolean isSubmitClosed(final Delivery delivery, final Instant now) {
+  private Instant submitDeadline(final Delivery delivery) {
     if (delivery == null) {
-      return false;
+      return null;
     }
     Instant anchor =
         delivery.getDeliveredAt() != null ? delivery.getDeliveredAt() : delivery.getReceivedAt();
     if (anchor == null) {
-      return false;
+      return null;
     }
-    return now.isAfter(anchor.plus(Duration.ofDays(properties.submitWindowDays())));
+    return anchor.plus(Duration.ofDays(properties.submitWindowDays()));
+  }
+
+  private boolean isSubmitClosed(final Delivery delivery, final Instant now) {
+    Instant deadline = submitDeadline(delivery);
+    return deadline != null && now.isAfter(deadline);
   }
 }

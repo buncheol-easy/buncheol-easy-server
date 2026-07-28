@@ -109,7 +109,8 @@ public class BuncheolImageDomainService {
     buncheolImageRepository.deleteByBuncheolIdExcludingIds(buncheolId, keepImageIds);
   }
 
-  /** 기존 이미지 하나를 대표사진으로 교체한다(기존 플래그 해제 후 지정). */
+  /** 기존 이미지 하나를 대표사진으로 교체한다(기존 플래그 해제 후 지정). 두 쿼리가 원자적이어야 하므로 트랜잭션을 명시한다. */
+  @Transactional
   public void changeThumbnail(final Long buncheolId, final Long thumbnailImageId) {
     buncheolImageRepository.clearThumbnail(buncheolId);
     if (!buncheolImageRepository.markThumbnail(buncheolId, thumbnailImageId)) {

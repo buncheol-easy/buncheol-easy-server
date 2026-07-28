@@ -20,6 +20,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
@@ -146,6 +147,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
 
                             이미지는 **업로드한 순서 그대로 저장·노출**된다. 대표사진은 순서를 바꾸지 않고 `thumbnailIndex`
                             로 **반드시 지정**하며(누락 시 `400 C-001`), 목록 카드의 `thumbnailUrl` 에만 반영된다.
+                            음수 `thumbnailIndex` 는 DTO 검증(`@PositiveOrZero`)이 먼저 걸러 `400 C-001` 로 응답한다 —
+                            `BCH-047` 은 images 파트 개수를 넘는 **범위 초과**에만 해당한다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
@@ -208,7 +211,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             `keepImageIds`(해당 분철의 실제 이미지여야 함) + 새 이미지 합이 **최소 1장 ~ 최대 5장** 이어야 한다. 즉 수정 후에도
                             이미지가 0장이 되도록 둘 다 비울 수 없다.
 
-                            이미지 순서는 항상 **등록 순(기존 이미지 → 새 이미지 업로드 순)** 으로 유지된다. 대표사진은
+                            이미지 순서는 항상 **등록 순(id ASC, 기존 이미지 → 새 이미지 업로드 순)** 으로 유지된다 —
+                            `keepImageIds` 의 순서를 바꿔 보내도 **재정렬되지 않고**, 신규 이미지는 항상 뒤에 붙는다. 대표사진은
                             `thumbnailImageId`(기존 이미지)와 `thumbnailIndex`(신규 이미지) 중 **정확히 하나를 반드시
                             지정**해야 한다 (둘 다 누락 시 `BCH-083`, 동시 지정 시 `BCH-049`).
 
@@ -406,9 +410,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             BuncheolStatus.RECRUITING,
             3,
             1,
-            List.of("https://cdn.example.com/img1.jpg", "https://cdn.example.com/img2.jpg"),
-            List.of(11L, 12L),
-            12L,
+            List.of(
+                new BuncheolImageResponse(11L, "https://cdn.example.com/img1.jpg", false),
+                new BuncheolImageResponse(12L, "https://cdn.example.com/img2.jpg", true)),
             List.of(
                 new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000),
                 new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
@@ -449,9 +453,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `CANCELLED`(인원미달 자동취소) 상태 분철도 200 으로 응답하며 `status` 로 구분.
                               단, 개최자가 직접 취소한(`HOST_CANCELLED`) 분철은 존재하지 않는 것처럼 **404 (`BCH-043`)** 로 응답한다
                             - `minHeadcount` 는 분철 진행 최소 인원, `confirmedCount` 는 현재 입금확인된 참여자 수
-                            - `imageUrls`/`imageIds` 는 **등록 순(업로드 순)** 으로 내려간다 — 대표사진이라고 앞으로
-                              당겨지지 않는다. 대표사진은 `thumbnailImageId` 로만 식별한다 (수정 화면의 유지 이미지
-                              `keepImageIds`·대표사진 프리셀렉트에 사용)
+                            - `images` 는 **등록 순(업로드 순)** 으로 내려간다 — 대표사진이라고 앞으로 당겨지지 않는다.
+                              대표사진은 `images[].thumbnail` 플래그로만 식별하며, 이미지가 있으면 정확히 1장만 `true` 다
+                              (수정 화면의 유지 이미지 `keepImageIds`·대표사진 프리셀렉트에는 `images[].id` 를 사용)
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, **0 이상·100원 단위** — 0원 슬롯은 오픈 이벤트 무료 분철 용도)
                             - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) /
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료)
@@ -476,9 +480,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "status": "RECRUITING",
                               "minHeadcount": 3,
                               "confirmedCount": 1,
-                              "imageUrls": ["https://cdn.example.com/img1.jpg", "https://cdn.example.com/img2.jpg"],
-                              "imageIds": [11, 12],
-                              "thumbnailImageId": 12,
+                              "images": [
+                                {"id": 11, "url": "https://cdn.example.com/img1.jpg", "thumbnail": false},
+                                {"id": 12, "url": "https://cdn.example.com/img2.jpg", "thumbnail": true}
+                              ],
                               "shippingOptions": [
                                 {"method": "GS25_HALF", "fee": 3000},
                                 {"method": "CU_HALF", "fee": 4000}
@@ -534,13 +539,14 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED)"),
                             fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
                             fieldWithPath("confirmedCount").description("현재 입금확인된 참여자 수"),
-                            fieldWithPath("imageUrls")
-                                .description("분철 이미지 URL 배열 (등록 순 — 대표사진 순서 우대 없음)"),
-                            fieldWithPath("imageIds")
-                                .description("imageUrls 와 같은 순서의 이미지 ID 배열 (수정 시 keepImageIds 로 사용)"),
-                            fieldWithPath("thumbnailImageId")
-                                .description("대표사진 이미지 ID (개최/수정 시 필수 지정. 플래그 유실 시 첫 이미지로 폴백, 이미지가 없으면 null)")
-                                .optional(),
+                            fieldWithPath("images")
+                                .description("분철 이미지 배열 (등록 순 — 대표사진 순서 우대 없음)"),
+                            fieldWithPath("images[].id")
+                                .description("이미지 ID (수정 시 keepImageIds·thumbnailImageId 로 사용)"),
+                            fieldWithPath("images[].url").description("이미지 URL"),
+                            fieldWithPath("images[].thumbnail")
+                                .description(
+                                    "대표사진 여부 — 이미지가 있으면 정확히 1장만 true (개최/수정 시 지정 필수)"),
                             fieldWithPath("shippingOptions").description("지원 배송방법 + 배송비 배열"),
                             fieldWithPath("shippingOptions[].method")
                                 .description("배송방법 (GS25_HALF | CU_HALF)"),

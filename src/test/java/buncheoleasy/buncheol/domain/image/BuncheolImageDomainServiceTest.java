@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -208,6 +209,35 @@ class BuncheolImageDomainServiceTest {
       assertThat(imagesCaptor.getValue())
           .extracting(BuncheolImage::isThumbnail)
           .containsExactly(false, false);
+    }
+
+    @Test
+    void thumbnailPosition이_있으면_기존_대표사진_플래그를_해제한_뒤_저장한다() {
+      // given
+      Long buncheolId = 1L;
+      List<String> imageUrls = List.of("https://cdn.example.com/image1.jpg");
+
+      // when
+      buncheolImageDomainService.createBuncheolImages(buncheolId, imageUrls, 0);
+
+      // then — 해제가 삽입보다 먼저 수행돼야 분철당 플래그 최대 1장 불변식이 유지된다.
+      InOrder order = inOrder(buncheolImageRepository);
+      then(buncheolImageRepository).should(order).clearThumbnail(buncheolId);
+      then(buncheolImageRepository).should(order).saveAll(anyList());
+    }
+
+    @Test
+    void thumbnailPosition이_null이면_기존_대표사진_플래그를_해제하지_않는다() {
+      // given — 수정 시 기존 이미지를 대표로 유지하는 경우 이번 저장분이 기존 플래그를 건드리면 안 된다.
+      Long buncheolId = 1L;
+      List<String> imageUrls = List.of("https://cdn.example.com/image1.jpg");
+
+      // when
+      buncheolImageDomainService.createBuncheolImages(buncheolId, imageUrls, null);
+
+      // then
+      then(buncheolImageRepository).should(never()).clearThumbnail(buncheolId);
+      then(buncheolImageRepository).should().saveAll(anyList());
     }
   }
 

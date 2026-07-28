@@ -88,6 +88,8 @@ public class BuncheolService {
 
     buncheolDomainService.updateBuncheolContent(buncheol, request.title(), request.description());
 
+    // ⚠️ 이 지점 이후는 clearAutomatically=true 벌크 쿼리(삭제·플래그 해제/지정)가 이어져 영속성 컨텍스트가 비워진다.
+    // buncheol 엔티티 변경(더티체킹)은 반드시 이 앞에서 끝내야 한다 — 이후 변경은 조용히 유실된다.
     buncheolImageDomainService.deleteImagesExcluding(buncheolId, request.keepImageIds());
 
     // 대표사진 지정은 필수 — validateThumbnailSelection 이 둘 중 정확히 하나만 있음을 보장한다.

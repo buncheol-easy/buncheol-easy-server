@@ -3,7 +3,6 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
-import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
@@ -11,6 +10,7 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
@@ -58,18 +58,10 @@ public class BuncheolDetailQueryService {
             .findById(buncheol.getGroupId())
             .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
 
-    // 이미지는 등록 순(id ASC = 업로드 순) 그대로 내려주고, 대표사진은 순서가 아니라 id 로만 식별한다.
-    List<BuncheolImage> images =
-        buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
-    List<String> imageUrls = images.stream().map(BuncheolImage::getImageUrl).toList();
-    List<Long> imageIds = images.stream().map(BuncheolImage::getId).toList();
-    Long thumbnailImageId =
-        images.stream()
-            .filter(BuncheolImage::isThumbnail)
-            .findFirst()
-            .or(() -> images.stream().findFirst())
-            .map(BuncheolImage::getId)
-            .orElse(null);
+    // 이미지는 등록 순(id ASC = 업로드 순) 그대로 내려주고, 대표사진은 순서가 아니라 항목별 thumbnail 플래그로 식별한다.
+    List<BuncheolImageResponse> images =
+        BuncheolImageResponse.listFrom(
+            buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId));
 
     List<BuncheolMember> buncheolMembers =
         buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
@@ -117,9 +109,7 @@ public class BuncheolDetailQueryService {
         buncheol.getStatus(),
         buncheol.getMinHeadcount(),
         confirmedCount,
-        imageUrls,
-        imageIds,
-        thumbnailImageId,
+        images,
         shippingOptions,
         memberResponses,
         hostedByMe,

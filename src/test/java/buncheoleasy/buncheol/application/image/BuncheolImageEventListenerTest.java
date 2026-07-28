@@ -113,6 +113,21 @@ class BuncheolImageEventListenerTest {
     }
 
     @Test
+    void thumbnailIndex가_음수여도_예외_없이_대표사진_위치를_null로_전달한다() {
+      // given — 이벤트는 공개 계약이라 정상 발행 경로(DTO 검증)를 우회한 음수 인덱스도 예외 없이 흡수한다.
+      ImageFile file1 = imageFile("image1.jpg");
+      givenUploadSucceeds(file1, "https://cdn.example.com/1.jpg");
+
+      // when
+      listener.handleImageUpload(new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1), -1));
+
+      // then — 플래그를 남기지 않고 조회 쿼리의 MIN(id) 폴백으로 수렴한다.
+      then(buncheolImageDomainService)
+          .should()
+          .createBuncheolImages(BUNCHEOL_ID, List.of("https://cdn.example.com/1.jpg"), null);
+    }
+
+    @Test
     void thumbnailIndex가_null이면_대표사진_위치도_null로_전달한다() {
       // given — 수정 시 기존 이미지를 대표로 유지하는 경우 이번 업로드분엔 플래그를 남기지 않는다.
       ImageFile file1 = imageFile("image1.jpg");

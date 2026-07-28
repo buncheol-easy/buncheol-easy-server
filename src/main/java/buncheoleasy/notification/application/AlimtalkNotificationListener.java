@@ -126,12 +126,16 @@ public class AlimtalkNotificationListener {
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onShippingFeePaybackCompleted(final ShippingFeePaybackCompletedEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    Long paybackAmount = paybackAmountOrNull(view, event.participationId());
+    if (paybackAmount == null) {
+      return;
+    }
     Map<String, String> variables =
         Map.of(
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
-            "환급금액", AlimtalkFormats.amount(view.participation().getPaybackAmount()));
+            "환급금액", AlimtalkFormats.amount(paybackAmount));
     recordSafely(view.participant().getId(), AlimtalkTemplate.PAYBACK_COMPLETED, variables);
     sender.send(
         AlimtalkTemplate.PAYBACK_COMPLETED,
@@ -147,18 +151,32 @@ public class AlimtalkNotificationListener {
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onShippingFeePaybackRejected(final ShippingFeePaybackRejectedEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    Long paybackAmount = paybackAmountOrNull(view, event.participationId());
+    if (paybackAmount == null) {
+      return;
+    }
     Map<String, String> variables =
         Map.of(
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "반려사유", event.rejectReason(),
-            "환급금액", AlimtalkFormats.amount(view.participation().getPaybackAmount()));
+            "환급금액", AlimtalkFormats.amount(paybackAmount));
     recordSafely(view.participant().getId(), AlimtalkTemplate.PAYBACK_REJECTED, variables);
     sender.send(
         AlimtalkTemplate.PAYBACK_REJECTED,
         view.participant().getPhoneNumber().value(),
         variables);
+  }
+
+  // 환급액 스냅샷은 REQUESTED 선행 전이가 세팅을 보장하지만, 수동 데이터 보정 등으로 비면 Map.of 조립 단계
+  // NPE 로 수신함 기록까지 통째로 유실되므로 명시적으로 걸러 로그를 남긴다.
+  private Long paybackAmountOrNull(final ParticipationView view, final Long participationId) {
+    Long paybackAmount = view.participation().getPaybackAmount();
+    if (paybackAmount == null) {
+      log.error("환급액 스냅샷이 없어 환급 알림을 건너뜀 - participationId={}", participationId);
+    }
+    return paybackAmount;
   }
 
   // in-app 알림 기록 실패가 알림톡 발송을 막지 않도록 격리한다(로깅만). 발송 실패도 비즈니스에 영향을 주지 않는다는 정책과 동일.

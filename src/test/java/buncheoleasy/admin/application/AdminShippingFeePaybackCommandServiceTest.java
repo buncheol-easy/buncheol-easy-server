@@ -58,7 +58,7 @@ class AdminShippingFeePaybackCommandServiceTest {
 
     then(participationDomainService)
         .should()
-        .rejectPayback(PARTICIPATION_ID, "비공개 계정이라 확인 불가");
+        .rejectPayback(PARTICIPATION_ID, "비공개 계정이라 확인 불가", NOW);
     then(eventPublisher)
         .should()
         .publishEvent(new ShippingFeePaybackRejectedEvent(PARTICIPATION_ID, "비공개 계정이라 확인 불가"));

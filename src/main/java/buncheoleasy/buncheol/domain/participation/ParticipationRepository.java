@@ -96,4 +96,19 @@ public interface ParticipationRepository {
    * buncheoleasy.global.exception.domain.ErrorCode#PAYBACK_TWEET_URL_DUPLICATE} 로 변환해 던진다.
    */
   void savePaybackRequest(Participation participation);
+
+  /**
+   * 운영진의 환급 입금 완료. REQUESTED 일 때만 COMPLETED 로 전이하는 CAS — 동시 검수(더블클릭·운영자 중복 처리)에서 한 요청만
+   * 성공시켜 완료 알림이 중복 발송되지 않게 한다.
+   *
+   * @return 전이에 성공하면 true, 이미 완료/반려됐거나 신청 전이면 false
+   */
+  boolean completePaybackIfRequested(Long participationId, Instant now);
+
+  /**
+   * 운영진의 후기 반려. REQUESTED 일 때만 사유와 함께 REJECTED 로 전이하는 CAS.
+   *
+   * @return 전이에 성공하면 true
+   */
+  boolean rejectPaybackIfRequested(Long participationId, String rejectReason, Instant now);
 }

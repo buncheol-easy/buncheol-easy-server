@@ -1284,5 +1284,93 @@ class JpaParticipationRepositoryAdapterTest {
                   "https://x.com/fan/status/999", ids[1]))
           .isFalse();
     }
+
+    @Test
+    void 확인중_신청은_완료_CAS_로_COMPLETED_전이되고_완료_시각이_기록된다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+      Instant completedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+      boolean transitioned =
+          participationRepository.completePaybackIfRequested(ids[0], completedAt);
+      em.clear();
+
+      assertThat(transitioned).isTrue();
+      Participation completed = participationRepository.findById(ids[0]).orElseThrow();
+      assertThat(completed.getPaybackStatus()).isEqualTo(PaybackStatus.COMPLETED);
+      assertThat(completed.getPaybackCompletedAt()).isEqualTo(completedAt);
+    }
+
+    @Test
+    void 신청_전이거나_이미_완료된_신청은_완료_CAS_가_false_를_반환한다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+
+      // 신청 전(NONE)
+      assertThat(participationRepository.completePaybackIfRequested(ids[0], Instant.now()))
+          .isFalse();
+
+      // 이미 완료된 뒤 중복 완료 (더블클릭 레이스의 순차 등가) — 두 번째는 실패해 알림 중복 발행이 차단된다
+      requestPayback(ids[0], TWEET_URL);
+      participationRepository.completePaybackIfRequested(ids[0], Instant.now());
+      assertThat(participationRepository.completePaybackIfRequested(ids[0], Instant.now()))
+          .isFalse();
+    }
+
+    @Test
+    void 확인중_신청은_반려_CAS_로_REJECTED_전이되고_사유가_저장된다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+
+      boolean transitioned =
+          participationRepository.rejectPaybackIfRequested(ids[0], "비공개 계정이라 확인 불가", Instant.now());
+      em.clear();
+
+      Participation rejected = participationRepository.findById(ids[0]).orElseThrow();
+      assertThat(transitioned).isTrue();
+      assertThat(rejected.getPaybackStatus()).isEqualTo(PaybackStatus.REJECTED);
+      assertThat(rejected.getPaybackRejectReason()).isEqualTo("비공개 계정이라 확인 불가");
+    }
+
+    @Test
+    void 이미_완료된_신청은_반려_CAS_가_false_를_반환한다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+      participationRepository.completePaybackIfRequested(ids[0], Instant.now());
+
+      assertThat(participationRepository.rejectPaybackIfRequested(ids[0], "사유", Instant.now()))
+          .isFalse();
+    }
+
+    @Test
+    void 반려된_신청을_재신청하면_REQUESTED_로_돌아오고_반려_사유가_초기화된다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+      participationRepository.rejectPaybackIfRequested(ids[0], "비공개 계정", Instant.now());
+      em.clear();
+
+      requestPayback(ids[0], "https://x.com/fan/status/456");
+      em.clear();
+
+      Participation retried = participationRepository.findById(ids[0]).orElseThrow();
+      assertThat(retried.getPaybackStatus()).isEqualTo(PaybackStatus.REQUESTED);
+      assertThat(retried.getPaybackRejectReason()).isNull();
+    }
+
+    @Test
+    void 완료된_신청은_재신청할_수_없다() {
+      Long[] ids = insertTwoConfirmedParticipations();
+      requestPayback(ids[0], TWEET_URL);
+      participationRepository.completePaybackIfRequested(ids[0], Instant.now());
+      em.clear();
+
+      Participation completed = participationRepository.findById(ids[0]).orElseThrow();
+      assertThatThrownBy(
+              () ->
+                  completed.requestPayback(
+                      PaybackTweetUrl.parse("https://x.com/fan/status/456"), Instant.now()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
+    }
   }
 }

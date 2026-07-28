@@ -100,7 +100,41 @@ public enum AlimtalkTemplate {
       ▪ 택배사 : GS25 편의점 택배
       ▪ 운송장 번호 : #{운송장번호}\
       """,
-      List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.GS25)));
+      List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.GS25))),
+
+  PAYBACK_COMPLETED(
+      "배송비 환급 완료 안내",
+      """
+      #{닉네임}님, 참여하신 무료 분철 이벤트에 후기를 작성해주셔서 배송비 환급이 완료되었어요! 🎁
+
+      입력해주신 환불 계좌로 배송비를 입금해 드렸어요.
+
+      ► 분철명
+      #{분철명}
+      ► 참여 멤버 : #{멤버명}
+      ► 환급 금액 : #{환급금액}원\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  PAYBACK_REJECTED(
+      "배송비 환급 반려 안내",
+      """
+      #{닉네임}님, 참여하신 무료 분철 이벤트의 배송비 환급 신청이 반려되었어요.
+
+      반려 사유: #{반려사유}
+      사유를 확인하신 뒤 신청 기한 내에 다시 신청해 주세요.
+      재신청하시면 다시 검수해 드려요.
+
+      ► 분철명
+      #{분철명}
+      ► 참여 멤버 : #{멤버명}
+      ► 환급 예정 금액 : #{환급금액}원\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("재신청하러 가기", BuncheolUrls.MY_PARTICIPATIONS)));
 
   // Aligo 알림톡 제목(subject_1, 필수 파라미터)이자 in-app 수신함 알림 제목. 카카오 기본형이라 본문 위 강조 타이틀(emtitle_1)은 쓰지 않는다.
   private final String subject;

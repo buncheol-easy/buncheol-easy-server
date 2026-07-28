@@ -292,6 +292,7 @@ class ParticipationControllerTest {
                   null,
                   null,
                   null,
+                  null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")));
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
@@ -353,6 +354,7 @@ class ParticipationControllerTest {
               new HostAccountResponse("국민은행", "98765432", "개최자"),
               new ShippingFeePaybackResponse(
                   PaybackStatus.NONE,
+                  null,
                   null,
                   null,
                   null,

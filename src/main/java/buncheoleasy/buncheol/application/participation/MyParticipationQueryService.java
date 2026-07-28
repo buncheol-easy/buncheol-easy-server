@@ -171,6 +171,8 @@ public class MyParticipationQueryService {
         delivery == null ? null : MyParticipationDeliveryResponse.from(delivery),
         // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(
-            participation, shippingFeePaybackPolicy.deriveStatus(participation, delivery, now)));
+            participation,
+            shippingFeePaybackPolicy.deriveStatus(participation, delivery, now),
+            shippingFeePaybackPolicy.submitDeadline(participation, delivery)));
   }
 }

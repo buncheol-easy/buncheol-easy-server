@@ -170,6 +170,10 @@ public enum ErrorCode {
   // 아이디 없음/비밀번호 불일치를 구분하지 않는다 — 계정 존재 여부 열거(enumeration)를 막기 위함.
   ADMIN_LOGIN_FAILED("ADM-002", "아이디 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
 
+  /** FDB - 의견 보내기 관련 에러 */
+  // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.
+  FEEDBACK_RATE_LIMITED("FDB-001", "의견을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
 

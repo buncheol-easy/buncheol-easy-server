@@ -131,6 +131,10 @@ app:
       enabled: ${PAYMENT_EXPIRY_ENABLED:true}
       interval-ms: ${PAYMENT_EXPIRY_INTERVAL_MS:60000} # 1분
       initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:10000} # 10초
+  feedback:
+    rate-limit: # 의견 보내기 도배 방지 (비로그인 허용 엔드포인트라 필수)
+      max-submissions: ${FEEDBACK_RATE_LIMIT_MAX:5}
+      window: ${FEEDBACK_RATE_LIMIT_WINDOW:10m}
 
 delivery:
   tracker:
@@ -174,6 +178,7 @@ slack:
     urls:
       NEW_PARTICIPATION: ${SLACK_WEBHOOK_NEW_PARTICIPATION_URL:}
       SHIPPING_FEE_PAYBACK: ${SLACK_WEBHOOK_SHIPPING_FEE_PAYBACK_URL:}
+      FEEDBACK: ${SLACK_WEBHOOK_FEEDBACK_URL:}
 
 management:
   endpoints:

@@ -17,7 +17,7 @@ class AligoButtonJsonWriterTest {
   @DisplayName("WL 버튼은 알리고 스펙대로 button 배열 + linkMo/linkPc 를 포함한다")
   void webLinkButtonJson() {
     AlimtalkButton button =
-        AlimtalkButton.webLink("입금 정보 확인하기", "https://buncheoleasy.com/profile/bids");
+        AlimtalkButton.webLink("입금 정보 확인하기", "https://frontbaseurl/profile/bids");
 
     String json = writer.toJson(List.of(button));
 
@@ -26,8 +26,8 @@ class AligoButtonJsonWriterTest {
         .contains("\"name\":\"입금 정보 확인하기\"")
         .contains("\"linkType\":\"WL\"")
         .contains("\"linkTypeName\":\"웹링크\"")
-        .contains("\"linkMo\":\"https://buncheoleasy.com/profile/bids\"")
-        .contains("\"linkPc\":\"https://buncheoleasy.com/profile/bids\"");
+        .contains("\"linkMo\":\"https://frontbaseurl/profile/bids\"")
+        .contains("\"linkPc\":\"https://frontbaseurl/profile/bids\"");
   }
 
   @Test
@@ -47,13 +47,13 @@ class AligoButtonJsonWriterTest {
   @DisplayName("동적 링크 버튼은 #{분철아이디} 치환 후 직렬화된다")
   void rendersDynamicLinkBeforeSerialize() {
     AlimtalkButton rendered =
-        AlimtalkButton.webLink("입금 확인하러 가기", "https://buncheoleasy.com/products/#{분철아이디}/manage")
+        AlimtalkButton.webLink("입금 확인하러 가기", "https://frontbaseurl/products/#{분철아이디}/manage")
             .render(Map.of("분철아이디", "42"));
 
     String json = writer.toJson(List.of(rendered));
 
     assertThat(json)
-        .contains("\"linkMo\":\"https://buncheoleasy.com/products/42/manage\"")
+        .contains("\"linkMo\":\"https://frontbaseurl/products/42/manage\"")
         .doesNotContain("#{");
   }
 
@@ -64,7 +64,7 @@ class AligoButtonJsonWriterTest {
         writer.toJson(
             List.of(
                 AlimtalkButton.channelAdd(),
-                AlimtalkButton.webLink("참여 내역 보러가기", "https://buncheoleasy.com/profile/bids")));
+                AlimtalkButton.webLink("참여 내역 보러가기", "https://frontbaseurl/profile/bids")));
 
     int acIndex = json.indexOf("\"linkType\":\"AC\"");
     int wlIndex = json.indexOf("\"linkType\":\"WL\"");
@@ -74,6 +74,6 @@ class AligoButtonJsonWriterTest {
         .contains("\"name\":\"채널 추가\"")
         .contains("\"linkTypeName\":\"채널 추가\"")
         .contains("\"name\":\"참여 내역 보러가기\"")
-        .contains("\"linkMo\":\"https://buncheoleasy.com/profile/bids\"");
+        .contains("\"linkMo\":\"https://frontbaseurl/profile/bids\"");
   }
 }

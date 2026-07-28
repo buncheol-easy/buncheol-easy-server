@@ -35,7 +35,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("SlackNotificationListener 단위 테스트")
 class SlackNotificationListenerTest {
 
-  private static final String FRONTEND_BASE_URL = "https://app.buncheoleasy.com";
+  private static final String FRONTEND_BASE_URL = "base_url";
+  private static final String ADMIN_BASE_URL = "admin_url";
 
   private SlackNotificationListener listener;
 
@@ -44,7 +45,9 @@ class SlackNotificationListenerTest {
 
   @BeforeEach
   void setUp() {
-    listener = new SlackNotificationListener(assembler, slackWebhookClient, FRONTEND_BASE_URL);
+    listener =
+        new SlackNotificationListener(
+            assembler, slackWebhookClient, FRONTEND_BASE_URL, ADMIN_BASE_URL);
   }
 
   @Nested
@@ -80,9 +83,7 @@ class SlackNotificationListenerTest {
       then(slackWebhookClient)
           .should()
           .send(
-              eq(SlackChannel.NEW_PARTICIPATION),
-              fallbackCaptor.capture(),
-              blocksCaptor.capture());
+              eq(SlackChannel.NEW_PARTICIPATION), fallbackCaptor.capture(), blocksCaptor.capture());
       assertThat(fallbackCaptor.getValue()).contains("신규 참여").contains("엔믹스 앨범");
       assertThat(blocksCaptor.getValue().toString())
           .contains("새로운 참여가 들어왔어요")
@@ -93,7 +94,7 @@ class SlackNotificationListenerTest {
           .contains("23,000")
           .contains("7/6 12:30")
           .contains(FRONTEND_BASE_URL + "/products/7")
-          .contains(FRONTEND_BASE_URL + "/admin");
+          .contains(ADMIN_BASE_URL);
     }
 
     @Test
@@ -157,8 +158,7 @@ class SlackNotificationListenerTest {
       given(participation.getRefundAccount())
           .willReturn(RefundAccount.of("국민은행", "11012345678", "김참여"));
       given(participation.getPaybackAmount()).willReturn(3_000L);
-      given(participation.getPaybackTweetUrl())
-          .willReturn("https://x.com/fan/status/1234567890");
+      given(participation.getPaybackTweetUrl()).willReturn("https://x.com/fan/status/1234567890");
       given(assembler.loadByParticipation(1L))
           .willReturn(
               new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
@@ -182,7 +182,7 @@ class SlackNotificationListenerTest {
           .contains("3,000원")
           .contains("국민은행 11012345678 (예금주 김참여)")
           .contains("https://x.com/fan/status/1234567890")
-          .contains(FRONTEND_BASE_URL + "/admin");
+          .contains(ADMIN_BASE_URL);
     }
 
     @Test

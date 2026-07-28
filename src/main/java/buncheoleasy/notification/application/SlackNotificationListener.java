@@ -27,16 +27,20 @@ public class SlackNotificationListener {
 
   private final NotificationAssembler assembler;
   private final SlackWebhookClient slackWebhookClient;
-  // 배송비 환급 알림의 어드민 검수 페이지 링크 base (프론트 웹앱 origin).
+  // 분철 상세 링크 base (프론트 웹앱 origin).
   private final String frontendBaseUrl;
+  // '어드민에서 처리' 링크 base (어드민 웹 origin).
+  private final String adminBaseUrl;
 
   public SlackNotificationListener(
       final NotificationAssembler assembler,
       final SlackWebhookClient slackWebhookClient,
-      @Value("${app.frontend.base-url}") final String frontendBaseUrl) {
+      @Value("${app.frontend.base-url}") final String frontendBaseUrl,
+      @Value("${app.admin.base-url}") final String adminBaseUrl) {
     this.assembler = assembler;
     this.slackWebhookClient = slackWebhookClient;
     this.frontendBaseUrl = frontendBaseUrl;
+    this.adminBaseUrl = adminBaseUrl;
   }
 
   /**
@@ -89,9 +93,9 @@ public class SlackNotificationListener {
                 "section",
                 "text",
                 markdown(
-                    "<%s/products/%d|분철 상세 보기> · <%s/admin|어드민에서 처리>"
+                    "<%s/products/%d|분철 상세 보기> · <%s|어드민에서 처리>"
                         .formatted(
-                            frontendBaseUrl, view.buncheol().getId(), frontendBaseUrl))));
+                            frontendBaseUrl, view.buncheol().getId(), adminBaseUrl))));
     slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, fallbackText, blocks);
   }
 
@@ -145,8 +149,8 @@ public class SlackNotificationListener {
                 "section",
                 "text",
                 markdown(
-                    "<%s|후기 트윗 보기> · <%s/admin|어드민에서 처리>"
-                        .formatted(tweetUrl, frontendBaseUrl))));
+                    "<%s|후기 트윗 보기> · <%s|어드민에서 처리>"
+                        .formatted(tweetUrl, adminBaseUrl))));
     slackWebhookClient.send(SlackChannel.SHIPPING_FEE_PAYBACK, fallbackText, blocks);
   }
 

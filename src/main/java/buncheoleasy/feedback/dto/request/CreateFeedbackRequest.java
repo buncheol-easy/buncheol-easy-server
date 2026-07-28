@@ -13,8 +13,7 @@ import jakarta.validation.constraints.Size;
 public record CreateFeedbackRequest(
     @NotBlank @Size(max = 500) String content,
     // 공지 linkPath 와 동일한 방어: in-app 상대 경로만 허용해 외부 URL 이 슬랙 메시지에 실리지 않게 한다.
-    @Size(max = 200)
-        @Pattern(
-            regexp = "^/(?![/\\\\]).*",
-            message = "화면 경로는 '//' 나 '/\\' 로 시작하지 않는 상대 경로(/...)여야 합니다.")
-        String screenPath) {}
+    // `.` 은 개행에 매칭되지 않아 경로에 줄바꿈이 섞이면 거부된다 — 슬랙 주입 방어 관점에서 의도한 동작이다.
+    // message 는 생략한다: GlobalExceptionHandler 가 검증 실패를 ErrorCode.INVALID_INPUT_VALUE 로
+    // 일괄 변환하므로 개별 message 는 사용자에게 도달하지 않는다.
+    @Size(max = 200) @Pattern(regexp = "^/(?![/\\\\]).*") String screenPath) {}

@@ -15,6 +15,8 @@ import buncheoleasy.feedback.application.FeedbackService;
 import buncheoleasy.feedback.dto.request.CreateFeedbackRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -22,6 +24,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -105,6 +110,105 @@ class FeedbackControllerTest {
         .andExpect(status().isBadRequest());
 
     verify(feedbackService, never()).submit(any(), any(), any());
+  }
+
+  @AfterEach
+  void clearSecurityContext() {
+    SecurityContextHolder.clearContext();
+  }
+
+  private void authenticate(final Long principalId, final String role) {
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            new UsernamePasswordAuthenticationToken(
+                principalId, null, List.of(new SimpleGrantedAuthority(role))));
+  }
+
+  @Test
+  void 로그인_회원의_의견은_회원_ID_와_함께_접수된다() throws Exception {
+    authenticate(7L, "ROLE_USER");
+
+    mockMvc
+        .perform(
+            post("/v1/feedbacks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"의견\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(feedbackService).submit(eq(7L), any(), any());
+  }
+
+  @Test
+  void 관리자_토큰은_회원_ID_로_취급하지_않는다() throws Exception {
+    // 관리자(admins)와 회원(users)은 id 공간이 겹칠 수 있어(SecurityConfig 주석),
+    // 관리자 id 를 회원 id 로 넘기면 무관한 회원의 닉네임이 슬랙에 표시된다.
+    authenticate(7L, "ROLE_ADMIN");
+
+    mockMvc
+        .perform(
+            post("/v1/feedbacks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"의견\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(feedbackService).submit(eq(null), any(), any());
+  }
+
+  @Test
+  void X_Real_IP_가_있으면_그_값을_제한_키로_쓴다() throws Exception {
+    // Nginx 가 $remote_addr 로 덮어쓰는 헤더라 위조할 수 없다.
+    mockMvc
+        .perform(
+            post("/v1/feedbacks")
+                .header("X-Real-IP", "203.0.113.9")
+                .header("X-Forwarded-For", "1.1.1.1, 2.2.2.2")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"의견\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(feedbackService).submit(eq(null), eq("203.0.113.9"), any());
+  }
+
+  @Test
+  void X_Real_IP_가_없으면_XFF_의_마지막_홉을_쓴다() throws Exception {
+    // 첫 항목은 클라이언트가 보낸 값이라 신뢰할 수 없다 — 마지막이 프록시가 본 실제 peer 다.
+    mockMvc
+        .perform(
+            post("/v1/feedbacks")
+                .header("X-Forwarded-For", "1.1.1.1, 203.0.113.9")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"의견\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(feedbackService).submit(eq(null), eq("203.0.113.9"), any());
+  }
+
+  @Test
+  void 프록시_헤더가_없으면_remoteAddr_을_쓴다() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/feedbacks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"의견\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(feedbackService).submit(eq(null), eq("127.0.0.1"), any());
+  }
+
+  @Test
+  void 과도하게_긴_헤더는_잘라서_키로_쓴다() throws Exception {
+    // 조작된 긴 헤더로 Redis 키가 비대해지는 것을 막는다(IPv6 최대 표기 45자).
+    mockMvc
+        .perform(
+            post("/v1/feedbacks")
+                .header("X-Real-IP", "9".repeat(200))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"의견\"}"))
+        .andExpect(status().isNoContent());
+
+    ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
+    verify(feedbackService).submit(eq(null), ipCaptor.capture(), any());
+    assertThat(ipCaptor.getValue()).hasSize(45);
   }
 
   @Test

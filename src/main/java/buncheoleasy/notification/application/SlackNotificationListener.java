@@ -27,6 +27,9 @@ public class SlackNotificationListener {
   private static final DateTimeFormatter DUE_AT_FORMAT =
       DateTimeFormatter.ofPattern("M/d HH:mm").withZone(ZoneId.of("Asia/Seoul"));
 
+  /** 알림 미리보기용 대체 텍스트에 실을 사용자 입력 길이 상한. 본문 전체는 blocks 에 그대로 실린다. */
+  private static final int FALLBACK_TEXT_MAX_LENGTH = 100;
+
   private final NotificationAssembler assembler;
   private final SlackWebhookClient slackWebhookClient;
   // 분철 상세 링크 base (프론트 웹앱 origin).
@@ -177,7 +180,10 @@ public class SlackNotificationListener {
             ? author
             : "%s · %s".formatted(author, event.screenPath());
 
-    String fallbackText = "💬 [새 의견] %s - %s".formatted(author, event.content());
+    // 최상위 text 는 blocks 와 달리 mrkdwn 으로 해석된다(푸시·데스크톱 알림 미리보기 경로).
+    // plain_text 블록으로 막아둔 링크 렌더링이 여기서 새지 않도록 이스케이프하고, 미리보기 길이에 맞춰 자른다.
+    String fallbackText =
+        "💬 [새 의견] %s - %s".formatted(author, escapeAndAbbreviate(event.content()));
     List<Map<String, Object>> blocks =
         List.of(
             Map.of(
@@ -195,6 +201,18 @@ public class SlackNotificationListener {
 
   private static Map<String, Object> plainText(final String text) {
     return Map.of("type", "plain_text", "text", text);
+  }
+
+  /**
+   * 슬랙 최상위 {@code text}(mrkdwn 해석) 에 사용자 입력을 실을 때만 쓴다. 슬랙은 {@code &}, {@code <}, {@code >} 를 이스케이프한
+   * 텍스트를 요구하며, 이스케이프하지 않으면 본문에 적은 {@code <http://…|링크>} 가 알림 미리보기에서 링크로 렌더링된다.
+   */
+  private static String escapeAndAbbreviate(final String text) {
+    String escaped =
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    return escaped.length() <= FALLBACK_TEXT_MAX_LENGTH
+        ? escaped
+        : escaped.substring(0, FALLBACK_TEXT_MAX_LENGTH) + "…";
   }
 
   // 입금내역 대조용으로 실명이 있으면 "닉네임(실명)" 으로 병기한다 (기존 회원은 실명이 없을 수 있음).

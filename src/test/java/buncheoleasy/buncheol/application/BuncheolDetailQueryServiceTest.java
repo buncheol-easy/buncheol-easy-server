@@ -297,6 +297,53 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
+    void 대표사진_플래그가_있으면_이미지는_등록순을_유지하고_thumbnailImageId는_플래그_이미지_id다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      // 두 번째 이미지가 대표사진 — 순서는 바뀌지 않고 id 로만 식별된다.
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(image(1L, "img-a.jpg"), image(2L, "img-b.jpg", true)));
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.imageUrls()).containsExactly("img-a.jpg", "img-b.jpg");
+      assertThat(response.imageIds()).containsExactly(1L, 2L);
+      assertThat(response.thumbnailImageId()).isEqualTo(2L);
+    }
+
+    @Test
+    void 대표사진_플래그가_없으면_첫_이미지가_thumbnailImageId다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(image(1L, "img-a.jpg"), image(2L, "img-b.jpg")));
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.thumbnailImageId()).isEqualTo(1L);
+    }
+
+    @Test
+    void 이미지가_없으면_thumbnailImageId는_null이다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.imageUrls()).isEmpty();
+      assertThat(response.imageIds()).isEmpty();
+      assertThat(response.thumbnailImageId()).isNull();
+    }
+
+    @Test
     void 개최자가_취소한_HOST_CANCELLED_분철은_BUNCHEOL_NOT_FOUND() {
       Buncheol hostCancelled =
           buncheol(
@@ -351,9 +398,14 @@ class BuncheolDetailQueryServiceTest {
   }
 
   private BuncheolImage image(Long id, String url) {
+    return image(id, url, false);
+  }
+
+  private BuncheolImage image(Long id, String url, boolean thumbnail) {
     BuncheolImage image = newInstance(BuncheolImage.class);
     setField(image, "id", id);
     setField(image, "imageUrl", url);
+    setField(image, "thumbnail", thumbnail);
     return image;
   }
 

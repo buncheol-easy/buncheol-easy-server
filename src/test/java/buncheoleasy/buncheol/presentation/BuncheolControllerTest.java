@@ -634,6 +634,8 @@ class BuncheolControllerTest {
               3,
               1,
               List.of("https://cdn/img1.jpg"),
+              List.of(11L),
+              11L,
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(
                   new BuncheolMemberDetailResponse(
@@ -687,6 +689,8 @@ class BuncheolControllerTest {
               3,
               0,
               List.of(),
+              List.of(),
+              null,
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
@@ -717,6 +721,8 @@ class BuncheolControllerTest {
               3,
               0,
               List.of(),
+              List.of(),
+              null,
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,

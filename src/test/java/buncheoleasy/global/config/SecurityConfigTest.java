@@ -68,6 +68,8 @@ class SecurityConfigTest {
                   0,
                   List.of(),
                   List.of(),
+                  null,
+                  List.of(),
                   List.of(),
                   false,
                   null));

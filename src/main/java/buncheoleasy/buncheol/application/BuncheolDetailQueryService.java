@@ -58,10 +58,18 @@ public class BuncheolDetailQueryService {
             .findById(buncheol.getGroupId())
             .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
 
-    List<String> imageUrls =
-        buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId).stream()
-            .map(BuncheolImage::getImageUrl)
-            .toList();
+    // 이미지는 등록 순(id ASC = 업로드 순) 그대로 내려주고, 대표사진은 순서가 아니라 id 로만 식별한다.
+    List<BuncheolImage> images =
+        buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+    List<String> imageUrls = images.stream().map(BuncheolImage::getImageUrl).toList();
+    List<Long> imageIds = images.stream().map(BuncheolImage::getId).toList();
+    Long thumbnailImageId =
+        images.stream()
+            .filter(BuncheolImage::isThumbnail)
+            .findFirst()
+            .or(() -> images.stream().findFirst())
+            .map(BuncheolImage::getId)
+            .orElse(null);
 
     List<BuncheolMember> buncheolMembers =
         buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
@@ -110,6 +118,8 @@ public class BuncheolDetailQueryService {
         buncheol.getMinHeadcount(),
         confirmedCount,
         imageUrls,
+        imageIds,
+        thumbnailImageId,
         shippingOptions,
         memberResponses,
         hostedByMe,

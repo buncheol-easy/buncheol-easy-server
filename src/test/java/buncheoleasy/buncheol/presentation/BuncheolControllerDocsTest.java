@@ -73,6 +73,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
           "minHeadcount": 3,
           "gs25ShippingFee": 3000,
           "cuShippingFee": null,
+          "thumbnailIndex": 0,
           "buncheolMembers": [
             {"memberId": 200, "price": 50000}
           ]
@@ -86,7 +87,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
         {
           "title": "뉴진스 1집 분철 (수정)",
           "description": "공식 스토어 단독 구성",
-          "keepImageIds": [1, 2]
+          "keepImageIds": [1, 2],
+          "thumbnailImageId": 2
         }
         """;
   }
@@ -129,6 +131,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
                               "gs25ShippingFee": Integer?,    // 양수, gs25/cu 중 최소 1개 필수
                               "cuShippingFee": Integer?,      // 양수, gs25/cu 중 최소 1개 필수
+                              "thumbnailIndex": Integer?,     // 선택, 대표사진으로 쓸 images 파트 내 인덱스(0-base). 생략 시 첫 이미지
                               "buncheolMembers": [
                                 {
                                   "memberId": Long,
@@ -141,6 +144,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **images 파트** (**필수**): 이미지 파일 목록, **최소 1장 ~ 최대 5장**. 파트 자체가 누락되면 `400 C-001`,
                             0장이면 `400 BCH-045`
 
+                            이미지는 **업로드한 순서 그대로 저장·노출**된다. 대표사진은 순서를 바꾸지 않고 `thumbnailIndex`
+                            로 지정하며(생략 시 첫 이미지), 목록 카드의 `thumbnailUrl` 에만 반영된다.
+
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
@@ -149,6 +155,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-082` (`BUNCHEOL_MEMBER_FREE_PRICE_MIXED`) | 무료(0원) 슬롯과 유료 슬롯을 섞어 구성 |
                             | 400 | `BCH-045` (`BUNCHEOL_IMAGE_REQUIRED`) | 이미지가 0장 |
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
+                            | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .build())));
@@ -191,7 +198,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             {
                               "title": String,                // 1~200자
                               "description": String?,         // 선택, 700자 이하
-                              "keepImageIds": [Long]          // 유지할 기존 이미지 ID
+                              "keepImageIds": [Long],         // 유지할 기존 이미지 ID
+                              "thumbnailImageId": Long?,      // 선택, 유지 이미지 중 대표사진으로 지정할 ID (keepImageIds 에 포함돼야 함)
+                              "thumbnailIndex": Integer?      // 선택, 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base)
                             }
                             ```
 
@@ -199,12 +208,19 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             `keepImageIds`(해당 분철의 실제 이미지여야 함) + 새 이미지 합이 **최소 1장 ~ 최대 5장** 이어야 한다. 즉 수정 후에도
                             이미지가 0장이 되도록 둘 다 비울 수 없다.
 
+                            이미지 순서는 항상 **등록 순(기존 이미지 → 새 이미지 업로드 순)** 으로 유지된다. 대표사진은
+                            `thumbnailImageId`(기존 이미지) 또는 `thumbnailIndex`(신규 이미지) 중 **하나로만** 지정하며,
+                            둘 다 생략하면 기존 대표사진이 유지된다(대표사진을 삭제한 경우 첫 이미지로 폴백).
+
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 400 | `BCH-045` (`BUNCHEOL_IMAGE_REQUIRED`) | 수정 후 남는 이미지가 0장 |
                             | 400 | `BCH-046` (`BUNCHEOL_KEEP_IMAGE_INVALID`) | `keepImageIds` 에 해당 분철의 이미지가 아닌 ID 포함 |
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
+                            | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 신규 images 파트 범위를 벗어남 |
+                            | 400 | `BCH-048` (`BUNCHEOL_THUMBNAIL_IMAGE_INVALID`) | `thumbnailImageId` 가 `keepImageIds` 에 없음 |
+                            | 400 | `BCH-049` (`BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED`) | `thumbnailImageId` 와 `thumbnailIndex` 동시 지정 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
@@ -357,7 +373,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("호출 사용자의 본인 찜 여부 (비로그인이면 항상 false)"),
                             fieldWithPath("items[].groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("items[].thumbnailUrl")
-                                .description("대표이미지 URL — 분철에 등록된 첫 이미지. 이미지 없으면 null")
+                                .description("대표사진 URL — 개최자가 지정한 대표사진(미지정 시 첫 이미지). 이미지 없으면 null")
                                 .optional(),
                             fieldWithPath("items[].memberNames")
                                 .description("분철에 포함된 전체 멤버 이름 (호스트 등록 슬롯 순)"),
@@ -389,7 +405,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             BuncheolStatus.RECRUITING,
             3,
             1,
-            List.of("https://cdn.example.com/img1.jpg"),
+            List.of("https://cdn.example.com/img1.jpg", "https://cdn.example.com/img2.jpg"),
+            List.of(11L, 12L),
+            12L,
             List.of(
                 new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000),
                 new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
@@ -430,6 +448,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `CANCELLED`(인원미달 자동취소) 상태 분철도 200 으로 응답하며 `status` 로 구분.
                               단, 개최자가 직접 취소한(`HOST_CANCELLED`) 분철은 존재하지 않는 것처럼 **404 (`BCH-043`)** 로 응답한다
                             - `minHeadcount` 는 분철 진행 최소 인원, `confirmedCount` 는 현재 입금확인된 참여자 수
+                            - `imageUrls`/`imageIds` 는 **등록 순(업로드 순)** 으로 내려간다 — 대표사진이라고 앞으로
+                              당겨지지 않는다. 대표사진은 `thumbnailImageId` 로만 식별한다 (수정 화면의 유지 이미지
+                              `keepImageIds`·대표사진 프리셀렉트에 사용)
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, **0 이상·100원 단위** — 0원 슬롯은 오픈 이벤트 무료 분철 용도)
                             - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) /
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료)
@@ -454,7 +475,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "status": "RECRUITING",
                               "minHeadcount": 3,
                               "confirmedCount": 1,
-                              "imageUrls": ["https://cdn.example.com/img1.jpg"],
+                              "imageUrls": ["https://cdn.example.com/img1.jpg", "https://cdn.example.com/img2.jpg"],
+                              "imageIds": [11, 12],
+                              "thumbnailImageId": 12,
                               "shippingOptions": [
                                 {"method": "GS25_HALF", "fee": 3000},
                                 {"method": "CU_HALF", "fee": 4000}
@@ -510,7 +533,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED)"),
                             fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
                             fieldWithPath("confirmedCount").description("현재 입금확인된 참여자 수"),
-                            fieldWithPath("imageUrls").description("분철 이미지 URL 배열 (등록 순)"),
+                            fieldWithPath("imageUrls")
+                                .description("분철 이미지 URL 배열 (등록 순 — 대표사진 순서 우대 없음)"),
+                            fieldWithPath("imageIds")
+                                .description("imageUrls 와 같은 순서의 이미지 ID 배열 (수정 시 keepImageIds 로 사용)"),
+                            fieldWithPath("thumbnailImageId")
+                                .description("대표사진 이미지 ID. 지정이 없으면 첫 이미지, 이미지가 없으면 null")
+                                .optional(),
                             fieldWithPath("shippingOptions").description("지원 배송방법 + 배송비 배열"),
                             fieldWithPath("shippingOptions[].method")
                                 .description("배송방법 (GS25_HALF | CU_HALF)"),

@@ -179,6 +179,15 @@ class ShippingFeePaybackPolicyTest {
     }
 
     @Test
+    void 배송_미완료_상태면_완료_시각이_남아있어도_null_이다() {
+      // 상태 정정 등으로 SHIPPING 인데 delivered_at 이 잔존하는 조합 — deriveStatus 의
+      // 배송 완료 게이트와 어긋나지 않아야 한다.
+      given(delivery.getStatus()).willReturn(DeliveryStatus.SHIPPING);
+
+      assertThat(policy.submitDeadline(participation, delivery)).isNull();
+    }
+
+    @Test
     void 이벤트_비대상_참여는_배송이_완료됐어도_null_이다() {
       given(participation.getAmount()).willReturn(30_000L);
 

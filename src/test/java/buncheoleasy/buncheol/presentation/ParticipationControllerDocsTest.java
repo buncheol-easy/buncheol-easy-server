@@ -286,7 +286,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].payback.submitDeadline")
                                 .description(
                                     "환급 신청 마감 시각 (배송 완료 시각 + 신청 가능 일수, UTC ISO-8601)."
-                                        + " 이벤트 비대상이거나 배송 완료 전 등 마감 미적용이면 null")
+                                        + " 이벤트 비대상이거나 배송 완료 전 등 마감 미적용이면 null."
+                                        + " 신청 이력 상태(REQUESTED/COMPLETED 등)에서도 내려가므로"
+                                        + " 마감 안내 표시 여부는 status 와 조합해 판단한다")
                                 .optional(),
                             fieldWithPath("[].payback.tweetUrl")
                                 .description("신청 시 제출한 후기 트윗 URL. 신청 전에는 null")
@@ -390,7 +392,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("payback.submitDeadline")
                                 .description(
                                     "환급 신청 마감 시각 (배송 완료 시각 + 신청 가능 일수, UTC ISO-8601)."
-                                        + " 이벤트 비대상이거나 배송 완료 전 등 마감 미적용이면 null")
+                                        + " 이벤트 비대상이거나 배송 완료 전 등 마감 미적용이면 null."
+                                        + " 신청 이력 상태(REQUESTED/COMPLETED 등)에서도 내려가므로"
+                                        + " 마감 안내 표시 여부는 status 와 조합해 판단한다")
                                 .optional(),
                             fieldWithPath("payback.tweetUrl")
                                 .description("신청 시 제출한 후기 트윗 URL. 신청 전에는 null")

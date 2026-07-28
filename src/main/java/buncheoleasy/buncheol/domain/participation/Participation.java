@@ -26,9 +26,11 @@ import org.hibernate.annotations.DynamicUpdate;
  * 입금확인이 동시에 경합하므로, 엔티티를 in-memory 로 변경한 뒤 dirty-checking 으로 커밋하지 않고 status 를 WHERE 조건으로 둔
  * compare-and-swap 으로만 전이해 lost update 를 막는다. 따라서 이 엔티티는 생성·조회용 데이터 홀더로 둔다.
  *
- * <p>예외로 배송비 환급(payback) 전이는 도메인 메서드 + dirty-checking 으로 한다 — 참여 본체 전이와 달리 스케줄러 경합 주체가 없고(신청은
- * 참여자 본인, 검수는 운영진 한 명뿐), 유일한 실질 경합인 같은 트윗 URL 의 동시 신청은 {@code payback_tweet_url} 유니크 인덱스가 커밋
- * 시점에 차단한다. payback 전이 트랜잭션에서는 참여 status CAS 를 함께 수행하지 않으므로 더티체킹+CAS 혼용 문제도 없다.
+ * <p>배송비 환급(payback) 전이는 방식이 갈린다. 신청({@link #requestPayback})은 도메인 메서드 + dirty-checking 으로 하고 —
+ * 유일한 실질 경합인 같은 트윗 URL 의 동시 신청은 {@code payback_tweet_url} 유니크 인덱스가 커밋 시점에 차단한다. 운영진 검수(완료/반려)는
+ * 동시 검수(더블클릭·운영자 중복 처리)에서 한 요청만 성공시켜 참여자 알림톡 중복 발송을 막아야 하므로 REQUESTED 를 WHERE 조건으로 둔
+ * CAS(completePaybackIfRequested/rejectPaybackIfRequested)로만 한다. payback 전이 트랜잭션에서는 참여 status CAS 를 함께
+ * 수행하지 않으므로 더티체킹+CAS 혼용 문제도 없다.
  *
  * <p>{@code @DynamicUpdate} 는 payback dirty flush 가 변경된 payback 컬럼만 UPDATE 하게 한다. 없으면 flush 가 행
  * 전체(status/cancel 컬럼 포함)를 다시 써서, 로드~커밋 사이에 분철 취소 CAS 가 전이해 둔 CANCELLED 를 stale 값(CONFIRMED)으로
@@ -186,26 +188,8 @@ public class Participation extends TimestampedEntity {
     this.paybackAmount = shippingFee;
   }
 
-  /** 운영진의 환급 입금 완료 처리 (REQUESTED → COMPLETED). 승인·입금완료를 한 번에 처리한다. */
-  public void completePayback(final Instant now) {
-    if (paybackStatus != PaybackStatus.REQUESTED) {
-      throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
-    }
-    this.paybackStatus = PaybackStatus.COMPLETED;
-    this.paybackCompletedAt = now;
-  }
-
-  /** 운영진의 후기 반려 (REQUESTED → REJECTED). 유저는 반려 사유를 보고 재신청할 수 있다. */
-  public void rejectPayback(final String rejectReason) {
-    if (rejectReason == null || rejectReason.isBlank()) {
-      throw new BusinessException(ErrorCode.PAYBACK_REJECT_REASON_REQUIRED);
-    }
-    if (paybackStatus != PaybackStatus.REQUESTED) {
-      throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
-    }
-    this.paybackStatus = PaybackStatus.REJECTED;
-    this.paybackRejectReason = rejectReason;
-  }
+  // 운영진의 환급 완료/반려 전이는 동시 검수 시 중복 알림을 막기 위해 CAS
+  // (completePaybackIfRequested/rejectPaybackIfRequested)로만 한다 — 엔티티 전이 메서드를 두지 않는다.
 
   public void validateOwnedBy(final Long participantId) {
     if (!this.participantId.equals(participantId)) {

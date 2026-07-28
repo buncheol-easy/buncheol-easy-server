@@ -108,13 +108,30 @@ public class ParticipationDomainService {
     participationRepository.savePaybackRequest(participation);
   }
 
-  /** 운영진의 환급 입금 완료 처리. dirty-checking 커밋이므로 호출 측 {@code @Transactional} 필수. */
+  /**
+   * 운영진의 환급 입금 완료 (REQUESTED → COMPLETED CAS). 동시 검수(더블클릭·운영자 중복 처리)는 한 요청만 성공한다. 호출 측
+   * {@code @Transactional} 필수.
+   */
   public void completePayback(final Long participationId, final Instant now) {
-    getParticipation(participationId).completePayback(now);
+    if (participationRepository.completePaybackIfRequested(participationId, now)) {
+      return;
+    }
+    // CAS 실패 분기: 미존재 참여는 404 로 구분하고, 존재하면 신청 전/이미 완료·반려 상태 위반이다.
+    getParticipation(participationId);
+    throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
   }
 
-  /** 운영진의 후기 반려. dirty-checking 커밋이므로 호출 측 {@code @Transactional} 필수. */
-  public void rejectPayback(final Long participationId, final String rejectReason) {
-    getParticipation(participationId).rejectPayback(rejectReason);
+  /** 운영진의 후기 반려 (REQUESTED → REJECTED CAS). 호출 측 {@code @Transactional} 필수. */
+  public void rejectPayback(
+      final Long participationId, final String rejectReason, final Instant now) {
+    if (rejectReason == null || rejectReason.isBlank()) {
+      throw new BusinessException(ErrorCode.PAYBACK_REJECT_REASON_REQUIRED);
+    }
+    if (participationRepository.rejectPaybackIfRequested(participationId, rejectReason, now)) {
+      return;
+    }
+    // CAS 실패 분기: 미존재 참여는 404 로 구분하고, 존재하면 신청 전/이미 완료·반려 상태 위반이다.
+    getParticipation(participationId);
+    throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
   }
 }

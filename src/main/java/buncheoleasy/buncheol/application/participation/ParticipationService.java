@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -129,9 +130,37 @@ public class ParticipationService {
     doConfirmPayment(participation, buncheol);
   }
 
+  /**
+   * 외부 입금 연동(입금 웹훅)의 자동 입금확인. 수동 경로와 달리 실패를 예외로 던지지 않고 {@link SystemPaymentConfirmResult} 로 돌려준다 —
+   * 웹훅은 재전송되므로 이미 확정된 건을 오류로 응답하면 발신 측이 재전송을 반복하고, 기한이 지나 확정 불가한 건은 운영자 개입이 필요해 구분해야 한다.
+   * 상태 전이는 수동 경로와 동일한 CAS 를 거치므로 만료 스케줄러와 동시에 실행돼도 한쪽만 성공한다.
+   */
+  @Transactional
+  public SystemPaymentConfirmResult confirmPaymentBySystem(final Long participationId) {
+    Participation participation = participationDomainService.getParticipation(participationId);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    final Instant now = Instant.now(clock);
+
+    if (!participationDomainService.confirmPaymentIfAwaiting(participationId, now)) {
+      return participationDomainService.getParticipation(participationId).getStatus()
+              == ParticipationStatus.CONFIRMED
+          ? SystemPaymentConfirmResult.ALREADY_CONFIRMED
+          : SystemPaymentConfirmResult.NOT_CONFIRMABLE;
+    }
+
+    applyPaymentConfirmed(participation, buncheol, now);
+    return SystemPaymentConfirmResult.CONFIRMED;
+  }
+
   private void doConfirmPayment(final Participation participation, final Buncheol buncheol) {
     final Instant now = Instant.now(clock);
     participationDomainService.confirmPayment(participation.getId(), now);
+    applyPaymentConfirmed(participation, buncheol, now);
+  }
+
+  /** 입금확인 CAS 성공 이후의 부수효과. 수동·자동 확인이 공유한다. */
+  private void applyPaymentConfirmed(
+      final Participation participation, final Buncheol buncheol, final Instant now) {
     // 입금확인 시점에 배송지를 스냅샷으로 확정한다. 배송지는 참여 후 변경 불가(updatable=false)라 참여 시점 값이 그대로 유효하다.
     deliverySnapshotCreator.create(participation);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participation.getId()));

@@ -178,6 +178,15 @@ shipping-fee-payback:
   # 신청 마감 = 기준 시점(배송 완료) + N일. 분철·참여마다 기준 시점이 달라 상대 일수로 관리한다.
   submit-window-days: ${SHIPPING_FEE_PAYBACK_SUBMIT_WINDOW_DAYS:7}
 
+payaction:
+  # 입금 자동확인 SaaS. 키가 비어 있으면 주문 등록·웹훅 수신을 모두 꺼둔다(로컬·테스트 기본값).
+  base-url: ${PAYACTION_BASE_URL:https://api.payaction.app}
+  api-key: ${PAYACTION_API_KEY:}
+  mall-id: ${PAYACTION_MALL_ID:}
+  webhook-key: ${PAYACTION_WEBHOOK_KEY:}
+  connect-timeout: 3s
+  read-timeout: 5s
+
 slack:
   webhook:
     connect-timeout: 3s

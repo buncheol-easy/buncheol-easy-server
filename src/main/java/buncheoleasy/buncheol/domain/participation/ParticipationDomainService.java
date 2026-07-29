@@ -77,6 +77,14 @@ public class ParticipationDomainService {
     throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
   }
 
+  /**
+   * 자동 입금확인용 CAS (외부 입금 연동). {@link #confirmPayment} 와 같은 전이지만 실패를 예외로 던지지 않고 성공 여부만 돌려준다 —
+   * 입금 웹훅은 재전송되므로 이미 확정된 건을 오류로 처리하면 발신 측이 실패로 간주해 재전송을 반복한다.
+   */
+  public boolean confirmPaymentIfAwaiting(final Long participationId, final Instant now) {
+    return participationRepository.confirmPaymentIfAwaiting(participationId, now);
+  }
+
   /** 입금 만료 처리 (입금 만료 스케줄러용). 멱등하며 실패 시(이미 확정/취소) 예외 없이 false 를 돌려준다. */
   public boolean expirePayment(final Long participationId, final Instant now) {
     return participationRepository.expirePaymentIfOverdue(participationId, now);

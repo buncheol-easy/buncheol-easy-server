@@ -4,6 +4,7 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
@@ -148,6 +149,56 @@ class SecurityConfigTest {
     @Test
     void 분철_삭제는_비로그인이면_401() throws Exception {
       mockMvc.perform(delete("/v1/buncheols/{id}", 10L)).andExpect(status().isUnauthorized());
+    }
+  }
+
+  @Nested
+  @DisplayName("입금 웹훅 — 인증 없이 도달하되 컨트롤러가 키를 검증")
+  class DepositWebhookPath {
+
+    private static final String BODY =
+        """
+        {"order_number":"999999","order_status":"매칭완료"}
+        """;
+
+    /**
+     * 페이액션은 JWT 를 보내지 않으므로 Security 단계에서 막히면 안 된다. 올바른 키로 200 이 나온다는 것이 곧 Security 를 통과했다는 증거다
+     * (존재하지 않는 참여라 서비스는 알림만 남기고 정상 응답한다).
+     */
+    @Test
+    void 올바른_키면_비로그인이어도_200_과_success_응답() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/deposits/payaction/webhook")
+                  .header("x-webhook-key", "test-webhook-key")
+                  .header("x-mall-id", "test-mall-id")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(BODY))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("success"));
+    }
+
+    /** 공개 경로라도 컨트롤러가 공유 비밀키를 검증한다. */
+    @Test
+    void 키가_틀리면_401() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/deposits/payaction/webhook")
+                  .header("x-webhook-key", "wrong-key")
+                  .header("x-mall-id", "test-mall-id")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(BODY))
+          .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 키가_없으면_401() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/deposits/payaction/webhook")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(BODY))
+          .andExpect(status().isUnauthorized());
     }
   }
 }

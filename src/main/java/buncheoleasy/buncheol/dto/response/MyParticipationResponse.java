@@ -15,6 +15,10 @@ import java.util.List;
  * 프론트가 멤버 가격(= amount - shippingFee)과 배송비를 나눠 그릴 수 있게 한다.
  *
  * <p>{@code payback} 은 오픈 이벤트 배송비 환급(배송비 돌려받기) 상태로, 비대상이어도 status=NONE 으로 항상 내려준다.
+ *
+ * <p>{@code refundHolder} 는 참여 시점에 박제된 환불계좌 예금주명이다. 자동 입금확인이 입금자명 일치로 매칭하므로
+ * 프론트가 "이 이름으로 입금하세요" 안내에 쓴다. 프로필의 현재 계좌는 참여 후 변경됐을 수 있어 쓰면 안 된다.
+ * hostAccount 와 같이 입금확인중(AWAITING_PAYMENT) 일 때만 노출한다.
  */
 public record MyParticipationResponse(
     Long participationId,
@@ -33,5 +37,6 @@ public record MyParticipationResponse(
     String thumbnailUrl,
     List<ShippingOptionResponse> shippingOptions,
     HostAccountResponse hostAccount,
+    String refundHolder,
     MyParticipationDeliveryResponse delivery,
     ShippingFeePaybackResponse payback) {}

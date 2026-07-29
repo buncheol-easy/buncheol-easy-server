@@ -283,6 +283,8 @@ class ParticipationControllerTest {
               "https://cdn.example.com/buncheols/10/main.jpg",
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
               null,
+              // CONFIRMED 라 hostAccount·refundHolder 둘 다 비노출
+              null,
               new MyParticipationDeliveryResponse(
                   900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
               new ShippingFeePaybackResponse(

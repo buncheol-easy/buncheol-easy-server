@@ -157,6 +157,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
             "https://cdn.example.com/buncheols/10/main.jpg",
             List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
             null,
+            // CONFIRMED 라 hostAccount·refundHolder 둘 다 비노출
+            null,
             new MyParticipationDeliveryResponse(
                 900L,
                 ShippingMethod.GS25_HALF,
@@ -190,6 +192,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
             "https://cdn.example.com/buncheols/20/main.jpg",
             List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 2_000)),
             new HostAccountResponse("국민은행", "98765432", "개최자"),
+            "홍길동",
             null,
             new ShippingFeePaybackResponse(
                   PaybackStatus.NONE,
@@ -259,6 +262,11 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("[].hostAccount.holder")
                                 .description("개최자 예금주")
+                                .optional(),
+                            fieldWithPath("[].refundHolder")
+                                .description(
+                                    "입금자명 안내용. 참여 시점에 박제된 환불계좌 예금주명이며 자동 입금확인이 이 이름으로 매칭한다."
+                                        + " 입금확인중(AWAITING_PAYMENT)이 아니면 null")
                                 .optional(),
                             fieldWithPath("[].delivery")
                                 .description("배송 스냅샷. 입금확인 시 생성되며 그 전에는 null")

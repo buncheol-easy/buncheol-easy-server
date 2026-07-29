@@ -27,7 +27,9 @@ public class SecurityConfig {
     "/error",
     "/actuator/health",
     "/v1/auth/reissue-token",
-    "/v1/api-docs/**"
+    "/v1/api-docs/**",
+    // 페이액션 입금 매칭 웹훅. 외부에서 인증 없이 들어오며 컨트롤러가 공유 비밀키 헤더로 발신자를 검증한다.
+    "/v1/deposits/payaction/webhook"
   };
 
   private static final String[] OAUTH_PATHS = {"/oauth2/**", "/login/oauth2/**"};

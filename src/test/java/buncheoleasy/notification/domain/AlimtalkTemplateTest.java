@@ -100,6 +100,51 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
+  @DisplayName("배송비 환급 완료(PAYBACK_COMPLETED)")
+  class PaybackCompleted {
+
+    @Test
+    @DisplayName("닉네임·분철명·멤버명·환급 금액을 치환하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of("닉네임", "참여자닉", "분철명", "엔믹스 앨범", "멤버명", "설윤", "환급금액", "3,500");
+
+      String rendered = AlimtalkTemplate.PAYBACK_COMPLETED.render(variables);
+
+      assertThat(rendered)
+          .startsWith("참여자닉님, 참여하신 무료 분철 이벤트에 후기를 작성해주셔서 배송비 환급이 완료되었어요!")
+          .contains("엔믹스 앨범")
+          .contains("► 참여 멤버 : 설윤")
+          .contains("► 환급 금액 : 3,500원")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
+  @DisplayName("배송비 환급 반려(PAYBACK_REJECTED)")
+  class PaybackRejected {
+
+    @Test
+    @DisplayName("반려 사유와 환급 예정 금액을 치환하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "참여자닉", "분철명", "아이브 앨범", "멤버명", "안유진", "반려사유", "비공개 계정이라 확인 불가", "환급금액",
+              "3,500");
+
+      String rendered = AlimtalkTemplate.PAYBACK_REJECTED.render(variables);
+
+      assertThat(rendered)
+          .startsWith("참여자닉님, 참여하신 무료 분철 이벤트의 배송비 환급 신청이 반려되었어요.")
+          .contains("반려 사유: 비공개 계정이라 확인 불가")
+          .contains("아이브 앨범")
+          .contains("► 참여 멤버 : 안유진")
+          .contains("► 환급 예정 금액 : 3,500원")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
   @DisplayName("버튼 구성")
   class Buttons {
 

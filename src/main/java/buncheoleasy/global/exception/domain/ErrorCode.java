@@ -97,6 +97,13 @@ public enum ErrorCode {
   BUNCHEOL_IMAGE_REQUIRED("BCH-045", "이미지는 최소 1장 이상 등록해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_KEEP_IMAGE_INVALID(
       "BCH-046", "유지할 이미지 중 해당 분철의 이미지가 아닌 항목이 있습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_INDEX_INVALID(
+      "BCH-047", "대표사진 인덱스가 이미지 목록 범위를 벗어났습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_IMAGE_INVALID(
+      "BCH-048", "대표사진으로 지정한 이미지가 유지할 이미지 목록에 없습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED(
+      "BCH-049", "대표사진은 유지 이미지와 신규 이미지 중 한 곳에서만 지정할 수 있습니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_THUMBNAIL_REQUIRED("BCH-083", "대표사진 지정은 필수입니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_NOT_FOUND("BCH-043", "존재하지 않는 분철입니다.", HttpStatus.NOT_FOUND),
   BUNCHEOL_NO_PERMISSION("BCH-044", "분철에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
@@ -169,6 +176,10 @@ public enum ErrorCode {
   ADMIN_NOT_FOUND("ADM-001", "관리자 권한이 없습니다.", HttpStatus.FORBIDDEN),
   // 아이디 없음/비밀번호 불일치를 구분하지 않는다 — 계정 존재 여부 열거(enumeration)를 막기 위함.
   ADMIN_LOGIN_FAILED("ADM-002", "아이디 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
+
+  /** FDB - 의견 보내기 관련 에러 */
+  // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.
+  FEEDBACK_RATE_LIMITED("FDB-001", "의견을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
 
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),

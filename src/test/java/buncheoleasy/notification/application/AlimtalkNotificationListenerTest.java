@@ -12,6 +12,8 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
@@ -204,6 +206,71 @@ class AlimtalkNotificationListenerTest {
           .containsEntry("멤버명", "카즈하")
           .containsEntry("운송장번호", "CJ123456789");
       verify(inboxRecorder).record(eq(11L), eq(expectedTemplate), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("배송비 환급 완료(onShippingFeePaybackCompleted)")
+  class ShippingFeePaybackCompleted {
+
+    @Test
+    @DisplayName("참여자에게 PAYBACK_COMPLETED 발송 + 변수 매핑 + 수신함 기록")
+    void sendsToParticipant() {
+      Participation participation = mock(Participation.class);
+      given(participation.getPaybackAmount()).willReturn(3_500L);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("엔믹스 앨범");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  participation, buncheol, "설윤", participant, mock(User.class), 20_000L));
+
+      listener.onShippingFeePaybackCompleted(new ShippingFeePaybackCompletedEvent(PARTICIPATION_ID));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.PAYBACK_COMPLETED, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "참여자닉")
+          .containsEntry("분철명", "엔믹스 앨범")
+          .containsEntry("멤버명", "설윤")
+          .containsEntry("환급금액", "3,500");
+      verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.PAYBACK_COMPLETED), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("배송비 환급 반려(onShippingFeePaybackRejected)")
+  class ShippingFeePaybackRejected {
+
+    // 반려 사유는 재신청 레이스로 엔티티에서 지워질 수 있어 재조회가 아니라 이벤트 스냅샷 값을 써야 한다.
+    @Test
+    @DisplayName("참여자에게 PAYBACK_REJECTED 발송 + 이벤트에 스냅샷된 반려 사유로 변수 매핑 + 수신함 기록")
+    void sendsToParticipant() {
+      Participation participation = mock(Participation.class);
+      given(participation.getPaybackAmount()).willReturn(3_500L);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("아이브 앨범");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  participation, buncheol, "안유진", participant, mock(User.class), 20_000L));
+
+      listener.onShippingFeePaybackRejected(
+          new ShippingFeePaybackRejectedEvent(PARTICIPATION_ID, "비공개 계정이라 확인 불가"));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.PAYBACK_REJECTED, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "참여자닉")
+          .containsEntry("분철명", "아이브 앨범")
+          .containsEntry("멤버명", "안유진")
+          .containsEntry("반려사유", "비공개 계정이라 확인 불가")
+          .containsEntry("환급금액", "3,500");
+      verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.PAYBACK_REJECTED), any());
     }
   }
 

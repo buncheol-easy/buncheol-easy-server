@@ -10,5 +10,8 @@ public enum SlackChannel {
   NEW_PARTICIPATION,
 
   /** 배송비 환급(배송비 돌려받기) 신청 알림 채널. 운영자가 후기 트윗을 검수하고 입금 완료/반려 처리한다. */
-  SHIPPING_FEE_PAYBACK
+  SHIPPING_FEE_PAYBACK,
+
+  /** 사용자 의견("의견 보내기") 수집 채널. 답장 없는 단방향 수집이라 운영자가 읽기만 한다. */
+  FEEDBACK
 }

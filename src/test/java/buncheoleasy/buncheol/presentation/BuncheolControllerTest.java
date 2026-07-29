@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
@@ -110,6 +111,7 @@ class BuncheolControllerTest {
                   "deadline": "%s",
                   "minHeadcount": 3,
                   "gs25ShippingFee": 3000,
+                  "thumbnailIndex": 0,
                   "buncheolMembers": [
                     {
                       "memberId": 200,
@@ -126,7 +128,8 @@ class BuncheolControllerTest {
                 {
                   "title": "수정 분철 제목",
                   "description": "수정 설명",
-                  "keepImageIds": [1, 2]
+                  "keepImageIds": [1, 2],
+                  "thumbnailImageId": 1
                 }
                 """;
   }
@@ -194,6 +197,7 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "minHeadcount": 3,
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -213,6 +217,39 @@ class BuncheolControllerTest {
     }
 
     @Test
+    void thumbnailIndex가_없으면_400을_반환한다() throws Exception {
+      // given — 대표사진 인덱스는 필수(@NotNull). 누락 시 DTO 검증에서 걸러진다.
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      String invalidJson =
+          """
+                    {
+                      "groupId": 100,
+                      "title": "제목",
+                      "purchaseSite": "공식 스토어",
+                      "deadline": "%s",
+                      "minHeadcount": 3,
+                      "gs25ShippingFee": 3000,
+                      "buncheolMembers": [
+                        {"memberId": 200, "price": 50000}
+                      ]
+                    }
+                    """
+              .formatted(deadline);
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, invalidJson.getBytes());
+
+      // when & then
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
+    }
+
+    @Test
     void minHeadcount가_없으면_400을_반환한다() throws Exception {
       // given
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
@@ -224,6 +261,7 @@ class BuncheolControllerTest {
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -254,6 +292,7 @@ class BuncheolControllerTest {
                       "purchaseSite": "공식 스토어",
                       "deadline": "%s",
                       "minHeadcount": 3,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -289,6 +328,7 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "minHeadcount": 3,
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -320,6 +360,7 @@ class BuncheolControllerTest {
                       "deadline": "%s",
                       "minHeadcount": 3,
                       "gs25ShippingFee": 3000,
+                      "thumbnailIndex": 0,
                       "buncheolMembers": [
                         {"memberId": 200, "price": 50000}
                       ]
@@ -633,7 +674,7 @@ class BuncheolControllerTest {
               BuncheolStatus.RECRUITING,
               3,
               1,
-              List.of("https://cdn/img1.jpg"),
+              List.of(new BuncheolImageResponse(11L, "https://cdn/img1.jpg", true)),
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(
                   new BuncheolMemberDetailResponse(
@@ -658,7 +699,9 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.minHeadcount").value(3))
           .andExpect(jsonPath("$.confirmedCount").value(1))
           .andExpect(jsonPath("$.hostedByMe").value(true))
-          .andExpect(jsonPath("$.imageUrls[0]").value("https://cdn/img1.jpg"))
+          .andExpect(jsonPath("$.images[0].id").value(11))
+          .andExpect(jsonPath("$.images[0].url").value("https://cdn/img1.jpg"))
+          .andExpect(jsonPath("$.images[0].thumbnail").value(true))
           .andExpect(jsonPath("$.shippingOptions[0].method").value("GS25_HALF"))
           .andExpect(jsonPath("$.shippingOptions[0].fee").value(3000))
           .andExpect(jsonPath("$.members[0].buncheolMemberId").value(101))

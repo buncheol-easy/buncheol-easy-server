@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -141,6 +142,56 @@ class ShippingFeePaybackPolicyTest {
 
       assertThat(policy.deriveStatus(participation, delivery, NOW_AFTER_DEADLINE))
           .isEqualTo(PaybackStatus.EXPIRED);
+    }
+  }
+
+  @Nested
+  @DisplayName("신청 마감 시각 테스트")
+  class SubmitDeadlineTest {
+
+    @Test
+    void 배송_완료_시각_더하기_신청_일수를_반환한다() {
+      assertThat(policy.submitDeadline(participation, delivery))
+          .isEqualTo(DELIVERED_AT.plus(Duration.ofDays(7)));
+    }
+
+    @Test
+    void 배송_완료_시각이_없으면_수령_시각_기준으로_계산한다() {
+      Instant receivedAt = Instant.parse("2026-07-16T09:00:00Z");
+      given(delivery.getDeliveredAt()).willReturn(null);
+      given(delivery.getReceivedAt()).willReturn(receivedAt);
+
+      assertThat(policy.submitDeadline(participation, delivery))
+          .isEqualTo(receivedAt.plus(Duration.ofDays(7)));
+    }
+
+    @Test
+    void 기준_시각이_없으면_null_이다() {
+      given(delivery.getDeliveredAt()).willReturn(null);
+      given(delivery.getReceivedAt()).willReturn(null);
+
+      assertThat(policy.submitDeadline(participation, delivery)).isNull();
+    }
+
+    @Test
+    void 배송_스냅샷이_없으면_null_이다() {
+      assertThat(policy.submitDeadline(participation, null)).isNull();
+    }
+
+    @Test
+    void 배송_미완료_상태면_완료_시각이_남아있어도_null_이다() {
+      // 상태 정정 등으로 SHIPPING 인데 delivered_at 이 잔존하는 조합 — deriveStatus 의
+      // 배송 완료 게이트와 어긋나지 않아야 한다.
+      given(delivery.getStatus()).willReturn(DeliveryStatus.SHIPPING);
+
+      assertThat(policy.submitDeadline(participation, delivery)).isNull();
+    }
+
+    @Test
+    void 이벤트_비대상_참여는_배송이_완료됐어도_null_이다() {
+      given(participation.getAmount()).willReturn(30_000L);
+
+      assertThat(policy.submitDeadline(participation, delivery)).isNull();
     }
   }
 

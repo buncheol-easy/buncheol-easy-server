@@ -168,7 +168,7 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
                                     "분철 모집 마감 시각 (UTC ISO-8601, 예: `2026-06-01T12:00:00Z`)"),
                             fieldWithPath("[].groupName").description("대상 K-pop 그룹명"),
                             fieldWithPath("[].thumbnailUrl")
-                                .description("분철 등록 이미지 중 가장 먼저 등록된 1장의 URL. 이미지가 없으면 `null`")
+                                .description("분철 대표사진 URL (개최자 지정, 미지정 시 첫 이미지). 이미지가 없으면 `null`")
                                 .optional(),
                             fieldWithPath("[].memberNames")
                                 .description("분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 슬롯을 등록한 순서로 정렬"))

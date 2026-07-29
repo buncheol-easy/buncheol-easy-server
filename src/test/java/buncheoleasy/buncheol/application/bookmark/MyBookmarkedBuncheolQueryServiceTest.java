@@ -76,7 +76,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
       given(groupRepository.findAllByIds(List.of(100L, 200L)))
           .willReturn(List.of(group(100L, "뉴진스"), group(200L, "에스파")));
 
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 20L)))
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
           .willReturn(List.of(image(10L, "https://cdn/img-a.jpg")));
 
       // resolver 가 분철별 멤버 이름 리스트(슬롯 등록순 정렬 완료) 를 한 번에 반환한다고 가정.
@@ -136,7 +136,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       // 최종 정렬: 모집중 deadline ASC [30, 20, 10] → 마감 deadline DESC [50, 40]
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
           .willReturn(List.of());
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
           .willReturn(Map.of());
@@ -172,7 +172,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
           .willReturn(List.of(b1, b2, b3));
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
 
       List<MyBookmarkedBuncheolResponse> result =
@@ -201,7 +201,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
           .willReturn(List.of(favorite(700L, USER_ID, 100L)));
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
 
       List<MyBookmarkedBuncheolResponse> result =
@@ -229,7 +229,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
           .willReturn(List.of(recruiting, cancelled, hostCancelled));
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
-      given(buncheolImageRepository.findFirstByBuncheolIds(List.of(10L, 20L))).willReturn(List.of());
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L))).willReturn(List.of());
       given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 20L)))
           .willReturn(Map.of());
 

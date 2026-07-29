@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCou
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -102,5 +103,30 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("targetStatuses") Collection<ParticipationStatus> targetStatuses,
       @Param("cancelledStatus") ParticipationStatus cancelledStatus,
       @Param("reason") ParticipationCancelReason reason,
+      @Param("now") Instant now);
+
+  /** 환급 신청이 REQUESTED 일 때만 COMPLETED 로 전이 (운영진 입금완료 CAS). */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.paybackStatus = :completedStatus, p.paybackCompletedAt = :now, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.paybackStatus = :requestedStatus")
+  int completePaybackIfRequested(
+      @Param("id") Long id,
+      @Param("requestedStatus") PaybackStatus requestedStatus,
+      @Param("completedStatus") PaybackStatus completedStatus,
+      @Param("now") Instant now);
+
+  /** 환급 신청이 REQUESTED 일 때만 사유와 함께 REJECTED 로 전이 (운영진 반려 CAS). */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.paybackStatus = :rejectedStatus, p.paybackRejectReason = :reason, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.paybackStatus = :requestedStatus")
+  int rejectPaybackIfRequested(
+      @Param("id") Long id,
+      @Param("requestedStatus") PaybackStatus requestedStatus,
+      @Param("rejectedStatus") PaybackStatus rejectedStatus,
+      @Param("reason") String reason,
       @Param("now") Instant now);
 }

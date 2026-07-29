@@ -233,6 +233,94 @@ class ParticipationDomainServiceTest {
     }
   }
 
+  @Nested
+  @DisplayName("배송비 환급 완료/반려 전이 테스트")
+  class PaybackTransitionTest {
+
+    @Test
+    void 완료_CAS_성공이면_예외_없이_끝난다() {
+      given(participationRepository.completePaybackIfRequested(PARTICIPATION_ID, NOW))
+          .willReturn(true);
+
+      participationDomainService.completePayback(PARTICIPATION_ID, NOW);
+
+      then(participationRepository).should().completePaybackIfRequested(PARTICIPATION_ID, NOW);
+    }
+
+    @Test
+    void 완료_CAS_실패_시_참여가_존재하면_상태_위반으로_구분한다() {
+      given(participationRepository.completePaybackIfRequested(PARTICIPATION_ID, NOW))
+          .willReturn(false);
+      given(participationRepository.findById(PARTICIPATION_ID))
+          .willReturn(Optional.of(newParticipation()));
+
+      assertThatThrownBy(() -> participationDomainService.completePayback(PARTICIPATION_ID, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
+    }
+
+    @Test
+    void 완료_CAS_실패_시_참여가_없으면_404_로_구분한다() {
+      given(participationRepository.completePaybackIfRequested(PARTICIPATION_ID, NOW))
+          .willReturn(false);
+      given(participationRepository.findById(PARTICIPATION_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> participationDomainService.completePayback(PARTICIPATION_ID, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_NOT_FOUND);
+    }
+
+    @Test
+    void 반려_CAS_성공이면_예외_없이_끝난다() {
+      given(participationRepository.rejectPaybackIfRequested(PARTICIPATION_ID, "사유", NOW))
+          .willReturn(true);
+
+      participationDomainService.rejectPayback(PARTICIPATION_ID, "사유", NOW);
+
+      then(participationRepository).should().rejectPaybackIfRequested(PARTICIPATION_ID, "사유", NOW);
+    }
+
+    @Test
+    void 반려_사유가_비어있으면_CAS_없이_예외가_발생한다() {
+      assertThatThrownBy(() -> participationDomainService.rejectPayback(PARTICIPATION_ID, "  ", NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PAYBACK_REJECT_REASON_REQUIRED);
+      then(participationRepository)
+          .should(never())
+          .rejectPaybackIfRequested(PARTICIPATION_ID, "  ", NOW);
+    }
+
+    @Test
+    void 반려_CAS_실패_시_참여가_존재하면_상태_위반으로_구분한다() {
+      given(participationRepository.rejectPaybackIfRequested(PARTICIPATION_ID, "사유", NOW))
+          .willReturn(false);
+      given(participationRepository.findById(PARTICIPATION_ID))
+          .willReturn(Optional.of(newParticipation()));
+
+      assertThatThrownBy(
+              () -> participationDomainService.rejectPayback(PARTICIPATION_ID, "사유", NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
+    }
+
+    @Test
+    void 반려_CAS_실패_시_참여가_없으면_404_로_구분한다() {
+      given(participationRepository.rejectPaybackIfRequested(PARTICIPATION_ID, "사유", NOW))
+          .willReturn(false);
+      given(participationRepository.findById(PARTICIPATION_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(
+              () -> participationDomainService.rejectPayback(PARTICIPATION_ID, "사유", NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_NOT_FOUND);
+    }
+  }
+
   private static Participation awaitingParticipation() {
     return participationWithStatus(ParticipationStatus.AWAITING_PAYMENT);
   }

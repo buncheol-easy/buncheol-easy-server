@@ -158,9 +158,14 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
             List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 1_800)),
             null,
             new MyParticipationDeliveryResponse(
-                900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
+                900L,
+                ShippingMethod.GS25_HALF,
+                "GS25 강남점",
+                "1234567890",
+                DeliveryStatus.DELIVERED),
             new ShippingFeePaybackResponse(
                 PaybackStatus.ELIGIBLE,
+                Instant.parse("2026-06-12T13:00:00Z"),
                 null,
                 null,
                 null,
@@ -188,6 +193,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
             null,
             new ShippingFeePaybackResponse(
                   PaybackStatus.NONE,
+                  null,
                   null,
                   null,
                   null,
@@ -277,6 +283,13 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "환급 상태 (NONE | ELIGIBLE | REQUESTED | COMPLETED | REJECTED |"
                                         + " EXPIRED). ELIGIBLE/EXPIRED 는 조회 시점 파생값"),
+                            fieldWithPath("[].payback.submitDeadline")
+                                .description(
+                                    "환급 신청 마감 시각 (배송 완료 시각 + 신청 가능 일수, UTC ISO-8601)."
+                                        + " 이벤트 비대상이거나 배송 완료 전 등 마감 미적용이면 null."
+                                        + " 신청 이력 상태(REQUESTED/COMPLETED 등)에서도 내려가므로"
+                                        + " 마감 안내 표시 여부는 status 와 조합해 판단한다")
+                                .optional(),
                             fieldWithPath("[].payback.tweetUrl")
                                 .description("신청 시 제출한 후기 트윗 URL. 신청 전에는 null")
                                 .optional(),
@@ -319,6 +332,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
             new HostAccountResponse("국민은행", "98765432", "개최자"),
             new ShippingFeePaybackResponse(
                   PaybackStatus.NONE,
+                  null,
                   null,
                   null,
                   null,
@@ -375,6 +389,13 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "환급 상태 (NONE | ELIGIBLE | REQUESTED | COMPLETED | REJECTED |"
                                         + " EXPIRED). ELIGIBLE/EXPIRED 는 조회 시점 파생값"),
+                            fieldWithPath("payback.submitDeadline")
+                                .description(
+                                    "환급 신청 마감 시각 (배송 완료 시각 + 신청 가능 일수, UTC ISO-8601)."
+                                        + " 이벤트 비대상이거나 배송 완료 전 등 마감 미적용이면 null."
+                                        + " 신청 이력 상태(REQUESTED/COMPLETED 등)에서도 내려가므로"
+                                        + " 마감 안내 표시 여부는 status 와 조합해 판단한다")
+                                .optional(),
                             fieldWithPath("payback.tweetUrl")
                                 .description("신청 시 제출한 후기 트윗 URL. 신청 전에는 null")
                                 .optional(),

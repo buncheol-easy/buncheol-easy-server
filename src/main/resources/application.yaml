@@ -111,6 +111,10 @@ app:
     # 사용자 웹앱(프론트) origin. 알림톡 버튼·인앱 링크의 절대 URL base 로 사용한다(환경별로 다름).
     base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
     login-callback-url: ${FRONTEND_LOGIN_CALLBACK_URL:http://localhost:3000/login/callback}
+  admin:
+    # 운영자 어드민 웹 base URL. 슬랙 알림의 '어드민에서 처리' 링크로 사용한다.
+    # local/staging 은 프론트 origin + /admin 경로, prod 는 별도 어드민 도메인을 env 로 주입한다.
+    base-url: ${ADMIN_BASE_URL:http://localhost:3000/admin}
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
   cookie:
@@ -127,6 +131,16 @@ app:
       enabled: ${PAYMENT_EXPIRY_ENABLED:true}
       interval-ms: ${PAYMENT_EXPIRY_INTERVAL_MS:60000} # 1분
       initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:10000} # 10초
+  feedback:
+    rate-limit: # 의견 보내기 도배 방지 (비로그인 허용 엔드포인트라 필수)
+      # 제출 주체(회원 ID 또는 IP) 1개당 한도.
+      # ⚠️ 비로그인 제출은 프론트 프록시를 거쳐 오면 IP 가 프록시 하나로 수렴해 이 한도를 '공유'한다.
+      # 개인당 한도가 아니라 '비로그인 전체 예산'으로 동작할 수 있어 여유 있게 잡는다.
+      max-submissions: ${FEEDBACK_RATE_LIMIT_MAX:20}
+      # 전체 합산 한도 — 헤더 조작으로 주체 키를 바꿔도 슬랙 도배량을 묶는 백스톱
+      global-max-submissions: ${FEEDBACK_RATE_LIMIT_GLOBAL_MAX:60}
+      # 단위를 붙이지 않으면 '분'으로 읽는다(@DurationUnit) — 10m 처럼 명시하는 것을 권장
+      window: ${FEEDBACK_RATE_LIMIT_WINDOW:10m}
 
 delivery:
   tracker:
@@ -155,6 +169,8 @@ aligo:
       BUNCHEOL_CANCELLED: ${ALIGO_TPL_BUNCHEOL_CANCELLED:}
       TRACKING_CU: ${ALIGO_TPL_TRACKING_CU:}
       TRACKING_GS25: ${ALIGO_TPL_TRACKING_GS25:}
+      PAYBACK_COMPLETED: ${ALIGO_TPL_PAYBACK_COMPLETED:}
+      PAYBACK_REJECTED: ${ALIGO_TPL_PAYBACK_REJECTED:}
 
 # 오픈 이벤트 배송비 환급(배송비 돌려받기). 이벤트 종료 시 enabled=false 로 내린다.
 shipping-fee-payback:
@@ -170,6 +186,7 @@ slack:
     urls:
       NEW_PARTICIPATION: ${SLACK_WEBHOOK_NEW_PARTICIPATION_URL:}
       SHIPPING_FEE_PAYBACK: ${SLACK_WEBHOOK_SHIPPING_FEE_PAYBACK_URL:}
+      FEEDBACK: ${SLACK_WEBHOOK_FEEDBACK_URL:}
 
 management:
   endpoints:

@@ -151,82 +151,8 @@ class ParticipationTest {
       assertThat(participation.getPaybackRequestedAt()).isEqualTo(editedAt);
     }
 
-    @Test
-    void 입금_완료된_신청은_다시_제출할_수_없다() {
-      Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW);
-      participation.completePayback(NOW);
-
-      assertThatThrownBy(() -> participation.requestPayback(TWEET_URL, NOW))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
-    }
-
-    @Test
-    void 확인중_신청을_입금_완료_처리한다() {
-      Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW);
-
-      Instant completedAt = NOW.plusSeconds(3600);
-      participation.completePayback(completedAt);
-
-      assertThat(participation.getPaybackStatus()).isEqualTo(PaybackStatus.COMPLETED);
-      assertThat(participation.getPaybackCompletedAt()).isEqualTo(completedAt);
-    }
-
-    @Test
-    void 신청하지_않은_참여를_입금_완료_처리하면_예외가_발생한다() {
-      Participation participation = newParticipation();
-
-      assertThatThrownBy(() -> participation.completePayback(NOW))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
-    }
-
-    @Test
-    void 반려하면_사유가_저장되고_재신청하면_사유가_초기화된다() {
-      Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW);
-
-      participation.rejectPayback("비공개 계정이라 후기를 확인할 수 없어요.");
-      assertThat(participation.getPaybackStatus()).isEqualTo(PaybackStatus.REJECTED);
-      assertThat(participation.getPaybackRejectReason())
-          .isEqualTo("비공개 계정이라 후기를 확인할 수 없어요.");
-
-      PaybackTweetUrl newUrl = PaybackTweetUrl.parse("https://x.com/fan/status/456");
-      Instant retryAt = NOW.plusSeconds(7200);
-      participation.requestPayback(newUrl, retryAt);
-
-      assertThat(participation.getPaybackStatus()).isEqualTo(PaybackStatus.REQUESTED);
-      assertThat(participation.getPaybackTweetUrl()).isEqualTo(newUrl.value());
-      assertThat(participation.getPaybackRequestedAt()).isEqualTo(retryAt);
-      assertThat(participation.getPaybackRejectReason()).isNull();
-    }
-
-    @Test
-    void 반려_사유가_비어있으면_예외가_발생한다() {
-      Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW);
-
-      assertThatThrownBy(() -> participation.rejectPayback("  "))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYBACK_REJECT_REASON_REQUIRED);
-    }
-
-    @Test
-    void 입금_완료된_신청은_반려할_수_없다() {
-      Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW);
-      participation.completePayback(NOW);
-
-      assertThatThrownBy(() -> participation.rejectPayback("사유"))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
-    }
+    // 운영진 완료/반려 전이는 CAS(completePaybackIfRequested/rejectPaybackIfRequested)로만 하므로
+    // 엔티티 전이 테스트가 없다 — 전이·상태 가드는 JpaParticipationRepositoryAdapterTest 가 검증한다.
   }
 
   private static Participation newParticipation() {

@@ -3,6 +3,7 @@ package buncheoleasy.global.config;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
@@ -13,6 +14,7 @@ import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.feedback.application.FeedbackService;
 import buncheoleasy.global.page.CursorResponse;
 import java.time.Instant;
 import java.util.List;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -42,6 +45,8 @@ class SecurityConfigTest {
   @MockitoBean private BuncheolDetailQueryService buncheolDetailQueryService;
   @MockitoBean private BuncheolManagementQueryService buncheolManagementQueryService;
   @MockitoBean private JwtTokenProvider jwtTokenProvider;
+  // 실제 구현은 Redis 를 쓰므로 접근 제어만 보는 이 테스트에서는 대역으로 둔다.
+  @MockitoBean private FeedbackService feedbackService;
 
   @Nested
   @DisplayName("/v1/buncheols/* 비로그인 허용 경로")
@@ -81,6 +86,31 @@ class SecurityConfigTest {
           .willReturn(new CursorResponse<BuncheolSummaryResponse>(List.of(), null, false));
 
       mockMvc.perform(get("/v1/buncheols")).andExpect(status().isOk());
+    }
+  }
+
+  @Nested
+  @DisplayName("POST /v1/feedbacks — POST 한정 비로그인 허용")
+  class FeedbackPath {
+
+    /**
+     * 의견 보내기는 <b>로그인이 안 된 상태에서 남기는 의견</b>을 받는 것이 목적이라 permitAll 이다. 이 매처가 지워지면 {@code
+     * anyRequest().hasRole("USER")} 로 떨어져 401 이 되며 이 테스트가 깨진다.
+     */
+    @Test
+    void 의견_보내기는_비로그인이어도_401이_아니다() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/feedbacks")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"content\":\"의견\"}"))
+          .andExpect(status().isNoContent());
+    }
+
+    /** permitAll 이 POST 한정임을 잠근다 — 메서드 무관으로 넓어지면 이 테스트가 깨진다. */
+    @Test
+    void 의견_조회는_비로그인이면_401() throws Exception {
+      mockMvc.perform(get("/v1/feedbacks")).andExpect(status().isUnauthorized());
     }
   }
 

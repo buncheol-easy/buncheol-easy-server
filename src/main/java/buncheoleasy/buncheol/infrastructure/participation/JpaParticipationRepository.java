@@ -9,6 +9,7 @@ import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -37,7 +38,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
       @Param("requestedPaybackStatus") PaybackStatus requestedPaybackStatus,
-      @Param("finishedDeliveryStatuses") Collection<DeliveryStatus> finishedDeliveryStatuses);
+      @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 
   boolean existsByBuncheolIdAndParticipantIdAndStatusIn(
       Long buncheolId, Long participantId, Collection<ParticipationStatus> statuses);

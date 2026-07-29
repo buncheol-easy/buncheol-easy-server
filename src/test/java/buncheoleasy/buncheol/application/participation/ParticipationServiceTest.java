@@ -18,6 +18,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.buncheol.dto.request.RefundAccountRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -494,6 +495,74 @@ class ParticipationServiceTest {
       participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
 
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("자동 입금확인 테스트")
+  class ConfirmPaymentBySystemTest {
+
+    private Participation participation;
+    private Buncheol buncheol;
+
+    private Participation stubParticipation() {
+      participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      return participation;
+    }
+
+    @Test
+    void CAS_에_성공하면_CONFIRMED_를_반환하고_수동확인과_같은_후속처리를_수행한다() {
+      Participation participation = stubParticipation();
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.confirmPaymentIfAwaiting(PARTICIPATION_ID, NOW))
+          .willReturn(true);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+      given(buncheolDomainService.confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW)).willReturn(false);
+
+      SystemPaymentConfirmResult result =
+          participationService.confirmPaymentBySystem(PARTICIPATION_ID);
+
+      assertThat(result).isEqualTo(SystemPaymentConfirmResult.CONFIRMED);
+      then(deliverySnapshotCreator).should().create(participation);
+      then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
+    }
+
+    @Test
+    void 이미_확정된_참여면_ALREADY_CONFIRMED_를_반환하고_부수효과를_다시_일으키지_않는다() {
+      // 웹훅 재전송·운영자 수동확인 선행 시나리오. 오류로 응답하면 발신 측이 재전송을 반복한다.
+      Participation participation = stubParticipation();
+      given(participationDomainService.confirmPaymentIfAwaiting(PARTICIPATION_ID, NOW))
+          .willReturn(false);
+      given(participation.getStatus()).willReturn(ParticipationStatus.CONFIRMED);
+
+      SystemPaymentConfirmResult result =
+          participationService.confirmPaymentBySystem(PARTICIPATION_ID);
+
+      assertThat(result).isEqualTo(SystemPaymentConfirmResult.ALREADY_CONFIRMED);
+      then(deliverySnapshotCreator).should(never()).create(any());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 기한이_지나_취소된_참여면_NOT_CONFIRMABLE_을_반환한다() {
+      // 돈은 들어왔는데 참여가 없는 상태. 호출 측이 운영자에게 알려 환불 판단을 받게 한다.
+      Participation participation = stubParticipation();
+      given(participationDomainService.confirmPaymentIfAwaiting(PARTICIPATION_ID, NOW))
+          .willReturn(false);
+      given(participation.getStatus()).willReturn(ParticipationStatus.CANCELLED);
+
+      SystemPaymentConfirmResult result =
+          participationService.confirmPaymentBySystem(PARTICIPATION_ID);
+
+      assertThat(result).isEqualTo(SystemPaymentConfirmResult.NOT_CONFIRMABLE);
+      then(deliverySnapshotCreator).should(never()).create(any());
+      then(eventPublisher).should(never()).publishEvent(any());
     }
   }
 

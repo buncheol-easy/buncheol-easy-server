@@ -64,6 +64,13 @@ delivery:
     connect-timeout: 3s
     read-timeout: 5s
 
+payaction:
+  # 웹훅 인증 경로를 테스트할 수 있게 더미 키를 채운다. base-url 은 비워 아웃바운드 호출은 꺼둔 상태로 남긴다.
+  base-url: ""
+  api-key: ""
+  mall-id: test-mall-id
+  webhook-key: test-webhook-key
+
 aligo:
   alimtalk:
     api-key: test-aligo-api-key

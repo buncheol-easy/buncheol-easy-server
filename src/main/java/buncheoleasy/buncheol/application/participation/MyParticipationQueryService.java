@@ -147,10 +147,11 @@ public class MyParticipationQueryService {
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
+    boolean awaitingPayment = participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT;
     HostAccountResponse hostAccount =
-        participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
-            ? hostAccountByHostId.get(buncheol.getHostId())
-            : null;
+        awaitingPayment ? hostAccountByHostId.get(buncheol.getHostId()) : null;
+    // 입금자명 안내용. 참여 시점 예금주명이라 프로필의 현재 계좌와 다를 수 있고, 자동 입금확인은 이 값으로 매칭한다.
+    String refundHolder = awaitingPayment ? participation.getRefundAccount().holder() : null;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
@@ -168,6 +169,7 @@ public class MyParticipationQueryService {
         thumbnailByBuncheolId.get(participation.getBuncheolId()),
         ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy()),
         hostAccount,
+        refundHolder,
         delivery == null ? null : MyParticipationDeliveryResponse.from(delivery),
         // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(

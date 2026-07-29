@@ -14,6 +14,9 @@ import org.springframework.stereotype.Component;
  * 배송비 환급(배송비 돌려받기) 대상·상태 파생 규칙의 단독 소유자. 저장하지 않는 {@link PaybackStatus#ELIGIBLE}/{@link
  * PaybackStatus#EXPIRED} 는 전부 여기서 계산한다 — 신청 검증(ShippingFeePaybackService)과 참여 목록/상세 응답이 같은 규칙을
  * 공유해야 신청 가능으로 보였는데 신청이 거절되는 불일치가 없다.
+ *
+ * <p>예외: 회원탈퇴 가드({@code ParticipationRepository#existsUnfinishedByParticipantId})는 파생 판정을 재계산하지 않고
+ * 저장 상태(REQUESTED)만 본다 — 신청/재신청 창이 열려 있어도 탈퇴를 막지 않는 운영 정책이라 마감 계산이 필요 없다.
  */
 @Component
 @RequiredArgsConstructor
@@ -69,9 +72,7 @@ public class ShippingFeePaybackPolicy {
   }
 
   private boolean isDeliveryCompleted(final Delivery delivery) {
-    return delivery != null
-        && (delivery.getStatus() == DeliveryStatus.DELIVERED
-            || delivery.getStatus() == DeliveryStatus.RECEIVED);
+    return delivery != null && DeliveryStatus.finished().contains(delivery.getStatus());
   }
 
   /**

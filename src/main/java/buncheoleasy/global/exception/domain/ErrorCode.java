@@ -37,6 +37,8 @@ public enum ErrorCode {
   SHIPPING_METHOD_FORMAT_INVALID("USR-017", "올바른 배송방법 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
   USER_PROFILE_IS_NOT_COMPLETE("USR-018", "사용자의 프로필 설정이 완료되지 않았습니다.", HttpStatus.FORBIDDEN),
 
+  // ACTIVE 라는 이름은 API 하위호환으로 유지한다. 실제 판정은 배송·환급 종료까지 보는 "끝나지 않은(unfinished)"
+  // 기준이며, 상세는 BuncheolRepository/ParticipationRepository 의 existsUnfinished* javadoc 참고.
   USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL(
       "USR-028", "진행 중인 분철이 있어 탈퇴할 수 없습니다.", HttpStatus.CONFLICT),
   USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION(

@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
@@ -134,9 +135,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public boolean existsActiveByParticipantId(final Long participantId) {
-    return jpaParticipationRepository.existsByParticipantIdAndStatusIn(
-        participantId, ParticipationStatus.active());
+  public boolean existsUnfinishedByParticipantId(final Long participantId) {
+    return jpaParticipationRepository.existsUnfinishedByParticipantId(
+        participantId,
+        ParticipationStatus.AWAITING_PAYMENT,
+        ParticipationStatus.CONFIRMED,
+        PaybackStatus.REQUESTED,
+        DeliveryStatus.finished());
   }
 
   @Override

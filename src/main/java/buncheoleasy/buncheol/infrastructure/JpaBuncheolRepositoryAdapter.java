@@ -6,12 +6,11 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -19,10 +18,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 @RequiredArgsConstructor
 public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
-
-  // 호스트의 '진행 중인 분철' 집합 (회원탈퇴 가드용). 모집 중이거나 진행확정된 분철이 있으면 탈퇴할 수 없다.
-  private static final Set<BuncheolStatus> ACTIVE_STATUSES =
-      EnumSet.of(BuncheolStatus.RECRUITING, BuncheolStatus.CONFIRMED);
 
   private final JpaBuncheolRepository jpaBuncheolRepository;
 
@@ -123,8 +118,14 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public boolean existsActiveByHostId(Long hostId) {
-    return jpaBuncheolRepository.existsByHostIdAndStatusIn(hostId, ACTIVE_STATUSES);
+  public boolean existsUnfinishedByHostId(Long hostId) {
+    return jpaBuncheolRepository.existsUnfinishedByHostId(
+        hostId,
+        BuncheolStatus.RECRUITING,
+        BuncheolStatus.CONFIRMED,
+        ParticipationStatus.AWAITING_PAYMENT,
+        ParticipationStatus.CONFIRMED,
+        DeliveryStatus.finished());
   }
 
   @Override

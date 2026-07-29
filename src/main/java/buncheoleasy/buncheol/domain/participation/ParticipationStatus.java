@@ -17,7 +17,8 @@ public enum ParticipationStatus {
   private final String description;
 
   // 멤버 슬롯을 점유한 '살아있는' 참여 상태들. 선착순 중복 점유 가드(generated column),
-  // 분철 취소 시 cascade 대상, 탈퇴 가드, 참여자 수 집계의 공통 기준이다.
+  // 분철 취소 시 cascade 대상, 참여자 수 집계의 공통 기준이다.
+  // 탈퇴 가드는 배송·환급 종료까지 보는 별도 판정(existsUnfinishedByParticipantId)을 쓴다.
   private static final Set<ParticipationStatus> ACTIVE = Set.of(AWAITING_PAYMENT, CONFIRMED);
 
   public static Set<ParticipationStatus> active() {

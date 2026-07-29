@@ -70,10 +70,10 @@ class UserServiceTest {
     }
 
     @Test
-    void 활성_분철을_개최중이면_탈퇴가_거부된다() {
+    void 끝나지_않은_분철을_개최중이면_탈퇴가_거부된다() {
       // given
       Long userId = 1L;
-      given(buncheolDomainService.hasActiveBuncheolHostedBy(userId)).willReturn(true);
+      given(buncheolDomainService.hasUnfinishedBuncheolHostedBy(userId)).willReturn(true);
 
       // when & then
       assertThatThrownBy(() -> userService.withdraw(userId))
@@ -86,11 +86,11 @@ class UserServiceTest {
     }
 
     @Test
-    void 활성_참여가_남아있으면_탈퇴가_거부된다() {
+    void 끝나지_않은_참여가_남아있으면_탈퇴가_거부된다() {
       // given
       Long userId = 1L;
-      given(buncheolDomainService.hasActiveBuncheolHostedBy(userId)).willReturn(false);
-      given(participationDomainService.hasActiveParticipationBy(userId)).willReturn(true);
+      given(buncheolDomainService.hasUnfinishedBuncheolHostedBy(userId)).willReturn(false);
+      given(participationDomainService.hasUnfinishedParticipationBy(userId)).willReturn(true);
 
       // when & then
       assertThatThrownBy(() -> userService.withdraw(userId))

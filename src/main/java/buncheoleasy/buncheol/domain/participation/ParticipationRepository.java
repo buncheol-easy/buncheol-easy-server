@@ -19,8 +19,14 @@ public interface ParticipationRepository {
   /** 내 참여 목록 (참여자별 최신순). */
   List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
 
-  /** 참여자에게 활성({@link ParticipationStatus#active()}) 참여가 하나라도 있는지 (회원탈퇴 가드용). */
-  boolean existsActiveByParticipantId(Long participantId);
+  /**
+   * 참여자에게 아직 끝나지 않은 참여가 하나라도 있는지 (회원탈퇴 가드용). 입금 확인 중({@link
+   * ParticipationStatus#AWAITING_PAYMENT})이거나, 입금확인({@link ParticipationStatus#CONFIRMED})됐지만 배송이
+   * 끝나지 않았거나({@link buncheoleasy.delivery.domain.DeliveryStatus#finished()} 이전), 배송비 환급 신청이 검수
+   * 대기({@link PaybackStatus#REQUESTED}) 중이면 끝나지 않은 참여로 본다. 취소·만료된 참여와 배송·환급 검수까지 끝난 참여는 탈퇴를 막지
+   * 않는다.
+   */
+  boolean existsUnfinishedByParticipantId(Long participantId);
 
   /**
    * 해당 분철에 참여자의 활성({@link ParticipationStatus#active()}) 참여가 있는지 (분철당 중복 참여 가드용). 취소·만료된 참여는

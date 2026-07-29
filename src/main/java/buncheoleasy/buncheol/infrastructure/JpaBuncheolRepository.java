@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -78,11 +79,27 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("cursorId") Long cursorId,
       Pageable pageable);
 
+  /**
+   * 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드). 모집중이거나, 진행확정됐지만 입금확인 참여 중 배송이 끝나지 않은 건이 하나라도
+   * 남아 있으면 끝나지 않은 분철로 판정한다 (배송 스냅샷이 없는 입금확인 참여도 미종료로 본다).
+   */
   @Query(
       "SELECT COUNT(b) > 0 FROM Buncheol b "
-          + "WHERE b.hostId = :hostId AND b.status IN :activeStatuses")
-  boolean existsByHostIdAndStatusIn(
-      @Param("hostId") Long hostId, @Param("activeStatuses") Set<BuncheolStatus> activeStatuses);
+          + "WHERE b.hostId = :hostId "
+          + "AND (b.status = :recruitingStatus "
+          + "  OR (b.status = :confirmedStatus "
+          + "    AND EXISTS ("
+          + "      SELECT p FROM Participation p "
+          + "      WHERE p.buncheolId = b.id AND p.status = :confirmedParticipationStatus "
+          + "      AND NOT EXISTS ("
+          + "        SELECT d FROM Delivery d "
+          + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
+  boolean existsUnfinishedByHostId(
+      @Param("hostId") Long hostId,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 
   // 최근 N일 분철 등록 수 상위 그룹 id 만 인기도 순으로 반환. Group 본문 매핑은 호출 측 책임.
   // 부정 조건(`status <> CANCELLED`) 대신 IN 절을 써 옵티마이저가 인덱스 활용을 안정적으로 판단하게 한다.

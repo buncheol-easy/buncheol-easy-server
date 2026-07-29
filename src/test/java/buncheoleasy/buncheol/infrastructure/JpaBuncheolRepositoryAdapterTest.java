@@ -270,19 +270,77 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("호스트의 활성 분철 존재 여부 테스트")
-  class ExistsActiveByHostIdTest {
+  @DisplayName("호스트의 끝나지 않은 분철 존재 여부 테스트")
+  class ExistsUnfinishedByHostIdTest {
+
+    private int fixtureSeq = 0;
+
+    // CONFIRMED 분철에 입금확인 참여 한 건을 깔고 참여 id 를 반환한다. 슬롯·참여자는 매번 새로 만들어
+    // uq_buncheol_members_buncheol_member / uq_participations_active_* 유니크와 충돌하지 않게 한다.
+    private Long insertConfirmedParticipation(final Long buncheolId) {
+      fixtureSeq++;
+      Long participantId = TestUserFixture.insertUser(jdbcTemplate, "guard_p" + fixtureSeq);
+      Long groupMemberId =
+          TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "가드멤버" + fixtureSeq);
+      jdbcTemplate.update(
+          "INSERT INTO buncheol_members (buncheol_id, member_id, price) VALUES (?, ?, ?)",
+          buncheolId,
+          groupMemberId,
+          30_000L);
+      Long buncheolMemberId =
+          jdbcTemplate.queryForObject(
+              "SELECT MAX(id) FROM buncheol_members WHERE buncheol_id = ? AND member_id = ?",
+              Long.class,
+              buncheolId,
+              groupMemberId);
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+              + " amount, refund_bank, refund_account, refund_holder, due_at, status)"
+              + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          30_000L,
+          "국민",
+          "12345678",
+          "홍길동",
+          Timestamp.from(Instant.now()),
+          "CONFIRMED");
+      return jdbcTemplate.queryForObject(
+          "SELECT MAX(id) FROM participations WHERE buncheol_member_id = ?",
+          Long.class,
+          buncheolMemberId);
+    }
+
+    private void insertDelivery(final Long participationId, final String deliveryStatus) {
+      jdbcTemplate.update(
+          "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+              + " receiver_nickname, receiver_phone_number, status)"
+              + " VALUES (?, ?, ?, ?, ?, ?)",
+          participationId,
+          "GS25_HALF",
+          "매장",
+          "닉네임",
+          "01012345678",
+          deliveryStatus);
+    }
+
+    private Long persistConfirmedBuncheol() {
+      Buncheol confirmed = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(confirmed.getId(), BuncheolStatus.CONFIRMED);
+      return confirmed.getId();
+    }
 
     @Test
     void 호스트의_분철이_없으면_false를_반환한다() {
-      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
     }
 
     @Test
     void 호스트의_RECRUITING_분철이_있으면_true를_반환한다() {
       persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
 
-      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isTrue();
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
     }
 
     @Test
@@ -292,23 +350,50 @@ class JpaBuncheolRepositoryAdapterTest {
       forceStatus(cancelledA.getId(), BuncheolStatus.CANCELLED);
       forceStatus(cancelledB.getId(), BuncheolStatus.CANCELLED);
 
-      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
     }
 
     @Test
-    void 호스트의_CONFIRMED_분철이_있으면_true를_반환한다() {
-      Buncheol confirmed = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      forceStatus(confirmed.getId(), BuncheolStatus.CONFIRMED);
+    void 호스트가_직접_취소한_분철만_있으면_false를_반환한다() {
+      Buncheol hostCancelled =
+          persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(hostCancelled.getId(), BuncheolStatus.HOST_CANCELLED);
 
-      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isTrue();
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
     }
 
     @Test
-    void 다른_호스트의_활성_분철은_영향을_주지_않는다() {
+    void CONFIRMED_분철에_배송이_끝나지_않은_참여가_있으면_true를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      Long participationId = insertConfirmedParticipation(buncheolId);
+      insertDelivery(participationId, "SHIPPING");
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
+    }
+
+    @Test
+    void CONFIRMED_분철에_배송_스냅샷이_없는_입금확인_참여가_있으면_true를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertConfirmedParticipation(buncheolId);
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
+    }
+
+    @Test
+    void CONFIRMED_분철의_모든_참여_배송이_끝났으면_false를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "DELIVERED");
+      insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void 다른_호스트의_끝나지_않은_분철은_영향을_주지_않는다() {
       Long otherHostId = TestUserFixture.insertUser(jdbcTemplate, "other_host");
       persistAndDetach(Buncheol.create(otherHostId, validParams(), Instant.now()));
 
-      assertThat(buncheolRepository.existsActiveByHostId(hostId)).isFalse();
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
     }
   }
 

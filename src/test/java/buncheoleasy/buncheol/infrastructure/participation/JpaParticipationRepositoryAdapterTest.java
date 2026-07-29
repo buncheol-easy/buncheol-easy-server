@@ -231,11 +231,45 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("existsActiveByParticipantId — 탈퇴 가드용 활성 참여 존재 여부")
-  class ExistsActiveByParticipantIdTest {
+  @DisplayName("existsUnfinishedByParticipantId — 탈퇴 가드용 끝나지 않은 참여 존재 여부")
+  class ExistsUnfinishedByParticipantIdTest {
+
+    private Long insertConfirmed(final String storeName) {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      return insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          insertShippingAddress(participantId, storeName),
+          30_000L,
+          Instant.now().plus(20, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+    }
+
+    private void insertDelivery(final Long participationId, final String deliveryStatus) {
+      jdbcTemplate.update(
+          "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+              + " receiver_nickname, receiver_phone_number, status)"
+              + " VALUES (?, ?, ?, ?, ?, ?)",
+          participationId,
+          "GS25_HALF",
+          "매장",
+          "닉네임",
+          "01012345678",
+          deliveryStatus);
+    }
+
+    private void updatePaybackStatus(final Long participationId, final PaybackStatus status) {
+      jdbcTemplate.update(
+          "UPDATE participations SET payback_status = ? WHERE id = ?",
+          status.name(),
+          participationId);
+    }
 
     @Test
-    void 활성_참여가_있으면_true_를_반환한다() {
+    void 입금_확인_중인_참여가_있으면_true_를_반환한다() {
       Long buncheolId = createBuncheol();
       Long buncheolMemberId = createBuncheolMember(buncheolId);
       Long addr = insertShippingAddress(participantId, "활성매장");
@@ -249,7 +283,7 @@ class JpaParticipationRepositoryAdapterTest {
           ParticipationStatus.AWAITING_PAYMENT,
           null);
 
-      assertThat(participationRepository.existsActiveByParticipantId(participantId)).isTrue();
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isTrue();
     }
 
     @Test
@@ -267,7 +301,53 @@ class JpaParticipationRepositoryAdapterTest {
           ParticipationStatus.CANCELLED,
           ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
-      assertThat(participationRepository.existsActiveByParticipantId(participantId)).isFalse();
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isFalse();
+    }
+
+    @Test
+    void 입금확인됐지만_배송이_끝나지_않았으면_true_를_반환한다() {
+      Long participationId = insertConfirmed("배송중매장");
+      insertDelivery(participationId, "SHIPPING");
+
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isTrue();
+    }
+
+    @Test
+    void 입금확인됐지만_배송_스냅샷이_없으면_true_를_반환한다() {
+      insertConfirmed("스냅샷없음매장");
+
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isTrue();
+    }
+
+    @Test
+    void 배송이_끝난_참여만_있으면_false_를_반환한다() {
+      Long delivered = insertConfirmed("배송완료매장");
+      insertDelivery(delivered, "DELIVERED");
+      Long received = insertConfirmed("수령완료매장");
+      insertDelivery(received, "RECEIVED");
+
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isFalse();
+    }
+
+    @Test
+    void 배송이_끝났어도_환급_신청이_검수_대기_중이면_true_를_반환한다() {
+      Long participationId = insertConfirmed("환급대기매장");
+      insertDelivery(participationId, "RECEIVED");
+      updatePaybackStatus(participationId, PaybackStatus.REQUESTED);
+
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isTrue();
+    }
+
+    @Test
+    void 배송이_끝나고_환급이_완료되거나_반려됐으면_false_를_반환한다() {
+      Long completed = insertConfirmed("환급완료매장");
+      insertDelivery(completed, "RECEIVED");
+      updatePaybackStatus(completed, PaybackStatus.COMPLETED);
+      Long rejected = insertConfirmed("환급반려매장");
+      insertDelivery(rejected, "RECEIVED");
+      updatePaybackStatus(rejected, PaybackStatus.REJECTED);
+
+      assertThat(participationRepository.existsUnfinishedByParticipantId(participantId)).isFalse();
     }
   }
 

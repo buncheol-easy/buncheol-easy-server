@@ -29,13 +29,16 @@ public class UserService {
   private final ParticipationDomainService participationDomainService;
   private final RefreshTokenStore refreshTokenStore;
 
-  /** 활성 분철(개최)·활성 참여가 남아 있으면 탈퇴를 거부한다. */
+  /**
+   * 아직 끝나지 않은 분철(개최)·참여가 남아 있으면 탈퇴를 거부한다. 취소·만료로 끝났거나, 배송(운송사 배송완료 이후)·환급 검수까지 끝난 건은 탈퇴를 막지
+   * 않는다. 판정 기준은 각 리포지토리 포트 javadoc 참고.
+   */
   @Transactional
   public void withdraw(final Long userId) {
-    if (buncheolDomainService.hasActiveBuncheolHostedBy(userId)) {
+    if (buncheolDomainService.hasUnfinishedBuncheolHostedBy(userId)) {
       throw new BusinessException(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL);
     }
-    if (participationDomainService.hasActiveParticipationBy(userId)) {
+    if (participationDomainService.hasUnfinishedParticipationBy(userId)) {
       throw new BusinessException(ErrorCode.USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION);
     }
 

@@ -73,7 +73,8 @@ public class BuncheolDomainService {
     throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
   }
 
-  public boolean hasActiveBuncheolHostedBy(final Long hostId) {
-    return buncheolRepository.existsActiveByHostId(hostId);
+  /** 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
+  public boolean hasUnfinishedBuncheolHostedBy(final Long hostId) {
+    return buncheolRepository.existsUnfinishedByHostId(hostId);
   }
 }

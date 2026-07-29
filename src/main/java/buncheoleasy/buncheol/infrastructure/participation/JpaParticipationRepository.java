@@ -5,9 +5,11 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -18,8 +20,25 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   List<Participation> findAllByParticipantIdOrderByCreatedAtDesc(Long participantId);
 
-  boolean existsByParticipantIdAndStatusIn(
-      Long participantId, Collection<ParticipationStatus> statuses);
+  /**
+   * 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드). 입금 확인 중이거나, 입금확인됐지만 배송이 끝나지 않았거나
+   * (배송 스냅샷이 없으면 미종료로 본다), 배송비 환급 신청이 검수 대기 중이면 끝나지 않은 것으로 판정한다.
+   */
+  @Query(
+      "SELECT COUNT(p) > 0 FROM Participation p "
+          + "WHERE p.participantId = :participantId "
+          + "AND (p.status = :awaitingStatus "
+          + "  OR (p.status = :confirmedStatus "
+          + "    AND (p.paybackStatus = :requestedPaybackStatus "
+          + "      OR NOT EXISTS ("
+          + "        SELECT d FROM Delivery d "
+          + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
+  boolean existsUnfinishedByParticipantId(
+      @Param("participantId") Long participantId,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("requestedPaybackStatus") PaybackStatus requestedPaybackStatus,
+      @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 
   boolean existsByBuncheolIdAndParticipantIdAndStatusIn(
       Long buncheolId, Long participantId, Collection<ParticipationStatus> statuses);

@@ -39,8 +39,9 @@ public class ParticipationDomainService {
     return participationRepository.countConfirmedByBuncheolId(buncheolId);
   }
 
-  public boolean hasActiveParticipationBy(final Long participantId) {
-    return participationRepository.existsActiveByParticipantId(participantId);
+  /** 참여자에게 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
+  public boolean hasUnfinishedParticipationBy(final Long participantId) {
+    return participationRepository.existsUnfinishedByParticipantId(participantId);
   }
 
   /** 해당 분철에 참여자의 활성 참여가 있는지 (분철당 중복 참여 가드용). 취소·만료된 참여는 재참여를 막지 않는다. */

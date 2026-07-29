@@ -123,21 +123,21 @@ class ParticipationDomainServiceTest {
   }
 
   @Nested
-  @DisplayName("참여자의 활성 참여 존재 여부 테스트")
-  class HasActiveParticipationByTest {
+  @DisplayName("참여자의 끝나지 않은 참여 존재 여부 테스트")
+  class HasUnfinishedParticipationByTest {
 
     @Test
-    void 활성_참여가_있으면_true를_반환한다() {
-      given(participationRepository.existsActiveByParticipantId(100L)).willReturn(true);
+    void 끝나지_않은_참여가_있으면_true를_반환한다() {
+      given(participationRepository.existsUnfinishedByParticipantId(100L)).willReturn(true);
 
-      assertThat(participationDomainService.hasActiveParticipationBy(100L)).isTrue();
+      assertThat(participationDomainService.hasUnfinishedParticipationBy(100L)).isTrue();
     }
 
     @Test
-    void 활성_참여가_없으면_false를_반환한다() {
-      given(participationRepository.existsActiveByParticipantId(100L)).willReturn(false);
+    void 끝나지_않은_참여가_없으면_false를_반환한다() {
+      given(participationRepository.existsUnfinishedByParticipantId(100L)).willReturn(false);
 
-      assertThat(participationDomainService.hasActiveParticipationBy(100L)).isFalse();
+      assertThat(participationDomainService.hasUnfinishedParticipationBy(100L)).isFalse();
     }
   }
 

@@ -16,6 +16,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, production]
+    # 정상 배포는 6분 20초대. 메모리 부족으로 빌드가 멈추면 실패하지 않고 기본 360분까지 매달리므로
+    # (2026-07-29 사고: 27분·15분간 멈춤, 사람이 알아채고 취소) 빠르게 실패하도록 상한을 둔다.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout source

@@ -178,6 +178,48 @@ class SecurityConfigTest {
           .andExpect(jsonPath("$.status").value("success"));
     }
 
+    /**
+     * 상점ID 는 비밀값이 아니라 인증 강도에 기여하지 않으므로 필수로 두지 않는다. 페이액션이 이 헤더를 싣지 않아도 자동확인이 죽지 않아야 한다(문서상 헤더 구성이
+     * 엇갈려 실제로 올지 확신할 수 없다).
+     */
+    @Test
+    void 상점ID_헤더가_없어도_비밀키만_맞으면_200() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/deposits/payaction/webhook")
+                  .header("x-webhook-key", "test-webhook-key")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(BODY))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("success"));
+    }
+
+    /** 문서가 헤더 이름을 x-webhook-key / X-API-Key 로 엇갈리게 안내해 둘 다 수용한다. */
+    @Test
+    void x_api_key_헤더로_와도_200() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/deposits/payaction/webhook")
+                  .header("x-api-key", "test-webhook-key")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(BODY))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("success"));
+    }
+
+    /** 상점ID 가 실려 왔는데 우리 설정과 다르면 거른다. */
+    @Test
+    void 상점ID가_실려왔는데_불일치면_401() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/deposits/payaction/webhook")
+                  .header("x-webhook-key", "test-webhook-key")
+                  .header("x-mall-id", "other-mall")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(BODY))
+          .andExpect(status().isUnauthorized());
+    }
+
     /** 공개 경로라도 컨트롤러가 공유 비밀키를 검증한다. */
     @Test
     void 키가_틀리면_401() throws Exception {

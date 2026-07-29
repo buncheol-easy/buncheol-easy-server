@@ -26,9 +26,12 @@ public record PayActionProperties(
     return isSet(baseUrl) && isSet(apiKey) && isSet(mallId);
   }
 
-  /** 수신 웹훅을 검증할 수 있는 환경인지. 검증 키가 없으면 웹훅을 신뢰할 수 없으므로 수신 자체를 거부한다. */
+  /**
+   * 수신 웹훅을 검증할 수 있는 환경인지. 검증 키가 없으면 웹훅을 신뢰할 수 없으므로 수신 자체를 거부한다. 상점ID 는 비밀값이 아니라 인증 강도에 기여하지 않으므로
+   * 여기서 요구하지 않는다.
+   */
   public boolean webhookEnabled() {
-    return isSet(webhookKey) && isSet(mallId);
+    return isSet(webhookKey);
   }
 
   private static boolean isSet(final String value) {

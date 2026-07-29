@@ -48,13 +48,20 @@ public class DepositWebhookController {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
     if (!isAuthentic(webhookKey, apiKey, mallId)) {
-      log.warn("페이액션 웹훅 수신 - 인증 실패 - traceId={} mallIdPresent={}", traceId, mallId != null);
+      // 연동 초기 진단용. 어떤 헤더가 실제로 왔는지 알아야 문서와 실제의 차이를 좁힐 수 있다(값은 남기지 않는다).
+      log.warn(
+          "페이액션 웹훅 수신 - 인증 실패 - traceId={} 수신헤더=[webhookKey={} apiKey={} mallId={}]",
+          traceId,
+          webhookKey != null,
+          apiKey != null,
+          mallId != null);
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
     log.info(
-        "페이액션 웹훅 수신 - orderNumber={} status={} traceId={} keyHeader={}",
+        "페이액션 웹훅 수신 - orderNumber={} status={} processingDate={} traceId={} keyHeader={}",
         request.orderNumber(),
         request.orderStatus(),
+        request.processingDate(),
         traceId,
         webhookKey != null ? "x-webhook-key" : "x-api-key");
 
@@ -63,10 +70,17 @@ public class DepositWebhookController {
     return ResponseEntity.ok(SUCCESS_BODY);
   }
 
+  /**
+   * 실질 인증은 비밀키 단독이다. 상점ID 는 비밀값이 아니라 스푸핑 방어에 기여하지 않으므로, 수신됐을 때만 불일치를 거른다 — 필수로 두면 페이액션이 이 헤더를
+   * 싣지 않을 때 모든 요청이 401 이 되어 자동확인이 통째로 죽는다(문서상 헤더 구성이 이미 엇갈려 있어 실제로 올지 확신할 수 없다).
+   */
   private boolean isAuthentic(
       final String webhookKey, final String apiKey, final String mallId) {
     String presentedKey = webhookKey != null ? webhookKey : apiKey;
-    return matches(presentedKey, properties.webhookKey()) && matches(mallId, properties.mallId());
+    if (!matches(presentedKey, properties.webhookKey())) {
+      return false;
+    }
+    return mallId == null || matches(mallId, properties.mallId());
   }
 
   /** 타이밍 공격을 피하려 상수 시간 비교한다. */

@@ -1,5 +1,6 @@
 package buncheoleasy.deposit.application;
 
+import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -55,6 +56,16 @@ public class DepositOrderListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentExpired(final PaymentExpiredEvent event) {
+    excludeQuietly(event.participationId());
+  }
+
+  /**
+   * 분철 취소 cascade 로 참여가 취소됨 → 매칭 대기 해제. 해제하지 않으면 최대 dueAt 까지 주문이 살아 있어, 뒤늦은 입금이 매칭돼 불필요한 알림이 나가거나
+   * 같은 사용자가 동일 금액으로 재참여했을 때 옛 주문이 매칭을 가져가 새 참여의 자동확정을 방해할 수 있다.
+   */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBuncheolCancelled(final BuncheolCancelledEvent event) {
     excludeQuietly(event.participationId());
   }
 

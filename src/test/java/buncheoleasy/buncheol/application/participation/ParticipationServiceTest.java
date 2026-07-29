@@ -502,12 +502,15 @@ class ParticipationServiceTest {
   @DisplayName("자동 입금확인 테스트")
   class ConfirmPaymentBySystemTest {
 
+    private Participation participation;
+    private Buncheol buncheol;
+
     private Participation stubParticipation() {
-      Participation participation = mock(Participation.class);
+      participation = mock(Participation.class);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
-      Buncheol buncheol = mock(Buncheol.class);
+      buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       return participation;
     }
@@ -515,7 +518,7 @@ class ParticipationServiceTest {
     @Test
     void CAS_에_성공하면_CONFIRMED_를_반환하고_수동확인과_같은_후속처리를_수행한다() {
       Participation participation = stubParticipation();
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID).getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(participationDomainService.confirmPaymentIfAwaiting(PARTICIPATION_ID, NOW))
           .willReturn(true);
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))

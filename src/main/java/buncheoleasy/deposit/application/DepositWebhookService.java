@@ -12,8 +12,10 @@ import org.springframework.stereotype.Service;
 /**
  * 페이액션 매칭완료 웹훅을 받아 참여를 자동 확정한다. 주문번호로 참여 ID 를 그대로 쓰므로 별도 매핑 테이블이 없다.
  *
- * <p>웹훅은 최대 3회 재전송되므로 어떤 경우에도 예외를 밖으로 던지지 않는다. 이미 확정된 건은 정상 처리로 넘기고, 확정할 수 없는 건(기한 경과·분철 취소)은 돈은
- * 들어왔는데 참여가 없는 상태라 운영자에게 알린다 — 이 알림이 자동확인 실패 시의 안전망이다.
+ * <p>재전송해도 결과가 같은 실패(알 수 없는 주문번호, 존재하지 않는 참여, 기한 경과)는 예외를 삼키고 정상 응답한다 — 오류를 돌려주면 페이액션이 재전송을
+ * 반복하다 발송 자체를 중단하기 때문이다. 반대로 DB 장애 같은 인프라 예외는 일시적이라 그대로 전파해 재전송을 유도한다.
+ *
+ * <p>확정할 수 없는 건은 돈은 들어왔는데 확정할 참여가 없는 상태라 운영자에게 알린다 — 이 알림이 자동확인 실패 시의 안전망이다.
  */
 @Slf4j
 @Service
@@ -70,8 +72,9 @@ public class DepositWebhookService {
       case ALREADY_CONFIRMED ->
           log.info("페이액션 웹훅 - 이미 확정된 참여 - participationId={}", participationId);
       case NOT_CONFIRMABLE -> {
+        // 취소된 경우뿐 아니라 아직 AWAITING_PAYMENT 인데 기한만 지난 경우(만료 스케줄러 실행 전)도 여기로 들어온다.
         log.warn("페이액션 웹훅 - 확정 불가(기한 경과·취소) - participationId={}", participationId);
-        alert("입금이 확인됐지만 참여가 이미 취소된 상태입니다. 환불 여부를 확인해 주세요.", String.valueOf(participationId));
+        alert("입금이 확인됐지만 확정할 수 없는 상태입니다(기한 경과 또는 취소). 환불 여부를 확인해 주세요.", String.valueOf(participationId));
       }
     }
   }

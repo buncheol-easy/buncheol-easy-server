@@ -77,6 +77,11 @@ dependencies {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
 
+    // 테스트는 Gradle 과 별도 JVM 으로 포크되며, 미지정 시 힙 상한이 호스트 메모리의 1/4 로 잡힌다.
+    // 배포 빌드가 도는 t3.small(2GB) 에서는 그 기본값이 남은 여유를 넘겨 스왑 스래싱을 일으키므로 명시한다.
+    // DocsTest 19개(= Spring 컨텍스트 19개)가 이 힙 안에서 통과하는 것을 확인했다.
+    maxHeapSize = '384m'
+
     doFirst {
         def agent = configurations.testRuntimeClasspath.find {
             it.name.contains("byte-buddy-agent")

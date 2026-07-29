@@ -2,8 +2,11 @@ FROM eclipse-temurin:21-jdk AS build
 
 WORKDIR /app
 
-# Gradle 빌드 JVM 힙 제한 (t3.small 2GB OOM 방지)
-ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx768m"
+# Gradle 빌드 JVM 힙 제한 (t3.small 2GB).
+# 배포는 앱·프론트·모니터링 컨테이너(합계 ~900MB)가 떠 있는 상태에서 돌기 때문에 빌드가 쓸 수 있는 여유는 ~580MB 뿐이다.
+# 여기에 더해 테스트는 별도 JVM 으로 포크되며 그 힙은 GRADLE_OPTS 가 아니라 build.gradle 의 maxHeapSize 가 정한다.
+# 둘을 합친 요구량이 여유를 넘으면 스왑 스래싱으로 빌드가 사실상 멈춘다(2026-07-29 배포 2건 중단).
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx512m"
 
 COPY gradlew settings.gradle build.gradle ./
 COPY gradle ./gradle

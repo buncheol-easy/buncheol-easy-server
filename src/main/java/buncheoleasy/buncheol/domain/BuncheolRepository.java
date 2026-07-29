@@ -33,7 +33,7 @@ public interface BuncheolRepository {
 
   /**
    * 호스트에게 아직 끝나지 않은 분철이 하나라도 있는지 (회원탈퇴 가드용). 모집중({@link BuncheolStatus#RECRUITING})이거나, 진행확정({@link
-   * BuncheolStatus#CONFIRMED})됐지만 입금확인 참여 중 배송이 끝나지 않은({@link
+   * BuncheolStatus#CONFIRMED})됐지만 호스트가 입금확인해 줘야 할 참여(입금 확인 중)가 남아 있거나, 입금확인 참여 중 배송이 끝나지 않은({@link
    * buncheoleasy.delivery.domain.DeliveryStatus#finished()} 이전) 건이 남아 있으면 끝나지 않은 분철로 본다. 취소된 분철과 전
    * 참여 배송이 끝난 진행확정 분철은 탈퇴를 막지 않는다 (배송비 환급 진행 여부는 보지 않는다).
    */

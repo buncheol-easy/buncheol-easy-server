@@ -275,9 +275,9 @@ class JpaBuncheolRepositoryAdapterTest {
 
     private int fixtureSeq = 0;
 
-    // CONFIRMED 분철에 입금확인 참여 한 건을 깔고 참여 id 를 반환한다. 슬롯·참여자는 매번 새로 만들어
+    // 분철에 지정 상태의 참여 한 건을 깔고 참여 id 를 반환한다. 슬롯·참여자는 매번 새로 만들어
     // uq_buncheol_members_buncheol_member / uq_participations_active_* 유니크와 충돌하지 않게 한다.
-    private Long insertConfirmedParticipation(final Long buncheolId) {
+    private Long insertParticipation(final Long buncheolId, final String participationStatus) {
       fixtureSeq++;
       Long participantId = TestUserFixture.insertUser(jdbcTemplate, "guard_p" + fixtureSeq);
       Long groupMemberId =
@@ -305,11 +305,15 @@ class JpaBuncheolRepositoryAdapterTest {
           "12345678",
           "홍길동",
           Timestamp.from(Instant.now()),
-          "CONFIRMED");
+          participationStatus);
       return jdbcTemplate.queryForObject(
           "SELECT MAX(id) FROM participations WHERE buncheol_member_id = ?",
           Long.class,
           buncheolMemberId);
+    }
+
+    private Long insertConfirmedParticipation(final Long buncheolId) {
+      return insertParticipation(buncheolId, "CONFIRMED");
     }
 
     private void insertDelivery(final Long participationId, final String deliveryStatus) {
@@ -386,6 +390,25 @@ class JpaBuncheolRepositoryAdapterTest {
       insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
 
       assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void CONFIRMED_분철에_배송_완료와_미완료_참여가_섞여_있으면_true를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
+      insertDelivery(insertConfirmedParticipation(buncheolId), "SHIPPING");
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
+    }
+
+    @Test
+    void CONFIRMED_분철에_입금_확인_중_참여가_남아_있으면_배송이_모두_끝났어도_true를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
+      // 만료 스케줄러가 아직 취소하지 못한 입금 확인 중 참여 — 호스트가 입금확인해 줘야 하므로 미종료.
+      insertParticipation(buncheolId, "AWAITING_PAYMENT");
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
     }
 
     @Test

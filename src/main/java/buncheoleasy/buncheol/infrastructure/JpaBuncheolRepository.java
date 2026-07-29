@@ -80,8 +80,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       Pageable pageable);
 
   /**
-   * 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드). 모집중이거나, 진행확정됐지만 입금확인 참여 중 배송이 끝나지 않은 건이 하나라도
-   * 남아 있으면 끝나지 않은 분철로 판정한다 (배송 스냅샷이 없는 입금확인 참여도 미종료로 본다).
+   * 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드). 모집중이거나, 진행확정됐지만 호스트가 입금확인해 줘야 할 참여(입금 확인 중)가
+   * 남아 있거나, 입금확인 참여 중 배송이 끝나지 않은 건이 하나라도 남아 있으면 끝나지 않은 분철로 판정한다 (배송 스냅샷이 없는 입금확인 참여도
+   * 미종료로 본다). 진행확정 분철의 입금 확인 중 참여는 만료 스케줄러가 곧 취소하는 게 정상 흐름이지만, 스케줄러 지연 사이에 호스트가 탈퇴하면
+   * 해당 참여자의 참여 상세(호스트 조회)가 깨지므로 배송 조건 없이 미종료로 본다.
    */
   @Query(
       "SELECT COUNT(b) > 0 FROM Buncheol b "
@@ -90,14 +92,18 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "  OR (b.status = :confirmedStatus "
           + "    AND EXISTS ("
           + "      SELECT p FROM Participation p "
-          + "      WHERE p.buncheolId = b.id AND p.status = :confirmedParticipationStatus "
-          + "      AND NOT EXISTS ("
-          + "        SELECT d FROM Delivery d "
-          + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
+          + "      WHERE p.buncheolId = b.id "
+          + "      AND (p.status = :awaitingParticipationStatus "
+          + "        OR (p.status = :confirmedParticipationStatus "
+          + "          AND NOT EXISTS ("
+          + "            SELECT d FROM Delivery d "
+          + "            WHERE d.participationId = p.id "
+          + "            AND d.status IN :finishedDeliveryStatuses))))))")
   boolean existsUnfinishedByHostId(
       @Param("hostId") Long hostId,
       @Param("recruitingStatus") BuncheolStatus recruitingStatus,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("awaitingParticipationStatus") ParticipationStatus awaitingParticipationStatus,
       @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
       @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 

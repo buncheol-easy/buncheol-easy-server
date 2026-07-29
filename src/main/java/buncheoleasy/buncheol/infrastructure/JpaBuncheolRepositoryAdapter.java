@@ -123,6 +123,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         hostId,
         BuncheolStatus.RECRUITING,
         BuncheolStatus.CONFIRMED,
+        ParticipationStatus.AWAITING_PAYMENT,
         ParticipationStatus.CONFIRMED,
         DeliveryStatus.finished());
   }

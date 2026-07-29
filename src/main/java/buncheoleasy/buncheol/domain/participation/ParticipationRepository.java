@@ -25,6 +25,10 @@ public interface ParticipationRepository {
    * 끝나지 않았거나({@link buncheoleasy.delivery.domain.DeliveryStatus#finished()} 이전), 배송비 환급 신청이 검수
    * 대기({@link PaybackStatus#REQUESTED}) 중이면 끝나지 않은 참여로 본다. 취소·만료된 참여와 배송·환급 검수까지 끝난 참여는 탈퇴를 막지
    * 않는다.
+   *
+   * <p>환급 미신청({@link PaybackStatus#NONE})·반려({@link PaybackStatus#REJECTED})는 신청/재신청 창이 남아 있어도
+   * 탈퇴를 막지 않는다 — 검수 대기만 차단하는 운영 정책 결정이며, 탈퇴로 환급 자격을 포기하게 된다는 안내는 프론트 탈퇴 확인 모달이 담당한다.
+   * 환급 상태는 저장값만 보고 파생 판정(ELIGIBLE/EXPIRED, {@code ShippingFeePaybackPolicy} 소유)은 여기서 재계산하지 않는다.
    */
   boolean existsUnfinishedByParticipantId(Long participantId);
 

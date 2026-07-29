@@ -208,8 +208,11 @@ class UserControllerDocsTest extends DocsTestSupport {
                         .summary("회원 탈퇴")
                         .description(
                             "로그인한 사용자를 탈퇴 처리한다. "
-                                + "활성 개최 분철이 있으면 409 `USR-028` (`USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL`), "
-                                + "활성 참여가 있으면 409 `USR-029` (`USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION`) 로 거부된다.")
+                                + "끝나지 않은 개최 분철(모집중이거나, 진행확정 후 배송이 끝나지 않은 참여가 남은 분철)이 있으면 "
+                                + "409 `USR-028` (`USER_WITHDRAW_BLOCKED_BY_ACTIVE_BUNCHEOL`), "
+                                + "끝나지 않은 참여(입금 확인 중이거나, 입금확인 후 배송이 끝나지 않았거나, 배송비 환급 신청 검수 대기 중)가 있으면 "
+                                + "409 `USR-029` (`USER_WITHDRAW_BLOCKED_BY_ACTIVE_PARTICIPATION`) 로 거부된다. "
+                                + "배송은 운송사 배송완료(DELIVERED)부터 끝난 것으로 본다.")
                         .requestHeaders(userAuthorizationHeader())
                         .build())));
   }

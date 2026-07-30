@@ -16,6 +16,7 @@ import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEven
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
@@ -204,6 +205,53 @@ class AlimtalkNotificationListenerTest {
           .containsEntry("닉네임", "참여자닉")
           .containsEntry("분철명", "르세라핌 앨범")
           .containsEntry("멤버명", "카즈하")
+          .containsEntry("운송장번호", "CJ123456789");
+      verify(inboxRecorder).record(eq(11L), eq(expectedTemplate), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("미수령 독촉(onPickupReminderDue)")
+  class PickupReminderDue {
+
+    @Test
+    @DisplayName("CU 택배는 PICKUP_REMINDER_CU 로 발송")
+    void cu() {
+      assertReminderSends(ShippingMethod.CU_HALF, AlimtalkTemplate.PICKUP_REMINDER_CU);
+    }
+
+    @Test
+    @DisplayName("GS25 택배는 PICKUP_REMINDER_GS25 로 발송")
+    void gs25() {
+      assertReminderSends(ShippingMethod.GS25_HALF, AlimtalkTemplate.PICKUP_REMINDER_GS25);
+    }
+
+    private void assertReminderSends(
+        final ShippingMethod method, final AlimtalkTemplate expectedTemplate) {
+      Delivery delivery = mock(Delivery.class);
+      given(delivery.getParticipationId()).willReturn(PARTICIPATION_ID);
+      given(delivery.getShippingMethod()).willReturn(method);
+      given(delivery.getStoreName()).willReturn("잠실점");
+      given(delivery.getTrackingNumber()).willReturn("CJ123456789");
+      given(assembler.loadDelivery(DELIVERY_ID)).willReturn(delivery);
+
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("르세라핌 앨범");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class), buncheol, "카즈하", participant, mock(User.class), 0L));
+
+      listener.onPickupReminderDue(new PickupReminderDueEvent(DELIVERY_ID));
+
+      Map<String, String> variables = captureSend(expectedTemplate, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "참여자닉")
+          .containsEntry("분철명", "르세라핌 앨범")
+          .containsEntry("멤버명", "카즈하")
+          .containsEntry("지점명", "잠실점")
           .containsEntry("운송장번호", "CJ123456789");
       verify(inboxRecorder).record(eq(11L), eq(expectedTemplate), any());
     }

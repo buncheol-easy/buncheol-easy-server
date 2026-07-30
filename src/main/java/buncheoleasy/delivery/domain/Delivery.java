@@ -17,6 +17,10 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/**
+ * 참여 확정 시점에 생성되는 배송 스냅샷. 수동 경로와 추적 웹훅 자동 전이가 경합하므로 상태 전이는 리포지토리의 status 조건부 CAS UPDATE 로만 하고,
+ * 엔티티는 조회용 홀더로 둔다(전이 도메인 메서드 없음).
+ */
 @Entity
 @Table(name = "deliveries")
 @Getter
@@ -63,6 +67,10 @@ public class Delivery extends TimestampedEntity {
   @Column(name = "received_at")
   private Instant receivedAt;
 
+  // 지점 도착 후 미수령 독촉 알림을 보낸 시각 (1회 발송 dedup 마커, 세팅은 CAS 로만).
+  @Column(name = "pickup_reminder_sent_at")
+  private Instant pickupReminderSentAt;
+
   // SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED.
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
@@ -92,31 +100,6 @@ public class Delivery extends TimestampedEntity {
     this.receiverNickname = receiverNickname;
     this.receiverPhoneNumber = receiverPhoneNumber;
     this.status = DeliveryStatus.SNAPSHOTTED;
-  }
-
-  public void registerTracking(final String trackingNumber, final Instant now) {
-    if (trackingNumber == null || trackingNumber.isBlank()) {
-      throw new BusinessException(ErrorCode.DELIVERY_TRACKING_NUMBER_REQUIRED);
-    }
-    if (status == DeliveryStatus.SHIPPING) {
-      this.trackingNumber = trackingNumber;
-      this.trackingRegisteredAt = now;
-      return;
-    }
-    if (status != DeliveryStatus.SNAPSHOTTED) {
-      throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
-    this.trackingNumber = trackingNumber;
-    this.trackingRegisteredAt = now;
-    this.status = DeliveryStatus.SHIPPING;
-  }
-
-  public void confirmReceipt(final Instant now) {
-    if (status != DeliveryStatus.SHIPPING && status != DeliveryStatus.DELIVERED) {
-      throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
-    this.receivedAt = now;
-    this.status = DeliveryStatus.RECEIVED;
   }
 
   private void validateSnapshot(

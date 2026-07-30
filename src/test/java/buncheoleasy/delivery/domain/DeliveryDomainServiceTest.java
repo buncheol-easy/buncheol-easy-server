@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.then;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,6 +25,8 @@ class DeliveryDomainServiceTest {
   @InjectMocks private DeliveryDomainService deliveryDomainService;
 
   @Mock private DeliveryRepository deliveryRepository;
+
+  private static final Instant NOW = Instant.parse("2026-03-23T12:00:00Z");
 
   private Delivery createDelivery() {
     return Delivery.createSnapshot(
@@ -106,6 +109,85 @@ class DeliveryDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_NOT_FOUND);
+    }
+  }
+
+  @Nested
+  @DisplayName("registerTracking 테스트 — 운송장 등록 CAS")
+  class RegisterTrackingTest {
+
+    @Test
+    void CAS_성공이면_예외_없이_통과한다() {
+      // given
+      given(deliveryRepository.registerTrackingIfRegistrable(1L, "TRACK123", NOW)).willReturn(true);
+
+      // when
+      deliveryDomainService.registerTracking(1L, "TRACK123", NOW);
+
+      // then
+      then(deliveryRepository).should().registerTrackingIfRegistrable(1L, "TRACK123", NOW);
+    }
+
+    @Test
+    void CAS_실패면_상태_위반_예외가_발생한다() {
+      // given
+      given(deliveryRepository.registerTrackingIfRegistrable(1L, "TRACK123", NOW))
+          .willReturn(false);
+
+      // when & then
+      assertThatThrownBy(() -> deliveryDomainService.registerTracking(1L, "TRACK123", NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+    }
+
+    @Test
+    void 운송장_번호가_null이면_예외가_발생한다() {
+      // when & then
+      assertThatThrownBy(() -> deliveryDomainService.registerTracking(1L, null, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_TRACKING_NUMBER_REQUIRED);
+      then(deliveryRepository).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 운송장_번호가_빈_문자열이면_예외가_발생한다() {
+      // when & then
+      assertThatThrownBy(() -> deliveryDomainService.registerTracking(1L, "  ", NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_TRACKING_NUMBER_REQUIRED);
+      then(deliveryRepository).shouldHaveNoInteractions();
+    }
+  }
+
+  @Nested
+  @DisplayName("confirmReceipt 테스트 — 수령 확인 CAS")
+  class ConfirmReceiptTest {
+
+    @Test
+    void CAS_성공이면_예외_없이_통과한다() {
+      // given
+      given(deliveryRepository.confirmReceiptIfActive(1L, NOW)).willReturn(true);
+
+      // when
+      deliveryDomainService.confirmReceipt(1L, NOW);
+
+      // then
+      then(deliveryRepository).should().confirmReceiptIfActive(1L, NOW);
+    }
+
+    @Test
+    void CAS_실패면_상태_위반_예외가_발생한다() {
+      // given
+      given(deliveryRepository.confirmReceiptIfActive(1L, NOW)).willReturn(false);
+
+      // when & then
+      assertThatThrownBy(() -> deliveryDomainService.confirmReceipt(1L, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
     }
   }
 }

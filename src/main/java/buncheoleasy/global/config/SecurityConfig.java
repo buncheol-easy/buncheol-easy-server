@@ -29,7 +29,9 @@ public class SecurityConfig {
     "/v1/auth/reissue-token",
     "/v1/api-docs/**",
     // 페이액션 입금 매칭 웹훅. 외부에서 인증 없이 들어오며 컨트롤러가 공유 비밀키 헤더로 발신자를 검증한다.
-    "/v1/deposits/payaction/webhook"
+    "/v1/deposits/payaction/webhook",
+    // Delivery Tracker 배송 추적 콜백. 컨트롤러가 콜백 URL 에 심어둔 공유 비밀 토큰(쿼리)으로 발신자를 검증한다.
+    "/v1/deliveries/webhook/callback"
   };
 
   private static final String[] OAUTH_PATHS = {"/oauth2/**", "/login/oauth2/**"};

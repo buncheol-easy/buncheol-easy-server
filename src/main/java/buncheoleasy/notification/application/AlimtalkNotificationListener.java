@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
+import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
@@ -18,8 +19,8 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 도메인 이벤트를 받아 알림톡을 발송한다. 원 트랜잭션 커밋 후(AFTER_COMMIT) 비동기로 실행하며, 트랜잭션 없이 발행되는 운송장 등록도 {@code
- * fallbackExecution} 으로 처리한다. 발송 실패는 로깅만 하고 비즈니스에 영향을 주지 않는다.
+ * 도메인 이벤트를 받아 알림톡을 발송한다. 원 트랜잭션 커밋 후(AFTER_COMMIT) 비동기로 실행하며, 혹시 트랜잭션 밖에서 발행되는 이벤트도 {@code
+ * fallbackExecution} 으로 놓치지 않는다. 발송 실패는 로깅만 하고 비즈니스에 영향을 주지 않는다.
  *
  * <p>각 핸들러는 알림톡 발송 직전에 {@link NotificationInboxRecorder} 로 in-app 알림(수신함)을 1:1 로 남긴다. 카카오 발송 성공 여부와
  * 무관하게 수신함에서 확인할 수 있도록 발송보다 먼저 기록하되, 기록 실패가 알림톡 발송까지 막지 않도록 {@link #recordSafely} 로 예외를 격리한다(두 채널은
@@ -116,6 +117,28 @@ public class AlimtalkNotificationListener {
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
+            "운송장번호", delivery.getTrackingNumber());
+    recordSafely(view.participant().getId(), template, variables);
+    sender.send(template, view.participant().getPhoneNumber().value(), variables);
+  }
+
+  /** (참여자) 편의점 도착 후 기준 시간이 지나도록 미수령이라 찾아가라고 독촉함. 택배사(CU/GS25)에 따라 템플릿이 갈린다. */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onPickupReminderDue(final PickupReminderDueEvent event) {
+    Delivery delivery = assembler.loadDelivery(event.deliveryId());
+    ParticipationView view = assembler.loadByParticipation(delivery.getParticipationId());
+    AlimtalkTemplate template =
+        switch (delivery.getShippingMethod()) {
+          case CU_HALF -> AlimtalkTemplate.PICKUP_REMINDER_CU;
+          case GS25_HALF -> AlimtalkTemplate.PICKUP_REMINDER_GS25;
+        };
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.participant().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "멤버명", view.memberName(),
+            "지점명", delivery.getStoreName(),
             "운송장번호", delivery.getTrackingNumber());
     recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);

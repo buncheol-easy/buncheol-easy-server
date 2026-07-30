@@ -131,6 +131,12 @@ app:
       enabled: ${PAYMENT_EXPIRY_ENABLED:true}
       interval-ms: ${PAYMENT_EXPIRY_INTERVAL_MS:60000} # 1분
       initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:10000} # 10초
+  delivery:
+    tracking-refresh: # 추적 웹훅 TTL 연장 + 상태 폴링(콜백 유실 안전망) 스케줄러
+      enabled: ${TRACKING_REFRESH_ENABLED:true}
+      # 웹훅 TTL(48h)의 절반 이하여야 만료 전 갱신 기회가 2회 이상 보장된다.
+      interval-ms: ${TRACKING_REFRESH_INTERVAL_MS:43200000} # 12시간
+      initial-delay-ms: ${TRACKING_REFRESH_INITIAL_DELAY_MS:30000} # 30초
   feedback:
     rate-limit: # 의견 보내기 도배 방지 (비로그인 허용 엔드포인트라 필수)
       # 제출 주체(회원 ID 또는 IP) 1개당 한도.

@@ -3,12 +3,15 @@ package buncheoleasy.delivery.infrastructure;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -77,6 +80,12 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
       final Collection<DeliveryStatus> statuses) {
     return jpaDeliveryRepository.findAllByTrackingNumberAndShippingMethodAndStatusIn(
         trackingNumber, shippingMethod, statuses);
+  }
+
+  @Override
+  public List<TrackedParcel> findTrackedParcels(final int limit) {
+    return jpaDeliveryRepository.findTrackedParcels(
+        Set.of(DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED), Limit.of(limit));
   }
 
   @Override

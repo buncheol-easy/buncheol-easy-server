@@ -34,6 +34,9 @@ public interface DeliveryRepository {
   List<Delivery> findAllByTrackingNumber(
       String trackingNumber, ShippingMethod shippingMethod, Collection<DeliveryStatus> statuses);
 
+  /** 추적 중(SHIPPING·DELIVERED) 운송장을 배송방식·번호 단위로 중복 제거해 최대 {@code limit} 개 조회한다. */
+  List<TrackedParcel> findTrackedParcels(int limit);
+
   Optional<Delivery> findById(Long id);
 
   Optional<Delivery> findByParticipationId(Long participationId);

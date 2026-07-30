@@ -54,6 +54,10 @@ app:
     # 테스트에서는 입금 만료 자동취소 스케줄러를 비활성화
     payment-expiry:
       enabled: false
+  delivery:
+    # 테스트에서는 추적 웹훅 갱신·폴링 스케줄러를 비활성화
+    tracking-refresh:
+      enabled: false
 
 delivery:
   tracker:

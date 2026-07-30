@@ -13,6 +13,7 @@ import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -332,6 +333,56 @@ class JpaDeliveryRepositoryAdapterTest {
 
       assertThat(result).isFalse();
       assertThat(findFresh(deliveryId).getReceivedAt()).isEqualTo(NOW);
+    }
+  }
+
+  @Nested
+  @DisplayName("findTrackedParcels — 추적 중 운송장 중복 제거 조회")
+  class FindTrackedParcelsTest {
+
+    @Test
+    void 같은_운송장_다건_배송은_한_건으로_중복_제거된다() {
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      saveDelivery(participationA, "GS25 잠실점", "TRACK123");
+      saveDelivery(participationB, "GS25 강남점", "TRACK123");
+
+      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(100);
+
+      assertThat(result)
+          .containsExactly(new TrackedParcel(ShippingMethod.GS25_HALF, "TRACK123"));
+    }
+
+    @Test
+    void 배치_상한만큼만_조회한다() {
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      Long participationC = createConfirmedParticipation("fanC", 70_000L);
+      saveDelivery(participationA, "GS25 잠실점", "TRACK-1");
+      saveDelivery(participationB, "GS25 강남점", "TRACK-2");
+      saveDelivery(participationC, "GS25 송파점", "TRACK-3");
+
+      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(2);
+
+      assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void 운송장_미등록과_수령완료_배송은_제외된다() {
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      Long participationC = createConfirmedParticipation("fanC", 70_000L);
+      saveDelivery(participationA, "GS25 잠실점", null);
+      Long receivedId = saveDelivery(participationB, "GS25 강남점", "TRACK-DONE");
+      deliveryRepository.confirmReceiptIfActive(receivedId, NOW);
+      Long deliveredId = saveDelivery(participationC, "GS25 송파점", "TRACK-ARRIVED");
+      deliveryRepository.markDeliveredIfShipping(deliveredId, NOW, NOW);
+
+      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(100);
+
+      // DELIVERED(지점 도착)는 아직 수령 감지가 남아 추적을 계속한다.
+      assertThat(result)
+          .containsExactly(new TrackedParcel(ShippingMethod.GS25_HALF, "TRACK-ARRIVED"));
     }
   }
 

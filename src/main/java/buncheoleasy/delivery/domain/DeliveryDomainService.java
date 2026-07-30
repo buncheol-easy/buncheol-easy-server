@@ -90,4 +90,9 @@ public class DeliveryDomainService {
       final Collection<DeliveryStatus> statuses) {
     return deliveryRepository.findAllByTrackingNumber(trackingNumber, shippingMethod, statuses);
   }
+
+  /** 추적 중(SHIPPING·DELIVERED) 운송장을 배송방식·번호 단위로 중복 제거해 조회한다 (웹훅 갱신 스케줄러용). */
+  public List<TrackedParcel> findTrackedParcels(final int limit) {
+    return deliveryRepository.findTrackedParcels(limit);
+  }
 }

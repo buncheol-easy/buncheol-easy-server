@@ -2,11 +2,13 @@ package buncheoleasy.delivery.infrastructure;
 
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,6 +23,19 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
   /** 운송장·배송방식이 같은 배송 조회 — 관리자 벌크 등록으로 한 운송장에 여러 배송이 매핑될 수 있어 전부 돌려준다. */
   List<Delivery> findAllByTrackingNumberAndShippingMethodAndStatusIn(
       String trackingNumber, ShippingMethod shippingMethod, Collection<DeliveryStatus> statuses);
+
+  /**
+   * 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회 (웹훅 갱신·폴링 대상). 상태 변경이 가장 오래된 운송장부터 돌려줘, 배치 상한에 걸려도 갱신이 가장
+   * 급한(정체된) 운송장이 우선 처리된다.
+   */
+  @Query(
+      "SELECT new buncheoleasy.delivery.domain.TrackedParcel(d.shippingMethod, d.trackingNumber) "
+          + "FROM Delivery d "
+          + "WHERE d.status IN :statuses AND d.trackingNumber IS NOT NULL "
+          + "GROUP BY d.shippingMethod, d.trackingNumber "
+          + "ORDER BY MIN(d.updatedAt) ASC")
+  List<TrackedParcel> findTrackedParcels(
+      @Param("statuses") Collection<DeliveryStatus> statuses, Limit limit);
 
   /** 참여 취소(분철 취소 cascade) 시 해당 참여의 배송 스냅샷을 정리 (bulk delete). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

@@ -176,7 +176,9 @@ delivery:
     # 웹훅 유효기간 (Delivery Tracker 권장 최대 48h). 갱신 스케줄러가 만료 전 재등록으로 연장한다.
     webhook-ttl: ${DELIVERY_TRACKER_WEBHOOK_TTL:48h}
     connect-timeout: 3s
-    read-timeout: 5s
+    # 추적 조회는 택배사 사이트를 실시간으로 긁어 응답해 캐리어에 따라 수 초씩 걸린다(cupost 등).
+    # 공식 권장 타임아웃 상한이 15초 — 5초로 뒀더니 실측에서 타임아웃이 났다.
+    read-timeout: 15s
 
 aligo:
   alimtalk:

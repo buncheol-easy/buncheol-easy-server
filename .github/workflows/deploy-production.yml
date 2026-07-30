@@ -37,7 +37,9 @@ jobs:
         run: |
           set -e
           cd /home/ubuntu/buncheol-easy-server
-          docker compose -f docker-compose.staging.yml up -d --build
+          # 박스가 스왑 스래싱으로 굳으면 러너가 timeout-minutes 를 집행하지 못한다
+          # (2026-07-29 사고: 수동 취소 반영에 6분). OS 레벨 timeout 은 박스가 아파도 빌드를 죽인다.
+          timeout -k 30s 13m docker compose -f docker-compose.staging.yml up -d --build
 
           echo "Waiting for backend health check..."
           MAX_RETRY=40

@@ -75,7 +75,7 @@ class TrackingSyncServiceTest {
       // given
       givenTargets(deliveryWithId(1L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("AVAILABLE_FOR_PICKUP", EVENT_TIME)));
+          .willReturn(Optional.of(new TrackLastEvent("AVAILABLE_FOR_PICKUP", "점포도착", EVENT_TIME)));
 
       // when
       trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
@@ -90,7 +90,7 @@ class TrackingSyncServiceTest {
       // given
       givenTargets(deliveryWithId(1L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", EVENT_TIME)));
+          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", "배송완료", EVENT_TIME)));
 
       // when
       trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
@@ -104,7 +104,7 @@ class TrackingSyncServiceTest {
       // given
       givenTargets(deliveryWithId(1L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("IN_TRANSIT", EVENT_TIME)));
+          .willReturn(Optional.of(new TrackLastEvent("IN_TRANSIT", "이동중", EVENT_TIME)));
 
       // when
       trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
@@ -118,7 +118,63 @@ class TrackingSyncServiceTest {
       // Delivery Tracker 가 코드를 추가해도 오동작하지 않아야 한다.
       givenTargets(deliveryWithId(1L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("SOMETHING_NEW", EVENT_TIME)));
+          .willReturn(Optional.of(new TrackLastEvent("SOMETHING_NEW", "새상태", EVENT_TIME)));
+
+      // when
+      trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
+
+      // then
+      then(trackingTransitionService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void UNKNOWN_코드라도_원문이_점포도착이면_지점_도착_전이를_적용한다() {
+      // cupost 는 코드 정규화가 안 돼 UNKNOWN + 원문 문구로 온다 (2026-07 실측).
+      givenTargets(deliveryWithId(1L));
+      given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
+          .willReturn(Optional.of(new TrackLastEvent("UNKNOWN", "점포도착", EVENT_TIME)));
+
+      // when
+      trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
+
+      // then
+      then(trackingTransitionService).should().markDelivered(1L, EVENT_TIME, NOW);
+    }
+
+    @Test
+    void UNKNOWN_코드라도_원문이_수령완료면_고객_수령_전이를_적용한다() {
+      // given
+      givenTargets(deliveryWithId(1L));
+      given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
+          .willReturn(Optional.of(new TrackLastEvent("UNKNOWN", "수령완료", EVENT_TIME)));
+
+      // when
+      trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
+
+      // then
+      then(trackingTransitionService).should().markReceived(1L, EVENT_TIME, NOW);
+    }
+
+    @Test
+    void UNKNOWN_코드에_모르는_원문이면_전이하지_않는다() {
+      // 문구가 바뀌면 오탐 대신 스킵(fail-safe) — 스킵 로그의 statusName 으로 발견해 매핑을 추가한다.
+      givenTargets(deliveryWithId(1L));
+      given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
+          .willReturn(Optional.of(new TrackLastEvent("UNKNOWN", "이동중", EVENT_TIME)));
+
+      // when
+      trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
+
+      // then
+      then(trackingTransitionService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void UNKNOWN_코드에_원문이_없어도_전이하지_않는다() {
+      // given
+      givenTargets(deliveryWithId(1L));
+      given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
+          .willReturn(Optional.of(new TrackLastEvent("UNKNOWN", null, EVENT_TIME)));
 
       // when
       trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
@@ -132,7 +188,7 @@ class TrackingSyncServiceTest {
       // given
       givenTargets(deliveryWithId(1L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", null)));
+          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", "배송완료", null)));
 
       // when
       trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
@@ -208,7 +264,7 @@ class TrackingSyncServiceTest {
       // 관리자 벌크 등록은 한 운송장을 여러 배송에 매핑한다.
       givenTargets(deliveryWithId(1L), deliveryWithId(2L), deliveryWithId(3L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", EVENT_TIME)));
+          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", "배송완료", EVENT_TIME)));
 
       // when
       trackingSyncService.sync(CARRIER_GS25, TRACKING_NUMBER);
@@ -224,7 +280,7 @@ class TrackingSyncServiceTest {
       // given
       givenTargets(deliveryWithId(1L), deliveryWithId(2L));
       given(deliveryTrackerClient.findLastEvent(CARRIER_GS25, TRACKING_NUMBER))
-          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", EVENT_TIME)));
+          .willReturn(Optional.of(new TrackLastEvent("DELIVERED", "배송완료", EVENT_TIME)));
       willThrow(new RuntimeException("DB 오류"))
           .given(trackingTransitionService)
           .markReceived(1L, EVENT_TIME, NOW);

@@ -37,6 +37,15 @@ public class TrackingSyncService {
 
   private static final String CARRIER_DELIVERED = "DELIVERED";
 
+  private static final String CARRIER_UNKNOWN = "UNKNOWN";
+
+  /** 캐리어의 최신 이벤트를 우리 전이로 해석한 결과. */
+  private enum CarrierEvent {
+    ARRIVED, // 지점 도착 → 우리 DELIVERED
+    PICKED_UP, // 고객 수령 → 우리 RECEIVED
+    OTHER // 이동중 등 — 전이 없음
+  }
+
   private final DeliveryTrackerClient deliveryTrackerClient;
   private final DeliveryDomainService deliveryDomainService;
   private final TrackingTransitionService trackingTransitionService;
@@ -82,10 +91,21 @@ public class TrackingSyncService {
       return;
     }
     TrackLastEvent lastEvent = found.get();
-    String statusCode = lastEvent.statusCode();
-    if (!CARRIER_AVAILABLE_FOR_PICKUP.equals(statusCode) && !CARRIER_DELIVERED.equals(statusCode)) {
-      log.debug(
-          "배송 추적 동기화 - 전이 대상 아닌 상태 - trackingNumber={} statusCode={}", trackingNumber, statusCode);
+    CarrierEvent event = resolveEvent(lastEvent);
+    if (event == CarrierEvent.OTHER) {
+      // 정규화 실패(UNKNOWN + 미지 문구)는 매핑 추가가 필요한 신호라 info 로 노출하고,
+      // 정상 코드(이동중 등)의 스킵은 평시 소음이라 debug 로 낮춘다.
+      if (CARRIER_UNKNOWN.equals(lastEvent.statusCode())) {
+        log.info(
+            "배송 추적 동기화 - 정규화 안 된 상태라 스킵 - trackingNumber={} statusName={}",
+            trackingNumber,
+            lastEvent.statusName());
+      } else {
+        log.debug(
+            "배송 추적 동기화 - 전이 대상 아닌 상태 - trackingNumber={} statusCode={}",
+            trackingNumber,
+            lastEvent.statusCode());
+      }
       return;
     }
 
@@ -95,29 +115,53 @@ public class TrackingSyncService {
     int failed = 0;
     for (Delivery target : targets) {
       try {
-        if (applyTransition(target.getId(), statusCode, eventTime, now)) {
+        if (applyTransition(target.getId(), event, eventTime, now)) {
           transitioned++;
         }
       } catch (Exception e) {
         // 한 건 실패가 같은 운송장의 나머지 배송 전이를 막지 않도록 격리한다.
         failed++;
-        log.error("배송 추적 전이 실패 - deliveryId={} statusCode={}", target.getId(), statusCode, e);
+        log.error("배송 추적 전이 실패 - deliveryId={} event={}", target.getId(), event, e);
       }
     }
     log.info(
-        "배송 추적 동기화 완료 - trackingNumber={} statusCode={} 대상: {}, 전이: {}, 실패: {}",
+        "배송 추적 동기화 완료 - trackingNumber={} statusCode={} event={} 대상: {}, 전이: {}, 실패: {}",
         trackingNumber,
-        statusCode,
+        lastEvent.statusCode(),
+        event,
         targets.size(),
         transitioned,
         failed);
   }
 
+  /**
+   * 캐리어 이벤트 해석. 캐리어와 우리 상태의 이름이 어긋난다 — 캐리어 AVAILABLE_FOR_PICKUP(지점 도착) = 우리 DELIVERED, 캐리어
+   * DELIVERED(고객이 찾아감) = 우리 RECEIVED.
+   *
+   * <p>cupost 는 Delivery Tracker 의 코드 정규화가 안 돼 전 이벤트가 UNKNOWN + 원문 한글 문구로 온다(2026-07 실측). 알려진 문구만
+   * 정확 일치로 폴백 매핑하고, 그 외 문구는 지금처럼 스킵된다(fail-safe) — 스킵 로그의 statusName 으로 새 문구를 발견하면 여기에 추가한다.
+   */
+  private CarrierEvent resolveEvent(final TrackLastEvent lastEvent) {
+    if (CARRIER_AVAILABLE_FOR_PICKUP.equals(lastEvent.statusCode())) {
+      return CarrierEvent.ARRIVED;
+    }
+    if (CARRIER_DELIVERED.equals(lastEvent.statusCode())) {
+      return CarrierEvent.PICKED_UP;
+    }
+    if (CARRIER_UNKNOWN.equals(lastEvent.statusCode())) {
+      if ("점포도착".equals(lastEvent.statusName())) {
+        return CarrierEvent.ARRIVED;
+      }
+      if ("수령완료".equals(lastEvent.statusName())) {
+        return CarrierEvent.PICKED_UP;
+      }
+    }
+    return CarrierEvent.OTHER;
+  }
+
   private boolean applyTransition(
-      final Long deliveryId, final String statusCode, final Instant eventTime, final Instant now) {
-    // 캐리어와 우리 상태의 이름이 어긋난다 — 캐리어 AVAILABLE_FOR_PICKUP(지점 도착) = 우리 DELIVERED,
-    // 캐리어 DELIVERED(고객이 찾아감) = 우리 RECEIVED.
-    if (CARRIER_AVAILABLE_FOR_PICKUP.equals(statusCode)) {
+      final Long deliveryId, final CarrierEvent event, final Instant eventTime, final Instant now) {
+    if (event == CarrierEvent.ARRIVED) {
       return trackingTransitionService.markDelivered(deliveryId, eventTime, now);
     }
     return trackingTransitionService.markReceived(deliveryId, eventTime, now);

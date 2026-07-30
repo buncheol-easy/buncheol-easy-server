@@ -30,7 +30,7 @@ public class DeliveryTrackerClient {
       """
       query Track($carrierId: ID!, $trackingNumber: String!) {
         track(carrierId: $carrierId, trackingNumber: $trackingNumber) {
-          lastEvent { time status { code } }
+          lastEvent { time status { code name } }
         }
       }""";
 
@@ -82,7 +82,9 @@ public class DeliveryTrackerClient {
     }
     LastEvent lastEvent = response.data().track().lastEvent();
     String statusCode = lastEvent.status() == null ? null : lastEvent.status().code();
-    return Optional.of(new TrackLastEvent(statusCode, parseTime(lastEvent.time(), trackingNumber)));
+    String statusName = lastEvent.status() == null ? null : lastEvent.status().name();
+    return Optional.of(
+        new TrackLastEvent(statusCode, statusName, parseTime(lastEvent.time(), trackingNumber)));
   }
 
   /**
@@ -214,7 +216,7 @@ public class DeliveryTrackerClient {
   private record LastEvent(String time, EventStatus status) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
-  private record EventStatus(String code) {}
+  private record EventStatus(String code, String name) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   private record WebhookResponse(WebhookData data, List<GraphQlError> errors) {}

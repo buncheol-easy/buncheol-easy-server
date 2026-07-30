@@ -37,13 +37,25 @@ jobs:
           set -e
           cd /home/ubuntu/buncheol-easy-server
           # 박스가 스왑 스래싱으로 굳으면 러너가 timeout-minutes 를 집행하지 못한다
-          # (2026-07-29 사고: 수동 취소 반영에 6분). OS 레벨 timeout 은 박스가 아파도 빌드를 죽인다.
-          timeout -k 30s 13m docker compose -f docker-compose.staging.yml up -d --build
+          # (2026-07-29 사고: 수동 취소 반영에 6분). OS 레벨 timeout 은 러너가 굳어도 커널 타이머로
+          # 발사돼 잡을 해방한다. 단 죽이는 대상은 compose 클라이언트 — 데몬 쪽 빌드 취소는
+          # BuildKit 전파에 의존하므로 박스 회복까지 보장하진 않는다.
+          # 10분 근거: 정상 6분 20초대, 스왑 열화 상태의 성공 배포도 8분 이내(35 §11-3) —
+          # 빌드+헬스체크가 잡 상한 15분 안에 들어오는 예산.
+          rc=0
+          timeout -k 30s 10m docker compose -f docker-compose.staging.yml up -d --build || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+              echo "::error::빌드가 OS 타임아웃으로 종료됨 (rc=$rc, 124=TERM/137=KILL) — 박스 스래싱 의심, free -h 확인 (docs 35 §11-6)"
+            fi
+            exit "$rc"
+          fi
 
           echo "Waiting for backend health check..."
           MAX_RETRY=40
           count=0
-          until curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; do
+          # curl 자체가 매달리면 timeout 래핑 밖에서 잡이 굳는다 — 호출당 상한 필수
+          until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
             count=$((count + 1))
             if [ "$count" -ge "$MAX_RETRY" ]; then
               echo "Backend health check failed after ${MAX_RETRY} retries"
@@ -55,4 +67,17 @@ jobs:
           done
           echo "Backend health check passed"
 
-          docker image prune -f
+      - name: Post-mortem snapshot
+        if: failure()
+        run: |
+          cd /home/ubuntu/buncheol-easy-server
+          free -h || true
+          docker compose -f docker-compose.staging.yml ps || true
+          docker logs buncheoleasy-backend --tail=100 || true
+
+      - name: Reclaim build cache
+        # 타임아웃으로 죽은 빌드의 잔여 레이어가 실패마다 쌓이지 않게 성공/실패 무관 정리
+        if: always()
+        run: |
+          docker image prune -f || true
+          docker builder prune -f --filter until=24h || true

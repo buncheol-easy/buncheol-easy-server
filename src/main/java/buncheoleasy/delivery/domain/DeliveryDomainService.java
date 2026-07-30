@@ -95,4 +95,14 @@ public class DeliveryDomainService {
   public List<TrackedParcel> findTrackedParcels(final int limit) {
     return deliveryRepository.findTrackedParcels(limit);
   }
+
+  /** 지점 도착이 {@code threshold} 이전이고 아직 독촉하지 않은 배송 조회 (미수령 독촉 스케줄러용). */
+  public List<Delivery> findPickupReminderTargets(final Instant threshold, final int limit) {
+    return deliveryRepository.findPickupReminderTargets(threshold, limit);
+  }
+
+  /** 미수령 독촉 1회 발송 마킹. 멱등하며 실패 시(이미 발송/수령) 예외 없이 false 를 돌려준다. 호출 측 {@code @Transactional} 필수. */
+  public boolean markPickupReminderSent(final Long deliveryId, final Instant now) {
+    return deliveryRepository.markPickupReminderSent(deliveryId, now);
+  }
 }

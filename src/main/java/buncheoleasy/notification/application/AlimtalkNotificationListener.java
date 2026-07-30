@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
+import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
@@ -116,6 +117,28 @@ public class AlimtalkNotificationListener {
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
+            "운송장번호", delivery.getTrackingNumber());
+    recordSafely(view.participant().getId(), template, variables);
+    sender.send(template, view.participant().getPhoneNumber().value(), variables);
+  }
+
+  /** (참여자) 편의점 도착 후 기준 시간이 지나도록 미수령이라 찾아가라고 독촉함. 택배사(CU/GS25)에 따라 템플릿이 갈린다. */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onPickupReminderDue(final PickupReminderDueEvent event) {
+    Delivery delivery = assembler.loadDelivery(event.deliveryId());
+    ParticipationView view = assembler.loadByParticipation(delivery.getParticipationId());
+    AlimtalkTemplate template =
+        switch (delivery.getShippingMethod()) {
+          case CU_HALF -> AlimtalkTemplate.PICKUP_REMINDER_CU;
+          case GS25_HALF -> AlimtalkTemplate.PICKUP_REMINDER_GS25;
+        };
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.participant().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "멤버명", view.memberName(),
+            "지점명", delivery.getStoreName(),
             "운송장번호", delivery.getTrackingNumber());
     recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);

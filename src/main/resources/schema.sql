@@ -317,6 +317,8 @@ CREATE TABLE IF NOT EXISTS deliveries
     tracking_registered_at DATETIME     NULL COMMENT '운송장 등록 시각',
     delivered_at           DATETIME     NULL COMMENT '배송 완료 시각',
     received_at            DATETIME     NULL COMMENT '사용자 수령 완료 시각',
+    -- 미수령 독촉 알림 1회 발송 dedup 마커. 기존 배포 DB 에는 수동 ALTER 필요.
+    pickup_reminder_sent_at DATETIME NULL COMMENT '미수령 독촉 알림 발송 시각',
     status                 VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED' COMMENT 'SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED',
     created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

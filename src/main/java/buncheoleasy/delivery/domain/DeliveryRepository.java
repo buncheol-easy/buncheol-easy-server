@@ -37,6 +37,15 @@ public interface DeliveryRepository {
   /** 추적 중(SHIPPING·DELIVERED) 운송장을 배송방식·번호 단위로 중복 제거해 최대 {@code limit} 개 조회한다. */
   List<TrackedParcel> findTrackedParcels(int limit);
 
+  /** 지점 도착(DELIVERED)이 {@code threshold} 이전이고 아직 독촉하지 않은 배송을 도착 오래된 순으로 조회한다. */
+  List<Delivery> findPickupReminderTargets(Instant threshold, int limit);
+
+  /**
+   * 미수령 독촉 1회 발송 마킹 CAS ({@code pickupReminderSentAt IS NULL} 이 dedup 가드). 성공 여부를 반환하며 호출 측
+   * {@code @Transactional} 필수.
+   */
+  boolean markPickupReminderSent(Long id, Instant now);
+
   Optional<Delivery> findById(Long id);
 
   Optional<Delivery> findByParticipationId(Long participationId);

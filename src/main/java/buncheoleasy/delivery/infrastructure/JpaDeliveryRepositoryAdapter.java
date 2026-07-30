@@ -89,6 +89,20 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
   }
 
   @Override
+  public List<Delivery> findPickupReminderTargets(final Instant threshold, final int limit) {
+    return jpaDeliveryRepository
+        .findByStatusAndDeliveredAtLessThanEqualAndPickupReminderSentAtIsNullOrderByDeliveredAtAsc(
+            DeliveryStatus.DELIVERED, threshold, Limit.of(limit));
+  }
+
+  @Override
+  public boolean markPickupReminderSent(final Long id, final Instant now) {
+    int updated =
+        jpaDeliveryRepository.markPickupReminderSentIfDue(id, DeliveryStatus.DELIVERED, now);
+    return updated > 0;
+  }
+
+  @Override
   public Optional<Delivery> findById(final Long id) {
     return jpaDeliveryRepository.findById(id);
   }

@@ -67,6 +67,10 @@ public class Delivery extends TimestampedEntity {
   @Column(name = "received_at")
   private Instant receivedAt;
 
+  // 지점 도착 후 미수령 독촉 알림을 보낸 시각 (1회 발송 dedup 마커, 세팅은 CAS 로만).
+  @Column(name = "pickup_reminder_sent_at")
+  private Instant pickupReminderSentAt;
+
   // SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED.
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)

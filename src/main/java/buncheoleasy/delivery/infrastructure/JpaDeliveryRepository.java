@@ -24,6 +24,22 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
   List<Delivery> findAllByTrackingNumberAndShippingMethodAndStatusIn(
       String trackingNumber, ShippingMethod shippingMethod, Collection<DeliveryStatus> statuses);
 
+  /** 지점 도착 후 미수령 독촉 대상 조회 — 도착이 오래된 순. */
+  List<Delivery>
+      findByStatusAndDeliveredAtLessThanEqualAndPickupReminderSentAtIsNullOrderByDeliveredAtAsc(
+          DeliveryStatus status, Instant threshold, Limit limit);
+
+  /** 미수령 독촉 1회 발송 마킹 CAS. {@code pickupReminderSentAt IS NULL} 조건이 중복 발송을 막는 dedup 가드다. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Delivery d "
+          + "SET d.pickupReminderSentAt = :now, d.updatedAt = :now "
+          + "WHERE d.id = :id AND d.status = :delivered AND d.pickupReminderSentAt IS NULL")
+  int markPickupReminderSentIfDue(
+      @Param("id") Long id,
+      @Param("delivered") DeliveryStatus delivered,
+      @Param("now") Instant now);
+
   /**
    * 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회 (웹훅 갱신·폴링 대상). 상태 변경이 가장 오래된 운송장부터 돌려줘, 배치 상한에 걸려도 갱신이 가장
    * 급한(정체된) 운송장이 우선 처리된다.

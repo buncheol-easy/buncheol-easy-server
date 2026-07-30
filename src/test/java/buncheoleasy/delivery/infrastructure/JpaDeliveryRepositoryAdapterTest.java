@@ -337,6 +337,90 @@ class JpaDeliveryRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("markPickupReminderSent — 미수령 독촉 발송 마킹 CAS")
+  class MarkPickupReminderSentTest {
+
+    @Test
+    void DELIVERED_이고_미발송이면_마킹에_성공한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.markDeliveredIfShipping(deliveryId, NOW, NOW);
+
+      boolean result = deliveryRepository.markPickupReminderSent(deliveryId, NOW);
+
+      assertThat(result).isTrue();
+      assertThat(findFresh(deliveryId).getPickupReminderSentAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 이미_발송했으면_실패한다_중복_발송_차단() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.markDeliveredIfShipping(deliveryId, NOW, NOW);
+      deliveryRepository.markPickupReminderSent(deliveryId, NOW);
+
+      boolean result =
+          deliveryRepository.markPickupReminderSent(deliveryId, NOW.plus(1, ChronoUnit.HOURS));
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getPickupReminderSentAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 그_사이_수령된_배송은_마킹에_실패한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      boolean result = deliveryRepository.markPickupReminderSent(deliveryId, NOW);
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getPickupReminderSentAt()).isNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("findPickupReminderTargets — 미수령 독촉 대상 조회")
+  class FindPickupReminderTargetsTest {
+
+    @Test
+    void 도착이_기준_시각_이전인_미독촉_배송만_도착_오래된_순으로_반환한다() {
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      Long participationC = createConfirmedParticipation("fanC", 70_000L);
+      Long participationD = createConfirmedParticipation("fanD", 60_000L);
+      // 기준 이전 도착 2건 (도착 순서 역순으로 저장해 정렬 검증)
+      Long lateArrival = saveDelivery(participationA, "GS25 잠실점", "TRACK-1");
+      deliveryRepository.markDeliveredIfShipping(lateArrival, NOW.minus(2, ChronoUnit.DAYS), NOW);
+      Long earlyArrival = saveDelivery(participationB, "GS25 강남점", "TRACK-2");
+      deliveryRepository.markDeliveredIfShipping(earlyArrival, NOW.minus(3, ChronoUnit.DAYS), NOW);
+      // 기준 이후 도착 — 제외
+      Long recentArrival = saveDelivery(participationC, "GS25 송파점", "TRACK-3");
+      deliveryRepository.markDeliveredIfShipping(recentArrival, NOW, NOW);
+      // 아직 배송중 — 제외
+      saveDelivery(participationD, "GS25 마포점", "TRACK-4");
+
+      List<Delivery> result =
+          deliveryRepository.findPickupReminderTargets(NOW.minus(1, ChronoUnit.DAYS), 100);
+
+      assertThat(result).extracting(Delivery::getId).containsExactly(earlyArrival, lateArrival);
+    }
+
+    @Test
+    void 이미_독촉한_배송은_제외된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK-1");
+      deliveryRepository.markDeliveredIfShipping(deliveryId, NOW.minus(2, ChronoUnit.DAYS), NOW);
+      deliveryRepository.markPickupReminderSent(deliveryId, NOW);
+
+      List<Delivery> result =
+          deliveryRepository.findPickupReminderTargets(NOW.minus(1, ChronoUnit.DAYS), 100);
+
+      assertThat(result).isEmpty();
+    }
+  }
+
+  @Nested
   @DisplayName("findTrackedParcels — 추적 중 운송장 중복 제거 조회")
   class FindTrackedParcelsTest {
 

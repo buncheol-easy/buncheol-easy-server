@@ -40,7 +40,7 @@ public class NotificationInboxRecorder {
     inboxMessageRepository.save(notification);
   }
 
-  // 알림톡 버튼 목적지(BuncheolUrls)와 동일한 화면의 in-app 상대 경로. 배송조회(TRACKING_*)는 외부 연결이라 경로 없음.
+  // 알림톡 버튼 목적지(BuncheolUrls)와 동일한 화면의 in-app 상대 경로. 배송조회(TRACKING_*, PICKUP_REMINDER_*)는 외부 연결이라 경로 없음.
   private String resolveLinkPath(final AlimtalkTemplate template) {
     return switch (template) {
       case PAYMENT_CONFIRMED,
@@ -50,7 +50,7 @@ public class NotificationInboxRecorder {
               PAYBACK_COMPLETED,
               PAYBACK_REJECTED ->
           PATH_MY_PARTICIPATIONS;
-      case TRACKING_CU, TRACKING_GS25 -> null;
+      case TRACKING_CU, TRACKING_GS25, PICKUP_REMINDER_CU, PICKUP_REMINDER_GS25 -> null;
     };
   }
 }

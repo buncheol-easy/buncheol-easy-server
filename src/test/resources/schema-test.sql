@@ -247,6 +247,7 @@ CREATE TABLE deliveries
     tracking_registered_at TIMESTAMP    NULL,
     delivered_at           TIMESTAMP    NULL,
     received_at            TIMESTAMP    NULL,
+    pickup_reminder_sent_at TIMESTAMP NULL,
     status                 VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED',
     created_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,

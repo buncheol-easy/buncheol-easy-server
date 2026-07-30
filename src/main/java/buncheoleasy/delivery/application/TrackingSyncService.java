@@ -115,6 +115,8 @@ public class TrackingSyncService {
 
   private boolean applyTransition(
       final Long deliveryId, final String statusCode, final Instant eventTime, final Instant now) {
+    // 캐리어와 우리 상태의 이름이 어긋난다 — 캐리어 AVAILABLE_FOR_PICKUP(지점 도착) = 우리 DELIVERED,
+    // 캐리어 DELIVERED(고객이 찾아감) = 우리 RECEIVED.
     if (CARRIER_AVAILABLE_FOR_PICKUP.equals(statusCode)) {
       return trackingTransitionService.markDelivered(deliveryId, eventTime, now);
     }

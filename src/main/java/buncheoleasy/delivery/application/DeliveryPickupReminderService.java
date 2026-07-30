@@ -29,7 +29,8 @@ public class DeliveryPickupReminderService {
   public DeliveryPickupReminderService(
       final DeliveryDomainService deliveryDomainService,
       final ApplicationEventPublisher eventPublisher,
-      @Value("${app.delivery.pickup-reminder.threshold}") final Duration threshold) {
+      // 스케줄러가 꺼져 있어도 이 빈은 항상 뜨므로, 키가 빈 값이어도 기동이 죽지 않게 인라인 기본값을 둔다.
+      @Value("${app.delivery.pickup-reminder.threshold:24h}") final Duration threshold) {
     this.deliveryDomainService = deliveryDomainService;
     this.eventPublisher = eventPublisher;
     this.threshold = threshold;

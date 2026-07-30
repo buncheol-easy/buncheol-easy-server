@@ -17,6 +17,13 @@ spring:
       max-file-size: 5MB
       max-request-size: 30MB
 
+  task:
+    scheduling:
+      pool:
+        # 기본 1 이면 모든 @Scheduled 가 한 스레드를 공유한다 — 추적 웹훅 갱신처럼 외부 HTTP 를 직렬로
+        # 도는 스케줄러가 지연되면 시간민감한 입금만료·자동마감 스케줄러까지 굶는다. 스케줄러 수 이상으로 분리.
+        size: 4
+
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL:jdbc:mysql://localhost:3306/buncheoleasy_db?serverTimezone=UTC&characterEncoding=UTF-8}

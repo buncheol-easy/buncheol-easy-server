@@ -50,19 +50,27 @@ public class TrackingWebhookRefreshScheduler {
 
     Instant expirationTime = Instant.now(clock).plus(deliveryTrackerProperties.webhookTtl());
     int renewedCount = 0;
-    int failedCount = 0;
+    int renewFailedCount = 0;
+    int pollFailedCount = 0;
     for (TrackedParcel target : targets) {
       try {
         if (trackingWebhookRefreshService.refresh(target, expirationTime)) {
           renewedCount++;
+        } else {
+          // 웹훅 연장 실패(폴링은 성공) — TTL 만료는 자동 추적을 조용히 죽이므로 요약에 따로 집계한다.
+          renewFailedCount++;
         }
       } catch (Exception e) {
         // 한 건 실패가 배치 전체를 중단시키지 않도록 격리하고 다음 운송장으로 진행한다.
-        failedCount++;
+        pollFailedCount++;
         log.error("추적 웹훅 갱신 실패 - trackingNumber: {}", target.trackingNumber(), e);
       }
     }
     log.info(
-        "추적 웹훅 갱신 완료 - 대상: {}, 연장: {}, 폴링실패: {}", targets.size(), renewedCount, failedCount);
+        "추적 웹훅 갱신 완료 - 대상: {}, 연장: {}, 연장실패: {}, 폴링실패: {}",
+        targets.size(),
+        renewedCount,
+        renewFailedCount,
+        pollFailedCount);
   }
 }

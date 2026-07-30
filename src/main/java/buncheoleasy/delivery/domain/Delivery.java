@@ -17,6 +17,10 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/**
+ * 참여 확정 시점에 생성되는 배송 스냅샷. 상태 전이(SHIPPING·DELIVERED·RECEIVED)는 호스트/관리자 수동 경로와 운송사 추적 웹훅 자동 전이가
+ * 경합할 수 있어 리포지토리의 status 조건부 CAS UPDATE 로만 수행한다 — 엔티티는 조회용 데이터 홀더로, 전이 도메인 메서드를 두지 않는다.
+ */
 @Entity
 @Table(name = "deliveries")
 @Getter
@@ -92,31 +96,6 @@ public class Delivery extends TimestampedEntity {
     this.receiverNickname = receiverNickname;
     this.receiverPhoneNumber = receiverPhoneNumber;
     this.status = DeliveryStatus.SNAPSHOTTED;
-  }
-
-  public void registerTracking(final String trackingNumber, final Instant now) {
-    if (trackingNumber == null || trackingNumber.isBlank()) {
-      throw new BusinessException(ErrorCode.DELIVERY_TRACKING_NUMBER_REQUIRED);
-    }
-    if (status == DeliveryStatus.SHIPPING) {
-      this.trackingNumber = trackingNumber;
-      this.trackingRegisteredAt = now;
-      return;
-    }
-    if (status != DeliveryStatus.SNAPSHOTTED) {
-      throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
-    this.trackingNumber = trackingNumber;
-    this.trackingRegisteredAt = now;
-    this.status = DeliveryStatus.SHIPPING;
-  }
-
-  public void confirmReceipt(final Instant now) {
-    if (status != DeliveryStatus.SHIPPING && status != DeliveryStatus.DELIVERED) {
-      throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
-    }
-    this.receivedAt = now;
-    this.status = DeliveryStatus.RECEIVED;
   }
 
   private void validateSnapshot(

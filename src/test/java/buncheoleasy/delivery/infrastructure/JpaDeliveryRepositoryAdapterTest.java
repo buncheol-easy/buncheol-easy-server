@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
+import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -41,6 +42,8 @@ class JpaDeliveryRepositoryAdapterTest {
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @PersistenceContext private EntityManager em;
+
+  private static final Instant NOW = Instant.parse("2026-03-23T12:00:00Z");
 
   private Long hostId;
   private Long groupId;
@@ -98,6 +101,127 @@ class JpaDeliveryRepositoryAdapterTest {
       assertThat(result)
           .singleElement()
           .satisfies(d -> assertThat(d.getParticipationId()).isEqualTo(participationA));
+    }
+  }
+
+  @Nested
+  @DisplayName("registerTrackingIfRegistrable — 운송장 등록 CAS")
+  class RegisterTrackingCasTest {
+
+    @Test
+    void SNAPSHOTTED_상태에서_등록하면_SHIPPING_으로_전이된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", null);
+
+      boolean result =
+          deliveryRepository.registerTrackingIfRegistrable(deliveryId, "TRACK123", NOW);
+
+      assertThat(result).isTrue();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
+      assertThat(found.getTrackingNumber()).isEqualTo("TRACK123");
+      assertThat(found.getTrackingRegisteredAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void SHIPPING_상태에서_재등록하면_운송장_번호가_교체된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+
+      Instant later = NOW.plus(1, ChronoUnit.HOURS);
+      boolean result =
+          deliveryRepository.registerTrackingIfRegistrable(deliveryId, "TRACK456", later);
+
+      assertThat(result).isTrue();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
+      assertThat(found.getTrackingNumber()).isEqualTo("TRACK456");
+      assertThat(found.getTrackingRegisteredAt()).isEqualTo(later);
+    }
+
+    @Test
+    void DELIVERED_상태에서는_실패하고_상태가_유지된다() {
+      // 웹훅 자동 전이가 먼저 지점 도착을 잡은 경우 — 재등록이 역행시키면 안 된다.
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      forceStatus(deliveryId, DeliveryStatus.DELIVERED);
+
+      boolean result =
+          deliveryRepository.registerTrackingIfRegistrable(deliveryId, "TRACK456", NOW);
+
+      assertThat(result).isFalse();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+      assertThat(found.getTrackingNumber()).isEqualTo("TRACK123");
+    }
+
+    @Test
+    void RECEIVED_상태에서는_실패한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      forceStatus(deliveryId, DeliveryStatus.RECEIVED);
+
+      boolean result =
+          deliveryRepository.registerTrackingIfRegistrable(deliveryId, "TRACK456", NOW);
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+    }
+  }
+
+  @Nested
+  @DisplayName("confirmReceiptIfActive — 수령 확인 CAS")
+  class ConfirmReceiptCasTest {
+
+    @Test
+    void SHIPPING_상태에서_수령_확인하면_RECEIVED_로_전이된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+
+      boolean result = deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      assertThat(result).isTrue();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+      assertThat(found.getReceivedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void DELIVERED_상태에서_수령_확인하면_RECEIVED_로_전이된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      forceStatus(deliveryId, DeliveryStatus.DELIVERED);
+
+      boolean result = deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      assertThat(result).isTrue();
+      assertThat(findFresh(deliveryId).getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+    }
+
+    @Test
+    void SNAPSHOTTED_상태에서는_실패한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", null);
+
+      boolean result = deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      assertThat(result).isFalse();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.SNAPSHOTTED);
+      assertThat(found.getReceivedAt()).isNull();
+    }
+
+    @Test
+    void 이미_RECEIVED_면_실패한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      boolean result =
+          deliveryRepository.confirmReceiptIfActive(deliveryId, NOW.plus(1, ChronoUnit.HOURS));
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getReceivedAt()).isEqualTo(NOW);
     }
   }
 
@@ -165,15 +289,28 @@ class JpaDeliveryRepositoryAdapterTest {
         storeName);
   }
 
-  private void saveDelivery(
+  private Long saveDelivery(
       final Long participationId, final String storeName, final String trackingNumber) {
     Delivery delivery =
         Delivery.createSnapshot(
             participationId, ShippingMethod.GS25_HALF, storeName, "수령인", "010-1234-5678");
-    if (trackingNumber != null) {
-      delivery.registerTracking(trackingNumber, Instant.now());
-    }
     deliveryRepository.save(delivery);
     em.flush();
+    if (trackingNumber != null) {
+      deliveryRepository.registerTrackingIfRegistrable(delivery.getId(), trackingNumber, NOW);
+    }
+    return delivery.getId();
+  }
+
+  private Delivery findFresh(final Long deliveryId) {
+    em.flush();
+    em.clear();
+    return deliveryRepository.findById(deliveryId).orElseThrow();
+  }
+
+  /** CAS 를 우회해 상태를 강제 세팅한다 (DELIVERED 등 아직 도달 경로가 없는 상태의 픽스처용). */
+  private void forceStatus(final Long deliveryId, final DeliveryStatus status) {
+    jdbcTemplate.update("UPDATE deliveries SET status = ? WHERE id = ?", status.name(), deliveryId);
+    em.clear();
   }
 }

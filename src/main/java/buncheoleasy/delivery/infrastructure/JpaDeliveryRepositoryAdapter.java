@@ -2,6 +2,8 @@ package buncheoleasy.delivery.infrastructure;
 
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
+import buncheoleasy.delivery.domain.DeliveryStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,27 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
   @Override
   public Delivery save(final Delivery delivery) {
     return jpaDeliveryRepository.save(delivery);
+  }
+
+  @Override
+  public boolean registerTrackingIfRegistrable(
+      final Long id, final String trackingNumber, final Instant now) {
+    int updated =
+        jpaDeliveryRepository.registerTrackingIfRegistrable(
+            id, trackingNumber, DeliveryStatus.SNAPSHOTTED, DeliveryStatus.SHIPPING, now);
+    return updated > 0;
+  }
+
+  @Override
+  public boolean confirmReceiptIfActive(final Long id, final Instant now) {
+    int updated =
+        jpaDeliveryRepository.confirmReceiptIfActive(
+            id,
+            DeliveryStatus.SHIPPING,
+            DeliveryStatus.DELIVERED,
+            DeliveryStatus.RECEIVED,
+            now);
+    return updated > 0;
   }
 
   @Override

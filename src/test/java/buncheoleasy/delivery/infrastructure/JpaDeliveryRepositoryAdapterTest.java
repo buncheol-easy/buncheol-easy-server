@@ -20,6 +20,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -222,6 +223,162 @@ class JpaDeliveryRepositoryAdapterTest {
 
       assertThat(result).isFalse();
       assertThat(findFresh(deliveryId).getReceivedAt()).isEqualTo(NOW);
+    }
+  }
+
+  @Nested
+  @DisplayName("markDeliveredIfShipping — 지점 도착 감지 CAS")
+  class MarkDeliveredCasTest {
+
+    @Test
+    void SHIPPING_상태에서_도착_감지시_DELIVERED_로_전이된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      Instant eventTime = NOW.plus(1, ChronoUnit.DAYS);
+
+      boolean result =
+          deliveryRepository.markDeliveredIfShipping(
+              deliveryId, eventTime, eventTime.plusSeconds(60));
+
+      assertThat(result).isTrue();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.DELIVERED);
+      assertThat(found.getDeliveredAt()).isEqualTo(eventTime);
+    }
+
+    @Test
+    void 이미_DELIVERED_면_실패한다_콜백_중복_멱등() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.markDeliveredIfShipping(deliveryId, NOW, NOW);
+
+      boolean result =
+          deliveryRepository.markDeliveredIfShipping(
+              deliveryId, NOW.plus(1, ChronoUnit.HOURS), NOW.plus(1, ChronoUnit.HOURS));
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getDeliveredAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void RECEIVED_상태에서는_실패하고_역행하지_않는다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      boolean result = deliveryRepository.markDeliveredIfShipping(deliveryId, NOW, NOW);
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+    }
+  }
+
+  @Nested
+  @DisplayName("markReceivedIfDelivered / markReceivedIfShipping — 고객 수령 감지 CAS")
+  class MarkReceivedCasTest {
+
+    @Test
+    void DELIVERED_상태에서_수령_감지시_RECEIVED_로_전이되고_deliveredAt_은_유지된다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.markDeliveredIfShipping(deliveryId, NOW, NOW);
+      Instant eventTime = NOW.plus(1, ChronoUnit.DAYS);
+
+      boolean result =
+          deliveryRepository.markReceivedIfDelivered(deliveryId, eventTime, eventTime);
+
+      assertThat(result).isTrue();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+      assertThat(found.getReceivedAt()).isEqualTo(eventTime);
+      assertThat(found.getDeliveredAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void SHIPPING_상태에서는_markReceivedIfDelivered_가_실패한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+
+      boolean result = deliveryRepository.markReceivedIfDelivered(deliveryId, NOW, NOW);
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
+    }
+
+    @Test
+    void 도착_감지를_놓친_직행_전이는_deliveredAt_도_함께_채운다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      Instant eventTime = NOW.plus(1, ChronoUnit.DAYS);
+
+      boolean result = deliveryRepository.markReceivedIfShipping(deliveryId, eventTime, eventTime);
+
+      assertThat(result).isTrue();
+      Delivery found = findFresh(deliveryId);
+      assertThat(found.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
+      assertThat(found.getDeliveredAt()).isEqualTo(eventTime);
+      assertThat(found.getReceivedAt()).isEqualTo(eventTime);
+    }
+
+    @Test
+    void 참여자가_먼저_수령확인한_배송은_직행_전이가_실패한다() {
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      Long deliveryId = saveDelivery(participationId, "GS25 잠실점", "TRACK123");
+      deliveryRepository.confirmReceiptIfActive(deliveryId, NOW);
+
+      boolean result =
+          deliveryRepository.markReceivedIfShipping(
+              deliveryId, NOW.plus(1, ChronoUnit.HOURS), NOW.plus(1, ChronoUnit.HOURS));
+
+      assertThat(result).isFalse();
+      assertThat(findFresh(deliveryId).getReceivedAt()).isEqualTo(NOW);
+    }
+  }
+
+  @Nested
+  @DisplayName("findAllByTrackingNumber — 운송장·배송방식·상태 조회")
+  class FindAllByTrackingNumberTest {
+
+    @Test
+    void 같은_운송장에_매핑된_추적_중_배송을_전부_반환한다() {
+      // 관리자 벌크 등록은 한 운송장을 여러 배송에 매핑한다 — 콜백 한 건이 전부 전이시켜야 한다.
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      Long deliveryA = saveDelivery(participationA, "GS25 잠실점", "TRACK123");
+      Long deliveryB = saveDelivery(participationB, "GS25 강남점", "TRACK123");
+
+      List<Delivery> result =
+          deliveryRepository.findAllByTrackingNumber(
+              "TRACK123",
+              ShippingMethod.GS25_HALF,
+              Set.of(DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED));
+
+      assertThat(result).extracting(Delivery::getId).containsExactlyInAnyOrder(deliveryA, deliveryB);
+    }
+
+    @Test
+    void 수령완료된_배송과_다른_배송방식은_제외된다() {
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      Long receivedId = saveDelivery(participationA, "GS25 잠실점", "TRACK123");
+      deliveryRepository.confirmReceiptIfActive(receivedId, NOW);
+      Long shippingId = saveDelivery(participationB, "GS25 강남점", "TRACK123");
+
+      List<Delivery> result =
+          deliveryRepository.findAllByTrackingNumber(
+              "TRACK123",
+              ShippingMethod.GS25_HALF,
+              Set.of(DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED));
+
+      assertThat(result).extracting(Delivery::getId).containsExactly(shippingId);
+
+      List<Delivery> otherMethod =
+          deliveryRepository.findAllByTrackingNumber(
+              "TRACK123",
+              ShippingMethod.CU_HALF,
+              Set.of(DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED));
+
+      assertThat(otherMethod).isEmpty();
     }
   }
 

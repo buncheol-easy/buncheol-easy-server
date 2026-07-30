@@ -3,7 +3,9 @@ package buncheoleasy.delivery.infrastructure;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,42 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
             DeliveryStatus.RECEIVED,
             now);
     return updated > 0;
+  }
+
+  @Override
+  public boolean markDeliveredIfShipping(
+      final Long id, final Instant eventTime, final Instant now) {
+    int updated =
+        jpaDeliveryRepository.markDeliveredIfShipping(
+            id, DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED, eventTime, now);
+    return updated > 0;
+  }
+
+  @Override
+  public boolean markReceivedIfDelivered(
+      final Long id, final Instant eventTime, final Instant now) {
+    int updated =
+        jpaDeliveryRepository.markReceivedIfDelivered(
+            id, DeliveryStatus.DELIVERED, DeliveryStatus.RECEIVED, eventTime, now);
+    return updated > 0;
+  }
+
+  @Override
+  public boolean markReceivedIfShipping(
+      final Long id, final Instant eventTime, final Instant now) {
+    int updated =
+        jpaDeliveryRepository.markReceivedIfShipping(
+            id, DeliveryStatus.SHIPPING, DeliveryStatus.RECEIVED, eventTime, now);
+    return updated > 0;
+  }
+
+  @Override
+  public List<Delivery> findAllByTrackingNumber(
+      final String trackingNumber,
+      final ShippingMethod shippingMethod,
+      final Collection<DeliveryStatus> statuses) {
+    return jpaDeliveryRepository.findAllByTrackingNumberAndShippingMethodAndStatusIn(
+        trackingNumber, shippingMethod, statuses);
   }
 
   @Override

@@ -257,6 +257,7 @@ CREATE TABLE deliveries
 
 CREATE UNIQUE INDEX uq_deliveries_participation_id ON deliveries (participation_id);
 CREATE INDEX idx_deliveries_status ON deliveries (status);
+CREATE INDEX idx_deliveries_tracking ON deliveries (tracking_number, shipping_method);
 
 CREATE TABLE buncheol_bookmarks
 (

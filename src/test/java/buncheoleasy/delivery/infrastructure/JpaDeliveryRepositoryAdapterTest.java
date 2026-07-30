@@ -424,6 +424,8 @@ class JpaDeliveryRepositoryAdapterTest {
   @DisplayName("findTrackedParcels — 추적 중 운송장 중복 제거 조회")
   class FindTrackedParcelsTest {
 
+    private static final Instant REGISTERED_AFTER = NOW.minus(30, ChronoUnit.DAYS);
+
     @Test
     void 같은_운송장_다건_배송은_한_건으로_중복_제거된다() {
       Long participationA = createConfirmedParticipation("fanA", 90_000L);
@@ -431,7 +433,7 @@ class JpaDeliveryRepositoryAdapterTest {
       saveDelivery(participationA, "GS25 잠실점", "TRACK123");
       saveDelivery(participationB, "GS25 강남점", "TRACK123");
 
-      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(100);
+      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(REGISTERED_AFTER, 100);
 
       assertThat(result)
           .containsExactly(new TrackedParcel(ShippingMethod.GS25_HALF, "TRACK123"));
@@ -446,7 +448,7 @@ class JpaDeliveryRepositoryAdapterTest {
       saveDelivery(participationB, "GS25 강남점", "TRACK-2");
       saveDelivery(participationC, "GS25 송파점", "TRACK-3");
 
-      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(2);
+      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(REGISTERED_AFTER, 2);
 
       assertThat(result).hasSize(2);
     }
@@ -462,11 +464,23 @@ class JpaDeliveryRepositoryAdapterTest {
       Long deliveredId = saveDelivery(participationC, "GS25 송파점", "TRACK-ARRIVED");
       deliveryRepository.markDeliveredIfShipping(deliveredId, NOW, NOW);
 
-      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(100);
+      List<TrackedParcel> result = deliveryRepository.findTrackedParcels(REGISTERED_AFTER, 100);
 
       // DELIVERED(지점 도착)는 아직 수령 감지가 남아 추적을 계속한다.
       assertThat(result)
           .containsExactly(new TrackedParcel(ShippingMethod.GS25_HALF, "TRACK-ARRIVED"));
+    }
+
+    @Test
+    void 등록이_기준_시각_이전인_운송장은_추적_포기로_제외된다() {
+      // 전이가 영영 안 되는 건(반송·오타)이 배치 앞자리를 영구 점유해 신규 운송장을 굶기지 않게.
+      Long participationId = createConfirmedParticipation("fanA", 90_000L);
+      saveDelivery(participationId, "GS25 잠실점", "TRACK-OLD");
+
+      List<TrackedParcel> result =
+          deliveryRepository.findTrackedParcels(NOW.plus(1, ChronoUnit.HOURS), 100);
+
+      assertThat(result).isEmpty();
     }
   }
 

@@ -40,15 +40,21 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
       @Param("delivered") DeliveryStatus delivered,
       @Param("now") Instant now);
 
-  /** 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회 — 상태 변경이 오래된(정체된) 운송장 우선. */
+  /**
+   * 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회 — 상태 변경이 오래된(정체된) 운송장 우선. 등록이 {@code registeredAfter} 이전인
+   * 운송장은 추적 포기로 제외한다 — 전이가 영영 안 되는 건(반송·오타)이 정렬 앞자리를 영구 점유해 신규 운송장을 굶기는 것을 막는다.
+   */
   @Query(
       "SELECT new buncheoleasy.delivery.domain.TrackedParcel(d.shippingMethod, d.trackingNumber) "
           + "FROM Delivery d "
           + "WHERE d.status IN :statuses AND d.trackingNumber IS NOT NULL "
+          + "AND d.trackingRegisteredAt > :registeredAfter "
           + "GROUP BY d.shippingMethod, d.trackingNumber "
           + "ORDER BY MIN(d.updatedAt) ASC")
   List<TrackedParcel> findTrackedParcels(
-      @Param("statuses") Collection<DeliveryStatus> statuses, Limit limit);
+      @Param("statuses") Collection<DeliveryStatus> statuses,
+      @Param("registeredAfter") Instant registeredAfter,
+      Limit limit);
 
   /** 참여 취소(분철 취소 cascade) 시 해당 참여의 배송 스냅샷을 정리 (bulk delete). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

@@ -5,6 +5,7 @@ import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerCarriers;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -20,13 +21,17 @@ public class TrackingWebhookRefreshService {
   // 한 주기에 처리할 운송장 수 상한. 초과분은 다음 주기에 처리한다.
   private static final int BATCH_SIZE = 500;
 
+  // 등록 후 이 기간이 지나면 추적 포기 — 전이가 영영 안 되는 건(반송·오타)이 배치 앞자리와 API 호출을 영구 점유하는 것을 막는다.
+  private static final Duration MAX_TRACKING_AGE = Duration.ofDays(30);
+
   private final DeliveryTrackerClient deliveryTrackerClient;
   private final DeliveryDomainService deliveryDomainService;
   private final TrackingSyncService trackingSyncService;
 
   /** 추적 중 운송장을 상태 변경이 오래된 순으로 최대 {@link #BATCH_SIZE} 개 조회한다 — 상한 도달이 반복되면 상향 필요. */
-  public List<TrackedParcel> findRefreshTargets() {
-    List<TrackedParcel> targets = deliveryDomainService.findTrackedParcels(BATCH_SIZE);
+  public List<TrackedParcel> findRefreshTargets(final Instant now) {
+    List<TrackedParcel> targets =
+        deliveryDomainService.findTrackedParcels(now.minus(MAX_TRACKING_AGE), BATCH_SIZE);
     if (targets.size() >= BATCH_SIZE) {
       log.warn("추적 웹훅 갱신 - 대상이 배치 상한({})에 도달 — 반복되면 상한 조정 필요", BATCH_SIZE);
     }

@@ -5,6 +5,7 @@ import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerCarriers;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerProperties;
+import buncheoleasy.delivery.infrastructure.TrackingExecutorConfig;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,7 @@ public class TrackingWebhookRegistrar {
   private final DeliveryDomainService deliveryDomainService;
   private final Clock clock;
 
-  @Async
+  @Async(TrackingExecutorConfig.TRACKING_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onTrackingRegistered(final TrackingRegisteredEvent event) {
     if (!deliveryTrackerClient.isEnabled()) {

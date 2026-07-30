@@ -90,9 +90,9 @@ public class DeliveryDomainService {
     return deliveryRepository.findAllByTrackingNumber(trackingNumber, shippingMethod, statuses);
   }
 
-  /** 추적 중(SHIPPING·DELIVERED) 운송장을 배송방식·번호 단위로 중복 제거해 조회한다 (웹훅 갱신 스케줄러용). */
-  public List<TrackedParcel> findTrackedParcels(final int limit) {
-    return deliveryRepository.findTrackedParcels(limit);
+  /** 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회한다 (웹훅 갱신 스케줄러용). 등록이 오래된 운송장은 추적 포기로 제외. */
+  public List<TrackedParcel> findTrackedParcels(final Instant registeredAfter, final int limit) {
+    return deliveryRepository.findTrackedParcels(registeredAfter, limit);
   }
 
   /** 지점 도착이 {@code threshold} 이전이고 아직 독촉하지 않은 배송 조회 (미수령 독촉 스케줄러용). */

@@ -164,8 +164,9 @@ app:
 delivery:
   tracker:
     api-url: https://apis.tracker.delivery/graphql
-    client-id: ${DELIVERY_TRACKER_CLIENT_ID}
-    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET}
+    # 빈 기본값 필수 — env 에 키가 아예 없어도 "미설정 = 연동 꺼짐" 으로 동작해야 한다.
+    client-id: ${DELIVERY_TRACKER_CLIENT_ID:}
+    client-secret: ${DELIVERY_TRACKER_CLIENT_SECRET:}
     callback-url: ${DELIVERY_TRACKER_CALLBACK_URL:http://localhost:8080/v1/deliveries/webhook/callback}
     # 콜백 발신자 검증용 공유 비밀값 — 웹훅 등록 시 콜백 URL 쿼리에 심고 수신 시 비교한다. 비면 콜백 수신 거부.
     webhook-token: ${DELIVERY_TRACKER_WEBHOOK_TOKEN:}

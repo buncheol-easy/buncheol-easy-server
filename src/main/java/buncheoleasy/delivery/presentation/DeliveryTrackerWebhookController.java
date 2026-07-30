@@ -3,6 +3,7 @@ package buncheoleasy.delivery.presentation;
 import buncheoleasy.delivery.application.TrackingSyncService;
 import buncheoleasy.delivery.dto.request.TrackingCallbackRequest;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerProperties;
+import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +32,7 @@ public class DeliveryTrackerWebhookController {
   @PostMapping("/callback")
   public ResponseEntity<Void> receiveCallback(
       @RequestParam(value = "token", required = false) final String token,
-      @RequestBody final TrackingCallbackRequest request) {
+      @Valid @RequestBody final TrackingCallbackRequest request) {
     if (!properties.webhookEnabled()) {
       log.warn("배송 추적 콜백 수신 - 검증 토큰 미설정이라 거부 - trackingNumber={}", request.trackingNumber());
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();

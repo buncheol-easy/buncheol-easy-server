@@ -83,9 +83,11 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
   }
 
   @Override
-  public List<TrackedParcel> findTrackedParcels(final int limit) {
+  public List<TrackedParcel> findTrackedParcels(final Instant registeredAfter, final int limit) {
     return jpaDeliveryRepository.findTrackedParcels(
-        Set.of(DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED), Limit.of(limit));
+        Set.of(DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED),
+        registeredAfter,
+        Limit.of(limit));
   }
 
   @Override

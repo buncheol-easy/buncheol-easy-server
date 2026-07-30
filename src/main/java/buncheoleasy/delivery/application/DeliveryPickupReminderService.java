@@ -27,11 +27,11 @@ public class DeliveryPickupReminderService {
   public DeliveryPickupReminderService(
       final DeliveryDomainService deliveryDomainService,
       final ApplicationEventPublisher eventPublisher,
-      // 인라인 기본값 — 이 빈은 스케줄러가 꺼져 있어도 항상 뜨므로 빈 env 값에 기동이 죽지 않게.
       @Value("${app.delivery.pickup-reminder.threshold:12h}") final Duration threshold) {
     this.deliveryDomainService = deliveryDomainService;
     this.eventPublisher = eventPublisher;
-    this.threshold = threshold;
+    // 인라인 기본값(:12h)은 키 부재만 커버한다 — 빈 env 값("")은 null 로 변환되므로 명시 폴백까지 둔다.
+    this.threshold = threshold == null ? Duration.ofHours(12) : threshold;
   }
 
   /** 도착 후 기준 시간이 지난 미독촉 DELIVERED 배송을 최대 {@link #BATCH_SIZE} 개 조회한다. */

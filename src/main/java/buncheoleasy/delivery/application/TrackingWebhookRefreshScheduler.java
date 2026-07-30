@@ -40,17 +40,19 @@ public class TrackingWebhookRefreshScheduler {
       log.debug("Delivery Tracker 미설정 - 추적 웹훅 갱신 건너뜀");
       return;
     }
-    List<TrackedParcel> targets = trackingWebhookRefreshService.findRefreshTargets();
+    List<TrackedParcel> targets =
+        trackingWebhookRefreshService.findRefreshTargets(Instant.now(clock));
     if (targets.isEmpty()) {
       return;
     }
 
-    Instant expirationTime = Instant.now(clock).plus(deliveryTrackerProperties.webhookTtl());
     int renewedCount = 0;
     int renewFailedCount = 0;
     int pollFailedCount = 0;
     for (TrackedParcel target : targets) {
       try {
+        // 만료시각은 건별로 계산한다 — 배치가 길어져도 뒤쪽 운송장의 실효 TTL 이 깎이지 않게.
+        Instant expirationTime = Instant.now(clock).plus(deliveryTrackerProperties.webhookTtl());
         if (trackingWebhookRefreshService.refresh(target, expirationTime)) {
           renewedCount++;
         } else {

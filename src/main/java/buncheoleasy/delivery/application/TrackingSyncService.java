@@ -5,6 +5,7 @@ import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerCarriers;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
+import buncheoleasy.delivery.infrastructure.TrackingExecutorConfig;
 import buncheoleasy.delivery.infrastructure.TrackLastEvent;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Clock;
@@ -50,7 +51,7 @@ public class TrackingSyncService {
   private final Clock clock;
 
   /** 콜백 수신 경로 — 비동기 처리, 실패는 로깅만 (갱신 스케줄러 폴링이 안전망). */
-  @Async
+  @Async(TrackingExecutorConfig.TRACKING_EXECUTOR)
   public void syncAsync(final String carrierId, final String trackingNumber) {
     try {
       sync(carrierId, trackingNumber);

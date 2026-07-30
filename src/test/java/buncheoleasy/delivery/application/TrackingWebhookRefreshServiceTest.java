@@ -11,6 +11,7 @@ import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerException;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -67,11 +68,13 @@ class TrackingWebhookRefreshServiceTest {
   }
 
   @Test
-  void 갱신_대상은_추적_중_운송장을_상한까지_조회한다() {
+  void 갱신_대상은_등록_30일_이내_추적_중_운송장을_상한까지_조회한다() {
     // given
-    given(deliveryDomainService.findTrackedParcels(500)).willReturn(List.of(PARCEL));
+    Instant now = Instant.parse("2026-03-23T12:00:00Z");
+    given(deliveryDomainService.findTrackedParcels(now.minus(Duration.ofDays(30)), 500))
+        .willReturn(List.of(PARCEL));
 
     // when & then
-    assertThat(trackingWebhookRefreshService.findRefreshTargets()).containsExactly(PARCEL);
+    assertThat(trackingWebhookRefreshService.findRefreshTargets(now)).containsExactly(PARCEL);
   }
 }

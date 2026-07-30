@@ -11,8 +11,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 지점 도착 후 미수령 배송의 독촉 알림을 구동한다. 반값택배는 보관기간(통상 3일)이 지나면 반송되므로, 도착 후 기준 시간(기본 24h)이 지나도록 수령이 감지되지
- * 않으면 참여자에게 찾아가라는 알림톡을 1회 보낸다.
+ * 지점 도착 후 미수령 배송의 독촉 알림을 구동한다. 반값택배는 보관기간(통상 3일)이 지나면 반송되므로, 도착 후 기준 시간(기본 12h)이 지나도록 수령이 감지되지
+ * 않은 배송에 참여자가 찾아가라는 알림톡을 1회 보낸다.
+ *
+ * <p>매일 정오(KST) 일괄 실행 — 발송 시각을 고정해 운영자가 예측할 수 있게 한다. 기준 시간이 12h 라 낮에 도착한 택배는 반드시 "도착 다음 날 정오"에
+ * 걸린다(24h 로 두면 오후 도착 건이 다음다음 날 정오로 밀려 보관기간 여유를 하루 까먹는다).
  *
  * <p>기본 꺼짐({@code app.delivery.pickup-reminder.enabled=false}) — 발송 마킹(1회 dedup)이 알림톡 발송 스킵과
  * 무관하게 소진되므로, 알리고 PICKUP_REMINDER_* 템플릿 승인·코드 설정 후에 켜야 한다.
@@ -29,9 +32,7 @@ public class DeliveryPickupReminderScheduler {
   private final DeliveryPickupReminderService deliveryPickupReminderService;
   private final Clock clock;
 
-  @Scheduled(
-      fixedDelayString = "${app.delivery.pickup-reminder.interval-ms}",
-      initialDelayString = "${app.delivery.pickup-reminder.initial-delay-ms}")
+  @Scheduled(cron = "${app.delivery.pickup-reminder.cron}", zone = "Asia/Seoul")
   public void remindUnclaimedDeliveries() {
     Instant now = Instant.now(clock);
     List<Delivery> targets = deliveryPickupReminderService.findReminderTargets(now);

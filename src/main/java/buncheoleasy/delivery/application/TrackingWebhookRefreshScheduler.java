@@ -13,12 +13,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 추적 중(SHIPPING·DELIVERED) 운송장의 웹훅을 주기적으로 재등록(TTL 연장)하고 최신 상태를 폴링한다. 웹훅은 만료시각(기본 48h)이 지나면 소멸하므로
- * 주기(기본 12h)가 TTL 의 절반 이하여야 만료 전 갱신 기회가 2회 이상 보장된다. 폴링은 콜백 유실·비동기 처리 실패의 안전망으로, 상태 정체 상한이 이 주기가
- * 된다.
- *
- * <p>운송장별 독립 처리({@link TrackingWebhookRefreshService#refresh})라 한 건 실패가 나머지를 막지 않고, 전이는 CAS 라 콜백과
- * 겹쳐도 안전하다. {@code app.delivery.tracking-refresh.enabled=false} 로 끌 수 있다 (테스트 환경 기본 비활성).
+ * 추적 중(SHIPPING·DELIVERED) 운송장의 웹훅을 주기 재등록(TTL 연장)하고 최신 상태를 폴링한다. 주기(기본 12h)는 웹훅 TTL(48h)의 절반
+ * 이하여야 만료 전 갱신 기회가 2회 이상 보장되고, 폴링은 콜백 유실의 안전망이라 상태 정체 상한이 이 주기다. 운송장별 격리 처리라 한 건 실패가 나머지를 막지
+ * 않는다.
  */
 @Slf4j
 @Component
@@ -57,7 +54,7 @@ public class TrackingWebhookRefreshScheduler {
         if (trackingWebhookRefreshService.refresh(target, expirationTime)) {
           renewedCount++;
         } else {
-          // 웹훅 연장 실패(폴링은 성공) — TTL 만료는 자동 추적을 조용히 죽이므로 요약에 따로 집계한다.
+          // 연장 실패는 자동 추적을 조용히 죽이므로 요약에 따로 집계한다.
           renewFailedCount++;
         }
       } catch (Exception e) {

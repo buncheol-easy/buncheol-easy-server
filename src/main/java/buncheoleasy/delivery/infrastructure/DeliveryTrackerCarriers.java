@@ -3,10 +3,7 @@ package buncheoleasy.delivery.infrastructure;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.util.Optional;
 
-/**
- * 배송 방법 ↔ Delivery Tracker 캐리어 ID 매핑. 캐리어 ID 는 Delivery Tracker 고유 식별자라 도메인 enum 이 아닌 연동 계층에 둔다.
- * 지원 목록: https://tracker.delivery/carriers
- */
+/** 배송 방법 ↔ Delivery Tracker 캐리어 ID 매핑 — 외부 고유 식별자라 도메인 enum 이 아닌 연동 계층에 둔다. */
 public final class DeliveryTrackerCarriers {
 
   private static final String CU = "kr.cupost";

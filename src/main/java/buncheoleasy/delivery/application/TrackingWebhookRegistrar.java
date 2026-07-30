@@ -15,9 +15,8 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 운송장 등록 커밋 후 Delivery Tracker 에 추적 웹훅을 등록한다. 같은 운송장 재등록은 만료 연장으로 동작하는 멱등 연산이라 이벤트가 중복돼도 무해하다.
- *
- * <p>등록 실패는 로깅만 하고 전파하지 않는다 — 자동 추적은 보조 수단이고, 갱신 스케줄러가 배송중 운송장 전체를 주기 재등록하며 자가 치유한다.
+ * 운송장 등록 커밋 후 Delivery Tracker 에 추적 웹훅을 등록한다. 재등록은 만료 연장으로 동작하는 멱등 연산이라 이벤트 중복이 무해하고, 등록 실패는
+ * 로깅만 한다 — 갱신 스케줄러가 주기 재등록으로 자가 치유한다.
  */
 @Slf4j
 @Component

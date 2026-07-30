@@ -10,24 +10,19 @@ public interface DeliveryRepository {
 
   Delivery save(Delivery delivery);
 
-  /**
-   * 운송장 등록 CAS (SNAPSHOTTED → SHIPPING, SHIPPING 재등록은 번호 last-write-wins). 성공 여부를 반환하며 호출 측
-   * {@code @Transactional} 필수.
-   */
+  /** 운송장 등록 CAS (SNAPSHOTTED·SHIPPING → SHIPPING). 호출 측 {@code @Transactional} 필수. */
   boolean registerTrackingIfRegistrable(Long id, String trackingNumber, Instant now);
 
-  /** 수령 확인 CAS (SHIPPING·DELIVERED → RECEIVED). 성공 여부를 반환하며 호출 측 {@code @Transactional} 필수. */
+  /** 수령 확인 CAS (SHIPPING·DELIVERED → RECEIVED). 호출 측 {@code @Transactional} 필수. */
   boolean confirmReceiptIfActive(Long id, Instant now);
 
-  /** 운송사 추적의 지점 도착 감지 CAS (SHIPPING → DELIVERED). 호출 측 {@code @Transactional} 필수. */
+  /** 지점 도착 감지 CAS (SHIPPING → DELIVERED). 호출 측 {@code @Transactional} 필수. */
   boolean markDeliveredIfShipping(Long id, Instant eventTime, Instant now);
 
-  /** 운송사 추적의 고객 수령 감지 CAS (DELIVERED → RECEIVED). 호출 측 {@code @Transactional} 필수. */
+  /** 고객 수령 감지 CAS (DELIVERED → RECEIVED). 호출 측 {@code @Transactional} 필수. */
   boolean markReceivedIfDelivered(Long id, Instant eventTime, Instant now);
 
-  /**
-   * 도착 콜백을 놓친 직행 전이 CAS (SHIPPING → RECEIVED, deliveredAt 도 함께 채움). 호출 측 {@code @Transactional} 필수.
-   */
+  /** 도착 감지를 놓친 직행 CAS (SHIPPING → RECEIVED, deliveredAt 도 채움). 호출 측 {@code @Transactional} 필수. */
   boolean markReceivedIfShipping(Long id, Instant eventTime, Instant now);
 
   /** 운송장·배송방식이 같은 지정 상태의 배송 전부 조회 — 관리자 벌크 등록으로 한 운송장에 여러 배송이 매핑될 수 있다. */
@@ -40,10 +35,7 @@ public interface DeliveryRepository {
   /** 지점 도착(DELIVERED)이 {@code threshold} 이전이고 아직 독촉하지 않은 배송을 도착 오래된 순으로 조회한다. */
   List<Delivery> findPickupReminderTargets(Instant threshold, int limit);
 
-  /**
-   * 미수령 독촉 1회 발송 마킹 CAS ({@code pickupReminderSentAt IS NULL} 이 dedup 가드). 성공 여부를 반환하며 호출 측
-   * {@code @Transactional} 필수.
-   */
+  /** 미수령 독촉 1회 발송 마킹 CAS (NULL 조건이 dedup 가드). 호출 측 {@code @Transactional} 필수. */
   boolean markPickupReminderSent(Long id, Instant now);
 
   Optional<Delivery> findById(Long id);

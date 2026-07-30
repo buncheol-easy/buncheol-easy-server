@@ -16,11 +16,9 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
- * Delivery Tracker GraphQL API 클라이언트. 운송장의 최신 추적 이벤트 조회(track)와 상태 변화 콜백을 받을 웹훅 등록
- * (registerTrackWebhook)을 담당한다.
- *
- * <p>주의 두 가지가 있다. (1) GraphQL 은 업무 실패를 HTTP 200 + {@code errors} 배열로 돌려주므로 상태코드만 보고 성공을 판단하면 안 된다.
- * (2) 웹훅은 {@code expirationTime}(권장 48시간) 이 지나면 소멸하므로, 만료 전에 같은 인자로 재등록해 연장해야 한다 — 재등록은 멱등하다.
+ * Delivery Tracker GraphQL 클라이언트 — 최신 추적 이벤트 조회(track)와 추적 웹훅 등록(registerTrackWebhook). 주의: (1)
+ * GraphQL 은 업무 실패를 HTTP 200 + {@code errors} 배열로 주므로 본문을 검증해야 한다. (2) 웹훅은 expirationTime(권장 48h) 후
+ * 소멸하며 같은 인자 재등록이 곧 연장이다(멱등).
  */
 @Slf4j
 @Component
@@ -57,10 +55,7 @@ public class DeliveryTrackerClient {
     return properties.outboundEnabled() && properties.webhookEnabled();
   }
 
-  /**
-   * 운송장의 최신 추적 이벤트 조회. 캐리어에 아직 등록되지 않은 운송장(NOT_FOUND)이거나 추적 이벤트가 없으면 empty 를 반환하고, 그 외 오류는 예외를
-   * 던진다.
-   */
+  /** 최신 추적 이벤트 조회. 캐리어 미등록(NOT_FOUND)·이벤트 없음은 empty, 그 외 오류는 예외. */
   public Optional<TrackLastEvent> findLastEvent(final String carrierId, final String trackingNumber) {
     requireEnabled(trackingNumber);
     TrackResponse response =
@@ -87,10 +82,7 @@ public class DeliveryTrackerClient {
         new TrackLastEvent(statusCode, statusName, parseTime(lastEvent.time(), trackingNumber)));
   }
 
-  /**
-   * 추적 웹훅 등록·연장. 같은 (carrierId, trackingNumber) 로 재호출하면 {@code expirationTime} 만 갱신되는 멱등 연산이라 중복 호출이
-   * 무해하다.
-   */
+  /** 추적 웹훅 등록·연장 (같은 인자 재호출 = 만료 연장, 멱등). */
   public void registerWebhook(
       final String carrierId, final String trackingNumber, final Instant expirationTime) {
     requireEnabled(trackingNumber);
@@ -114,10 +106,7 @@ public class DeliveryTrackerClient {
     }
   }
 
-  /**
-   * fail-closed 안전망 — 호출자는 {@link #isEnabled()} 로 먼저 걸러야 하고, 여기까지 온 미설정 호출은 버그다. 특히 콜백 검증 토큰 없이
-   * 웹훅을 등록하면 인증 불가능한 콜백이 열리므로 조용히 진행하지 않는다.
-   */
+  /** fail-closed 안전망 — 토큰 없이 웹훅을 등록하면 인증 불가능한 콜백이 열리므로 조용히 진행하지 않는다. */
   private void requireEnabled(final String trackingNumber) {
     if (!isEnabled()) {
       throw new DeliveryTrackerException(

@@ -11,10 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/**
- * 추적 중 운송장의 웹훅 TTL 연장 + 상태 폴링. 운송장 단위로 ① 웹훅 재등록(만료 연장, 초기 등록 실패 자가 치유) ② 최신 상태 동기화(콜백 유실 안전망)를
- * 수행한다. 재등록이 실패해도 폴링은 진행한다 — 둘은 독립적인 안전망이다.
- */
+/** 운송장 단위로 ① 웹훅 재등록(TTL 연장, 등록 실패 자가 치유) ② 상태 폴링(콜백 유실 안전망)을 수행한다 — 둘은 독립이라 ①이 실패해도 ②는 진행한다. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -27,10 +24,7 @@ public class TrackingWebhookRefreshService {
   private final DeliveryDomainService deliveryDomainService;
   private final TrackingSyncService trackingSyncService;
 
-  /**
-   * 추적 중(SHIPPING·DELIVERED) 운송장을 상태 변경이 오래된 순으로 최대 {@link #BATCH_SIZE} 개 조회한다. 상한을 넘는 초과분은 이번 주기에
-   * 빠지지만 정체된 운송장이 우선이라 다음 주기들에서 따라잡힌다 — 상한 도달이 반복되면 BATCH_SIZE 상향이 필요하다.
-   */
+  /** 추적 중 운송장을 상태 변경이 오래된 순으로 최대 {@link #BATCH_SIZE} 개 조회한다 — 상한 도달이 반복되면 상향 필요. */
   public List<TrackedParcel> findRefreshTargets() {
     List<TrackedParcel> targets = deliveryDomainService.findTrackedParcels(BATCH_SIZE);
     if (targets.size() >= BATCH_SIZE) {
@@ -40,9 +34,9 @@ public class TrackingWebhookRefreshService {
   }
 
   /**
-   * 운송장 1건의 웹훅 연장 + 폴링. 재등록 실패는 삼키고 폴링은 시도하며(둘은 독립 안전망), 폴링 실패는 호출자에게 전파해 건별 격리·집계를 맡긴다.
+   * 운송장 1건의 웹훅 연장 + 폴링. 연장 실패는 삼키고 폴링은 시도하며, 폴링 실패는 호출자에게 전파해 건별 격리·집계를 맡긴다.
    *
-   * @return 웹훅 재등록(TTL 연장) 성공 여부 — 실패 건수를 집계에 정확히 남기기 위한 값
+   * @return 웹훅 연장 성공 여부 (요약 집계용)
    */
   public boolean refresh(final TrackedParcel parcel, final Instant expirationTime) {
     String carrierId = DeliveryTrackerCarriers.carrierId(parcel.shippingMethod());

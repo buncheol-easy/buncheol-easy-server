@@ -18,8 +18,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 참여 확정 시점에 생성되는 배송 스냅샷. 상태 전이(SHIPPING·DELIVERED·RECEIVED)는 호스트/관리자 수동 경로와 운송사 추적 웹훅 자동 전이가
- * 경합할 수 있어 리포지토리의 status 조건부 CAS UPDATE 로만 수행한다 — 엔티티는 조회용 데이터 홀더로, 전이 도메인 메서드를 두지 않는다.
+ * 참여 확정 시점에 생성되는 배송 스냅샷. 수동 경로와 추적 웹훅 자동 전이가 경합하므로 상태 전이는 리포지토리의 status 조건부 CAS UPDATE 로만 하고,
+ * 엔티티는 조회용 홀더로 둔다(전이 도메인 메서드 없음).
  */
 @Entity
 @Table(name = "deliveries")

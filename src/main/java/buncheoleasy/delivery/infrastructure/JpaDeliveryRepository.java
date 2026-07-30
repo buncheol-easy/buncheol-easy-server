@@ -40,10 +40,7 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
       @Param("delivered") DeliveryStatus delivered,
       @Param("now") Instant now);
 
-  /**
-   * 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회 (웹훅 갱신·폴링 대상). 상태 변경이 가장 오래된 운송장부터 돌려줘, 배치 상한에 걸려도 갱신이 가장
-   * 급한(정체된) 운송장이 우선 처리된다.
-   */
+  /** 추적 중 운송장을 배송방식·번호 단위로 중복 제거해 조회 — 상태 변경이 오래된(정체된) 운송장 우선. */
   @Query(
       "SELECT new buncheoleasy.delivery.domain.TrackedParcel(d.shippingMethod, d.trackingNumber) "
           + "FROM Delivery d "
@@ -58,10 +55,7 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
   @Query("DELETE FROM Delivery d WHERE d.participationId IN :participationIds")
   int deleteByParticipationIdIn(@Param("participationIds") List<Long> participationIds);
 
-  /**
-   * 운송장 등록 CAS. SNAPSHOTTED → SHIPPING 최초 등록과 SHIPPING 상태의 번호 재등록(last-write-wins)을 모두 허용한다.
-   * 배송이 이미 DELIVERED/RECEIVED 로 진행됐으면 0 을 반환해 역행을 막는다.
-   */
+  /** 운송장 등록 CAS — 최초 등록과 SHIPPING 재등록(번호 last-write-wins) 허용, DELIVERED/RECEIVED 역행 차단. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Delivery d "
@@ -88,7 +82,7 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
       @Param("received") DeliveryStatus received,
       @Param("now") Instant now);
 
-  /** 운송사 추적이 지점 도착을 감지: SHIPPING → DELIVERED CAS. eventTime 은 캐리어 이벤트 시각. */
+  /** 지점 도착 감지 CAS (SHIPPING → DELIVERED). eventTime 은 캐리어 이벤트 시각. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Delivery d "
@@ -101,7 +95,7 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
       @Param("eventTime") Instant eventTime,
       @Param("now") Instant now);
 
-  /** 운송사 추적이 고객 수령을 감지: DELIVERED → RECEIVED CAS. */
+  /** 고객 수령 감지 CAS (DELIVERED → RECEIVED). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Delivery d "
@@ -115,8 +109,7 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
       @Param("now") Instant now);
 
   /**
-   * 도착 콜백을 놓친 채 고객 수령이 감지된 직행 전이: SHIPPING → RECEIVED CAS. 탈퇴 가드·환급 기산이 deliveredAt 을 참조하므로 null 로
-   * 남기지 않고 수령 시각으로 함께 채운다(실제 지점 도착 시각은 알 수 없어 근사치).
+   * 도착 감지를 놓친 직행 CAS (SHIPPING → RECEIVED). 탈퇴 가드·환급 기산이 참조하는 deliveredAt 을 수령 시각으로 함께 채운다(근사치).
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

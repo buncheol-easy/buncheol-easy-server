@@ -8,11 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Delivery Tracker(운송장 추적 API) 연동 설정. 키는 시크릿이라 환경변수로만 주입하며, 비어 있으면 연동을 꺼둔다 — 키 발급 전에도 서버가 정상 기동해야
- * 하므로 필수값으로 두지 않는다(페이액션과 같은 방식).
- *
- * <p>{@code webhookToken} 은 추적 콜백의 발신자를 검증하는 공유 비밀값이다. Delivery Tracker 는 콜백에 서명·인증 헤더를 싣지 않아, 웹훅 등록
- * 시 콜백 URL 쿼리 파라미터에 이 토큰을 심어두고 수신 측에서 비교하는 것이 유일한 인증 수단이다.
+ * Delivery Tracker 연동 설정. 시크릿은 환경변수로만 주입하고 비면 연동을 꺼둔다(페이액션과 같은 방식). {@code webhookToken} 은 콜백 발신자
+ * 검증용 공유 비밀값 — 콜백에 서명이 없어 콜백 URL 쿼리에 심어둔 이 토큰 비교가 유일한 인증 수단이다.
  */
 @Validated
 @ConfigurationProperties(prefix = "delivery.tracker")

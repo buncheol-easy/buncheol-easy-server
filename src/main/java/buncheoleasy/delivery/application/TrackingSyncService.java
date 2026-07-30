@@ -18,10 +18,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 /**
- * 운송장의 최신 추적 상태를 조회해 배송 상태에 반영한다. 추적 콜백(웹훅)과 갱신 스케줄러의 폴링 안전망이 같은 경로를 쓴다.
- *
- * <p>콜백 본문에는 캐리어·운송장 번호만 오고 상태가 없으므로 Track API 를 재조회해 최신 이벤트 하나로 판정한다 — 중간 콜백을 놓쳐도 다음 조회가 최신 상태를
- * 반영하므로 따라잡힌다. 전이는 전부 CAS 라 콜백 중복·수동 수령확인과 겹쳐도 수렴한다.
+ * 운송장의 최신 추적 이벤트를 조회해 배송 상태에 반영한다 — 콜백(상태 미포함이라 Track API 재조회)과 갱신 스케줄러 폴링이 같은 경로를 쓴다. 최신 이벤트
+ * 하나로 판정하므로 중간 콜백을 놓쳐도 따라잡히고, 전이는 전부 CAS 라 중복·경합에도 수렴한다.
  */
 @Slf4j
 @Service
@@ -51,7 +49,7 @@ public class TrackingSyncService {
   private final TrackingTransitionService trackingTransitionService;
   private final Clock clock;
 
-  /** 콜백 수신 경로 — 202 응답을 1초 내에 돌려줘야 하므로 비동기로 처리하고, 실패는 로깅만 한다(갱신 스케줄러 폴링이 안전망). */
+  /** 콜백 수신 경로 — 비동기 처리, 실패는 로깅만 (갱신 스케줄러 폴링이 안전망). */
   @Async
   public void syncAsync(final String carrierId, final String trackingNumber) {
     try {
@@ -80,7 +78,6 @@ public class TrackingSyncService {
         deliveryDomainService.findAllByTrackingNumber(
             trackingNumber, shippingMethod.get(), TRACKED_STATUSES);
     if (targets.isEmpty()) {
-      // 전부 수령완료됐거나 우리가 모르는 운송장(취소 정리 등) — 조회 비용을 아끼고 끝낸다.
       log.debug("배송 추적 동기화 - 추적 중 배송 없음 - trackingNumber={}", trackingNumber);
       return;
     }
@@ -93,8 +90,7 @@ public class TrackingSyncService {
     TrackLastEvent lastEvent = found.get();
     CarrierEvent event = resolveEvent(lastEvent);
     if (event == CarrierEvent.OTHER) {
-      // 정규화 실패(UNKNOWN + 미지 문구)는 매핑 추가가 필요한 신호라 info 로 노출하고,
-      // 정상 코드(이동중 등)의 스킵은 평시 소음이라 debug 로 낮춘다.
+      // 정규화 실패(UNKNOWN)는 매핑 추가가 필요한 신호라 info, 정상 코드 스킵은 평시 소음이라 debug.
       if (CARRIER_UNKNOWN.equals(lastEvent.statusCode())) {
         log.info(
             "배송 추적 동기화 - 정규화 안 된 상태라 스킵 - trackingNumber={} statusName={}",
@@ -135,11 +131,9 @@ public class TrackingSyncService {
   }
 
   /**
-   * 캐리어 이벤트 해석. 캐리어와 우리 상태의 이름이 어긋난다 — 캐리어 AVAILABLE_FOR_PICKUP(지점 도착) = 우리 DELIVERED, 캐리어
-   * DELIVERED(고객이 찾아감) = 우리 RECEIVED.
-   *
-   * <p>cupost 는 Delivery Tracker 의 코드 정규화가 안 돼 전 이벤트가 UNKNOWN + 원문 한글 문구로 온다(2026-07 실측). 알려진 문구만
-   * 정확 일치로 폴백 매핑하고, 그 외 문구는 지금처럼 스킵된다(fail-safe) — 스킵 로그의 statusName 으로 새 문구를 발견하면 여기에 추가한다.
+   * 캐리어 이벤트 해석 — 이름이 어긋난다: 캐리어 AVAILABLE_FOR_PICKUP(지점 도착) = 우리 DELIVERED, 캐리어 DELIVERED(고객 수령) =
+   * 우리 RECEIVED. cupost 는 코드 정규화가 안 돼 UNKNOWN + 원문 문구로 오므로(2026-07 실측) 알려진 문구만 정확 일치로 폴백하고, 미지
+   * 문구는 스킵 로그의 statusName 을 보고 여기에 추가한다.
    */
   private CarrierEvent resolveEvent(final TrackLastEvent lastEvent) {
     if (CARRIER_AVAILABLE_FOR_PICKUP.equals(lastEvent.statusCode())) {

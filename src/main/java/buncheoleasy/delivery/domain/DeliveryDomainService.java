@@ -37,8 +37,8 @@ public class DeliveryDomainService {
   }
 
   /**
-   * 운송장 등록 (SNAPSHOTTED → SHIPPING CAS, SHIPPING 재등록은 번호 last-write-wins). 웹훅 자동 전이가 배송을 이미
-   * DELIVERED/RECEIVED 로 진행시켰으면 CAS 가 실패하고 상태 위반 예외를 던진다. 호출 측 {@code @Transactional} 필수.
+   * 운송장 등록 (SNAPSHOTTED → SHIPPING CAS, 재등록은 번호 last-write-wins). 이미 DELIVERED/RECEIVED 로 진행됐으면 상태
+   * 위반 예외. 호출 측 {@code @Transactional} 필수.
    */
   public void registerTracking(final Long deliveryId, final String trackingNumber, final Instant now) {
     if (trackingNumber == null || trackingNumber.isBlank()) {
@@ -50,8 +50,7 @@ public class DeliveryDomainService {
   }
 
   /**
-   * 수령 확인 (SHIPPING·DELIVERED → RECEIVED CAS). 운송장 등록 전이거나 이미 수령완료면 상태 위반 예외를 던진다. 호출 측
-   * {@code @Transactional} 필수.
+   * 수령 확인 (SHIPPING·DELIVERED → RECEIVED CAS). 등록 전·이미 수령완료면 상태 위반 예외. 호출 측 {@code @Transactional} 필수.
    */
   public void confirmReceipt(final Long deliveryId, final Instant now) {
     if (!deliveryRepository.confirmReceiptIfActive(deliveryId, now)) {
@@ -60,22 +59,22 @@ public class DeliveryDomainService {
   }
 
   /**
-   * 운송사 추적의 지점 도착 감지 (SHIPPING → DELIVERED CAS). 멱등하며 실패 시(이미 도착/수령) 예외 없이 false 를 돌려준다 — 추적 콜백은
-   * 중복 수신될 수 있어 이미 전이된 건을 오류로 다루지 않는다. 호출 측 {@code @Transactional} 필수.
+   * 지점 도착 감지 (SHIPPING → DELIVERED CAS). 콜백은 중복 수신될 수 있어 실패(이미 전이)는 예외 없이 false. 호출 측
+   * {@code @Transactional} 필수.
    */
   public boolean markDeliveredIfShipping(
       final Long deliveryId, final Instant eventTime, final Instant now) {
     return deliveryRepository.markDeliveredIfShipping(deliveryId, eventTime, now);
   }
 
-  /** 운송사 추적의 고객 수령 감지 (DELIVERED → RECEIVED CAS). 멱등, 실패 시 false. 호출 측 {@code @Transactional} 필수. */
+  /** 고객 수령 감지 (DELIVERED → RECEIVED CAS). 멱등, 실패 시 false. 호출 측 {@code @Transactional} 필수. */
   public boolean markReceivedIfDelivered(
       final Long deliveryId, final Instant eventTime, final Instant now) {
     return deliveryRepository.markReceivedIfDelivered(deliveryId, eventTime, now);
   }
 
   /**
-   * 도착 콜백을 놓친 직행 전이 (SHIPPING → RECEIVED CAS, deliveredAt 도 함께 채움). 멱등, 실패 시 false. 호출 측
+   * 도착 감지를 놓친 직행 전이 (SHIPPING → RECEIVED CAS, deliveredAt 도 채움). 멱등, 실패 시 false. 호출 측
    * {@code @Transactional} 필수.
    */
   public boolean markReceivedIfShipping(

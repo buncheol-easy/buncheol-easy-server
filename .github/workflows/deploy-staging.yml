@@ -19,6 +19,10 @@ concurrency:
   group: backend-staging-deploy
   cancel-in-progress: true
 
+# 기본 최소권한 — build/promote 잡만 OIDC 용 id-token 을 자체 선언으로 추가한다
+permissions:
+  contents: read
+
 env:
   ECR_REGISTRY: 823164610944.dkr.ecr.ap-northeast-2.amazonaws.com
   IMAGE_REPO: bce-backend
@@ -58,9 +62,12 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
-            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:staging
+          # 여기서는 sha- 불변 태그만 push 한다. staging 별칭은 헬스체크 통과 후
+          # promote 잡이 옮긴다 — "별칭 = 지금 떠 있는 것" 불변식 (리뷰 #89 반영).
+          tags: ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+          # provenance attestation 은 ECR 에 untagged 매니페스트를 남겨 lifecycle 카운팅과
+          # promote 재태깅에 노이즈가 된다 — 단일 아키 이미지라 끈다.
+          provenance: false
           # Gradle 의존성 레이어가 재사용되도록 GHA 캐시 사용 — 2회차부터 빌드가 크게 준다
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -68,7 +75,9 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, staging]
-    timeout-minutes: 10
+    # 내부 최악 예산(pull 5m + up 3m + 헬스체크 ~3.3m ≈ 11.3m)보다 커야
+    # OS 레벨 timeout 이 잡 취소보다 먼저 발화한다 (리뷰 #89 반영)
+    timeout-minutes: 15
     env:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
@@ -92,7 +101,7 @@ jobs:
 
           # 박스는 pull 만 한다 — 빌드 부하 0 이 이 구조의 존재 이유.
           # timeout 은 박스·네트워크 이상 시 잡이 매달리지 않게 하는 안전망(35 §11 교훈 유지).
-          timeout -k 30s 8m docker compose -f docker-compose.staging.yml pull backend
+          timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend
           timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
 
           echo "Waiting for backend health check..."
@@ -112,7 +121,8 @@ jobs:
           echo "Backend health check passed"
 
       - name: Post-mortem snapshot
-        if: failure()
+        # cancelled() 포함 — 잡 타임아웃(=취소)이 가장 진단이 필요한 케이스다 (리뷰 #89 반영)
+        if: failure() || cancelled()
         run: |
           cd /home/ubuntu/buncheol-easy-server
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
@@ -124,8 +134,39 @@ jobs:
         # 박스 빌드가 없어져 builder prune 은 불필요해졌다. pull 된 sha- 이미지는 태그가 있어
         # image prune 으로 안 지워지므로 최근 3개만 남기고 정리한다(GitHub 불능 시 오프라인 롤백용).
         # 레지스트리 쪽 보존은 ECR lifecycle policy(sha- 최근 10개)가 담당한다.
+        # ⚠️ 정렬은 이미지 Created(빌드 시각) 기준이지 pull 시각이 아니다 — 롤백으로 되돌린 옛
+        # 이미지는 이후 배포 몇 번이면 밀려날 수 있다(실행 중 이미지는 rmi 실패로 살아남음).
         if: always()
         run: |
           docker images --format '{{.Repository}}:{{.Tag}}' "${ECR_REGISTRY}/${IMAGE_REPO}" \
             | grep ':sha-' | tail -n +4 | xargs -r docker rmi || true
           docker image prune -f || true
+
+  promote:
+    # 별칭은 배포가 헬스체크까지 통과한 뒤에만 이동한다 — 실패한 배포의 이미지를 별칭이
+    # 가리키면, 박스 .env 기본값(:staging)을 쓰는 수동 up/restart 가 롤백을 조용히 원복시킨다
+    # (리뷰 #89 반영). 재빌드 없이 ECR 매니페스트 재태깅만 한다.
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::823164610944:role/bce-gha-ecr-push
+          aws-region: ap-northeast-2
+
+      - name: Move 'staging' alias to deployed image
+        run: |
+          set -e
+          manifest=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'images[0].imageManifest' --output text)
+          out=$(aws ecr put-image --repository-name "$IMAGE_REPO" \
+            --image-tag staging --image-manifest "$manifest" 2>&1) \
+            || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
+          echo "alias 'staging' -> ${IMAGE_TAG}"

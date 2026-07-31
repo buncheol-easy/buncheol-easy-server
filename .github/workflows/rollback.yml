@@ -2,6 +2,11 @@ name: Rollback Backend
 
 # ECR 의 불변 sha- 태그로 빌드 없이 즉시 되돌린다(1~2분). 태그 조회·절차는 루트 docs/38.
 # GitHub 자체가 불능일 때의 수동 롤백(박스에서 BACKEND_IMAGE=... compose up)도 docs/38 에 있다.
+#
+# ⚠️ 실행 브랜치는 staging=dev, production=main 에서 — OIDC 신뢰정책이 두 ref 만 허용해
+#    다른 브랜치에서 실행하면 마지막 promote(별칭 재지정) 잡이 실패한다.
+# ⚠️ 이미지(코드)만 되돌린다 — 박스의 compose 파일·.env 는 되돌리지 않는다. compose 스키마가
+#    바뀐 배포를 롤백할 때는 수동 확인 필요.
 on:
   workflow_dispatch:
     inputs:
@@ -16,10 +21,15 @@ on:
         description: '되돌릴 불변 태그 (예: sha-a1b2c3d4e5f6) — ECR bce-backend 태그 목록 또는 직전 배포 로그에서 확인'
         required: true
 
-# 배포 워크플로와 같은 그룹을 써서 진행 중 배포와 경합하지 않는다.
+# 배포와 같은 그룹 + cancel-in-progress: true = 롤백이 진행 중 배포를 "선점"한다.
+# (false 면 장애 대응 도구가 문제를 일으킨 배포 뒤에 줄을 선다 — 리뷰 #89 반영.
+#  롤백은 멱등한 pull+up 이라 끊긴 배포 위에 덮어써도 안전하다.)
 concurrency:
   group: backend-${{ inputs.environment }}-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
+
+# 기본 무권한 — promote 잡만 OIDC 용 id-token 을 자체 선언한다
+permissions: {}
 
 env:
   ECR_REGISTRY: 823164610944.dkr.ecr.ap-northeast-2.amazonaws.com
@@ -30,7 +40,8 @@ jobs:
     runs-on:
       - self-hosted
       - ${{ inputs.environment }}
-    timeout-minutes: 10
+    # 내부 최악 예산(pull 5m + up 3m + 헬스체크 ~3.3m)보다 커야 OS timeout 이 먼저 발화
+    timeout-minutes: 15
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
     steps:
@@ -39,11 +50,19 @@ jobs:
         # 롤백은 코드가 아니라 이미지 좌표만 바꾸는 작업이다.
         run: |
           set -e
+
+          # 불변 태그만 허용 — 이동 별칭(staging/prod)을 넣으면 "롤백"이 아니라
+          # 최신 이미지 재배포가 되어 장애 상황에서 혼란을 키운다 (리뷰 #89 반영)
+          case "$IMAGE_TAG" in
+            sha-[0-9a-f]*) ;;
+            *) echo "::error::불변 태그(sha-...)만 허용 — 이동 별칭은 롤백 좌표가 아니다: $IMAGE_TAG"; exit 1 ;;
+          esac
+
           cd /home/ubuntu/buncheol-easy-server
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           echo "Rolling back to ${BACKEND_IMAGE}"
 
-          timeout -k 30s 8m docker compose -f docker-compose.staging.yml pull backend
+          timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend
           timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
 
           echo "Waiting for backend health check..."
@@ -60,3 +79,44 @@ jobs:
             sleep 5
           done
           echo "Backend health check passed — rollback complete"
+
+      - name: Post-mortem snapshot
+        # 롤백은 이미 장애 상황 — 실패·취소 시 진단 스냅샷이 더 절실하다 (리뷰 #89 반영)
+        if: failure() || cancelled()
+        run: |
+          cd /home/ubuntu/buncheol-easy-server
+          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+          free -h || true
+          docker compose -f docker-compose.staging.yml ps || true
+          docker logs buncheoleasy-backend --tail=100 || true
+
+  promote:
+    # 롤백 성공 시 별칭도 롤백 대상으로 재지정 — "별칭 = 지금 떠 있는 것" 불변식 유지.
+    # 이게 없으면 별칭이 깨진 이미지를 계속 가리켜, 박스 .env 기본값을 쓰는 수동
+    # up/restart 가 롤백을 조용히 원복시킨다 (리뷰 #89 반영).
+    needs: rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      TARGET_ENV: ${{ inputs.environment }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::823164610944:role/bce-gha-ecr-push
+          aws-region: ap-northeast-2
+
+      - name: Move alias to rollback target
+        run: |
+          set -e
+          alias=$([ "$TARGET_ENV" = "production" ] && echo prod || echo staging)
+          manifest=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'images[0].imageManifest' --output text)
+          out=$(aws ecr put-image --repository-name "$IMAGE_REPO" \
+            --image-tag "$alias" --image-manifest "$manifest" 2>&1) \
+            || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
+          echo "alias '$alias' -> ${IMAGE_TAG}"

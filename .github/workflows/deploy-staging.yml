@@ -38,6 +38,12 @@ jobs:
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
     steps:
+      - name: Guard — dev 브랜치에서만 실행
+        # push 트리거는 브랜치가 고정이지만 workflow_dispatch 는 아니다 — 다른 브랜치 코드가
+        # staging 에 배포되고 별칭까지 따라가는 경로를 빌드 전에 차단 (3차 리뷰 반영)
+        run: |
+          [ "$GITHUB_REF_NAME" = "dev" ] || { echo "::error::staging 배포는 dev 에서만 — 현재 ref: $GITHUB_REF_NAME"; exit 1; }
+
       - name: Checkout source
         uses: actions/checkout@v4
 
@@ -173,8 +179,12 @@ jobs:
       - name: Move 'staging' alias to deployed image
         run: |
           set -e
+          # accepted-media-types 명시 — buildx 는 OCI 매니페스트로 push 하므로 요청·회신 포맷을
+          # 고정해 put-image 왕복을 결정론적으로 만든다 (3차 리뷰 반영)
           resp=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
-            --image-ids imageTag="$IMAGE_TAG" --output json)
+            --image-ids imageTag="$IMAGE_TAG" \
+            --accepted-media-types "application/vnd.oci.image.manifest.v1+json" "application/vnd.docker.distribution.manifest.v2+json" \
+            --output json)
           manifest=$(echo "$resp" | jq -r '.images[0].imageManifest // empty')
           mt=$(echo "$resp" | jq -r '.images[0].imageManifestMediaType // empty')
           # 태그 미존재 시 batch-get-image 는 exit 0 + failures 에만 담긴다 — 명시적 가드 (리뷰 반영)

@@ -7,6 +7,8 @@ name: Rollback Backend
 #    (다른 브랜치에서 실행하면 박스를 건드리기 전에 즉시 실패한다).
 # ⚠️ 이미지(코드)만 되돌린다 — 박스의 compose 파일·.env 는 되돌리지 않는다. compose 스키마가
 #    바뀐 배포를 롤백할 때는 수동 확인 필요.
+# ⚠️ 롤백은 "브랜치를 되돌리기 전까지의 임시 조치"다 — 롤백 후 그 브랜치에 push 가 들어오면
+#    새 배포가 롤백을 덮는다. revert 머지(또는 원인 수정)까지가 진짜 복구다 (3차 리뷰 반영).
 on:
   workflow_dispatch:
     inputs:
@@ -98,7 +100,7 @@ jobs:
         # 롤백은 이미 장애 상황 — 실패·취소 시 진단 스냅샷이 더 절실하다 (리뷰 #89 반영)
         if: failure() || cancelled()
         run: |
-          cd /home/ubuntu/buncheol-easy-server
+          cd /home/ubuntu/buncheol-easy-server || true
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           free -h || true
           docker compose -f docker-compose.staging.yml ps || true
@@ -127,8 +129,12 @@ jobs:
         run: |
           set -e
           alias=$([ "$TARGET_ENV" = "production" ] && echo prod || echo staging)
+          # accepted-media-types 명시 — buildx 는 OCI 매니페스트로 push 하므로 요청·회신 포맷을
+          # 고정해 put-image 왕복을 결정론적으로 만든다 (3차 리뷰 반영)
           resp=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
-            --image-ids imageTag="$IMAGE_TAG" --output json)
+            --image-ids imageTag="$IMAGE_TAG" \
+            --accepted-media-types "application/vnd.oci.image.manifest.v1+json" "application/vnd.docker.distribution.manifest.v2+json" \
+            --output json)
           manifest=$(echo "$resp" | jq -r '.images[0].imageManifest // empty')
           mt=$(echo "$resp" | jq -r '.images[0].imageManifestMediaType // empty')
           # 태그 미존재 시 batch-get-image 는 exit 0 + failures 에만 담긴다 — 명시적 가드 (리뷰 반영)

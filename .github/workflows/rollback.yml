@@ -3,8 +3,8 @@ name: Rollback Backend
 # ECR 의 불변 sha- 태그로 빌드 없이 즉시 되돌린다(1~2분). 태그 조회·절차는 루트 docs/38.
 # GitHub 자체가 불능일 때의 수동 롤백(박스에서 BACKEND_IMAGE=... compose up)도 docs/38 에 있다.
 #
-# ⚠️ 실행 브랜치는 staging=dev, production=main 에서 — OIDC 신뢰정책이 두 ref 만 허용해
-#    다른 브랜치에서 실행하면 마지막 promote(별칭 재지정) 잡이 실패한다.
+# ⚠️ 실행 브랜치는 staging=dev, production=main — 첫 스텝의 가드가 이 짝을 강제한다
+#    (다른 브랜치에서 실행하면 박스를 건드리기 전에 즉시 실패한다).
 # ⚠️ 이미지(코드)만 되돌린다 — 박스의 compose 파일·.env 는 되돌리지 않는다. compose 스키마가
 #    바뀐 배포를 롤백할 때는 수동 확인 필요.
 on:
@@ -44,20 +44,27 @@ jobs:
     timeout-minutes: 15
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
+      TARGET_ENV: ${{ inputs.environment }}
     steps:
+      - name: Guard — 환경·브랜치·태그 검증 (박스를 건드리기 전에 fail-fast)
+        # OIDC 실패는 promote(별칭 재지정)에서 — 즉 박스를 이미 되돌린 뒤에 — 터진다.
+        # 그 반쪽 롤백(컨테이너는 구버전, 별칭은 깨진 이미지)을 만들지 않도록
+        # 허용 짝(staging=dev / production=main)을 첫 스텝에서 강제한다 (리뷰 재검토 반영).
+        run: |
+          case "${TARGET_ENV}:${GITHUB_REF_NAME}" in
+            staging:dev|production:main) ;;
+            *) echo "::error::환경·브랜치 불일치 — staging 은 dev, production 은 main 브랜치에서 실행해야 한다 (현재: env=$TARGET_ENV, ref=$GITHUB_REF_NAME). OIDC 신뢰정책·별칭 재지정이 이 짝을 전제한다."; exit 1 ;;
+          esac
+          # 불변 태그 정확 일치 — 이동 별칭(=최신 재배포)과 경로 오염 문자를 모두 차단 (리뷰 반영)
+          if ! echo "$IMAGE_TAG" | grep -qE '^sha-[0-9a-f]{12}$'; then
+            echo "::error::불변 태그(sha-<12자리 hex>)만 허용: $IMAGE_TAG"; exit 1
+          fi
+
       - name: Pull target image and swap container
         # checkout 없음 — compose 파일은 배포 디렉터리에 이미 있고,
         # 롤백은 코드가 아니라 이미지 좌표만 바꾸는 작업이다.
         run: |
           set -e
-
-          # 불변 태그만 허용 — 이동 별칭(staging/prod)을 넣으면 "롤백"이 아니라
-          # 최신 이미지 재배포가 되어 장애 상황에서 혼란을 키운다 (리뷰 #89 반영)
-          case "$IMAGE_TAG" in
-            sha-[0-9a-f]*) ;;
-            *) echo "::error::불변 태그(sha-...)만 허용 — 이동 별칭은 롤백 좌표가 아니다: $IMAGE_TAG"; exit 1 ;;
-          esac
-
           cd /home/ubuntu/buncheol-easy-server
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           echo "Rolling back to ${BACKEND_IMAGE}"
@@ -66,18 +73,25 @@ jobs:
           timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
 
           echo "Waiting for backend health check..."
-          MAX_RETRY=40
-          count=0
+          # 벽시계 데드라인(배포 워크플로와 동일 근거). curl 호출당 상한 필수 — 매달리면 잡이 굳는다.
+          deadline=$((SECONDS + 180))
           until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
-            count=$((count + 1))
-            if [ "$count" -ge "$MAX_RETRY" ]; then
-              echo "Backend health check failed after ${MAX_RETRY} retries"
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Backend health check timed out after 180s"
               docker logs buncheoleasy-backend --tail=100
               exit 1
             fi
-            echo "Backend is not ready yet... retry $count"
+            echo "Backend is not ready yet..."
             sleep 5
           done
+
+          # 롤백의 존재 이유 = "정말 그 이미지로 되돌아갔는가" — 실행 중 이미지를 직접 대조 (리뷰 반영)
+          running=$(docker inspect -f '{{.Image}}' buncheoleasy-backend)
+          expected=$(docker image inspect -f '{{.Id}}' "$BACKEND_IMAGE")
+          if [ "$running" != "$expected" ]; then
+            echo "::error::떠 있는 컨테이너가 롤백 대상 이미지가 아니다: $running != $expected"
+            exit 1
+          fi
           echo "Backend health check passed — rollback complete"
 
       - name: Post-mortem snapshot
@@ -113,10 +127,15 @@ jobs:
         run: |
           set -e
           alias=$([ "$TARGET_ENV" = "production" ] && echo prod || echo staging)
-          manifest=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
-            --image-ids imageTag="$IMAGE_TAG" \
-            --query 'images[0].imageManifest' --output text)
-          out=$(aws ecr put-image --repository-name "$IMAGE_REPO" \
-            --image-tag "$alias" --image-manifest "$manifest" 2>&1) \
+          resp=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
+            --image-ids imageTag="$IMAGE_TAG" --output json)
+          manifest=$(echo "$resp" | jq -r '.images[0].imageManifest // empty')
+          mt=$(echo "$resp" | jq -r '.images[0].imageManifestMediaType // empty')
+          # 태그 미존재 시 batch-get-image 는 exit 0 + failures 에만 담긴다 — 명시적 가드 (리뷰 반영)
+          [ -n "$manifest" ] || { echo "::error::ECR 에 태그 없음: $IMAGE_TAG"; exit 1; }
+          # mediaType 미전달 시 OCI 매니페스트에서 UnsupportedImageTypeException 가능 (리뷰 반영)
+          args=(--repository-name "$IMAGE_REPO" --image-tag "$alias" --image-manifest "$manifest")
+          [ -n "$mt" ] && args+=(--image-manifest-media-type "$mt")
+          out=$(aws ecr put-image "${args[@]}" 2>&1) \
             || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
           echo "alias '$alias' -> ${IMAGE_TAG}"

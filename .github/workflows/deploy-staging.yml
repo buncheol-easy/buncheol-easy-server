@@ -75,7 +75,7 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, staging]
-    # 내부 최악 예산(pull 5m + up 3m + 헬스체크 ~3.3m ≈ 11.3m)보다 커야
+    # 내부 최악 예산(pull 5m + up 3m + 헬스체크 3m = 11m)보다 커야
     # OS 레벨 timeout 이 잡 취소보다 먼저 발화한다 (리뷰 #89 반영)
     timeout-minutes: 15
     env:
@@ -105,20 +105,28 @@ jobs:
           timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
 
           echo "Waiting for backend health check..."
-          MAX_RETRY=40
-          count=0
-          # curl 자체가 매달리면 잡이 굳는다 — 호출당 상한 필수
+          # 벽시계 데드라인 — 재시도 횟수 × (curl 5s + sleep 5s) 곱셈 예산은 최악값이 주석과
+          # 어긋나기 쉽다(리뷰 재검토에서 실제 최악 6.6m 지적). curl 호출당 상한은 여전히 필수.
+          deadline=$((SECONDS + 180))
           until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
-            count=$((count + 1))
-            if [ "$count" -ge "$MAX_RETRY" ]; then
-              echo "Backend health check failed after ${MAX_RETRY} retries"
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Backend health check timed out after 180s"
               docker logs buncheoleasy-backend --tail=100
               exit 1
             fi
-            echo "Backend is not ready yet... retry $count"
+            echo "Backend is not ready yet..."
             sleep 5
           done
           echo "Backend health check passed"
+
+          # 헬스체크는 "8080 이 살아있다"만 본다 — 떠 있는 게 방금 배포한 그 이미지인지 확인
+          # (promote 의 "별칭 = 지금 떠 있는 것" 불변식의 전제 — 리뷰 반영)
+          running=$(docker inspect -f '{{.Image}}' buncheoleasy-backend)
+          expected=$(docker image inspect -f '{{.Id}}' "$BACKEND_IMAGE")
+          if [ "$running" != "$expected" ]; then
+            echo "::error::떠 있는 컨테이너가 배포 대상 이미지가 아니다: $running != $expected"
+            exit 1
+          fi
 
       - name: Post-mortem snapshot
         # cancelled() 포함 — 잡 타임아웃(=취소)이 가장 진단이 필요한 케이스다 (리뷰 #89 반영)
@@ -136,7 +144,9 @@ jobs:
         # 레지스트리 쪽 보존은 ECR lifecycle policy(sha- 최근 10개)가 담당한다.
         # ⚠️ 정렬은 이미지 Created(빌드 시각) 기준이지 pull 시각이 아니다 — 롤백으로 되돌린 옛
         # 이미지는 이후 배포 몇 번이면 밀려날 수 있다(실행 중 이미지는 rmi 실패로 살아남음).
-        if: always()
+        # 취소 시에는 돌지 않는다 — 롤백이 이 배포를 선점(취소)한 순간 오프라인 롤백 캐시를
+        # 지우면 안 되기 때문 (리뷰 반영).
+        if: success() || failure()
         run: |
           docker images --format '{{.Repository}}:{{.Tag}}' "${ECR_REGISTRY}/${IMAGE_REPO}" \
             | grep ':sha-' | tail -n +4 | xargs -r docker rmi || true
@@ -163,10 +173,15 @@ jobs:
       - name: Move 'staging' alias to deployed image
         run: |
           set -e
-          manifest=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
-            --image-ids imageTag="$IMAGE_TAG" \
-            --query 'images[0].imageManifest' --output text)
-          out=$(aws ecr put-image --repository-name "$IMAGE_REPO" \
-            --image-tag staging --image-manifest "$manifest" 2>&1) \
+          resp=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
+            --image-ids imageTag="$IMAGE_TAG" --output json)
+          manifest=$(echo "$resp" | jq -r '.images[0].imageManifest // empty')
+          mt=$(echo "$resp" | jq -r '.images[0].imageManifestMediaType // empty')
+          # 태그 미존재 시 batch-get-image 는 exit 0 + failures 에만 담긴다 — 명시적 가드 (리뷰 반영)
+          [ -n "$manifest" ] || { echo "::error::ECR 에 태그 없음: $IMAGE_TAG"; exit 1; }
+          # mediaType 미전달 시 OCI 매니페스트에서 UnsupportedImageTypeException 가능 (리뷰 반영)
+          args=(--repository-name "$IMAGE_REPO" --image-tag staging --image-manifest "$manifest")
+          [ -n "$mt" ] && args+=(--image-manifest-media-type "$mt")
+          out=$(aws ecr put-image "${args[@]}" 2>&1) \
             || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
           echo "alias 'staging' -> ${IMAGE_TAG}"

@@ -1,0 +1,62 @@
+name: Rollback Backend
+
+# ECR 의 불변 sha- 태그로 빌드 없이 즉시 되돌린다(1~2분). 태그 조회·절차는 루트 docs/38.
+# GitHub 자체가 불능일 때의 수동 롤백(박스에서 BACKEND_IMAGE=... compose up)도 docs/38 에 있다.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '대상 환경'
+        type: choice
+        options:
+          - staging
+          - production
+        required: true
+      image_tag:
+        description: '되돌릴 불변 태그 (예: sha-a1b2c3d4e5f6) — ECR bce-backend 태그 목록 또는 직전 배포 로그에서 확인'
+        required: true
+
+# 배포 워크플로와 같은 그룹을 써서 진행 중 배포와 경합하지 않는다.
+concurrency:
+  group: backend-${{ inputs.environment }}-deploy
+  cancel-in-progress: false
+
+env:
+  ECR_REGISTRY: 823164610944.dkr.ecr.ap-northeast-2.amazonaws.com
+  IMAGE_REPO: bce-backend
+
+jobs:
+  rollback:
+    runs-on:
+      - self-hosted
+      - ${{ inputs.environment }}
+    timeout-minutes: 10
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Pull target image and swap container
+        # checkout 없음 — compose 파일은 배포 디렉터리에 이미 있고,
+        # 롤백은 코드가 아니라 이미지 좌표만 바꾸는 작업이다.
+        run: |
+          set -e
+          cd /home/ubuntu/buncheol-easy-server
+          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+          echo "Rolling back to ${BACKEND_IMAGE}"
+
+          timeout -k 30s 8m docker compose -f docker-compose.staging.yml pull backend
+          timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
+
+          echo "Waiting for backend health check..."
+          MAX_RETRY=40
+          count=0
+          until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
+            count=$((count + 1))
+            if [ "$count" -ge "$MAX_RETRY" ]; then
+              echo "Backend health check failed after ${MAX_RETRY} retries"
+              docker logs buncheoleasy-backend --tail=100
+              exit 1
+            fi
+            echo "Backend is not ready yet... retry $count"
+            sleep 5
+          done
+          echo "Backend health check passed — rollback complete"

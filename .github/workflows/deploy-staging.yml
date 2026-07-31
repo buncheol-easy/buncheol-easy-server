@@ -1,7 +1,14 @@
 name: Deploy Backend Staging
 
-# dev 브랜치 push -> staging EC2 의 self-hosted runner 에서 직접 배포.
-# runner 가 박스 안에서 docker 를 돌리므로 SSH 키가 필요 없다.
+# dev push -> GitHub 호스팅 러너가 이미지를 빌드해 ECR 에 push 하고,
+# staging EC2 의 self-hosted runner 는 pull + 컨테이너 교체만 한다.
+#
+# 박스에서 Gradle 빌드를 돌리지 않는 것이 핵심 — 빌드 피크 RSS ~2GB 가 박스를
+# 스왑 스래싱으로 굳혔던 2026-07-29 사고(docs 35 §11)의 근본 조치다.
+# - push 인증: GitHub OIDC -> IAM 롤 bce-gha-ecr-push (장기 시크릿 없음)
+# - pull 인증: EC2 인스턴스 롤(bce-ec2-ssm-role) + amazon-ecr-credential-helper
+# - 태그 규율: sha- 불변 태그(롤백 좌표) + staging 이동 별칭 (docs 36 §5-5)
+# - 롤백: rollback.yml (빌드 없이 직전 sha- 태그로 1~2분)
 on:
   push:
     branches:
@@ -12,13 +19,58 @@ concurrency:
   group: backend-staging-deploy
   cancel-in-progress: true
 
-jobs:
-  deploy:
-    runs-on: [self-hosted, staging]
-    # 정상 배포는 6분 20초대. 메모리 부족으로 빌드가 멈추면 실패하지 않고 기본 360분까지 매달리므로
-    # (2026-07-29 사고: 27분·15분간 멈춤, 사람이 알아채고 취소) 빠르게 실패하도록 상한을 둔다.
-    timeout-minutes: 15
+env:
+  ECR_REGISTRY: 823164610944.dkr.ecr.ap-northeast-2.amazonaws.com
+  IMAGE_REPO: bce-backend
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # 첫 빌드(캐시 없음)는 10분 안팎, GHA 레이어 캐시가 잡히면 5분 안팎.
+    timeout-minutes: 25
+    permissions:
+      id-token: write   # OIDC 토큰 발급 (aws-actions/configure-aws-credentials)
+      contents: read
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Resolve immutable image tag
+        id: meta
+        run: echo "tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::823164610944:role/bce-gha-ecr-push
+          aws-region: ap-northeast-2
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:staging
+          # Gradle 의존성 레이어가 재사용되도록 GHA 캐시 사용 — 2회차부터 빌드가 크게 준다
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, staging]
+    timeout-minutes: 10
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -32,29 +84,21 @@ jobs:
             --exclude='.env*' \
             "${GITHUB_WORKSPACE}/" /home/ubuntu/buncheol-easy-server/
 
-      - name: Build and run backend container (RDS compose)
+      - name: Pull image and swap container
         run: |
           set -e
           cd /home/ubuntu/buncheol-easy-server
-          # 박스가 스왑 스래싱으로 굳으면 러너가 timeout-minutes 를 집행하지 못한다
-          # (2026-07-29 사고: 수동 취소 반영에 6분). OS 레벨 timeout 은 러너가 굳어도 커널 타이머로
-          # 발사돼 잡을 해방한다. 단 죽이는 대상은 compose 클라이언트 — 데몬 쪽 빌드 취소는
-          # BuildKit 전파에 의존하므로 박스 회복까지 보장하진 않는다.
-          # 10분 근거: 정상 6분 20초대, 스왑 열화 상태의 성공 배포도 8분 이내(35 §11-3) —
-          # 빌드+헬스체크가 잡 상한 15분 안에 들어오는 예산.
-          rc=0
-          timeout -k 30s 10m docker compose -f docker-compose.staging.yml up -d --build || rc=$?
-          if [ "$rc" -ne 0 ]; then
-            if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
-              echo "::error::빌드가 OS 타임아웃으로 종료됨 (rc=$rc, 124=TERM/137=KILL) — 박스 스래싱 의심, free -h 확인 (docs 35 §11-6)"
-            fi
-            exit "$rc"
-          fi
+          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+
+          # 박스는 pull 만 한다 — 빌드 부하 0 이 이 구조의 존재 이유.
+          # timeout 은 박스·네트워크 이상 시 잡이 매달리지 않게 하는 안전망(35 §11 교훈 유지).
+          timeout -k 30s 8m docker compose -f docker-compose.staging.yml pull backend
+          timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
 
           echo "Waiting for backend health check..."
           MAX_RETRY=40
           count=0
-          # curl 자체가 매달리면 timeout 래핑 밖에서 잡이 굳는다 — 호출당 상한 필수
+          # curl 자체가 매달리면 잡이 굳는다 — 호출당 상한 필수
           until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
             count=$((count + 1))
             if [ "$count" -ge "$MAX_RETRY" ]; then
@@ -71,13 +115,17 @@ jobs:
         if: failure()
         run: |
           cd /home/ubuntu/buncheol-easy-server
+          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           free -h || true
           docker compose -f docker-compose.staging.yml ps || true
           docker logs buncheoleasy-backend --tail=100 || true
 
-      - name: Reclaim build cache
-        # 타임아웃으로 죽은 빌드의 잔여 레이어가 실패마다 쌓이지 않게 성공/실패 무관 정리
+      - name: Retain last 3 images (rollback cache)
+        # 박스 빌드가 없어져 builder prune 은 불필요해졌다. pull 된 sha- 이미지는 태그가 있어
+        # image prune 으로 안 지워지므로 최근 3개만 남기고 정리한다(GitHub 불능 시 오프라인 롤백용).
+        # 레지스트리 쪽 보존은 ECR lifecycle policy(sha- 최근 10개)가 담당한다.
         if: always()
         run: |
+          docker images --format '{{.Repository}}:{{.Tag}}' "${ECR_REGISTRY}/${IMAGE_REPO}" \
+            | grep ':sha-' | tail -n +4 | xargs -r docker rmi || true
           docker image prune -f || true
-          docker builder prune -f --filter until=24h || true

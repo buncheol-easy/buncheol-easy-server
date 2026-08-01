@@ -71,7 +71,25 @@ jobs:
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           echo "Rolling back to ${BACKEND_IMAGE}"
 
-          timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend
+          # ECR/네트워크 장애 시에도 롤백이 돌아야 한다 — 로컬에 이미지가 있으면 pull 실패를
+          # 허용한다(불변 태그라 로컬 == 원격이 정의상 보장, 4차 리뷰 반영). 배포 스텝의
+          # keep-last-3 이 이 경로의 재고를 만든다.
+          if docker image inspect "$BACKEND_IMAGE" >/dev/null 2>&1; then
+            timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend \
+              || echo "::warning::pull 실패 — 로컬 캐시 이미지로 진행 (불변 태그라 동일 이미지)"
+          else
+            timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend
+          fi
+
+          # 계보 검증 — 두 환경이 리포를 공유하므로 sha- 태그 풀에 dev·main 빌드가 섞여 있다.
+          # production 롤백에 dev 빌드를 고르는 오조작을 이미지 라벨(bce.ref)로 차단 (4차 리뷰 반영)
+          expected_ref=$([ "$TARGET_ENV" = "production" ] && echo main || echo dev)
+          img_ref=$(docker image inspect -f '{{index .Config.Labels "bce.ref"}}' "$BACKEND_IMAGE" 2>/dev/null || echo "")
+          if [ -n "$img_ref" ] && [ "$img_ref" != "$expected_ref" ]; then
+            echo "::error::태그 계보 불일치 — 이 이미지는 '$img_ref' 빌드다. $TARGET_ENV 롤백은 '$expected_ref' 빌드만 허용"; exit 1
+          fi
+          [ -n "$img_ref" ] || echo "::warning::bce.ref 라벨 없음(라벨 도입 전 빌드) — 계보 자동 확인 불가, ECR push 시각으로 수동 확인 권장"
+
           timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
 
           echo "Waiting for backend health check..."
@@ -145,3 +163,9 @@ jobs:
           out=$(aws ecr put-image "${args[@]}" 2>&1) \
             || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
           echo "alias '$alias' -> ${IMAGE_TAG}"
+
+      - name: Warn on stale alias
+        # rollback 성공 + promote 실패 = 박스는 롤백됐는데 별칭은 깨진 이미지 — 이 상태에서
+        # 박스 .env 기본값으로 수동 up/restart 하면 롤백이 조용히 원복된다 (4차 리뷰 반영)
+        if: failure()
+        run: echo "::error::별칭 재지정 실패 — 박스는 ${IMAGE_TAG} 로 롤백됐으나 별칭은 이전 이미지를 가리킨다. 이 잡을 재실행해 별칭을 맞추기 전까지 박스에서 compose up/restart 금지 (docs/38 §5)."

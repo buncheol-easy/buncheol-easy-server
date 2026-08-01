@@ -44,8 +44,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Resolve immutable image tag
+        # GITHUB_SHA 고정 12자리 — git rev-parse --short=12 는 "최소" 길이라 prefix 충돌 시
+        # 13자리+ 를 반환해 rollback 의 정확 일치 검증(12자리)을 통과하지 못한다 (4차 리뷰 반영)
         id: meta
-        run: echo "tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+        run: echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -68,6 +70,10 @@ jobs:
           # ⚠️ main 머지 커밋은 dev 와 SHA 가 달라 prod 는 재빌드된다 — staging 에서 검증한
           # 이미지와 바이트 동일하지 않다(같은 소스의 재현 빌드). 승격 모델 전환은 후속 검토.
           tags: ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+          # 빌드 출처 ref 라벨 — rollback 의 계보 검증이 읽는다 (4차 리뷰 반영)
+          labels: |
+            bce.ref=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
           provenance: false
           # 기본 브랜치(dev)의 캐시는 모든 브랜치에서 읽힌다 — main 빌드도 dev 가 시딩한
           # 캐시를 재사용할 수 있다(리뷰 재검토에서 주석 정정).
@@ -100,6 +106,10 @@ jobs:
           set -e
           cd /home/ubuntu/buncheol-easy-server
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+
+          # 교체 전 현재 이미지를 남긴다 — 배포가 실패했을 때 이 값이 곧 롤백 좌표다 (4차 리뷰 반영)
+          prev=$(docker inspect -f '{{.Config.Image}}' buncheoleasy-backend 2>/dev/null || echo "none")
+          echo "::notice::롤백 좌표(직전 이미지): ${prev}"
 
           # 박스는 pull 만 한다 — 빌드 부하 0 이 이 구조의 존재 이유.
           # timeout 은 박스·네트워크 이상 시 잡이 매달리지 않게 하는 안전망(35 §11 교훈 유지).
@@ -134,7 +144,7 @@ jobs:
         # cancelled() 포함 — 잡 타임아웃(=취소)이 가장 진단이 필요한 케이스다 (리뷰 #89 반영)
         if: failure() || cancelled()
         run: |
-          cd /home/ubuntu/buncheol-easy-server
+          cd /home/ubuntu/buncheol-easy-server || true
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           free -h || true
           docker compose -f docker-compose.staging.yml ps || true
@@ -191,3 +201,9 @@ jobs:
           out=$(aws ecr put-image "${args[@]}" 2>&1) \
             || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
           echo "alias 'prod' -> ${IMAGE_TAG}"
+
+      - name: Warn on stale alias
+        # deploy 성공 + promote 실패 = 박스는 신버전인데 별칭은 구버전 — 이 상태에서 박스
+        # .env 기본값으로 수동 up/restart 하면 조용히 구버전으로 되돌아간다 (4차 리뷰 반영)
+        if: failure()
+        run: echo "::error::별칭 이동 실패 — 박스는 ${IMAGE_TAG} 로 떠 있으나 'prod' 별칭은 이전 이미지를 가리킨다. 이 잡을 재실행해 별칭을 맞추기 전까지 박스에서 compose up/restart 금지 (docs/38 §5)."

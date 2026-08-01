@@ -27,10 +27,10 @@ class AlimtalkTemplateTest {
       String rendered = AlimtalkTemplate.PAYMENT_CONFIRMED.render(variables);
 
       assertThat(rendered)
-          .startsWith("참여자닉님, 입금이 확인되었어요!")
+          .startsWith("참여자닉님, 참여하신 분철의 입금이 확인되었어요!")
           .contains("엔믹스 앨범")
-          .contains("▪ 참여 멤버 : 설윤")
-          .contains("▪ 입금 금액 : 20,000원")
+          .contains("▶ 참여 멤버: 설윤")
+          .contains("▶ 입금 금액: 20,000원")
           .doesNotContain("#{");
     }
   }
@@ -50,7 +50,7 @@ class AlimtalkTemplateTest {
       assertThat(rendered)
           .startsWith("참여자닉님, 참여하신 분철의 진행이 확정되었어요!")
           .contains("르세라핌 앨범")
-          .contains("▪ 참여 멤버 : 카즈하")
+          .contains("▶ 참여 멤버: 카즈하")
           .doesNotContain("#{");
     }
   }
@@ -72,7 +72,7 @@ class AlimtalkTemplateTest {
           .startsWith("참여자닉님, 참여하신 분철이 아래 사유로 취소되었어요.")
           .contains("취소 사유: 최소 진행 인원 미달")
           .contains("아이브 앨범")
-          .contains("▪ 참여 멤버 : 안유진")
+          .contains("▶ 참여 멤버: 안유진")
           .doesNotContain("#{");
     }
   }
@@ -88,13 +88,13 @@ class AlimtalkTemplateTest {
           Map.of("닉네임", "영희", "분철명", "엔믹스 앨범", "멤버명", "설윤", "운송장번호", "123456789");
 
       assertThat(AlimtalkTemplate.TRACKING_CU.render(variables))
-          .contains("▪ 택배사 : CU 편의점 택배")
-          .contains("▪ 운송장 번호 : 123456789")
+          .contains("▶ 택배사: CU 편의점 택배")
+          .contains("▶ 운송장 번호: 123456789")
           .doesNotContain("GS25")
           .doesNotContain("#{");
       assertThat(AlimtalkTemplate.TRACKING_GS25.render(variables))
-          .contains("▪ 택배사 : GS25 편의점 택배")
-          .contains("▪ 운송장 번호 : 123456789")
+          .contains("▶ 택배사: GS25 편의점 택배")
+          .contains("▶ 운송장 번호: 123456789")
           .doesNotContain("#{");
     }
   }
@@ -112,10 +112,10 @@ class AlimtalkTemplateTest {
       String rendered = AlimtalkTemplate.PAYBACK_COMPLETED.render(variables);
 
       assertThat(rendered)
-          .startsWith("참여자닉님, 참여하신 무료 분철 이벤트에 후기를 작성해주셔서 배송비 환급이 완료되었어요!")
+          .startsWith("참여자닉님, 무료 분철 이벤트에 남겨주신 소중한 후기 감사해요!")
           .contains("엔믹스 앨범")
-          .contains("► 참여 멤버 : 설윤")
-          .contains("► 환급 금액 : 3,500원")
+          .contains("▶ 참여 멤버: 설윤")
+          .contains("▶ 환급 금액: 3,500원")
           .doesNotContain("#{");
     }
   }
@@ -138,8 +138,8 @@ class AlimtalkTemplateTest {
           .startsWith("참여자닉님, 참여하신 무료 분철 이벤트의 배송비 환급 신청이 반려되었어요.")
           .contains("반려 사유: 비공개 계정이라 확인 불가")
           .contains("아이브 앨범")
-          .contains("► 참여 멤버 : 안유진")
-          .contains("► 환급 예정 금액 : 3,500원")
+          .contains("▶ 참여 멤버: 안유진")
+          .contains("▶ 환급 예정 금액: 3,500원")
           .doesNotContain("#{");
     }
   }

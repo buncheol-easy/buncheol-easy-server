@@ -57,8 +57,8 @@ class ShippingFeePolicyTest {
   class ValidateFeeValueTest {
 
     @ParameterizedTest
-    @ValueSource(ints = {0, -1, -1000})
-    void gs25_배송비가_0_이하면_예외가_발생한다(int fee) {
+    @ValueSource(ints = {-1, -1000})
+    void gs25_배송비가_음수면_예외가_발생한다(int fee) {
       // when & then
       assertThatThrownBy(() -> ShippingFeePolicy.of(fee, null))
           .isInstanceOf(BusinessException.class)
@@ -67,8 +67,8 @@ class ShippingFeePolicyTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, -1, -1000})
-    void cu_배송비가_0_이하면_예외가_발생한다(int fee) {
+    @ValueSource(ints = {-1, -1000})
+    void cu_배송비가_음수면_예외가_발생한다(int fee) {
       // when & then
       assertThatThrownBy(() -> ShippingFeePolicy.of(null, fee))
           .isInstanceOf(BusinessException.class)
@@ -76,9 +76,10 @@ class ShippingFeePolicyTest {
           .isEqualTo(ErrorCode.BUNCHEOL_SHIPPING_FEE_INVALID);
     }
 
+    // 0원은 개최자가 배송비를 받지 않는 무료 배송으로 허용한다.
     @ParameterizedTest
-    @ValueSource(ints = {1, 500, 3000})
-    void 양수_배송비는_유효하다(int fee) {
+    @ValueSource(ints = {0, 1, 500, 3000})
+    void 배송비가_0_이상이면_유효하다(int fee) {
       // when & then
       assertThatCode(() -> ShippingFeePolicy.of(fee, null)).doesNotThrowAnyException();
     }

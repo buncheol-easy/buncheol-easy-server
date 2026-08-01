@@ -84,7 +84,7 @@ public enum ErrorCode {
       "BCH-004", "분철 마감 시간은 정각(매시 0분 0초)이어야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MIN_HEADCOUNT_INVALID("BCH-008", "분철 진행 최소 인원은 1명 이상이어야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_SHIPPING_FEE_REQUIRED("BCH-006", "배송비는 최소 1개 이상 입력해야 합니다.", HttpStatus.BAD_REQUEST),
-  BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0보다 커야 합니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_SHIPPING_FEE_INVALID("BCH-007", "배송비는 0 이상이어야 합니다.", HttpStatus.BAD_REQUEST),
 
   BUNCHEOL_MEMBER_REQUIRED("BCH-020", "분철 멤버는 최소 1명 이상 존재해야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_MEMBER_DUPLICATED("BCH-021", "중복된 멤버가 포함되어 있습니다.", HttpStatus.BAD_REQUEST),

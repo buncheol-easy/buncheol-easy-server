@@ -186,6 +186,73 @@ class BuncheolControllerTest {
     }
 
     @Test
+    void 배송비가_0원이어도_분철_개최에_성공하면_201을_반환한다() throws Exception {
+      // given — 0원은 개최자가 배송비를 받지 않는 무료 배송으로 허용한다(@PositiveOrZero).
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      String zeroShippingFeeJson =
+          """
+                    {
+                      "groupId": 100,
+                      "title": "테스트 분철 제목",
+                      "purchaseSite": "공식 스토어",
+                      "deadline": "%s",
+                      "minHeadcount": 3,
+                      "gs25ShippingFee": 0,
+                      "thumbnailIndex": 0,
+                      "buncheolMembers": [
+                        {"memberId": 200, "price": 50000}
+                      ]
+                    }
+                    """
+              .formatted(deadline);
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, zeroShippingFeeJson.getBytes());
+
+      // when & then
+      mockMvc
+          .perform(
+              multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isCreated());
+    }
+
+    @Test
+    void 배송비가_음수면_400을_반환한다() throws Exception {
+      // given — 음수는 DTO 검증(@PositiveOrZero)에서 걸러진다.
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      String negativeShippingFeeJson =
+          """
+                    {
+                      "groupId": 100,
+                      "title": "테스트 분철 제목",
+                      "purchaseSite": "공식 스토어",
+                      "deadline": "%s",
+                      "minHeadcount": 3,
+                      "gs25ShippingFee": -100,
+                      "thumbnailIndex": 0,
+                      "buncheolMembers": [
+                        {"memberId": 200, "price": 50000}
+                      ]
+                    }
+                    """
+              .formatted(deadline);
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, negativeShippingFeeJson.getBytes());
+
+      // when & then
+      mockMvc
+          .perform(
+              multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
+    }
+
+    @Test
     void 제목이_없으면_400을_반환한다() throws Exception {
       // given
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);

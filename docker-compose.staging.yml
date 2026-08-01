@@ -39,8 +39,15 @@ x-backend-base: &backend-base
     # REDIS_PORT 는 .env 값을 그대로 쓰되 미설정 시 6379 기본값(env_file 과 의도적 중복 — 기본값 보장용).
     REDIS_PORT: ${REDIS_PORT:-6379}
     # DB_URL 의도적으로 미설정 → .env 의 RDS endpoint 가 사용된다.
+  # cgroup 상한이 없으면 UseContainerSupport 가 호스트 RAM(4GiB)으로 폴백해
+  # MaxRAMPercentage=75 가 색당 최대 힙 ~3GiB 로 계산된다 — 전환 창에 두 JVM 이 겹치는
+  # 블루-그린에서는 박스 전체를 위협하는 값이다(7/29 스왑 스래싱과 같은 실패 모드).
+  # 1200m 상한이면 색당 최대 힙 900m(실측 평시 RSS 581MB), 겹침 최악 2.4GiB 로 격리된다.
+  # 한 색이 상한을 치면 그 컨테이너만 OOM-kill 되고(restart 가 복구) 박스는 산다.
+  mem_limit: 1200m
   # docker 기본 정지 유예 10초는 Spring graceful shutdown 기본 유예 30초를 SIGKILL 로 자른다
-  # — 진행 중 요청 유실 방지의 전제 (docs/36 §5-1).
+  # — 진행 중 요청 유실 방지의 전제 (docs/36 §5-1). 유예값 계약은 application.yaml 의
+  # server.shutdown / spring.lifecycle.timeout-per-shutdown-phase(30s) 명시와 짝이다.
   stop_grace_period: 40s
   healthcheck:
     # "떴다"와 "서빙 가능하다"를 docker 가 구분하게 한다 (docs/36 §5-4).

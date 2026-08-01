@@ -2,8 +2,15 @@ server:
   # nginx 등 reverse proxy 뒤에서 X-Forwarded-* 헤더로 원본 host/scheme/port 를 인식.
   # Spring Security OAuth2 의 {baseUrl} 자동치환, sendRedirect 등에 영향.
   forward-headers-strategy: framework
+  # Boot 3.4+ 기본값이지만 명시로 고정한다 — compose 의 stop_grace_period: 40s 는
+  # 이 graceful 유예(아래 30s) + 10s 여유라는 계약 위에 서 있다 (docs/39).
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    # graceful shutdown 이 진행 중 요청을 기다려주는 상한 (기본값과 동일 — 계약 명시용).
+    timeout-per-shutdown-phase: 30s
+
   config:
     import: optional:file:.env[.properties]
 

@@ -33,6 +33,12 @@ export COMPOSE_PROFILES=blue,green
 log() { printf '[blue-green] %s\n' "$*"; }
 die() { printf '::error::[blue-green] %s\n' "$*" >&2; exit 1; }
 
+# 동시 실행 잠금 — 워크플로 배포와 박스 수동 switch 가 겹치면 "방금 트래픽을 받기 시작한
+# 컨테이너를 재생성"하는 경합이 가능하다(러너 큐는 잡끼리만 직렬화한다). fd 는 프로세스
+# 종료 시 자동 해제되므로 stale lock 이 남지 않는다.
+exec 9>/var/lock/bce-blue-green.lock
+flock -n 9 || die "다른 blue-green 작업이 진행 중이다 — 끝나기를 기다렸다가 다시 실행하라"
+
 port_of() { if [ "$1" = "blue" ]; then echo 8080; else echo 8081; fi; }
 other_of() { if [ "$1" = "blue" ]; then echo green; else echo blue; fi; }
 container_of() { echo "buncheoleasy-backend-$1"; }
@@ -47,6 +53,12 @@ precheck_nginx() {
     || die "upstream 파일 없음: $UPSTREAM_CONF — Nginx 1회성 셋업(docs/39) 먼저"
   sudo grep -q "bce_backend" "$SNIPPET" 2>/dev/null \
     || die "snippet($SNIPPET)이 upstream(bce_backend)을 참조하지 않는다 — Nginx 1회성 셋업(docs/39) 먼저"
+  # upstream 을 우회해 백엔드 포트를 직접 가리키는 설정이 하나라도 있으면, 전환해도 그
+  # 경로는 구 색에 남아 구 색 정지 순간 502 가 난다 — snippet 하나만 믿지 말고 전수 색출.
+  # (upstream 파일 자체의 "server 127.0.0.1:PORT" 는 proxy_pass 가 아니라서 걸리지 않는다)
+  if sudo grep -rlE 'proxy_pass[^;]*127\.0\.0\.1:808[01]' /etc/nginx/ > /dev/null 2>&1; then
+    die "upstream 을 우회해 8080/8081 을 직접 가리키는 Nginx 설정이 있다: $(sudo grep -rlE 'proxy_pass[^;]*127\.0\.0\.1:808[01]' /etc/nginx/ | tr '\n' ' ')— 전환 불변식이 깨진다"
+  fi
 }
 
 active_color() {
@@ -70,9 +82,24 @@ switch_nginx() {
     printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
     die "nginx -t 실패 — upstream 파일을 원복했다. 서빙은 기존 색 그대로다."
   fi
+  # reload 실패도 원복해야 한다 — 파일만 새 색을 가리키고 실서빙은 구 색인 상태를 남기면
+  # "활성 색의 유일한 진실 = upstream 파일" 불변식이 깨지고, 이후 switch 가
+  # "이미 활성"이라며 복귀 경로까지 막는다.
+  if ! sudo systemctl reload nginx; then
+    printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
+    sudo systemctl reload nginx || true
+    die "nginx reload 실패 — upstream 파일을 원복했다. 서빙은 기존 색 그대로다."
+  fi
+  # 실효 설정 종단 게이트 — 이 함수 다음은 되돌릴 수 없는 구 색 정지다. "파일에 썼고
+  # reload 가 성공했다"에 더해, nginx 가 읽는 설정 전체(-T 덤프)에 대상 포트의 upstream 이
+  # 실제로 존재하는지 최종 확인한다(다른 include 가 덮어쓰는 구성 오류 방어).
+  if ! sudo nginx -T 2>/dev/null | grep -q "server 127.0.0.1:${port};"; then
+    printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
+    sudo systemctl reload nginx || true
+    die "reload 후 실효 설정에 ${port} upstream 이 없다 — 원복했다. Nginx 구성을 점검하라."
+  fi
   # reload 는 무중단 — 신규 연결은 새 upstream, 진행 중 연결은 구 워커가 마무리한다.
-  sudo systemctl reload nginx
-  log "Nginx upstream → 127.0.0.1:${port} 전환 완료"
+  log "Nginx upstream → 127.0.0.1:${port} 전환 완료 (실효 설정 확인됨)"
 }
 
 # ── 헬스·검증 ─────────────────────────────────────────────────────────────────
@@ -153,6 +180,13 @@ stop_color() {
 # ── 서브커맨드 ────────────────────────────────────────────────────────────────
 
 cmd_deploy() {
+  # 수동 실행 편의 — 셸 env 가 없으면 compose 와 같은 곳(.env 의 별칭 기본값)을 읽는다.
+  # 별칭(:staging/:prod)은 아래 pull 단계에서 관용 없이 항상 성공해야 통과한다.
+  if [ -z "${BACKEND_IMAGE:-}" ] && [ -f .env ]; then
+    BACKEND_IMAGE=$(grep -E '^BACKEND_IMAGE=' .env | tail -1 | cut -d= -f2-)
+    export BACKEND_IMAGE
+    if [ -n "$BACKEND_IMAGE" ]; then log "BACKEND_IMAGE 를 .env 기본값에서 읽음: $BACKEND_IMAGE"; fi
+  fi
   [ -n "${BACKEND_IMAGE:-}" ] || die "BACKEND_IMAGE 미설정 — 배포할 이미지 좌표가 필요하다"
   precheck_nginx
 
@@ -172,14 +206,24 @@ cmd_deploy() {
 
   # 박스는 pull 만 한다 — 빌드 부하 0 이 이 구조의 존재 이유(docs/38).
   # timeout 은 박스·네트워크 이상 시 잡이 매달리지 않게 하는 안전망(35 §11 교훈 유지).
-  # ECR/네트워크 장애 시에도 로컬에 이미지가 있으면 진행한다 — 불변 태그라 로컬 == 원격이
-  # 정의상 보장(#89 4차 리뷰의 롤백 내성과 동일 근거).
-  if docker image inspect "$BACKEND_IMAGE" > /dev/null 2>&1; then
-    timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}" \
-      || log "pull 실패 — 로컬 캐시 이미지로 진행 (불변 태그라 동일 이미지)"
-  else
-    timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
-  fi
+  # pull 실패 관용은 sha- 불변 태그 + 로컬 존재일 때만 — "로컬 == 원격"은 불변 태그에서만
+  # 정의상 보장된다(#89 4차 리뷰와 동일 근거). 이동 별칭(:staging/:prod)은 로컬이 낡은
+  # 버전일 수 있어 pull 이 반드시 성공해야 한다(낡은 코드를 배포 성공으로 보고하는 사고 방지).
+  # 관용 경로의 타임아웃은 1m — 레지스트리 무응답 시 5m 을 태우면 rollback.yml 의
+  # 잡 예산(15m)이 스위치 이후·구 색 정지 이전에 끊길 수 있다.
+  case "$BACKEND_IMAGE" in
+    *:sha-*)
+      if docker image inspect "$BACKEND_IMAGE" > /dev/null 2>&1; then
+        timeout -k 15s 1m docker compose -f "$COMPOSE_FILE" pull "backend-${target}" \
+          || log "pull 실패 — 로컬 캐시 이미지로 진행 (불변 태그라 동일 이미지)"
+      else
+        timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
+      fi
+      ;;
+    *)
+      timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
+      ;;
+  esac
   # up 은 대상 색 서비스만 — 활성 색 컨테이너는 건드리지 않으므로 BACKEND_IMAGE 가
   # 바뀌어도 재생성되지 않는다.
   timeout -k 30s 3m docker compose -f "$COMPOSE_FILE" up -d "backend-${target}"

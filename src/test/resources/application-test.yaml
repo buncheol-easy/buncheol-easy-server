@@ -54,13 +54,24 @@ app:
     # 테스트에서는 입금 만료 자동취소 스케줄러를 비활성화
     payment-expiry:
       enabled: false
+  delivery:
+    # 테스트에서는 추적 웹훅 갱신·폴링, 미수령 독촉 스케줄러를 비활성화
+    tracking-refresh:
+      enabled: false
+    pickup-reminder:
+      enabled: false
+      threshold: 12h
 
 delivery:
   tracker:
-    api-url: https://test.tracker.delivery/graphql
+    # api-url 은 비워 아웃바운드 호출(추적 조회·웹훅 등록)은 꺼둔 상태로 남기고,
+    # 콜백 인증 경로를 테스트할 수 있게 더미 토큰만 채운다 (페이액션과 같은 방식).
+    api-url: ""
     client-id: test-client-id
     client-secret: test-client-secret
     callback-url: http://localhost:8080/v1/deliveries/webhook/callback
+    webhook-token: test-webhook-token
+    webhook-ttl: 48h
     connect-timeout: 3s
     read-timeout: 5s
 

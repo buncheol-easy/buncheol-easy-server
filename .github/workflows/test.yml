@@ -1,0 +1,80 @@
+name: Test
+
+# PR(base dev/main)과 dev push 에서 전체 테스트를 돌린다. 배포 빌드는 *DocsTest 19개만
+# 돌리므로(Dockerfile) 나머지 테스트 클래스는 이 워크플로가 유일한 자동 실행 지점이다.
+# - dev push 실행이 Gradle 캐시를 시딩한다(GitHub 캐시는 기본 브랜치 실행만 쓰기 가능,
+#   PR 실행은 읽기 전용) + 머지 커밋 자체를 한 번 더 검증한다.
+# - main 타깃(릴리스 PR)도 커버 — main 머지는 곧장 production 배포로 이어진다.
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+# 같은 PR 에 새 푸시가 오면 이전 실행을 취소한다 (호스팅 러너 분수 절약).
+# PR 번호 기준이라 dev push 실행·수동 실행과는 그룹이 분리된다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # 반드시 GitHub 호스팅 러너 — self-hosted 는 운영 배포 박스라 빌드 부하가
+    # 2026-07-29 스왑 스래싱 사고를 재현한다.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # 운영 컨테이너(Dockerfile ENV TZ=UTC)와 동일 — 로컬 KST 와의 시간대 차이를 CI 에서 잡는다
+      TZ: UTC
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle (dependency/build cache)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # 기본값은 "기본 브랜치 외 읽기 전용" — dev push·수동 실행이 캐시를 쓰고 PR 은 읽는다
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Build and run full test suite
+        # build = 전체 test + bootJar/OpenAPI 조립 검증.
+        # 힙 1g·메타스페이스 768m: build.gradle 기본값(512m/384m)은 2GB 배포 박스 기준 —
+        # 호스팅 러너는 여유 있고, 전체 스위트는 Spring 컨텍스트 다양성이 커 비힙도 함께 올린다.
+        run: ./gradlew build -PtestMaxHeap=1g -PtestMaxMetaspace=768m
+
+      - name: Verify packaged OpenAPI spec
+        # Gradle build 는 openapi3(assemble 경로)와 test(check 경로) 사이 순서 보장이 없다.
+        # openapi3 가 test 스니펫 없이 먼저 돌면 빈 스펙이 초록불로 통과하므로 결과물을 직접 확인한다.
+        run: |
+          spec=build/api-docs-static/static/v1/api-docs/openapi3.yaml
+          paths=$(grep -cE '^ {2}/' "$spec" || true)
+          echo "OpenAPI paths: $paths"
+          if [ ! -s "$spec" ] || [ "$paths" -lt 1 ]; then
+            echo "::error::OpenAPI 스펙이 비어 있음 — openapi3 가 DocsTest 스니펫 없이 생성된 것으로 의심"
+            exit 1
+          fi
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/test
+            build/test-results/test
+          retention-days: 7
+          if-no-files-found: ignore

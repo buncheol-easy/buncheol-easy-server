@@ -1,7 +1,12 @@
 # staging 전용 compose (독립 실행 — base docker-compose.yml 과 병합하지 않는다).
+# production 박스도 같은 파일을 쓴다(환경 차이는 .env 가 흡수).
 #
 # 구성: MySQL 은 RDS(.env 의 DB_URL), Redis 는 컨테이너 유지. mysql 서비스 없음.
-# 실행:  docker compose -f docker-compose.staging.yml up -d --build
+# backend 이미지는 GitHub 호스팅 러너가 빌드해 ECR 에 올린다 — 박스에서 빌드하지 않는다
+# (2026-07-29 스왑 스래싱 사고의 근본 조치, docs 35 §8-A · 루트 docs/38).
+#
+# 실행:  BACKEND_IMAGE=<ECR>/bce-backend:sha-... docker compose -f docker-compose.staging.yml up -d
+#        (BACKEND_IMAGE 는 배포/롤백 워크플로가 주입. 수동 실행 시 박스 .env 의 기본값 사용)
 # 상태:  docker compose -f docker-compose.staging.yml ps
 # 로그:  docker compose -f docker-compose.staging.yml logs -f backend
 # 헬스:  curl -fsS http://127.0.0.1:8080/actuator/health   # {"status":"UP"}
@@ -24,9 +29,10 @@ services:
       retries: 20
 
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # sha- 불변 태그는 워크플로가 셸 env 로 주입한다(셸 env 가 .env 보다 우선).
+    # 수동 조작(up/restart 등)을 위해 박스 .env 에 환경 별칭 기본값 한 줄이 필요하다:
+    #   staging: BACKEND_IMAGE=<ECR>/bce-backend:staging  /  prod: ...:prod   (docs/38)
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE 미설정 — 박스 .env 에 기본값 추가 필요 (docs/38)}
     container_name: buncheoleasy-backend
     restart: unless-stopped
     depends_on:

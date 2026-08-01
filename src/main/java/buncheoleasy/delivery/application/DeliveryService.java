@@ -36,11 +36,9 @@ public class DeliveryService {
     buncheol.validateOwner(hostId);
     validateBuncheolConfirmed(buncheol);
 
-    // delivery status 는 호스트/운영자만 전이시킨다. 동시 등록이 겹쳐도 양쪽 모두 SHIPPING 으로
-    // 수렴(번호만 last-write-wins)해 상태머신이 깨지지 않으므로 CAS 없이 더티체킹으로 커밋한다.
-    // 잘못된 전이는 registerTracking 도메인 메서드가 막는다.
-    // 단, DELIVERED 자동전이 스케줄러를 추가하면 이 "동일 방향 수렴" 가정이 깨지므로 CAS/@Version 재검토 필요.
-    delivery.registerTracking(trackingNumber, Instant.now(clock));
+    // 웹훅 자동 전이(DELIVERED/RECEIVED)와 겹칠 수 있으므로 전이는 CAS 로만 한다. 위에서 조회한
+    // 엔티티는 검증용 데이터 홀더일 뿐 in-memory 로 바꾸지 않는다 (더티체킹 + CAS 혼용 금지).
+    deliveryDomainService.registerTracking(deliveryId, trackingNumber, Instant.now(clock));
     eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
   }
 
@@ -51,7 +49,7 @@ public class DeliveryService {
 
     validateBuncheolConfirmed(getBuncheolOf(delivery));
 
-    delivery.registerTracking(trackingNumber, Instant.now(clock));
+    deliveryDomainService.registerTracking(deliveryId, trackingNumber, Instant.now(clock));
     eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
   }
 
@@ -82,14 +80,15 @@ public class DeliveryService {
       throw new BusinessException(ErrorCode.DELIVERY_NO_PERMISSION);
     }
 
-    delivery.confirmReceipt(Instant.now(clock));
+    deliveryDomainService.confirmReceipt(deliveryId, Instant.now(clock));
   }
 
   /** 관리자(운영자)의 수령완료 처리. 참여자 본인 검증 없이 모든 배송을 수령완료로 전이할 수 있다는 점만 다르다. */
   @Transactional
   public void confirmReceiptByAdmin(final Long deliveryId) {
-    Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
+    // 존재 검증 선행 — CAS 실패(상태 위반)와 미존재(NOT_FOUND)를 구분해 응답한다.
+    deliveryDomainService.getDelivery(deliveryId);
 
-    delivery.confirmReceipt(Instant.now(clock));
+    deliveryDomainService.confirmReceipt(deliveryId, Instant.now(clock));
   }
 }

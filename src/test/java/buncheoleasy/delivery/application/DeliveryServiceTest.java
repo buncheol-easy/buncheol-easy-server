@@ -1,13 +1,15 @@
 package buncheoleasy.delivery.application;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
@@ -16,7 +18,6 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
-import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
@@ -52,6 +53,7 @@ class DeliveryServiceTest {
   private static final Long DELIVERY_ID = 10L;
   private static final Long PARTICIPATION_ID = 20L;
   private static final Long BUNCHEOL_ID = 30L;
+  private static final Instant NOW = Instant.parse("2026-03-23T12:00:00Z");
 
   private Delivery createSnapshotDelivery() {
     Delivery delivery =
@@ -84,8 +86,7 @@ class DeliveryServiceTest {
       deliveryService.registerTracking(HOST_ID, DELIVERY_ID, "TRACK123");
 
       // then
-      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
-      assertThat(delivery.getTrackingNumber()).isEqualTo("TRACK123");
+      then(deliveryDomainService).should().registerTracking(DELIVERY_ID, "TRACK123", NOW);
       then(eventPublisher).should().publishEvent(any(TrackingRegisteredEvent.class));
     }
 
@@ -110,6 +111,8 @@ class DeliveryServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(deliveryDomainService).should(never()).registerTracking(anyLong(), anyString(), any());
     }
 
     @Test
@@ -133,7 +136,34 @@ class DeliveryServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_BUNCHEOL_NOT_CONFIRMED);
 
-      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.SNAPSHOTTED);
+      then(deliveryDomainService).should(never()).registerTracking(anyLong(), anyString(), any());
+      then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void CAS_전이가_실패하면_이벤트를_발행하지_않는다() {
+      // 웹훅 자동 전이가 먼저 DELIVERED/RECEIVED 로 진행시킨 경합 케이스 — 상태 위반으로 끝나야 한다.
+      Delivery delivery = createSnapshotDelivery();
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.CONFIRMED);
+
+      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willDoNothing().given(buncheol).validateOwner(HOST_ID);
+      willThrow(new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID))
+          .given(deliveryDomainService)
+          .registerTracking(DELIVERY_ID, "TRACK123", NOW);
+
+      // when & then
+      assertThatThrownBy(() -> deliveryService.registerTracking(HOST_ID, DELIVERY_ID, "TRACK123"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+
       then(eventPublisher).shouldHaveNoInteractions();
     }
 
@@ -155,8 +185,7 @@ class DeliveryServiceTest {
       deliveryService.registerTrackingByAdmin(DELIVERY_ID, "TRACK123");
 
       // then
-      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.SHIPPING);
-      assertThat(delivery.getTrackingNumber()).isEqualTo("TRACK123");
+      then(deliveryDomainService).should().registerTracking(DELIVERY_ID, "TRACK123", NOW);
       then(eventPublisher).should().publishEvent(any(TrackingRegisteredEvent.class));
     }
 
@@ -180,7 +209,7 @@ class DeliveryServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_BUNCHEOL_NOT_CONFIRMED);
 
-      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.SNAPSHOTTED);
+      then(deliveryDomainService).should(never()).registerTracking(anyLong(), anyString(), any());
       then(eventPublisher).shouldHaveNoInteractions();
     }
   }
@@ -193,7 +222,6 @@ class DeliveryServiceTest {
     void 참여자_본인이_수령_확인한다() {
       // given
       Delivery delivery = createSnapshotDelivery();
-      delivery.registerTracking("TRACK123", Instant.now(clock));
       Participation participation = mock(Participation.class);
       given(participation.getParticipantId()).willReturn(PARTICIPANT_ID);
 
@@ -205,35 +233,54 @@ class DeliveryServiceTest {
       deliveryService.confirmReceipt(PARTICIPANT_ID, DELIVERY_ID);
 
       // then
-      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
-      assertThat(delivery.getReceivedAt()).isNotNull();
+      then(deliveryDomainService).should().confirmReceipt(DELIVERY_ID, NOW);
     }
 
     @Test
     void 관리자는_참여자_검증_없이_수령완료로_전이한다() {
       // given
       Delivery delivery = createSnapshotDelivery();
-      delivery.registerTracking("TRACK123", Instant.now(clock));
-
       given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
 
       // when
       deliveryService.confirmReceiptByAdmin(DELIVERY_ID);
 
       // then
-      assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.RECEIVED);
-      assertThat(delivery.getReceivedAt()).isNotNull();
+      then(deliveryDomainService).should().confirmReceipt(DELIVERY_ID, NOW);
     }
 
     @Test
     void 관리자여도_운송장_등록_전이면_예외가_발생한다() {
       // given
       Delivery delivery = createSnapshotDelivery();
-
       given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
+      willThrow(new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID))
+          .given(deliveryDomainService)
+          .confirmReceipt(DELIVERY_ID, NOW);
 
       // when & then
       assertThatThrownBy(() -> deliveryService.confirmReceiptByAdmin(DELIVERY_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+    }
+
+    @Test
+    void 참여자_본인이어도_운송장_등록_전이면_예외가_발생한다() {
+      // given
+      Delivery delivery = createSnapshotDelivery();
+      Participation participation = mock(Participation.class);
+      given(participation.getParticipantId()).willReturn(PARTICIPANT_ID);
+
+      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      willThrow(new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID))
+          .given(deliveryDomainService)
+          .confirmReceipt(DELIVERY_ID, NOW);
+
+      // when & then
+      assertThatThrownBy(() -> deliveryService.confirmReceipt(PARTICIPANT_ID, DELIVERY_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
@@ -255,6 +302,8 @@ class DeliveryServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_NO_PERMISSION);
+
+      then(deliveryDomainService).should(never()).confirmReceipt(anyLong(), any());
     }
   }
 

@@ -102,6 +102,34 @@ public enum AlimtalkTemplate {
       """,
       List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.GS25))),
 
+  PICKUP_REMINDER_CU(
+      "택배 수령 안내",
+      """
+      #{닉네임}님, 편의점에 도착한 상품이 아직 수령 전이에요! ⏰
+      보관 기한이 지나면 상품이 반송될 수 있어요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 상품(멤버): #{멤버명}
+      ▶ 수령 지점: #{지점명}
+      ▶ 택배사: CU 편의점 택배
+      ▶ 운송장 번호: #{운송장번호}\
+      """,
+      List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.CU))),
+
+  PICKUP_REMINDER_GS25(
+      "택배 수령 안내",
+      """
+      #{닉네임}님, 편의점에 도착한 상품이 아직 수령 전이에요! ⏰
+      보관 기한이 지나면 상품이 반송될 수 있어요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 상품(멤버): #{멤버명}
+      ▶ 수령 지점: #{지점명}
+      ▶ 택배사: GS25 편의점 택배
+      ▶ 운송장 번호: #{운송장번호}\
+      """,
+      List.of(AlimtalkButton.channelAdd(), AlimtalkButton.webLink("배송조회", CourierUrls.GS25))),
+
   PAYBACK_COMPLETED(
       "배송비 환급 완료 안내",
       """

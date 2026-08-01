@@ -1,3 +1,8 @@
+-- ⚠️ 스키마 변경 운영 규칙 — expand-contract (루트 docs/39):
+-- 블루-그린 배포는 구·신 버전이 같은 DB 를 수십 초 동시에 본다. 컬럼 삭제·rename·NOT NULL 추가
+-- 같은 파괴적 변경(contract)을 코드 배포와 한 릴리스에 묶으면 전환 창에서 구버전이 죽는다.
+-- 추가(expand)를 먼저 배포하고, 제거·강제는 구버전이 완전히 내려간 다음 릴리스에서 한다.
+
 -- users 테이블 생성
 CREATE TABLE IF NOT EXISTS users
 (

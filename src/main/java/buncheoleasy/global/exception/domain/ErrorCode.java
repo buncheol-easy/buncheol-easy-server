@@ -126,7 +126,7 @@ public enum ErrorCode {
   PARTICIPATION_PAYMENT_DUE_PASSED("BCH-073", "입금 기한이 지났습니다.", HttpStatus.CONFLICT),
   // BCH-074 는 다중 선택 시절의 중복 멤버 선택 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
   PARTICIPATION_ALREADY_JOINED_BUNCHEOL(
-      "BCH-075", "이미 참여 중인 분철입니다. 오픈 이벤트 기간에는 분철당 멤버 1명에만 참여할 수 있습니다.", HttpStatus.CONFLICT),
+      "BCH-075", "이미 참여 중인 분철입니다. 분철당 멤버 1명에만 참여할 수 있습니다.", HttpStatus.CONFLICT),
 
   // 배송비 환급(배송비 돌려받기, 오픈 이벤트)
   PAYBACK_NOT_ELIGIBLE("BCH-076", "배송비 환급 신청 대상이 아닙니다.", HttpStatus.CONFLICT),

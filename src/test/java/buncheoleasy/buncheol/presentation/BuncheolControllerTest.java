@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.presentation;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -210,11 +211,19 @@ class BuncheolControllerTest {
           new MockMultipartFile(
               "request", "", MediaType.APPLICATION_JSON_VALUE, zeroShippingFeeJson.getBytes());
 
-      // when & then
+      // when & then — 201 은 DTO 검증 통과까지만 보증하므로, 0원이 매핑 중 탈락하지 않고 서비스까지
+      // 전달되는지도 함께 검증한다.
       mockMvc
           .perform(
               multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isCreated());
+
+      then(buncheolService)
+          .should()
+          .holdBuncheol(
+              eq(HOST_ID),
+              argThat(request -> request.gs25ShippingFee() == 0 && request.cuShippingFee() == null),
+              any());
     }
 
     @Test

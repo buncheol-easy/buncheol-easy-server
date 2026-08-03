@@ -30,12 +30,14 @@ public class ShippingFeePaybackPolicy {
   }
 
   /**
-   * 참여 단위 환급 대상 여부 = 이벤트 활성 + 0원 슬롯 참여 + 입금확인(CONFIRMED)된 참여. 0원 슬롯 분철은 운영진만 발행하므로 별도의 이벤트
-   * 기간 판정은 두지 않는다. {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다.
+   * 참여 단위 환급 대상 여부 = 이벤트 활성 + 0원 슬롯 참여 + 배송비 있음 + 입금확인(CONFIRMED)된 참여. 0원 슬롯 분철은 운영진만 발행하므로
+   * 별도의 이벤트 기간 판정은 두지 않는다. {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다. 배송비 0원 참여는 환급할
+   * 금액이 없으므로 비대상 — 무료 슬롯 분철은 배송비를 보증금으로 받는 운영 전제이나, 배송비 0원 개최가 허용된 뒤로는 코드로도 가드한다.
    */
   public boolean isEventTarget(final Participation participation) {
     return properties.enabled()
         && participation.getAmount() == 0
+        && participation.getShippingFee() > 0
         && participation.getStatus() == ParticipationStatus.CONFIRMED;
   }
 

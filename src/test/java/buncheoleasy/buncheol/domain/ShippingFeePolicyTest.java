@@ -57,8 +57,8 @@ class ShippingFeePolicyTest {
   class ValidateFeeValueTest {
 
     @ParameterizedTest
-    @ValueSource(ints = {0, -1, -1000})
-    void gs25_배송비가_0_이하면_예외가_발생한다(int fee) {
+    @ValueSource(ints = {-1, -1000})
+    void gs25_배송비가_음수면_예외가_발생한다(int fee) {
       // when & then
       assertThatThrownBy(() -> ShippingFeePolicy.of(fee, null))
           .isInstanceOf(BusinessException.class)
@@ -67,8 +67,8 @@ class ShippingFeePolicyTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, -1, -1000})
-    void cu_배송비가_0_이하면_예외가_발생한다(int fee) {
+    @ValueSource(ints = {-1, -1000})
+    void cu_배송비가_음수면_예외가_발생한다(int fee) {
       // when & then
       assertThatThrownBy(() -> ShippingFeePolicy.of(null, fee))
           .isInstanceOf(BusinessException.class)
@@ -76,11 +76,25 @@ class ShippingFeePolicyTest {
           .isEqualTo(ErrorCode.BUNCHEOL_SHIPPING_FEE_INVALID);
     }
 
+    // 0원은 개최자가 배송비를 받지 않는 무료 배송으로 허용한다.
     @ParameterizedTest
-    @ValueSource(ints = {1, 500, 3000})
-    void 양수_배송비는_유효하다(int fee) {
+    @ValueSource(ints = {0, 1, 500, 3000})
+    void gs25_배송비가_0_이상이면_유효하다(int fee) {
       // when & then
       assertThatCode(() -> ShippingFeePolicy.of(fee, null)).doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 500, 3000})
+    void cu_배송비가_0_이상이면_유효하다(int fee) {
+      // when & then
+      assertThatCode(() -> ShippingFeePolicy.of(null, fee)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 양쪽_모두_0원이어도_미입력과_구분되어_생성에_성공한다() {
+      // 최소 1개 입력 검증(validateAtLeastOneFeeProvided)은 null 기준이라 0원 두 개는 정상 통과해야 한다.
+      assertThatCode(() -> ShippingFeePolicy.of(0, 0)).doesNotThrowAnyException();
     }
   }
 

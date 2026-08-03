@@ -41,8 +41,9 @@ public record ShippingFeePolicy(
     }
   }
 
+  // 0원은 개최자가 배송비를 받지 않는 무료 배송으로 허용한다.
   private void validateFeeValue(final Integer fee) {
-    if (fee != null && fee <= 0) {
+    if (fee != null && fee < 0) {
       throw new BusinessException(ErrorCode.BUNCHEOL_SHIPPING_FEE_INVALID);
     }
   }

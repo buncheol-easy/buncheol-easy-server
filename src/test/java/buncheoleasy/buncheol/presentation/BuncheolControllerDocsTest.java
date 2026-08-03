@@ -130,8 +130,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "purchaseSite": String,         // 1~200자
                               "deadline": Instant,            // 미래 시점 (UTC ISO-8601, 예: 2026-06-01T03:00:00Z)
                               "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
-                              "gs25ShippingFee": Integer?,    // 양수, gs25/cu 중 최소 1개 필수
-                              "cuShippingFee": Integer?,      // 양수, gs25/cu 중 최소 1개 필수
+                              "gs25ShippingFee": Integer?,    // 0 이상 (0원 = 무료 배송), gs25/cu 중 최소 1개 필수
+                              "cuShippingFee": Integer?,      // 0 이상 (0원 = 무료 배송), gs25/cu 중 최소 1개 필수
                               "thumbnailIndex": Integer,      // 필수, 대표사진으로 쓸 images 파트 내 인덱스(0-base)
                               "buncheolMembers": [
                                 {

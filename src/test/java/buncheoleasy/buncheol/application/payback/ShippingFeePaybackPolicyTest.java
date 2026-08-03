@@ -40,6 +40,7 @@ class ShippingFeePaybackPolicyTest {
   void setUp() {
     policy = policyWith(true);
     given(participation.getAmount()).willReturn(0L);
+    given(participation.getShippingFee()).willReturn(3000L);
     given(participation.getStatus()).willReturn(ParticipationStatus.CONFIRMED);
     given(participation.getPaybackStatus()).willReturn(PaybackStatus.NONE);
     given(delivery.getStatus()).willReturn(DeliveryStatus.DELIVERED);
@@ -78,6 +79,14 @@ class ShippingFeePaybackPolicyTest {
     @Test
     void 슬롯_금액이_0원이_아니면_NONE_이다() {
       given(participation.getAmount()).willReturn(30_000L);
+
+      assertThat(policy.deriveStatus(participation, delivery, NOW_BEFORE_DEADLINE))
+          .isEqualTo(PaybackStatus.NONE);
+    }
+
+    @Test
+    void 배송비가_0원인_참여는_환급할_금액이_없어_NONE_이다() {
+      given(participation.getShippingFee()).willReturn(0L);
 
       assertThat(policy.deriveStatus(participation, delivery, NOW_BEFORE_DEADLINE))
           .isEqualTo(PaybackStatus.NONE);

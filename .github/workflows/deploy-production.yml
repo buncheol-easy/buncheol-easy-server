@@ -84,9 +84,11 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, production]
-    # 내부 최악 예산(pull 5m + up 3m + 헬스 3m + 드레인 30s + graceful 정지 40s ≈ 12.5m)보다
-    # 커야 OS 레벨 timeout 이 잡 취소보다 먼저 발화한다 (리뷰 #89 반영)
-    timeout-minutes: 15
+    # 내부 최악 예산: checkout/rsync ~1m + 락 대기 2m + pull 5.5m(-k 유예 포함) + up 3.5m
+    # + 헬스 3m + 웜업 15s + 드레인 30s + 최종확인 5s + graceful 정지 40s ≈ 16.5m — 이보다
+    # 커야 OS 레벨 timeout 이 잡 취소보다 먼저 발화한다. 초과 취소 지점이 하필 "전환 후·
+    # 구 색 정지 전"이면 두 색이 동시에 뜬 채 남는다 (3차 리뷰 산식 재계산)
+    timeout-minutes: 20
     env:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
@@ -120,10 +122,10 @@ jobs:
           free -h || true
           sudo cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
           docker ps -a --filter name=buncheoleasy-backend --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
-          docker logs buncheoleasy-backend-blue --tail=100 || true
-          docker logs buncheoleasy-backend-green --tail=100 || true
+          docker logs buncheoleasy-backend-blue --tail=50 || true
+          docker logs buncheoleasy-backend-green --tail=50 || true
           # 레거시(블루-그린 도입 전 단일 컨테이너) — 첫 배포 진단용, 이후 무해한 no-op
-          docker logs buncheoleasy-backend --tail=100 || true
+          docker logs buncheoleasy-backend --tail=50 || true
 
       - name: Retain last 3 images (rollback cache)
         # 박스 빌드가 없어져 builder prune 은 불필요해졌다. pull 된 sha- 이미지는 태그가 있어

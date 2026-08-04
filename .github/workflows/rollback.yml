@@ -46,11 +46,12 @@ jobs:
     runs-on:
       - self-hosted
       - ${{ inputs.environment }}
-    # 내부 최악 예산: 사전 pull 5m + 스크립트(sha- 로컬 존재 시 관용 pull 1m + up 3m +
-    # 헬스 3m + 드레인 30s + graceful 정지 40s) ≈ 13.2m < 15m — 레지스트리 무응답이
-    # 사전 pull 과 스크립트 pull 양쪽에서 5m 씩 이중 소진되지 않도록 스크립트 쪽 관용
-    # 경로는 1m 상한이다(스위치 후·구 색 정지 전에 잡이 끊기는 최악을 차단).
-    timeout-minutes: 15
+    # 내부 최악 예산: 사전 pull 5.5m + 락 대기 2m + 스크립트(관용 pull 1.25m + up 3.5m +
+    # 헬스 3m + 웜업 15s + 드레인 30s + 최종확인 5s + graceful 정지 40s) ≈ 17.2m < 20m.
+    # 레지스트리 무응답이 사전 pull 과 스크립트 pull 양쪽에서 5m 씩 이중 소진되지 않도록
+    # 스크립트 쪽 관용 경로는 1m 상한. 초과 취소 지점이 "전환 후·구 색 정지 전"이면 두 색이
+    # 동시에 뜬 채 남으므로 예산은 넉넉해야 한다 (3차 리뷰 산식 재계산).
+    timeout-minutes: 20
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
       TARGET_ENV: ${{ inputs.environment }}
@@ -112,10 +113,10 @@ jobs:
           free -h || true
           sudo cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
           docker ps -a --filter name=buncheoleasy-backend --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
-          docker logs buncheoleasy-backend-blue --tail=100 || true
-          docker logs buncheoleasy-backend-green --tail=100 || true
+          docker logs buncheoleasy-backend-blue --tail=50 || true
+          docker logs buncheoleasy-backend-green --tail=50 || true
           # 레거시(블루-그린 도입 전 단일 컨테이너) — 첫 배포 진단용, 이후 무해한 no-op
-          docker logs buncheoleasy-backend --tail=100 || true
+          docker logs buncheoleasy-backend --tail=50 || true
 
   promote:
     # 롤백 성공 시 별칭도 롤백 대상으로 재지정 — "별칭 = 지금 떠 있는 것" 불변식 유지.

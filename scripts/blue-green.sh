@@ -33,10 +33,13 @@ export COMPOSE_PROFILES=blue,green
 log() { printf '[blue-green] %s\n' "$*"; }
 die() { printf '::error::[blue-green] %s\n' "$*" >&2; exit 1; }
 
-# DRAIN_SECONDS 는 외부 입력 — 숫자가 아니면 sleep 이 "전환 후·구 색 정지 전"이라는
-# 가장 애매한 지점에서 죽는다. 진입 시점에 검증한다.
+# DRAIN_SECONDS·LOCK_WAIT_SECONDS 는 외부 입력 — 숫자가 아니면 sleep/flock 이
+# 엉뚱한 지점·엉뚱한 메시지로 죽는다. 진입 시점에 검증한다.
 case "$DRAIN_SECONDS" in
   ''|*[!0-9]*) die "DRAIN_SECONDS 는 정수(초)여야 한다: '$DRAIN_SECONDS'" ;;
+esac
+case "${LOCK_WAIT_SECONDS:-120}" in
+  ''|*[!0-9]*) die "LOCK_WAIT_SECONDS 는 정수(초)여야 한다: '${LOCK_WAIT_SECONDS:-}'" ;;
 esac
 
 # 동시 실행 잠금 — 워크플로 배포와 박스 수동 switch 가 겹치면 "방금 트래픽을 받기 시작한
@@ -75,16 +78,27 @@ precheck_nginx() {
   # 구 색에 남아 구 색 정지 순간 502 가 난다. 검사 대상은 nginx 가 실제로 include 하는 설정
   # 전체(-T 덤프)다 — 디렉터리 grep -r 은 .bak 백업·sites-available 비활성 파일·주석까지
   # 잡아 오탐으로 전 배포를 막는다(셋업 절차 자체가 스니펫 백업을 남긴다).
-  # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다.
-  if sudo nginx -T 2>/dev/null | grep -qE '^[[:space:]]*proxy_pass[^;]*127\.0\.0\.1:808[01]'; then
+  # 덤프 실패는 반드시 die — 파이프에 넣으면 "검사 불가"가 "우회 없음"으로 fail-open 되어,
+  # sudo 미설정 시 "컨테이너를 건드리기 전에 중단"이라는 이 함수의 계약이 깨진다.
+  local dump
+  dump=$(sudo nginx -T 2>/dev/null) \
+    || die "sudo nginx -T 실패 — sudo 권한/Nginx 설정을 확인하라 (검사 불가 = 진행 불가)"
+  # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다. localhost 표기도 잡는다.
+  if printf '%s\n' "$dump" | grep -qE '^[[:space:]]*proxy_pass[^;]*(127\.0\.0\.1|localhost):808[01]'; then
     die "upstream 을 우회해 8080/8081 을 직접 가리키는 실효 Nginx 설정이 있다 — 전환 불변식이 깨진다 (sudo nginx -T | grep proxy_pass 로 확인)"
   fi
 }
 
+# upstream 파일의 bce_backend 블록에서 활성 포트를 읽는다(주석 속 IP 오독 방지 —
+# 종단 게이트와 같은 블록 스코프). 실패는 삼켜 호출부가 원인을 말하게 한다(set -e 무언사 방지).
+read_active_port() {
+  awk '/upstream[[:space:]]+bce_backend/,/}/' "$UPSTREAM_CONF" 2>/dev/null \
+    | grep -oE '127\.0\.0\.1:[0-9]+' | head -1 | cut -d: -f2 || true
+}
+
 active_color() {
   local port
-  # grep 실패(파일 손상)를 삼켜 case 의 die 가 원인을 말하게 한다 — set -e 의 무언사 방지.
-  port=$(grep -oE '127\.0\.0\.1:[0-9]+' "$UPSTREAM_CONF" 2>/dev/null | head -1 | cut -d: -f2 || true)
+  port=$(read_active_port)
   case "$port" in
     8080) echo blue ;;
     8081) echo green ;;
@@ -135,9 +149,10 @@ wait_healthy() {
       echo "헬스체크 ${HEALTH_DEADLINE_SECONDS}s 초과 — 컨테이너 로그:"
       docker logs "$ctr" --tail=100 || true
       # restart: unless-stopped 라 부팅 실패가 무한 재시도로 램을 갉아먹는다 — 루프를 멈춘다.
-      # 활성 색은 그대로 서빙 중이므로 사용자 영향 없음.
+      # HTTP 서빙은 활성 색이 계속 담당하지만, 새 색의 "스케줄러"는 기동 직후(initial-delay
+      # 10s~)부터 이미 돌았을 수 있다 — DB 상태 전이·알림 발송은 회수되지 않는다(docs/39 리스크).
       docker stop -t 5 "$ctr" > /dev/null 2>&1 || true
-      die "새 색(${ctr})이 헬스체크를 통과하지 못했다 — 정지시켰고, 서빙은 기존 색 그대로다."
+      die "새 색(${ctr})이 헬스체크를 통과하지 못했다 — 정지시켰다. HTTP 서빙은 기존 색 그대로 (⚠️ 새 색 스케줄러 부작용은 이미 발생했을 수 있음)"
     fi
     sleep 5
   done
@@ -152,6 +167,17 @@ verify_image() {
   expected=$(docker image inspect -f '{{.Id}}' "$image")
   [ "$running" = "$expected" ] \
     || die "떠 있는 컨테이너(${ctr})가 배포 대상 이미지가 아니다: $running != $expected"
+}
+
+# 되돌릴 수 없는 구 색 정지 "직전"의 최종 생존 확인 — 전환 이후 어떤 이유로든(늦은 크래시,
+# OOM 등) 새 색이 죽었다면, 아직 살아 있는 구 색으로 스위치를 되돌리고 중단한다.
+# "설정이 새 색을 가리킨다"(종단 게이트)와 "새 색이 실제로 응답한다"는 다른 명제다.
+ensure_target_alive_or_revert() {
+  local target_port="$1" old_color="$2"
+  if ! curl -fsS --connect-timeout 3 --max-time 5 "http://127.0.0.1:${target_port}/actuator/health" > /dev/null 2>&1; then
+    switch_nginx "$(port_of "$old_color")"
+    die "구 색 정지 직전 확인에서 새 색(${target_port})이 응답하지 않는다 — upstream 을 ${old_color} 로 되돌렸다. 새 색 로그를 확인하라."
+  fi
 }
 
 warmup() {
@@ -204,13 +230,25 @@ stop_color() {
 
 # 전환 성공 전에 죽으면(검증 실패·워크플로 취소·SIGTERM) 새로 띄운 색을 정리한다 —
 # restart: unless-stopped 라 방치하면 실패한 JVM 이 최대 mem_limit 을 물고 무기한 남는다.
-# 전환 성공 후에는 CLEANUP_CTR 를 비워 no-op 이 된다.
+# 전환 성공 후에는 CLEANUP_CTR 를 비워 no-op 이 된다. 정리 후에도 비워 멱등(INT 핸들러의
+# exit 가 EXIT 트랩을 다시 태우는 경로에서 이중 정지 방지).
+#
+# ⚠️ INT/TERM 핸들러는 반드시 exit 해야 한다 — bash 는 핸들러가 반환하면 중단 지점
+# 다음부터 스크립트를 "계속 실행"한다. exit 없이 정리만 하면 "새 색을 정지시킨 손으로
+# 그 색에 전환 → 구 색도 정지 = 전면 장애"가 된다(3차 리뷰). 종료 코드는 128+시그널 관례.
 CLEANUP_CTR=""
 cleanup_target() {
   if [ -n "$CLEANUP_CTR" ]; then
     docker stop -t 5 "$CLEANUP_CTR" > /dev/null 2>&1 || true
-    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다 (서빙은 기존 색 그대로)"
+    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다. HTTP 서빙은 기존 색 그대로다 (⚠️ 새 색 스케줄러가 기동~정지 사이 이미 돌았을 수 있다 — docs/39 리스크)"
+    CLEANUP_CTR=""
   fi
+}
+arm_cleanup() {
+  CLEANUP_CTR="$1"
+  trap cleanup_target EXIT
+  trap 'cleanup_target; exit 130' INT
+  trap 'cleanup_target; exit 143' TERM
 }
 
 cmd_deploy() {
@@ -261,11 +299,14 @@ cmd_deploy() {
       timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
       ;;
   esac
+  # redis 는 색과 독립으로 상주시킨다 — 색 기동을 depends_on 에 맡기면(redis 가 동반
+  # 대상이 되면) 미래에 redis 정의가 한 줄이라도 바뀌는 배포에서 redis 가 재생성돼,
+  # 아직 서빙 중인 활성 색의 커넥션(리프레시 토큰 등)이 끊긴다. 그래서 색은 --no-deps.
+  timeout -k 30s 2m docker compose -f "$COMPOSE_FILE" up -d redis
   # up 은 대상 색 서비스만 — 활성 색 컨테이너는 건드리지 않으므로 BACKEND_IMAGE 가
   # 바뀌어도 재생성되지 않는다. up 직후부터 전환 성공까지 trap 이 새 색을 책임진다.
-  trap cleanup_target EXIT INT TERM
-  CLEANUP_CTR="$target_ctr"
-  timeout -k 30s 3m docker compose -f "$COMPOSE_FILE" up -d "backend-${target}"
+  arm_cleanup "$target_ctr"
+  timeout -k 30s 3m docker compose -f "$COMPOSE_FILE" up -d --no-deps "backend-${target}"
 
   wait_healthy "$target_port" "$target_ctr"
   verify_image "$target_ctr" "$BACKEND_IMAGE"
@@ -276,6 +317,7 @@ cmd_deploy() {
 
   log "드레인 ${DRAIN_SECONDS}s — 구 색으로 이미 프록시된 요청이 끝나기를 기다린다"
   sleep "$DRAIN_SECONDS"
+  ensure_target_alive_or_revert "$target_port" "$active"
   stop_color "$active"
 
   echo "::notice::배포 완료 — 활성: ${target}(${target_port}). 1분 롤백: scripts/blue-green.sh switch ${active}"
@@ -299,26 +341,36 @@ cmd_switch() {
   fi
 
   # 재기동한 색도 전환 성공 전 중단 시 정리한다(deploy 와 동일한 trap 계약).
-  trap cleanup_target EXIT INT TERM
-  CLEANUP_CTR="$target_ctr"
+  arm_cleanup "$target_ctr"
   start_color "$target"
   wait_healthy "$target_port" "$target_ctr"
   switch_nginx "$target_port"
   CLEANUP_CTR=""   # 전환 성공
   log "드레인 ${DRAIN_SECONDS}s"
   sleep "$DRAIN_SECONDS"
+  ensure_target_alive_or_revert "$target_port" "$active"
   stop_color "$active"
-  echo "::notice::전환 완료 — 활성: ${target}(${target_port}). 복귀: scripts/blue-green.sh switch ${active}"
+  local running_img
+  running_img=$(docker inspect -f '{{.Config.Image}}' "$target_ctr" 2>/dev/null || echo "?")
+  echo "::notice::전환 완료 — 활성: ${target}(${target_port}, ${running_img}). 복귀: scripts/blue-green.sh switch ${active}"
+  # 워크플로 경로는 promote 잡이 별칭을 옮기지만 수동 switch 는 아무도 안 옮긴다 —
+  # 이 상태에서 박스 .env 기본값(환경 별칭)으로 up/restart 하면 롤백이 조용히 원복된다.
+  echo "::warning::ECR 별칭은 이동하지 않았다 — 지금 떠 있는 이미지(${running_img})와 환경 별칭(:staging/:prod)이 다를 수 있다. 별칭을 맞추기 전까지 박스에서 compose up/restart 금지 (docs/38 §5). 정식 복구는 rollback.yml 에 위 좌표를 지정하라."
 }
 
 cmd_status() {
-  precheck_nginx
-  local active port
-  active=$(active_color)
-  port=$(port_of "$active")
+  # 읽기 전용 진단 — precheck·락·die 없이 항상 끝까지 출력한다. upstream 이 깨졌거나
+  # sudo 가 안 되는 상황이야말로 status 를 가장 보고 싶은 순간이다(3차 리뷰).
+  local port active="판독 불가 — upstream 파일/포트 확인 필요"
+  port=$(read_active_port)
+  case "$port" in
+    8080) active="blue" ;;
+    8081) active="green" ;;
+    *) port="?" ;;
+  esac
   echo "활성 색: ${active} (127.0.0.1:${port})"
   echo "--- upstream ---"
-  cat "$UPSTREAM_CONF"
+  cat "$UPSTREAM_CONF" 2>/dev/null || echo "(upstream 파일 없음/읽기 실패: $UPSTREAM_CONF — Nginx 셋업은 docs/39 §4)"
   echo "--- 컨테이너 ---"
   docker ps -a --filter "name=buncheoleasy-backend" \
     --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'

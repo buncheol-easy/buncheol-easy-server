@@ -55,7 +55,10 @@ x-backend-base: &backend-base
   # server.shutdown / spring.lifecycle.timeout-per-shutdown-phase(30s) 명시와 짝이다.
   stop_grace_period: 40s
   healthcheck:
-    # "떴다"와 "서빙 가능하다"를 docker 가 구분하게 한다 (docs/36 §5-4).
+    # "떴다"와 "서빙 가능하다"를 docker 가 구분하게 한다 (docs/36 §5-4). 진단·관측용 —
+    # 배포 게이트는 스크립트의 "호스트" curl 이라 이 체크가 깨져도 배포는 막히지 않는다.
+    # ⚠️ 컨테이너 안 curl 에 의존한다(eclipse-temurin:21-jre 는 ubuntu 베이스라 포함) —
+    # 베이스를 alpine/distroless 로 바꾸면 영구 unhealthy 로 docker ps 만 조용히 거짓말한다.
     # 컨테이너 내부 포트는 두 색 모두 8080 — 호스트 바인딩만 다르다.
     test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:8080/actuator/health"]
     interval: 10s

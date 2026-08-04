@@ -33,11 +33,25 @@ export COMPOSE_PROFILES=blue,green
 log() { printf '[blue-green] %s\n' "$*"; }
 die() { printf '::error::[blue-green] %s\n' "$*" >&2; exit 1; }
 
+# DRAIN_SECONDS 는 외부 입력 — 숫자가 아니면 sleep 이 "전환 후·구 색 정지 전"이라는
+# 가장 애매한 지점에서 죽는다. 진입 시점에 검증한다.
+case "$DRAIN_SECONDS" in
+  ''|*[!0-9]*) die "DRAIN_SECONDS 는 정수(초)여야 한다: '$DRAIN_SECONDS'" ;;
+esac
+
 # 동시 실행 잠금 — 워크플로 배포와 박스 수동 switch 가 겹치면 "방금 트래픽을 받기 시작한
-# 컨테이너를 재생성"하는 경합이 가능하다(러너 큐는 잡끼리만 직렬화한다). fd 는 프로세스
-# 종료 시 자동 해제되므로 stale lock 이 남지 않는다.
-exec 9>/var/lock/bce-blue-green.lock
-flock -n 9 || die "다른 blue-green 작업이 진행 중이다 — 끝나기를 기다렸다가 다시 실행하라"
+# 컨테이너를 재생성"하는 경합이 가능하다(러너 큐는 잡끼리만 직렬화한다).
+# - 락 파일은 배포 디렉터리의 "부모"(/home/ubuntu, ubuntu 소유) — /var/lock 은 sticky 라
+#   root 로 한 번 실행되면 러너(ubuntu)가 열지도 지우지도 못해 전 배포가 영구 실패한다.
+#   배포 디렉터리 안은 rsync --delete 가 지워 inode 가 갈리므로 역시 부적합.
+# - flock -w: 긴급 롤백이 잔여 배포의 락 때문에 즉시 죽지 않도록 상한부 대기.
+# - fd 는 프로세스 종료 시 자동 해제 — stale lock 없음. 읽기 전용 status 는 락을 잡지 않는다.
+acquire_lock() {
+  local lock_file="${LOCK_FILE:-$(dirname "$PWD")/.bce-blue-green.lock}"
+  exec 9>"$lock_file" || die "락 파일 열기 실패: $lock_file (소유자/권한 확인 — root 로 실행했었다면 rm 후 재시도)"
+  flock -w "${LOCK_WAIT_SECONDS:-120}" 9 \
+    || die "다른 blue-green 작업이 ${LOCK_WAIT_SECONDS:-120}s 안에 끝나지 않았다 — status 로 상태 확인 후 재시도"
+}
 
 port_of() { if [ "$1" = "blue" ]; then echo 8080; else echo 8081; fi; }
 other_of() { if [ "$1" = "blue" ]; then echo green; else echo blue; fi; }
@@ -47,24 +61,30 @@ container_running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/nu
 
 # ── Nginx ────────────────────────────────────────────────────────────────────
 
+# /etc/nginx 의 파일은 0644/0755 라 읽기에는 sudo 가 필요 없다 — sudo 는 root 가 실제로
+# 필요한 tee(쓰기)·nginx -t/-T(인증서 읽기)·systemctl reload 세 곳에만 쓴다.
+# (sudo 실패가 "파일 없음"으로 오진되는 것도 함께 방지 — 후속 sudoers 축소의 명령 목록이 된다)
+
 precheck_nginx() {
   # 전환 지점이 없는 상태에서 배포를 진행하면 구 색 정지 순간 중단이 난다 — 시작 전에 멈춘다.
-  sudo test -f "$UPSTREAM_CONF" \
+  [ -f "$UPSTREAM_CONF" ] \
     || die "upstream 파일 없음: $UPSTREAM_CONF — Nginx 1회성 셋업(docs/39) 먼저"
-  sudo grep -q "bce_backend" "$SNIPPET" 2>/dev/null \
+  grep -q "bce_backend" "$SNIPPET" 2>/dev/null \
     || die "snippet($SNIPPET)이 upstream(bce_backend)을 참조하지 않는다 — Nginx 1회성 셋업(docs/39) 먼저"
-  # upstream 을 우회해 백엔드 포트를 직접 가리키는 설정이 하나라도 있으면, 전환해도 그
-  # 경로는 구 색에 남아 구 색 정지 순간 502 가 난다 — snippet 하나만 믿지 말고 전수 색출.
-  # (upstream 파일 자체의 "server 127.0.0.1:PORT" 는 proxy_pass 가 아니라서 걸리지 않는다)
-  if sudo grep -rlE 'proxy_pass[^;]*127\.0\.0\.1:808[01]' /etc/nginx/ > /dev/null 2>&1; then
-    die "upstream 을 우회해 8080/8081 을 직접 가리키는 Nginx 설정이 있다: $(sudo grep -rlE 'proxy_pass[^;]*127\.0\.0\.1:808[01]' /etc/nginx/ | tr '\n' ' ')— 전환 불변식이 깨진다"
+  # upstream 을 우회해 백엔드 포트를 직접 가리키는 "실효" 설정이 있으면, 전환해도 그 경로는
+  # 구 색에 남아 구 색 정지 순간 502 가 난다. 검사 대상은 nginx 가 실제로 include 하는 설정
+  # 전체(-T 덤프)다 — 디렉터리 grep -r 은 .bak 백업·sites-available 비활성 파일·주석까지
+  # 잡아 오탐으로 전 배포를 막는다(셋업 절차 자체가 스니펫 백업을 남긴다).
+  # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다.
+  if sudo nginx -T 2>/dev/null | grep -qE '^[[:space:]]*proxy_pass[^;]*127\.0\.0\.1:808[01]'; then
+    die "upstream 을 우회해 8080/8081 을 직접 가리키는 실효 Nginx 설정이 있다 — 전환 불변식이 깨진다 (sudo nginx -T | grep proxy_pass 로 확인)"
   fi
 }
 
 active_color() {
   local port
   # grep 실패(파일 손상)를 삼켜 case 의 die 가 원인을 말하게 한다 — set -e 의 무언사 방지.
-  port=$(sudo grep -oE '127\.0\.0\.1:[0-9]+' "$UPSTREAM_CONF" 2>/dev/null | head -1 | cut -d: -f2 || true)
+  port=$(grep -oE '127\.0\.0\.1:[0-9]+' "$UPSTREAM_CONF" 2>/dev/null | head -1 | cut -d: -f2 || true)
   case "$port" in
     8080) echo blue ;;
     8081) echo green ;;
@@ -74,7 +94,7 @@ active_color() {
 
 switch_nginx() {
   local port="$1" prev
-  prev=$(sudo cat "$UPSTREAM_CONF")
+  prev=$(cat "$UPSTREAM_CONF")
   printf '# bce backend 활성 색 — 이 파일이 유일한 진실. 수정은 scripts/blue-green.sh 로만 (docs/39)\nupstream bce_backend { server 127.0.0.1:%s; }\n' "$port" \
     | sudo tee "$UPSTREAM_CONF" > /dev/null
   if ! sudo nginx -t; then
@@ -91,12 +111,14 @@ switch_nginx() {
     die "nginx reload 실패 — upstream 파일을 원복했다. 서빙은 기존 색 그대로다."
   fi
   # 실효 설정 종단 게이트 — 이 함수 다음은 되돌릴 수 없는 구 색 정지다. "파일에 썼고
-  # reload 가 성공했다"에 더해, nginx 가 읽는 설정 전체(-T 덤프)에 대상 포트의 upstream 이
-  # 실제로 존재하는지 최종 확인한다(다른 include 가 덮어쓰는 구성 오류 방어).
-  if ! sudo nginx -T 2>/dev/null | grep -q "server 127.0.0.1:${port};"; then
+  # reload 가 성공했다"에 더해, -T 덤프의 "bce_backend 블록 안"에 대상 포트가 있는지
+  # 최종 확인한다(블록 스코프 없이 전체 grep 하면 같은 포트를 쓰는 다른 upstream 이
+  # 우연히 통과시킨다). 주의: -T 는 디스크 설정을 다시 읽는다 — 단독으로는 "reload 적용"의
+  # 증거가 아니며, 위 reload exit code 검사와 결합해서만 의미가 있다.
+  if ! sudo nginx -T 2>/dev/null | awk '/upstream[[:space:]]+bce_backend/,/}/' | grep -q "127.0.0.1:${port};"; then
     printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
     sudo systemctl reload nginx || true
-    die "reload 후 실효 설정에 ${port} upstream 이 없다 — 원복했다. Nginx 구성을 점검하라."
+    die "reload 후 실효 설정의 bce_backend 블록에 ${port} 가 없다 — 원복했다. Nginx 구성을 점검하라."
   fi
   # reload 는 무중단 — 신규 연결은 새 upstream, 진행 중 연결은 구 워커가 마무리한다.
   log "Nginx upstream → 127.0.0.1:${port} 전환 완료 (실효 설정 확인됨)"
@@ -134,10 +156,11 @@ verify_image() {
 
 warmup() {
   # JVM 콜드 스타트 완화용 프라이밍 — 실패해도 배포는 계속한다(헬스는 이미 통과).
+  # 3회 전부 시도한다(첫 실패에서 끊으면 실질 1회가 된다). 효과는 보조적 — 판정 기준 아님.
   local port="$1" i
   for i in 1 2 3; do
     curl -fsS --max-time 5 "http://127.0.0.1:${port}/v1/buncheols" > /dev/null 2>&1 \
-      || { log "웜업 요청 ${i} 실패 (무해 — JIT 프라이밍 목적)"; break; }
+      || log "웜업 요청 ${i} 실패 (무해 — JIT 프라이밍 목적)"
   done
   log "웜업 완료"
 }
@@ -179,15 +202,29 @@ stop_color() {
 
 # ── 서브커맨드 ────────────────────────────────────────────────────────────────
 
+# 전환 성공 전에 죽으면(검증 실패·워크플로 취소·SIGTERM) 새로 띄운 색을 정리한다 —
+# restart: unless-stopped 라 방치하면 실패한 JVM 이 최대 mem_limit 을 물고 무기한 남는다.
+# 전환 성공 후에는 CLEANUP_CTR 를 비워 no-op 이 된다.
+CLEANUP_CTR=""
+cleanup_target() {
+  if [ -n "$CLEANUP_CTR" ]; then
+    docker stop -t 5 "$CLEANUP_CTR" > /dev/null 2>&1 || true
+    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다 (서빙은 기존 색 그대로)"
+  fi
+}
+
 cmd_deploy() {
   # 수동 실행 편의 — 셸 env 가 없으면 compose 와 같은 곳(.env 의 별칭 기본값)을 읽는다.
   # 별칭(:staging/:prod)은 아래 pull 단계에서 관용 없이 항상 성공해야 통과한다.
+  # sed -n 은 매치 없어도 exit 0 이지만 방어적으로 || true(§active_color 와 같은 원칙 —
+  # 여기서 무언사하면 아래 die 의 안내에 영영 닿지 못한다). 따옴표·CR 은 벗긴다.
   if [ -z "${BACKEND_IMAGE:-}" ] && [ -f .env ]; then
-    BACKEND_IMAGE=$(grep -E '^BACKEND_IMAGE=' .env | tail -1 | cut -d= -f2-)
+    BACKEND_IMAGE=$(sed -n 's/^BACKEND_IMAGE=//p' .env | tail -1 | tr -d "\r\"'" || true)
     export BACKEND_IMAGE
     if [ -n "$BACKEND_IMAGE" ]; then log "BACKEND_IMAGE 를 .env 기본값에서 읽음: $BACKEND_IMAGE"; fi
   fi
   [ -n "${BACKEND_IMAGE:-}" ] || die "BACKEND_IMAGE 미설정 — 배포할 이미지 좌표가 필요하다"
+  acquire_lock
   precheck_nginx
 
   local active target target_port target_ctr active_ctr prev
@@ -225,7 +262,9 @@ cmd_deploy() {
       ;;
   esac
   # up 은 대상 색 서비스만 — 활성 색 컨테이너는 건드리지 않으므로 BACKEND_IMAGE 가
-  # 바뀌어도 재생성되지 않는다.
+  # 바뀌어도 재생성되지 않는다. up 직후부터 전환 성공까지 trap 이 새 색을 책임진다.
+  trap cleanup_target EXIT INT TERM
+  CLEANUP_CTR="$target_ctr"
   timeout -k 30s 3m docker compose -f "$COMPOSE_FILE" up -d "backend-${target}"
 
   wait_healthy "$target_port" "$target_ctr"
@@ -233,6 +272,7 @@ cmd_deploy() {
   warmup "$target_port"
 
   switch_nginx "$target_port"
+  CLEANUP_CTR=""   # 전환 성공 — 이제 새 색이 서빙 중이므로 trap 은 no-op
 
   log "드레인 ${DRAIN_SECONDS}s — 구 색으로 이미 프록시된 요청이 끝나기를 기다린다"
   sleep "$DRAIN_SECONDS"
@@ -244,6 +284,7 @@ cmd_deploy() {
 cmd_switch() {
   local target="${1:-}" active target_port target_ctr
   case "$target" in blue|green) ;; *) die "사용법: blue-green.sh switch <blue|green>" ;; esac
+  acquire_lock
   precheck_nginx
   active=$(active_color)
   [ "$target" != "$active" ] || die "이미 ${target} 이 활성이다 — 전환할 것이 없다"
@@ -257,9 +298,13 @@ cmd_switch() {
     fi
   fi
 
+  # 재기동한 색도 전환 성공 전 중단 시 정리한다(deploy 와 동일한 trap 계약).
+  trap cleanup_target EXIT INT TERM
+  CLEANUP_CTR="$target_ctr"
   start_color "$target"
   wait_healthy "$target_port" "$target_ctr"
   switch_nginx "$target_port"
+  CLEANUP_CTR=""   # 전환 성공
   log "드레인 ${DRAIN_SECONDS}s"
   sleep "$DRAIN_SECONDS"
   stop_color "$active"
@@ -273,7 +318,7 @@ cmd_status() {
   port=$(port_of "$active")
   echo "활성 색: ${active} (127.0.0.1:${port})"
   echo "--- upstream ---"
-  sudo cat "$UPSTREAM_CONF"
+  cat "$UPSTREAM_CONF"
   echo "--- 컨테이너 ---"
   docker ps -a --filter "name=buncheoleasy-backend" \
     --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'

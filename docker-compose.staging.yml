@@ -40,11 +40,16 @@ x-backend-base: &backend-base
     REDIS_PORT: ${REDIS_PORT:-6379}
     # DB_URL 의도적으로 미설정 → .env 의 RDS endpoint 가 사용된다.
   # cgroup 상한이 없으면 UseContainerSupport 가 호스트 RAM(4GiB)으로 폴백해
-  # MaxRAMPercentage=75 가 색당 최대 힙 ~3GiB 로 계산된다 — 전환 창에 두 JVM 이 겹치는
+  # MaxRAMPercentage 가 색당 최대 힙 수 GiB 로 계산된다 — 전환 창에 두 JVM 이 겹치는
   # 블루-그린에서는 박스 전체를 위협하는 값이다(7/29 스왑 스래싱과 같은 실패 모드).
-  # 1200m 상한이면 색당 최대 힙 900m(실측 평시 RSS 581MB), 겹침 최악 2.4GiB 로 격리된다.
+  # 1500m + MaxRAMPercentage 60(Dockerfile) = 최대 힙 900m, 비힙(메타스페이스·코드캐시·
+  # 스레드 등 ~300m+) 여유 600m — 힙이 상한까지 자라도 cgroup 을 넘지 않는 배분이다
+  # (실측 평시 RSS 581MB). 겹침 최악 3GiB 는 t3.medium 에서 수용.
   # 한 색이 상한을 치면 그 컨테이너만 OOM-kill 되고(restart 가 복구) 박스는 산다.
-  mem_limit: 1200m
+  mem_limit: 1500m
+  # memory-swap 미지정 시 docker 기본은 2×memory — 상한 초과가 OOM-kill 이 아니라
+  # 스왑 내려쓰기(= 7/29 실패 모드)로 새 나간다. 동일값 지정 = 스왑 사용 금지.
+  memswap_limit: 1500m
   # docker 기본 정지 유예 10초는 Spring graceful shutdown 기본 유예 30초를 SIGKILL 로 자른다
   # — 진행 중 요청 유실 방지의 전제 (docs/36 §5-1). 유예값 계약은 application.yaml 의
   # server.shutdown / spring.lifecycle.timeout-per-shutdown-phase(30s) 명시와 짝이다.

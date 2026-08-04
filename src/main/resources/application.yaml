@@ -164,10 +164,12 @@ app:
       enabled: ${TRACKING_REFRESH_ENABLED:true}
       # 웹훅 TTL(48h)의 절반 이하여야 만료 전 갱신 기회가 2회 이상 보장된다.
       interval-ms: ${TRACKING_REFRESH_INTERVAL_MS:43200000} # 12시간
-      # ⚠️ 기동 유예 게이트(activation-grace 300s)보다 커야 한다 — 작으면 첫 발화가 skip 되고
-      # fixedDelay 12h 라 다음 기회가 12시간 뒤로 밀려, 배포 주기가 그보다 짧으면 이 스케줄러는
-      # 영구히 돌지 않는다(웹훅 TTL 갱신 중단 → 48h 후 추적 콜백 단절 — #92 6차 리뷰).
-      initial-delay-ms: ${TRACKING_REFRESH_INITIAL_DELAY_MS:360000} # 6분 (> 유예 300s)
+      # ⚠️ 기동 유예 게이트(activation-grace 300s) + 마진 60s 보다 커야 한다 — 작으면 첫 발화가
+      # skip 되고 fixedDelay 12h 라 다음 기회가 12시간 뒤로 밀려, 배포 주기가 그보다 짧으면 이
+      # 스케줄러는 영구히 돌지 않는다(웹훅 TTL 갱신 중단 → 48h 후 추적 콜백 단절 — #92 6차 리뷰).
+      # 마진은 initial-delay(refresh 기점)와 유예(ready 기점)의 시계 원점 차이 흡수(8차 리뷰).
+      # 위반은 SchedulerContractValidator 가 기동 fail-fast 로 잡는다.
+      initial-delay-ms: ${TRACKING_REFRESH_INITIAL_DELAY_MS:420000} # 7분 (> 유예 300s + 마진 60s)
     pickup-reminder: # 지점 도착 후 미수령 독촉 알림 (매일 정오 일괄 발송)
       # ⚠️ 기본 꺼짐 — 발송 마킹(1회 dedup)이 발송 스킵과 무관하게 소진되므로 알리고
       # PICKUP_REMINDER_* 템플릿 승인·코드 설정 후에 켠다. 먼저 켜면 미수령 backlog 가 영영 독촉을 못 받는다.

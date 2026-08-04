@@ -84,6 +84,8 @@ other_of() { if [ "$1" = "blue" ]; then echo green; else echo blue; fi; }
 container_of() { echo "buncheoleasy-backend-$1"; }
 container_exists() { docker inspect "$1" >/dev/null 2>&1; }
 container_running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = "true" ]; }
+# healthcheck 가 정의된 컨테이너 전용 — 없는 컨테이너는 필드가 비어 false 가 된다.
+container_healthy() { [ "$(docker inspect -f '{{.State.Health.Status}}' "$1" 2>/dev/null)" = "healthy" ]; }
 
 # ── Nginx ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +108,9 @@ precheck_nginx() {
   # 한계(6차 리뷰): "직접 proxy_pass" 만 탐지한다 — 별도 upstream 블록을 경유한 간접 우회는
   # 못 잡고, 반대로 무관한 서비스가 808[01] 을 쓰면 오탐한다. 오탐으로 배포가 막히면
   # 구성 확인 후 SKIP_NGINX_BYPASS_CHECK=1 로 이 검사만 우회할 수 있다.
+  if [ "${SKIP_NGINX_BYPASS_CHECK:-0}" = "1" ]; then
+    echo "::warning::[blue-green] SKIP_NGINX_BYPASS_CHECK=1 — 우회 proxy_pass 검사를 건너뛴다 (안전 게이트 비활성 흔적)"
+  fi
   if [ "${SKIP_NGINX_BYPASS_CHECK:-0}" != "1" ]; then
     local dump
     dump=$(sudo nginx -T 2>/dev/null) \
@@ -327,9 +332,11 @@ finish_old_color() {
 }
 arm_finish_old() {
   OLD_COLOR="$1"
-  trap 'finish_old_color; exit 130' INT
-  trap 'finish_old_color; exit 143' TERM
-  trap 'finish_old_color; exit 129' HUP
+  # set +e: 트랩 안에서 정리 명령이 실패하면 set -e 가 exit 128+N 에 닿기 전에 죽여
+  # 의도한 종료 코드·로그가 사라진다 (8차 리뷰).
+  trap 'set +e; finish_old_color; exit 130' INT
+  trap 'set +e; finish_old_color; exit 143' TERM
+  trap 'set +e; finish_old_color; exit 129' HUP
 }
 # revert 가능 구간(생존 확인) 직전에는 해제해야 한다 — 그 안에서 구 색으로 되돌 수 있다.
 disarm_signals() { trap - INT TERM HUP; }
@@ -395,16 +402,17 @@ cmd_deploy() {
       timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
       ;;
   esac
-  # redis 는 색과 독립으로 상주시킨다 — 이미 떠 있으면 절대 건드리지 않는다. 무조건
+  # redis 는 색과 독립으로 상주시킨다 — "healthy" 면 절대 건드리지 않는다. 무조건
   # `up -d redis` 를 부르면 정의가 바뀐 배포에서 compose 가 redis 를 재생성해, --no-deps 로
   # 막으려던 "활성 색의 커넥션 단절"을 그 줄이 그대로 실행하게 된다 (5차 리뷰).
+  # 판정은 running 이 아니라 healthy — 색 기동이 --no-deps 라 depends_on 의 healthy 조건이
+  # 우회되므로 이 분기가 그 유일한 대체 게이트다. running-but-unhealthy(RDB 로드 중 등)를
+  # 통과시키면 새 색이 커넥션 실패 상태로 부팅한다 (8차 리뷰 — 6차 --wait 의 잔여 구멍).
   # redis 정의 변경은 블루-그린으로 무중단이 안 되는 변경이다 — compose 헤더 참조.
-  if ! container_running "buncheoleasy-redis"; then
-    # --wait: healthy 까지 대기 — 색 기동이 --no-deps 라 depends_on 의 healthy 조건이
-    # 우회되므로, 여기서 기다리지 않으면 새 색이 커넥션 실패 상태로 부팅한다 (6차 리뷰).
+  if ! container_healthy "buncheoleasy-redis"; then
     timeout -k 30s 2m docker compose -f "$COMPOSE_FILE" up -d --wait redis
   else
-    log "redis 상주 중 — 건드리지 않는다 (정의 변경 반영은 별도 정비 창에서)"
+    log "redis healthy — 건드리지 않는다 (정의 변경 반영은 별도 정비 창에서)"
   fi
   # up 은 대상 색 서비스만 — 활성 색 컨테이너는 건드리지 않으므로 BACKEND_IMAGE 가
   # 바뀌어도 재생성되지 않는다. up 직후부터 전환 성공까지 trap 이 새 색을 책임진다.
@@ -423,7 +431,11 @@ cmd_deploy() {
   sleep "$DRAIN_SECONDS"
   disarm_signals
   ensure_target_alive_or_revert "$target_port" "$active" "$target_ctr"
+  # 프로브 통과 = 더 이상 revert 하지 않는다 — 여기서 취소되면 정리 대상은 다시 구 색이다
+  # (프로브~정지 사이 취소가 구 색을 살려 두는 창 봉쇄 — 8차 리뷰).
+  arm_finish_old "$active"
   stop_color "$active"
+  OLD_COLOR=""
 
   echo "::notice::배포 완료 — 활성: ${target}(${target_port}). 1분 롤백: scripts/blue-green.sh switch ${active}"
 }
@@ -456,7 +468,11 @@ cmd_switch() {
   sleep "$DRAIN_SECONDS"
   disarm_signals
   ensure_target_alive_or_revert "$target_port" "$active" "$target_ctr"
+  # 프로브 통과 = 더 이상 revert 하지 않는다 — 여기서 취소되면 정리 대상은 다시 구 색이다
+  # (프로브~정지 사이 취소가 구 색을 살려 두는 창 봉쇄 — 8차 리뷰).
+  arm_finish_old "$active"
   stop_color "$active"
+  OLD_COLOR=""
   local running_img
   running_img=$(docker inspect -f '{{.Config.Image}}' "$target_ctr" 2>/dev/null || echo "?")
   echo "::notice::전환 완료 — 활성: ${target}(${target_port}, ${running_img}). 복귀: scripts/blue-green.sh switch ${active}"

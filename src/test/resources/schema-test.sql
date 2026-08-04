@@ -1,5 +1,6 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
+DROP TABLE IF EXISTS cvs_stores;
 DROP TABLE IF EXISTS inbox_messages;
 DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS deliveries;
@@ -326,3 +327,27 @@ CREATE TABLE inbox_messages
 CREATE INDEX idx_inbox_recipient_created ON inbox_messages (recipient_id, created_at DESC, id DESC);
 CREATE INDEX idx_inbox_type_pinned_created ON inbox_messages (type, pinned, created_at DESC, id DESC);
 CREATE INDEX idx_inbox_banner ON inbox_messages (banner_image_url);
+
+CREATE TABLE cvs_stores
+(
+    id         BIGINT         NOT NULL AUTO_INCREMENT,
+    brand      VARCHAR(10)    NOT NULL,
+    store_code VARCHAR(20)    NOT NULL,
+    name       VARCHAR(100)   NOT NULL,
+    tel        VARCHAR(20)    NULL,
+    sido       VARCHAR(20)    NULL,
+    address    VARCHAR(255)   NOT NULL,
+    post_no    VARCHAR(6)     NULL,
+    latitude   DECIMAL(10, 7) NOT NULL,
+    longitude  DECIMAL(11, 7) NOT NULL,
+    receive_yn BOOLEAN        NOT NULL,
+    pickup_yn  BOOLEAN        NOT NULL,
+    created_at TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX uk_cvs_stores_brand_code ON cvs_stores (brand, store_code);
+CREATE INDEX idx_cvs_stores_pickup_brand ON cvs_stores (pickup_yn, brand, id);
+CREATE INDEX idx_cvs_stores_coord ON cvs_stores (latitude, longitude);

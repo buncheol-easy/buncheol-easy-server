@@ -186,6 +186,9 @@ public enum ErrorCode {
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
 
+  /** CVS - 편의점 접수처 관련 에러 */
+  CVS_BRAND_INVALID("CVS-001", "지원하지 않는 편의점 브랜드입니다.", HttpStatus.BAD_REQUEST),
+
   /** PAGE - 페이지네이션 관련 에러 */
   CURSOR_INVALID("PAGE-001", "유효하지 않은 커서 값입니다.", HttpStatus.BAD_REQUEST),
 

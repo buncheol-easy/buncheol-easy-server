@@ -448,3 +448,37 @@ CREATE TABLE IF NOT EXISTS inbox_messages
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- cvs_stores 테이블 생성 (편의점 택배 접수처 마스터 — 배송지 등록 화면의 지점 검색용)
+-- 데이터는 buncheoleasy-crawler 가 GS25(cvsnet)·CU(cupost) 조회 API 에서 수집해 배치로 적재/갱신한다.
+-- 서버는 읽기 전용. receive_yn = 접수(보내기) 가능, pickup_yn = 픽업(수령) 가능 —
+-- 접수·픽업 모두 불가한 점포는 원천 API 에 노출되지 않아 애초에 적재되지 않는다.
+CREATE TABLE IF NOT EXISTS cvs_stores
+(
+    id         BIGINT         NOT NULL AUTO_INCREMENT,
+    brand      VARCHAR(10)    NOT NULL COMMENT 'GS25 | CU',
+    store_code VARCHAR(20)    NOT NULL COMMENT '원천(브랜드) 점포 코드',
+    name       VARCHAR(100)   NOT NULL COMMENT '지점명',
+    tel        VARCHAR(20)    NULL,
+    sido       VARCHAR(20)    NULL COMMENT '정규화된 축약 시도명 (서울/경기/...)',
+    address    VARCHAR(255)   NOT NULL COMMENT '도로명 주소',
+    post_no    VARCHAR(6)     NULL COMMENT '우편번호',
+    latitude   DECIMAL(10, 7) NOT NULL COMMENT 'WGS84 위도',
+    longitude  DECIMAL(11, 7) NOT NULL COMMENT 'WGS84 경도',
+    receive_yn TINYINT(1)     NOT NULL COMMENT '택배 접수(보내기) 가능',
+    pickup_yn  TINYINT(1)     NOT NULL COMMENT '택배 픽업(수령) 가능',
+    created_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 크롤러가 직접 쓰는 테이블이라 JPA @PreUpdate 가 돌지 않는다 — DB 레벨에서 갱신 시각을 보장한다
+    updated_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    -- 크롤러 배치의 (brand, store_code) upsert 기준
+    UNIQUE KEY uk_cvs_stores_brand_code (brand, store_code),
+    -- 접수처 검색 쿼리(WHERE pickup_yn AND brand ORDER BY id) 커버용
+    INDEX idx_cvs_stores_pickup_brand (pickup_yn, brand, id),
+    -- 향후 좌표 범위(주변 접수처) 조회 대비
+    INDEX idx_cvs_stores_coord (latitude, longitude)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

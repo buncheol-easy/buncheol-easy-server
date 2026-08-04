@@ -126,7 +126,7 @@ jobs:
         run: |
           cd /home/ubuntu/buncheol-easy-server || true
           free -h || true
-          sudo cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
+          cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
           docker ps -a --filter name=buncheoleasy-backend --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
           docker logs buncheoleasy-backend-blue --tail=50 || true
           docker logs buncheoleasy-backend-green --tail=50 || true

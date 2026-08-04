@@ -4,7 +4,8 @@ name: Rollback Backend
 # GitHub 자체가 불능일 때의 수동 롤백(박스에서 scripts/blue-green.sh)도 docs/38·39 에 있다.
 #
 # 💡 직전 버전으로의 1분 롤백은 이 워크플로보다 박스의 스위치 복귀가 빠르다:
-#    ssh 박스 → scripts/blue-green.sh switch <색>  (정지된 구 색 컨테이너 재기동 + Nginx 전환).
+#    ssh 박스 → nohup scripts/blue-green.sh switch <색>  (정지된 구 색 재기동 + Nginx 전환).
+#    ⚠️ nohup(또는 tmux) 권장 — ssh 가 끊기면 HUP 트랩이 정리는 해 주지만 전환 자체가 중단된다.
 #    이 워크플로는 임의 sha- 태그로 되돌릴 때 쓴다 — 비활성 색에 올려 전환하므로 롤백도 무중단이다.
 #
 # ⚠️ 실행 브랜치는 staging=dev, production=main — 첫 스텝의 가드가 이 짝을 강제한다
@@ -111,7 +112,7 @@ jobs:
         run: |
           cd /home/ubuntu/buncheol-easy-server || true
           free -h || true
-          sudo cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
+          cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
           docker ps -a --filter name=buncheoleasy-backend --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
           docker logs buncheoleasy-backend-blue --tail=50 || true
           docker logs buncheoleasy-backend-green --tail=50 || true

@@ -50,7 +50,9 @@ esac
 # - flock -w: 긴급 롤백이 잔여 배포의 락 때문에 즉시 죽지 않도록 상한부 대기.
 # - fd 는 프로세스 종료 시 자동 해제 — stale lock 없음. 읽기 전용 status 는 락을 잡지 않는다.
 acquire_lock() {
-  local lock_file="${LOCK_FILE:-$(dirname "$PWD")/.bce-blue-green.lock}"
+  # 고정 절대경로 — cwd 파생이면 다른 체크아웃에서 실행한 수동 switch 가 워크플로 배포와
+  # 전혀 배제되지 않는다(컨테이너명은 고정이라 같은 컨테이너를 두 실행이 건드린다).
+  local lock_file="${LOCK_FILE:-/home/ubuntu/.bce-blue-green.lock}"
   exec 9>"$lock_file" || die "락 파일 열기 실패: $lock_file (소유자/권한 확인 — root 로 실행했었다면 rm 후 재시도)"
   flock -w "${LOCK_WAIT_SECONDS:-120}" 9 \
     || die "다른 blue-green 작업이 ${LOCK_WAIT_SECONDS:-120}s 안에 끝나지 않았다 — status 로 상태 확인 후 재시도"
@@ -83,8 +85,8 @@ precheck_nginx() {
   local dump
   dump=$(sudo nginx -T 2>/dev/null) \
     || die "sudo nginx -T 실패 — sudo 권한/Nginx 설정을 확인하라 (검사 불가 = 진행 불가)"
-  # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다. localhost 표기도 잡는다.
-  if printf '%s\n' "$dump" | grep -qE '^[[:space:]]*proxy_pass[^;]*(127\.0\.0\.1|localhost):808[01]'; then
+  # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다. loopback 의 모든 표기를 잡는다.
+  if printf '%s\n' "$dump" | grep -qE '^[[:space:]]*proxy_pass[^;]*(127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0):808[01]'; then
     die "upstream 을 우회해 8080/8081 을 직접 가리키는 실효 Nginx 설정이 있다 — 전환 불변식이 깨진다 (sudo nginx -T | grep proxy_pass 로 확인)"
   fi
 }
@@ -106,23 +108,33 @@ active_color() {
   esac
 }
 
+# upstream 파일 원자 교체 — tee 직접 쓰기는 truncate→write 사이 빈 파일 창이 생기고,
+# 그 창에 certbot deploy hook 등 외부 reload 가 겹치면 bce_backend 미정의로 실패한다
+# (서빙은 구 워커 유지로 안 죽지만 원인 불명 실패가 남는다). 같은 FS 의 mv 는 원자적.
+write_upstream() {
+  printf '%s\n' "$1" | sudo tee "${UPSTREAM_CONF}.tmp" > /dev/null
+  sudo mv "${UPSTREAM_CONF}.tmp" "$UPSTREAM_CONF"
+}
+
 switch_nginx() {
   local port="$1" prev
   prev=$(cat "$UPSTREAM_CONF")
-  printf '# bce backend 활성 색 — 이 파일이 유일한 진실. 수정은 scripts/blue-green.sh 로만 (docs/39)\nupstream bce_backend { server 127.0.0.1:%s; }\n' "$port" \
-    | sudo tee "$UPSTREAM_CONF" > /dev/null
+  # ⚠️ 아래 실패 문구가 "기존 색"이라 말하지 않는 이유: 이 함수는 revert 경로에서 중첩
+  # 호출된다(ensure_target_alive_or_revert). 그 컨텍스트의 prev 는 "새 색을 가리키는 현재
+  # 파일"이라, 항상 참인 서술은 "마지막 reload 성공 설정 그대로"뿐이다 (4차 리뷰).
+  write_upstream "$(printf '# bce backend 활성 색 — 이 파일이 유일한 진실. 수정은 scripts/blue-green.sh 로만 (docs/39)\nupstream bce_backend { server 127.0.0.1:%s; }' "$port")"
   if ! sudo nginx -t; then
-    # 문법 실패 시 원복 — 이 시점엔 reload 전이라 서빙은 계속 구 설정으로 돌고 있다.
-    printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
-    die "nginx -t 실패 — upstream 파일을 원복했다. 서빙은 기존 색 그대로다."
+    # 문법 실패 시 원복 — 이 시점엔 reload 전이라 서빙 설정은 바뀐 게 없다.
+    write_upstream "$prev"
+    die "nginx -t 실패 — upstream 파일을 원복했다. 서빙은 마지막 reload 성공 설정 그대로다."
   fi
-  # reload 실패도 원복해야 한다 — 파일만 새 색을 가리키고 실서빙은 구 색인 상태를 남기면
+  # reload 실패도 원복해야 한다 — 파일만 새 대상을 가리키고 실서빙은 아닌 상태를 남기면
   # "활성 색의 유일한 진실 = upstream 파일" 불변식이 깨지고, 이후 switch 가
   # "이미 활성"이라며 복귀 경로까지 막는다.
   if ! sudo systemctl reload nginx; then
-    printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
+    write_upstream "$prev"
     sudo systemctl reload nginx || true
-    die "nginx reload 실패 — upstream 파일을 원복했다. 서빙은 기존 색 그대로다."
+    die "nginx reload 실패 — upstream 파일을 원복했다. 서빙은 마지막 reload 성공 설정 그대로다."
   fi
   # 실효 설정 종단 게이트 — 이 함수 다음은 되돌릴 수 없는 구 색 정지다. "파일에 썼고
   # reload 가 성공했다"에 더해, -T 덤프의 "bce_backend 블록 안"에 대상 포트가 있는지
@@ -130,9 +142,9 @@ switch_nginx() {
   # 우연히 통과시킨다). 주의: -T 는 디스크 설정을 다시 읽는다 — 단독으로는 "reload 적용"의
   # 증거가 아니며, 위 reload exit code 검사와 결합해서만 의미가 있다.
   if ! sudo nginx -T 2>/dev/null | awk '/upstream[[:space:]]+bce_backend/,/}/' | grep -q "127.0.0.1:${port};"; then
-    printf '%s\n' "$prev" | sudo tee "$UPSTREAM_CONF" > /dev/null
+    write_upstream "$prev"
     sudo systemctl reload nginx || true
-    die "reload 후 실효 설정의 bce_backend 블록에 ${port} 가 없다 — 원복했다. Nginx 구성을 점검하라."
+    die "reload 후 실효 설정의 bce_backend 블록에 ${port} 가 없다 — 원복했다. 서빙은 마지막 reload 성공 설정 그대로다. Nginx 구성을 점검하라."
   fi
   # reload 는 무중단 — 신규 연결은 새 upstream, 진행 중 연결은 구 워커가 마무리한다.
   log "Nginx upstream → 127.0.0.1:${port} 전환 완료 (실효 설정 확인됨)"
@@ -149,8 +161,9 @@ wait_healthy() {
       echo "헬스체크 ${HEALTH_DEADLINE_SECONDS}s 초과 — 컨테이너 로그:"
       docker logs "$ctr" --tail=100 || true
       # restart: unless-stopped 라 부팅 실패가 무한 재시도로 램을 갉아먹는다 — 루프를 멈춘다.
-      # HTTP 서빙은 활성 색이 계속 담당하지만, 새 색의 "스케줄러"는 기동 직후(initial-delay
-      # 10s~)부터 이미 돌았을 수 있다 — DB 상태 전이·알림 발송은 회수되지 않는다(docs/39 리스크).
+      # 새 색 "스케줄러"는 기동 시점부터 시계가 돈다 — initial-delay 240s(application.yaml)가
+      # 헬스 데드라인 180s 를 넘도록 잡혀 있어, 여기서 정지되는 색은 부작용 0 으로 죽는다.
+      # (누가 delay 를 줄이면 그 보장이 깨진다 — DB 전이·알림 발송은 회수 불가, docs/39)
       docker stop -t 5 "$ctr" > /dev/null 2>&1 || true
       die "새 색(${ctr})이 헬스체크를 통과하지 못했다 — 정지시켰다. HTTP 서빙은 기존 색 그대로 (⚠️ 새 색 스케줄러 부작용은 이미 발생했을 수 있음)"
     fi
@@ -173,11 +186,20 @@ verify_image() {
 # OOM 등) 새 색이 죽었다면, 아직 살아 있는 구 색으로 스위치를 되돌리고 중단한다.
 # "설정이 새 색을 가리킨다"(종단 게이트)와 "새 색이 실제로 응답한다"는 다른 명제다.
 ensure_target_alive_or_revert() {
-  local target_port="$1" old_color="$2"
-  if ! curl -fsS --connect-timeout 3 --max-time 5 "http://127.0.0.1:${target_port}/actuator/health" > /dev/null 2>&1; then
-    switch_nginx "$(port_of "$old_color")"
-    die "구 색 정지 직전 확인에서 새 색(${target_port})이 응답하지 않는다 — upstream 을 ${old_color} 로 되돌렸다. 새 색 로그를 확인하라."
-  fi
+  local target_port="$1" old_color="$2" target_ctr="$3" i
+  # 단발 프로브는 full GC·순간 포화를 "죽었다"로 오판한다 — 3회(간격 3s) 모두 실패해야 되돌린다.
+  for i in 1 2 3; do
+    if curl -fsS --connect-timeout 3 --max-time 5 "http://127.0.0.1:${target_port}/actuator/health" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep 3
+  done
+  switch_nginx "$(port_of "$old_color")"
+  # 죽었다고 판정한 새 색을 정지 — restart: unless-stopped 의 크래시 루프가 mem_limit 를
+  # 물고 스케줄러까지 재실행하는 것을 차단(wait_healthy 실패 경로와 같은 계약).
+  # docker logs 는 정지된 컨테이너에서도 되므로 진단은 잃지 않는다.
+  docker stop -t 5 "$target_ctr" > /dev/null 2>&1 || true
+  die "구 색 정지 직전 확인에서 새 색(${target_port})이 3회 무응답 — upstream 을 ${old_color} 로 되돌리고 ${target_ctr} 를 정지했다. 로그: docker logs ${target_ctr}"
 }
 
 warmup() {
@@ -240,7 +262,7 @@ CLEANUP_CTR=""
 cleanup_target() {
   if [ -n "$CLEANUP_CTR" ]; then
     docker stop -t 5 "$CLEANUP_CTR" > /dev/null 2>&1 || true
-    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다. HTTP 서빙은 기존 색 그대로다 (⚠️ 새 색 스케줄러가 기동~정지 사이 이미 돌았을 수 있다 — docs/39 리스크)"
+    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다. 서빙은 기존 색 그대로다 (스케줄러 initial-delay 240s > 이 시점의 컨테이너 나이라 부작용도 없다 — docs/39)"
     CLEANUP_CTR=""
   fi
 }
@@ -249,6 +271,9 @@ arm_cleanup() {
   trap cleanup_target EXIT
   trap 'cleanup_target; exit 130' INT
   trap 'cleanup_target; exit 143' TERM
+  # HUP 도 트랩한다 — 문서가 권하는 긴급 롤백 경로가 "ssh 박스 → switch" 인데, ssh 세션이
+  # 끊기면 오는 시그널이 정확히 HUP 이고, 트랩 없는 HUP 은 EXIT 트랩도 태우지 않는다.
+  trap 'cleanup_target; exit 129' HUP
 }
 
 cmd_deploy() {
@@ -317,7 +342,7 @@ cmd_deploy() {
 
   log "드레인 ${DRAIN_SECONDS}s — 구 색으로 이미 프록시된 요청이 끝나기를 기다린다"
   sleep "$DRAIN_SECONDS"
-  ensure_target_alive_or_revert "$target_port" "$active"
+  ensure_target_alive_or_revert "$target_port" "$active" "$target_ctr"
   stop_color "$active"
 
   echo "::notice::배포 완료 — 활성: ${target}(${target_port}). 1분 롤백: scripts/blue-green.sh switch ${active}"
@@ -348,7 +373,7 @@ cmd_switch() {
   CLEANUP_CTR=""   # 전환 성공
   log "드레인 ${DRAIN_SECONDS}s"
   sleep "$DRAIN_SECONDS"
-  ensure_target_alive_or_revert "$target_port" "$active"
+  ensure_target_alive_or_revert "$target_port" "$active" "$target_ctr"
   stop_color "$active"
   local running_img
   running_img=$(docker inspect -f '{{.Config.Image}}' "$target_ctr" 2>/dev/null || echo "?")

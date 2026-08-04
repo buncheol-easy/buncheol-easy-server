@@ -138,18 +138,26 @@ app:
       enabled: ${BUNCHEOL_AUTO_CLOSE_ENABLED:true}
       cron: ${BUNCHEOL_AUTO_CLOSE_CRON:0 0 * * * *} # 매 정각
       fallback-interval-ms: ${BUNCHEOL_AUTO_CLOSE_FALLBACK_INTERVAL_MS:600000} # 10분
-      initial-delay-ms: ${BUNCHEOL_AUTO_CLOSE_INITIAL_DELAY_MS:10000} # 10초
+      # 4분 — 블루-그린 배포에서 새 색은 트래픽 전환 "전"(기동 직후)부터 스케줄러가 돌므로,
+      # 전환에 실패해 정지되는 색이 도메인 전이·알림 발송을 이미 저질러 놓는 것을 막는다
+      # (initial-delay 가 헬스 데드라인 180s + 드레인 창을 넘어야 실패한 색이 부작용 0 으로
+      # 죽는다 — docs/39, #92 4차 리뷰). 재기동 복구는 정각 cron 이 본선이라 지연 무해.
+      initial-delay-ms: ${BUNCHEOL_AUTO_CLOSE_INITIAL_DELAY_MS:240000}
   participation:
     payment-expiry: # 입금 기한 초과 입금확인중 참여를 자동 취소 및 알림하는 스케줄러
       enabled: ${PAYMENT_EXPIRY_ENABLED:true}
       interval-ms: ${PAYMENT_EXPIRY_INTERVAL_MS:60000} # 1분
-      initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:10000} # 10초
+      # 4분 — 근거는 auto-close 와 동일(블루-그린 전환 전 실행 차단). 만료 판정 자체가
+      # 30분 단위 기한이라 재기동 후 4분 지연은 무해.
+      initial-delay-ms: ${PAYMENT_EXPIRY_INITIAL_DELAY_MS:240000}
   delivery:
     tracking-refresh: # 추적 웹훅 TTL 연장 + 상태 폴링(콜백 유실 안전망) 스케줄러
       enabled: ${TRACKING_REFRESH_ENABLED:true}
       # 웹훅 TTL(48h)의 절반 이하여야 만료 전 갱신 기회가 2회 이상 보장된다.
       interval-ms: ${TRACKING_REFRESH_INTERVAL_MS:43200000} # 12시간
-      initial-delay-ms: ${TRACKING_REFRESH_INITIAL_DELAY_MS:30000} # 30초
+      # 4분 — 근거는 auto-close 와 동일. 12h 주기·전이 CAS 라 원래도 상대적으로 무해하지만
+      # 실패한 색의 Delivery Tracker 쿼터 이중 소모(배치 500건×2 호출)를 같이 없앤다.
+      initial-delay-ms: ${TRACKING_REFRESH_INITIAL_DELAY_MS:240000}
     pickup-reminder: # 지점 도착 후 미수령 독촉 알림 (매일 정오 일괄 발송)
       # ⚠️ 기본 꺼짐 — 발송 마킹(1회 dedup)이 발송 스킵과 무관하게 소진되므로 알리고
       # PICKUP_REMINDER_* 템플릿 승인·코드 설정 후에 켠다. 먼저 켜면 미수령 backlog 가 영영 독촉을 못 받는다.

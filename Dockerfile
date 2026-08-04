@@ -38,4 +38,8 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+# MaxRAMPercentage 는 "힙만" 계산한다 — compose 의 mem_limit: 1500m 과 짝으로 60% = 힙 900m,
+# 비힙(메타스페이스·코드캐시·스레드 스택 등 ~300m+)에 600m 를 남긴다. 75% 였다면 힙이 상한까지
+# 자란 순간 cgroup 을 넘겨 "활성 색 OOM-kill → restart 30초 = 502" — 블루-그린이 없애려는
+# 바로 그 증상이 된다 (#92 리뷰 반영, 루트 docs/39).
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=60.0", "-jar", "app.jar"]

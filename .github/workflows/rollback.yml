@@ -1,12 +1,17 @@
 name: Rollback Backend
 
 # ECR 의 불변 sha- 태그로 빌드 없이 즉시 되돌린다(1~2분). 태그 조회·절차는 루트 docs/38.
-# GitHub 자체가 불능일 때의 수동 롤백(박스에서 BACKEND_IMAGE=... compose up)도 docs/38 에 있다.
+# GitHub 자체가 불능일 때의 수동 롤백(박스에서 scripts/blue-green.sh)도 docs/38·39 에 있다.
+#
+# 💡 직전 버전으로의 1분 롤백은 이 워크플로보다 박스의 스위치 복귀가 빠르다:
+#    ssh 박스 → nohup scripts/blue-green.sh switch <색>  (정지된 구 색 재기동 + Nginx 전환).
+#    ⚠️ nohup(또는 tmux) 권장 — ssh 가 끊기면 HUP 트랩이 정리는 해 주지만 전환 자체가 중단된다.
+#    이 워크플로는 임의 sha- 태그로 되돌릴 때 쓴다 — 비활성 색에 올려 전환하므로 롤백도 무중단이다.
 #
 # ⚠️ 실행 브랜치는 staging=dev, production=main — 첫 스텝의 가드가 이 짝을 강제한다
 #    (다른 브랜치에서 실행하면 박스를 건드리기 전에 즉시 실패한다).
-# ⚠️ 이미지(코드)만 되돌린다 — 박스의 compose 파일·.env 는 되돌리지 않는다. compose 스키마가
-#    바뀐 배포를 롤백할 때는 수동 확인 필요.
+# ⚠️ 이미지(코드)만 되돌린다 — 박스의 compose 파일·.env·scripts 는 되돌리지 않는다. compose
+#    스키마가 바뀐 배포를 롤백할 때는 수동 확인 필요.
 # ⚠️ 롤백은 "브랜치를 되돌리기 전까지의 임시 조치"다 — 롤백 후 그 브랜치에 push 가 들어오면
 #    새 배포가 롤백을 덮는다. revert 머지(또는 원인 수정)까지가 진짜 복구다 (3차 리뷰 반영).
 on:
@@ -42,8 +47,12 @@ jobs:
     runs-on:
       - self-hosted
       - ${{ inputs.environment }}
-    # 내부 최악 예산(pull 5m + up 3m + 헬스체크 ~3.3m)보다 커야 OS timeout 이 먼저 발화
-    timeout-minutes: 15
+    # 내부 최악 예산: 사전 pull 5.5m + 락 대기 2m + 스크립트(관용 pull 1.25m + up 3.5m +
+    # 헬스 3m + 웜업 15s + 드레인 30s + 최종확인 5s + graceful 정지 45s) ≈ 17.3m < 20m.
+    # 레지스트리 무응답이 사전 pull 과 스크립트 pull 양쪽에서 5m 씩 이중 소진되지 않도록
+    # 스크립트 쪽 관용 경로는 1m 상한. 초과 취소 지점이 "전환 후·구 색 정지 전"이면 두 색이
+    # 동시에 뜬 채 남으므로 예산은 넉넉해야 한다 (3차 리뷰 산식 재계산).
+    timeout-minutes: 20
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
       TARGET_ENV: ${{ inputs.environment }}
@@ -62,9 +71,11 @@ jobs:
             echo "::error::불변 태그(sha-<12자리 hex>)만 허용: $IMAGE_TAG"; exit 1
           fi
 
-      - name: Pull target image and swap container
-        # checkout 없음 — compose 파일은 배포 디렉터리에 이미 있고,
+      - name: Pull target image and blue-green switch
+        # checkout 없음 — compose 파일·스크립트는 배포 디렉터리에 이미 있고,
         # 롤백은 코드가 아니라 이미지 좌표만 바꾸는 작업이다.
+        # 계보 검증까지 통과하면 배포와 같은 블루-그린 경로를 탄다 — 비활성 색에 올려
+        # 전환하므로 롤백 중에도 사용자 관점 중단이 없다 (docs/39).
         run: |
           set -e
           cd /home/ubuntu/buncheol-easy-server
@@ -73,12 +84,13 @@ jobs:
 
           # ECR/네트워크 장애 시에도 롤백이 돌아야 한다 — 로컬에 이미지가 있으면 pull 실패를
           # 허용한다(불변 태그라 로컬 == 원격이 정의상 보장, 4차 리뷰 반영). 배포 스텝의
-          # keep-last-3 이 이 경로의 재고를 만든다.
+          # keep-last-3 이 이 경로의 재고를 만든다. 여기서 미리 pull 해 두면 스크립트 내부의
+          # compose pull 은 즉시 no-op 이 된다.
           if docker image inspect "$BACKEND_IMAGE" >/dev/null 2>&1; then
-            timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend \
+            timeout -k 30s 5m docker pull "$BACKEND_IMAGE" \
               || echo "::warning::pull 실패 — 로컬 캐시 이미지로 진행 (불변 태그라 동일 이미지)"
           else
-            timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend
+            timeout -k 30s 5m docker pull "$BACKEND_IMAGE"
           fi
 
           # 계보 검증 — 두 환경이 리포를 공유하므로 sha- 태그 풀에 dev·main 빌드가 섞여 있다.
@@ -90,39 +102,22 @@ jobs:
           fi
           [ -n "$img_ref" ] || echo "::warning::bce.ref 라벨 없음(라벨 도입 전 빌드) — 계보 자동 확인 불가, ECR push 시각으로 수동 확인 권장"
 
-          timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
-
-          echo "Waiting for backend health check..."
-          # 벽시계 데드라인(배포 워크플로와 동일 근거). curl 호출당 상한 필수 — 매달리면 잡이 굳는다.
-          deadline=$((SECONDS + 180))
-          until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "Backend health check timed out after 180s"
-              docker logs buncheoleasy-backend --tail=100
-              exit 1
-            fi
-            echo "Backend is not ready yet..."
-            sleep 5
-          done
-
-          # 롤백의 존재 이유 = "정말 그 이미지로 되돌아갔는가" — 실행 중 이미지를 직접 대조 (리뷰 반영)
-          running=$(docker inspect -f '{{.Image}}' buncheoleasy-backend)
-          expected=$(docker image inspect -f '{{.Id}}' "$BACKEND_IMAGE")
-          if [ "$running" != "$expected" ]; then
-            echo "::error::떠 있는 컨테이너가 롤백 대상 이미지가 아니다: $running != $expected"
-            exit 1
-          fi
-          echo "Backend health check passed — rollback complete"
+          # 헬스 게이트·이미지 대조·Nginx 전환·구 색 graceful 정지는 스크립트가 수행한다.
+          bash scripts/blue-green.sh deploy
+          echo "Rollback complete"
 
       - name: Post-mortem snapshot
         # 롤백은 이미 장애 상황 — 실패·취소 시 진단 스냅샷이 더 절실하다 (리뷰 #89 반영)
         if: failure() || cancelled()
         run: |
           cd /home/ubuntu/buncheol-easy-server || true
-          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           free -h || true
-          docker compose -f docker-compose.staging.yml ps || true
-          docker logs buncheoleasy-backend --tail=100 || true
+          cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
+          docker ps -a --filter name=buncheoleasy-backend --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+          docker logs buncheoleasy-backend-blue --tail=50 || true
+          docker logs buncheoleasy-backend-green --tail=50 || true
+          # 레거시(블루-그린 도입 전 단일 컨테이너) — 첫 배포 진단용, 이후 무해한 no-op
+          docker logs buncheoleasy-backend --tail=50 || true
 
   promote:
     # 롤백 성공 시 별칭도 롤백 대상으로 재지정 — "별칭 = 지금 떠 있는 것" 불변식 유지.

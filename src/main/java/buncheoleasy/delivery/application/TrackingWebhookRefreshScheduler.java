@@ -3,6 +3,7 @@ package buncheoleasy.delivery.application;
 import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerProperties;
+import buncheoleasy.global.scheduler.SchedulerActivationGate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -30,12 +31,19 @@ public class TrackingWebhookRefreshScheduler {
   private final TrackingWebhookRefreshService trackingWebhookRefreshService;
   private final DeliveryTrackerClient deliveryTrackerClient;
   private final DeliveryTrackerProperties deliveryTrackerProperties;
+  private final SchedulerActivationGate schedulerActivationGate;
   private final Clock clock;
 
   @Scheduled(
       fixedDelayString = "${app.delivery.tracking-refresh.interval-ms}",
       initialDelayString = "${app.delivery.tracking-refresh.initial-delay-ms}")
   public void refreshTrackedParcels() {
+    // 전환 전 인스턴스의 외부 API 호출(쿼터 이중 소모)·상태 전이를 게이트로 차단 (docs/39).
+    // 12h 주기라 유예만큼의 재개 지연은 무해하다.
+    if (!schedulerActivationGate.isActive()) {
+      log.info("기동 유예 중 — 추적 웹훅 갱신 건너뜀 (블루-그린 전환 전 부작용 차단)");
+      return;
+    }
     if (!deliveryTrackerClient.isEnabled()) {
       log.debug("Delivery Tracker 미설정 - 추적 웹훅 갱신 건너뜀");
       return;

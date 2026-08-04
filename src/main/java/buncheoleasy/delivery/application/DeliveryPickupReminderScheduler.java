@@ -1,6 +1,7 @@
 package buncheoleasy.delivery.application;
 
 import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.global.scheduler.SchedulerActivationGate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -26,10 +27,17 @@ import org.springframework.stereotype.Component;
 public class DeliveryPickupReminderScheduler {
 
   private final DeliveryPickupReminderService deliveryPickupReminderService;
+  private final SchedulerActivationGate schedulerActivationGate;
   private final Clock clock;
 
   @Scheduled(cron = "${app.delivery.pickup-reminder.cron}", zone = "Asia/Seoul")
   public void remindUnclaimedDeliveries() {
+    // cron 트리거는 initial-delay 보호가 없다 — 정오 직전 기동한 전환 전 인스턴스가 독촉
+    // 마킹·발송을 저지르는 것을 게이트로 차단 (docs/39). 하루 1회라 skip 시 다음 날 처리.
+    if (!schedulerActivationGate.isActive()) {
+      log.info("기동 유예 중 — 미수령 독촉 건너뜀 (블루-그린 전환 전 부작용 차단)");
+      return;
+    }
     Instant now = Instant.now(clock);
     List<Delivery> targets = deliveryPickupReminderService.findReminderTargets(now);
     if (targets.isEmpty()) {

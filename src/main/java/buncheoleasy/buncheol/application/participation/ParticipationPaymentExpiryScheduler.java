@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.application.participation;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.global.scheduler.SchedulerActivationGate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -28,12 +29,19 @@ import org.springframework.stereotype.Component;
 public class ParticipationPaymentExpiryScheduler {
 
   private final ParticipationPaymentExpiryService participationPaymentExpiryService;
+  private final SchedulerActivationGate schedulerActivationGate;
   private final Clock clock;
 
   @Scheduled(
       fixedDelayString = "${app.participation.payment-expiry.interval-ms}",
       initialDelayString = "${app.participation.payment-expiry.initial-delay-ms}")
   public void expireOverduePayments() {
+    // 블루-그린 전환 전 인스턴스의 만료 취소·알림 발송 차단 (docs/39). 만료 판정은 30분 단위
+    // 기한이라 유예(기본 300s)만큼의 재개 지연은 무해하다.
+    if (!schedulerActivationGate.isActive()) {
+      log.info("기동 유예 중 — 입금 만료 처리 건너뜀 (블루-그린 전환 전 부작용 차단)");
+      return;
+    }
     Instant now = Instant.now(clock);
     List<Participation> targets = participationPaymentExpiryService.findOverdueTargets(now);
     if (targets.isEmpty()) {

@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.application;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import buncheoleasy.global.scheduler.SchedulerActivationGate;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -25,10 +26,13 @@ class BuncheolAutoCloseSchedulerTest {
 
   @Mock private BuncheolAutoCloseService buncheolAutoCloseService;
 
+  @Mock private SchedulerActivationGate schedulerActivationGate;
+
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
   @Test
   void 만료된_분철마다_마감_판정을_시도한다() {
+    given(schedulerActivationGate.isActive()).willReturn(true);
     given(buncheolAutoCloseService.findExpiredBuncheolIds(NOW)).willReturn(List.of(1L, 2L, 3L));
     given(buncheolAutoCloseService.finalizeExpired(1L, NOW)).willReturn(true);
     given(buncheolAutoCloseService.finalizeExpired(2L, NOW)).willReturn(true);
@@ -43,6 +47,7 @@ class BuncheolAutoCloseSchedulerTest {
 
   @Test
   void 한_분철_마감이_예외를_던져도_나머지를_계속_처리한다() {
+    given(schedulerActivationGate.isActive()).willReturn(true);
     given(buncheolAutoCloseService.findExpiredBuncheolIds(NOW)).willReturn(List.of(1L, 2L));
     given(buncheolAutoCloseService.finalizeExpired(1L, NOW))
         .willThrow(new RuntimeException("DB 오류"));
@@ -56,6 +61,7 @@ class BuncheolAutoCloseSchedulerTest {
 
   @Test
   void 만료된_분철이_없으면_마감을_시도하지_않는다() {
+    given(schedulerActivationGate.isActive()).willReturn(true);
     given(buncheolAutoCloseService.findExpiredBuncheolIds(NOW)).willReturn(List.of());
 
     buncheolAutoCloseScheduler.closeByFallbackPolling();
@@ -66,11 +72,24 @@ class BuncheolAutoCloseSchedulerTest {
 
   @Test
   void 정시_cron_도_같은_마감_로직을_탄다() {
+    given(schedulerActivationGate.isActive()).willReturn(true);
     given(buncheolAutoCloseService.findExpiredBuncheolIds(NOW)).willReturn(List.of(1L));
     given(buncheolAutoCloseService.finalizeExpired(1L, NOW)).willReturn(true);
 
     buncheolAutoCloseScheduler.closeAtHour();
 
     then(buncheolAutoCloseService).should().finalizeExpired(1L, NOW);
+  }
+
+  @Test
+  void 기동_유예_중에는_아무것도_하지_않는다() {
+    // 블루-그린: 트래픽 전환 전(폐기될 수 있는) 인스턴스의 마감 커밋·알림 발송 차단 (docs/39).
+    // cron 은 initial-delay 보호가 없어 이 게이트가 유일한 방어 — 두 트리거 모두 검증한다.
+    given(schedulerActivationGate.isActive()).willReturn(false);
+
+    buncheolAutoCloseScheduler.closeAtHour();
+    buncheolAutoCloseScheduler.closeByFallbackPolling();
+
+    then(buncheolAutoCloseService).shouldHaveNoInteractions();
   }
 }

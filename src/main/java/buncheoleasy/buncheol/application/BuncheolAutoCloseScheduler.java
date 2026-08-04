@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.global.scheduler.SchedulerActivationGate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Component;
 public class BuncheolAutoCloseScheduler {
 
   private final BuncheolAutoCloseService buncheolAutoCloseService;
+  private final SchedulerActivationGate schedulerActivationGate;
   private final Clock clock;
 
   // 정시 정밀 마감: 마감시간이 도메인에서 정각으로 강제돼 매시 정각(KST)에 즉시 마감해 통지 지연을 최소화. 식은 app.buncheol.auto-close.cron
@@ -46,6 +48,12 @@ public class BuncheolAutoCloseScheduler {
   }
 
   private void runAutoClose() {
+    // 두 트리거(정각 cron·fallback 폴링)의 공통 진입부에서 게이트 — cron 은 initial-delay 의
+    // 보호를 받지 않으므로 이 게이트가 "전환 전 인스턴스의 부작용 차단"의 유일한 방어다 (docs/39).
+    if (!schedulerActivationGate.isActive()) {
+      log.info("기동 유예 중 — 분철 자동 마감 건너뜀 (블루-그린 전환 전 부작용 차단)");
+      return;
+    }
     Instant now = Instant.now(clock);
     List<Long> expiredIds = buncheolAutoCloseService.findExpiredBuncheolIds(now);
     if (expiredIds.isEmpty()) {

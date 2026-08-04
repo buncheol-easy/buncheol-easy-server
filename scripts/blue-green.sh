@@ -23,7 +23,9 @@ UPSTREAM_CONF="/etc/nginx/conf.d/bce-backend-upstream.conf"
 SNIPPET="/etc/nginx/snippets/proxy-backend.conf"
 LEGACY_CONTAINER="buncheoleasy-backend"   # 블루-그린 도입 전 단일 컨테이너 — 첫 배포 때만 만난다
 DRAIN_SECONDS="${DRAIN_SECONDS:-30}"      # Nginx reload 후 구 색이 진행 중 요청을 마무리할 유예
-HEALTH_DEADLINE_SECONDS=180
+HEALTH_DEADLINE_SECONDS="${HEALTH_DEADLINE_SECONDS:-180}"
+# ⚠️ 위 예산을 늘리면 application.yaml 의 app.scheduler.activation-grace(기동 유예 게이트,
+# 기본 300s)가 최악 경로(헬스+웜업+드레인+프로브)보다 큰지 같이 확인할 것 (docs/39).
 
 # compose 는 항상 저장소 루트에서, 두 색 profile 을 모두 보이게 실행한다
 # (색 서비스 기동은 반드시 서비스명 명시 — 이 스크립트는 이름 없는 up 을 쓰지 않는다).
@@ -40,6 +42,9 @@ case "$DRAIN_SECONDS" in
 esac
 case "${LOCK_WAIT_SECONDS:-120}" in
   ''|*[!0-9]*) die "LOCK_WAIT_SECONDS 는 정수(초)여야 한다: '${LOCK_WAIT_SECONDS:-}'" ;;
+esac
+case "$HEALTH_DEADLINE_SECONDS" in
+  ''|*[!0-9]*) die "HEALTH_DEADLINE_SECONDS 는 정수(초)여야 한다: '$HEALTH_DEADLINE_SECONDS'" ;;
 esac
 
 # 동시 실행 잠금 — 워크플로 배포와 박스 수동 switch 가 겹치면 "방금 트래픽을 받기 시작한
@@ -161,9 +166,9 @@ wait_healthy() {
       echo "헬스체크 ${HEALTH_DEADLINE_SECONDS}s 초과 — 컨테이너 로그:"
       docker logs "$ctr" --tail=100 || true
       # restart: unless-stopped 라 부팅 실패가 무한 재시도로 램을 갉아먹는다 — 루프를 멈춘다.
-      # 새 색 "스케줄러"는 기동 시점부터 시계가 돈다 — initial-delay 240s(application.yaml)가
-      # 헬스 데드라인 180s 를 넘도록 잡혀 있어, 여기서 정지되는 색은 부작용 0 으로 죽는다.
-      # (누가 delay 를 줄이면 그 보장이 깨진다 — DB 전이·알림 발송은 회수 불가, docs/39)
+      # 새 색 "스케줄러"는 기동 시점부터 시계가 돈다 — 기동 유예 게이트(SchedulerActivationGate,
+      # 기본 300s > 이 데드라인 180s + 후속 창)가 실행을 막고 있어, 여기서 정지되는 색은
+      # 부작용 0 으로 죽는다. (유예를 이 예산 밑으로 줄이면 그 보장이 깨진다 — docs/39)
       docker stop -t 5 "$ctr" > /dev/null 2>&1 || true
       die "새 색(${ctr})이 헬스체크를 통과하지 못했다 — 정지시켰다. HTTP 서빙은 기존 색 그대로 (⚠️ 새 색 스케줄러 부작용은 이미 발생했을 수 있음)"
     fi
@@ -262,7 +267,7 @@ CLEANUP_CTR=""
 cleanup_target() {
   if [ -n "$CLEANUP_CTR" ]; then
     docker stop -t 5 "$CLEANUP_CTR" > /dev/null 2>&1 || true
-    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다. 서빙은 기존 색 그대로다 (스케줄러 initial-delay 240s > 이 시점의 컨테이너 나이라 부작용도 없다 — docs/39)"
+    log "중단 정리 — 전환 전이라 ${CLEANUP_CTR} 를 정지했다. 서빙은 기존 색 그대로다 (기동 유예 게이트 300s > 이 시점의 컨테이너 나이라 스케줄러 부작용도 없다 — docs/39)"
     CLEANUP_CTR=""
   fi
 }
@@ -282,7 +287,10 @@ cmd_deploy() {
   # sed -n 은 매치 없어도 exit 0 이지만 방어적으로 || true(§active_color 와 같은 원칙 —
   # 여기서 무언사하면 아래 die 의 안내에 영영 닿지 못한다). 따옴표·CR 은 벗긴다.
   if [ -z "${BACKEND_IMAGE:-}" ] && [ -f .env ]; then
-    BACKEND_IMAGE=$(sed -n 's/^BACKEND_IMAGE=//p' .env | tail -1 | tr -d "\r\"'" || true)
+    # compose 의 .env 파서와 결과가 갈리지 않게 인라인 주석·끝 공백·따옴표·CR 을 벗긴다
+    # (안 벗기면 verify_image 의 "대상 이미지가 아니다"로 나와 원인 추적이 어렵다 — 5차 리뷰).
+    BACKEND_IMAGE=$(sed -n 's/^BACKEND_IMAGE=//p' .env | tail -1 \
+      | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' | tr -d "\r\"'" || true)
     export BACKEND_IMAGE
     if [ -n "$BACKEND_IMAGE" ]; then log "BACKEND_IMAGE 를 .env 기본값에서 읽음: $BACKEND_IMAGE"; fi
   fi
@@ -304,13 +312,23 @@ cmd_deploy() {
   prev=$(docker inspect -f '{{.Config.Image}}' "$active_ctr" 2>/dev/null || echo "none")
   echo "::notice::활성 ${active} → 대상 ${target} | 롤백 좌표(직전 이미지): ${prev}"
 
+  # 화해(reconcile): upstream 이 가리키지 않는 색이 살아 있으면 이전 실행이 "전환 후·
+  # 구 색 정지 전"에 끊긴 잔재다 — 정지하고 시작한다. 안 하면 그 색이 스케줄러를 돌리며
+  # 메모리를 물고 남고, 같은 이미지 재배포 시 compose 가 낡은 컨테이너를 최신으로 판단해
+  # 살려둔 채 헬스·이미지 대조를 통과시킨 뒤 그리로 전환한다 (5차 리뷰).
+  if container_running "$target_ctr" \
+    || { [ "$target" = "blue" ] && container_running "$LEGACY_CONTAINER"; }; then
+    log "비활성 색(${target})이 실행 중 — 중단된 이전 실행의 잔재로 보고 graceful 정지 후 진행"
+    stop_color "$target"
+  fi
+
   # 박스는 pull 만 한다 — 빌드 부하 0 이 이 구조의 존재 이유(docs/38).
   # timeout 은 박스·네트워크 이상 시 잡이 매달리지 않게 하는 안전망(35 §11 교훈 유지).
   # pull 실패 관용은 sha- 불변 태그 + 로컬 존재일 때만 — "로컬 == 원격"은 불변 태그에서만
   # 정의상 보장된다(#89 4차 리뷰와 동일 근거). 이동 별칭(:staging/:prod)은 로컬이 낡은
   # 버전일 수 있어 pull 이 반드시 성공해야 한다(낡은 코드를 배포 성공으로 보고하는 사고 방지).
   # 관용 경로의 타임아웃은 1m — 레지스트리 무응답 시 5m 을 태우면 rollback.yml 의
-  # 잡 예산(15m)이 스위치 이후·구 색 정지 이전에 끊길 수 있다.
+  # 잡 예산(20m) 산식이 깨져 스위치 이후·구 색 정지 이전에 잡이 끊길 수 있다.
   case "$BACKEND_IMAGE" in
     *:sha-*)
       if docker image inspect "$BACKEND_IMAGE" > /dev/null 2>&1; then
@@ -324,10 +342,15 @@ cmd_deploy() {
       timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
       ;;
   esac
-  # redis 는 색과 독립으로 상주시킨다 — 색 기동을 depends_on 에 맡기면(redis 가 동반
-  # 대상이 되면) 미래에 redis 정의가 한 줄이라도 바뀌는 배포에서 redis 가 재생성돼,
-  # 아직 서빙 중인 활성 색의 커넥션(리프레시 토큰 등)이 끊긴다. 그래서 색은 --no-deps.
-  timeout -k 30s 2m docker compose -f "$COMPOSE_FILE" up -d redis
+  # redis 는 색과 독립으로 상주시킨다 — 이미 떠 있으면 절대 건드리지 않는다. 무조건
+  # `up -d redis` 를 부르면 정의가 바뀐 배포에서 compose 가 redis 를 재생성해, --no-deps 로
+  # 막으려던 "활성 색의 커넥션 단절"을 그 줄이 그대로 실행하게 된다 (5차 리뷰).
+  # redis 정의 변경은 블루-그린으로 무중단이 안 되는 변경이다 — compose 헤더 참조.
+  if ! container_running "buncheoleasy-redis"; then
+    timeout -k 30s 2m docker compose -f "$COMPOSE_FILE" up -d redis
+  else
+    log "redis 상주 중 — 건드리지 않는다 (정의 변경 반영은 별도 정비 창에서)"
+  fi
   # up 은 대상 색 서비스만 — 활성 색 컨테이너는 건드리지 않으므로 BACKEND_IMAGE 가
   # 바뀌어도 재생성되지 않는다. up 직후부터 전환 성공까지 trap 이 새 색을 책임진다.
   arm_cleanup "$target_ctr"
@@ -386,7 +409,7 @@ cmd_switch() {
 cmd_status() {
   # 읽기 전용 진단 — precheck·락·die 없이 항상 끝까지 출력한다. upstream 이 깨졌거나
   # sudo 가 안 되는 상황이야말로 status 를 가장 보고 싶은 순간이다(3차 리뷰).
-  local port active="판독 불가 — upstream 파일/포트 확인 필요"
+  local port p active="판독 불가 — upstream 파일/포트 확인 필요"
   port=$(read_active_port)
   case "$port" in
     8080) active="blue" ;;

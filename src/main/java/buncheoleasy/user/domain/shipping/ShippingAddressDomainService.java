@@ -15,11 +15,23 @@ public class ShippingAddressDomainService {
 
   private final ShippingAddressRepository shippingAddressRepository;
 
+  /** 점포 코드 없는 등록 — 접수처 검색 이전 클라이언트와의 하위 호환용. */
   @Transactional
   public ShippingAddress createShippingAddress(
       final Long userId,
       final String shippingMethod,
       final String storeName,
+      final String alias,
+      final boolean isDefault) {
+    return createShippingAddress(userId, shippingMethod, storeName, null, alias, isDefault);
+  }
+
+  @Transactional
+  public ShippingAddress createShippingAddress(
+      final Long userId,
+      final String shippingMethod,
+      final String storeName,
+      final String storeCode,
       final String alias,
       final boolean isDefault) {
     // 개수 제한 체크
@@ -39,7 +51,19 @@ public class ShippingAddressDomainService {
     }
 
     return shippingAddressRepository.save(
-        ShippingAddress.create(userId, shippingMethod, storeName, alias, isDefault));
+        ShippingAddress.create(userId, shippingMethod, storeName, storeCode, alias, isDefault));
+  }
+
+  /** 점포 코드 없는 수정 — 하위 호환용. 코드 유지/초기화 규칙은 {@link ShippingAddress#update} 를 따른다. */
+  @Transactional
+  public void updateShippingAddress(
+      final Long userId,
+      final Long id,
+      final String shippingMethod,
+      final String storeName,
+      final String alias,
+      final boolean isDefault) {
+    updateShippingAddress(userId, id, shippingMethod, storeName, null, alias, isDefault);
   }
 
   @Transactional
@@ -48,6 +72,7 @@ public class ShippingAddressDomainService {
       final Long id,
       final String shippingMethod,
       final String storeName,
+      final String storeCode,
       final String alias,
       final boolean isDefault) {
     ShippingAddress shippingAddress = getShippingAddress(id);
@@ -67,7 +92,7 @@ public class ShippingAddressDomainService {
       shippingAddressRepository.clearDefaultByUserAndMethod(userId, shippingMethod, id);
     }
 
-    shippingAddress.update(shippingMethod, storeName, alias, isDefault);
+    shippingAddress.update(shippingMethod, storeName, storeCode, alias, isDefault);
   }
 
   public void validateOwnership(final Long userId, final Long id) {

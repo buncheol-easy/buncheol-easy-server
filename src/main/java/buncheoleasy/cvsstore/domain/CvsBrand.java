@@ -8,10 +8,7 @@ public enum CvsBrand {
   GS25,
   CU;
 
-  /**
-   * 브랜드 문자열을 해석한다. {@code null}/공백은 "미지정"으로 보고 {@code null} 을 돌려준다. 사이블링의 직접 enum 바인딩과 달리
-   * String 경유인 이유: 대소문자를 허용하고, 잘못된 값에 generic 400 대신 전용 코드({@code CVS-001})를 주기 위함.
-   */
+  /** {@code null}/공백은 미지정으로 보고 {@code null} 을 돌려준다. 대소문자 무관, 그 외 값은 {@code CVS-001}. */
   public static CvsBrand fromFilter(final String name) {
     if (name == null || name.isBlank()) {
       return null;

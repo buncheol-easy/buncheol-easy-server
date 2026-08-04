@@ -35,6 +35,7 @@ class CvsStoreControllerDocsTest extends DocsTestSupport {
                     new CvsStoreResponse(
                         101L,
                         "GS25",
+                        "V0001",
                         "GS25강남점",
                         "021234567",
                         "서울 강남구 테헤란로 1",
@@ -44,6 +45,7 @@ class CvsStoreControllerDocsTest extends DocsTestSupport {
                     new CvsStoreResponse(
                         108L,
                         "GS25",
+                        "V0008",
                         "GS25강남타워점",
                         "0809995425",
                         "서울 강남구 역삼로 2",
@@ -97,6 +99,8 @@ class CvsStoreControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("items").description("접수처 배열"),
                             fieldWithPath("items[].id").description("접수처 ID"),
                             fieldWithPath("items[].brand").description("편의점 브랜드 (GS25 | CU)"),
+                            fieldWithPath("items[].storeCode")
+                                .description("원천(브랜드) 점포 코드 — 배송지 등록 시 storeCode 로 전달"),
                             fieldWithPath("items[].name").description("지점명"),
                             fieldWithPath("items[].tel").description("지점 전화번호").optional(),
                             fieldWithPath("items[].address").description("도로명 주소"),

@@ -37,6 +37,13 @@ public class ShippingAddress extends TimestampedEntity {
   @Column(name = "store_name", nullable = false, length = 100)
   private String storeName;
 
+  /**
+   * 선택한 접수처의 원천 점포 코드 — {@code cvs_stores (brand, store_code)} 재조인 키. 지점명은 개명·중복이
+   * 가능해 마스터 연결은 이 코드를 기준으로 한다. 코드 없이 등록된 배송지는 {@code null}.
+   */
+  @Column(name = "store_code", length = 20)
+  private String storeCode;
+
   @Column(name = "alias", length = 10)
   private String alias;
 
@@ -62,31 +69,69 @@ public class ShippingAddress extends TimestampedEntity {
       final Long userId,
       final ShippingMethod shippingMethod,
       final String storeName,
+      final String storeCode,
       final String alias,
       final boolean isDefault) {
     this.userId = userId;
     this.shippingMethod = shippingMethod;
     this.storeName = storeName;
+    this.storeCode = storeCode;
     this.alias = alias;
     this.isDefault = isDefault;
   }
 
+  /** 점포 코드 없는 생성 — 접수처 검색 이전 클라이언트와의 하위 호환용. */
   public static ShippingAddress create(
       final Long userId,
       final String shippingMethodName,
       final String storeName,
       final String alias,
       final boolean isDefault) {
-    String normalizedAlias = normalizeAlias(alias);
-    return new ShippingAddress(
-        userId, ShippingMethod.of(shippingMethodName), storeName, normalizedAlias, isDefault);
+    return create(userId, shippingMethodName, storeName, null, alias, isDefault);
   }
 
+  public static ShippingAddress create(
+      final Long userId,
+      final String shippingMethodName,
+      final String storeName,
+      final String storeCode,
+      final String alias,
+      final boolean isDefault) {
+    String normalizedAlias = normalizeAlias(alias);
+    return new ShippingAddress(
+        userId,
+        ShippingMethod.of(shippingMethodName),
+        storeName,
+        normalizeStoreCode(storeCode),
+        normalizedAlias,
+        isDefault);
+  }
+
+  /** 점포 코드 없는 수정 — 하위 호환용. 코드 유지/초기화 규칙은 6-인자 {@link #update} 를 따른다. */
   public void update(
       final String shippingMethodName,
       final String storeName,
       final String alias,
       final boolean isDefault) {
+    update(shippingMethodName, storeName, null, alias, isDefault);
+  }
+
+  /**
+   * 코드가 안 넘어온 요청은 지점명이 그대로일 때만 기존 코드를 유지한다(기본 배송지 토글 등 코드 필드를 모르는
+   * 클라이언트 보호). 지점명이 바뀌면 낡은 코드가 다른 지점을 가리키게 되므로 초기화한다.
+   */
+  public void update(
+      final String shippingMethodName,
+      final String storeName,
+      final String storeCode,
+      final String alias,
+      final boolean isDefault) {
+    final String normalizedStoreCode = normalizeStoreCode(storeCode);
+    if (normalizedStoreCode != null) {
+      this.storeCode = normalizedStoreCode;
+    } else if (!this.storeName.equals(storeName)) {
+      this.storeCode = null;
+    }
     this.shippingMethod = ShippingMethod.of(shippingMethodName);
     this.storeName = storeName;
     this.alias = normalizeAlias(alias);
@@ -100,6 +145,13 @@ public class ShippingAddress extends TimestampedEntity {
 
   public boolean isOwnedBy(final Long userId) {
     return this.userId.equals(userId);
+  }
+
+  private static String normalizeStoreCode(final String storeCode) {
+    if (storeCode == null || storeCode.isBlank()) {
+      return null;
+    }
+    return storeCode.trim();
   }
 
   private static String normalizeAlias(final String alias) {

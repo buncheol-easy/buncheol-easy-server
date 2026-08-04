@@ -61,7 +61,7 @@ class ShippingAddressServiceTest {
       then(userDomainService).should().requireProfileCompleted(userId);
       then(shippingAddressDomainService)
           .should()
-          .createShippingAddress(userId, "GS25_HALF", "GS25 강남역점", "회사 근처", true);
+          .createShippingAddress(userId, "GS25_HALF", "GS25 강남역점", null, "회사 근처", true);
     }
 
     @Test
@@ -122,7 +122,7 @@ class ShippingAddressServiceTest {
       // then
       then(shippingAddressDomainService)
           .should()
-          .updateShippingAddress(userId, addressId, "CU_HALF", "CU 홍대입구점", "단골", true);
+          .updateShippingAddress(userId, addressId, "CU_HALF", "CU 홍대입구점", null, "단골", true);
     }
 
     @Test

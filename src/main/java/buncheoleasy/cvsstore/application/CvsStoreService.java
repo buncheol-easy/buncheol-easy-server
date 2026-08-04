@@ -13,11 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 배송지 등록 화면의 편의점 접수처 검색.
- *
- * <p>비로그인 호출도 허용하는 공개 마스터 데이터 조회다. 배송지(수령지) 후보만 의미가 있으므로 픽업 가능 점포로 한정한다. 정렬은
- * {@link CvsStoreCursor} 의 (그룹, id) — 지점명 일치 매장을 주소만 일치 매장보다 먼저 노출한다. hasNext 판별은 size+1
- * fetch 패턴을 쓴다.
+ * 배송지 등록 화면의 편의점 접수처 검색 (비로그인 허용 공개 조회). 배송지(수령지) 후보만 의미가 있으므로 픽업 가능 점포로
+ * 한정하며, 정렬은 {@link CvsStoreCursor} 의 (그룹, id) 순서를 따른다.
  */
 @Service
 @RequiredArgsConstructor

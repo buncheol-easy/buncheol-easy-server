@@ -72,6 +72,7 @@ CREATE TABLE shipping_addresses
     user_id         BIGINT       NOT NULL,
     shipping_method VARCHAR(20)  NOT NULL,
     store_name      VARCHAR(100) NOT NULL,
+    store_code      VARCHAR(20)  NULL,
     alias           VARCHAR(10)  NULL,
     is_default      BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
     user_id         BIGINT       NOT NULL,
     shipping_method VARCHAR(20)  NOT NULL COMMENT 'GS25_HALF | CU_HALF',
     store_name      VARCHAR(100) NOT NULL COMMENT '편의점 지점명',
+    store_code      VARCHAR(20)  NULL COMMENT '선택한 접수처의 원천 점포 코드 (cvs_stores 재조인용, 자유입력 등록분은 NULL)',
     alias           VARCHAR(10)  NULL COMMENT '사용자 지정 별칭',
     is_default      BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '배송방법별 기본 배송지 여부',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

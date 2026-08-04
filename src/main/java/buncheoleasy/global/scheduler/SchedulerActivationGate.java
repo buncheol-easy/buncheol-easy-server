@@ -29,6 +29,11 @@ import org.springframework.stereotype.Component;
  * 작으면 첫 발화가 유예에 걸려 skip 되고 다음 기회는 주기(예: 추적 갱신 12h) 뒤인데, 배포
  * 주기가 그보다 짧으면 매번 인스턴스가 갈려 그 스케줄러는 영구히 돌지 않는다(#92 6차 리뷰 —
  * tracking-refresh 가 정확히 이 함정이었다). 짧은 주기(분 단위)는 재시도가 흡수하므로 무관.
+ * 이 계약은 {@link SchedulerContractValidator} 가 기동 시 fail-fast 로 강제한다(7차 리뷰).
+ *
+ * <p>적용 범위: <b>{@code @Scheduled} 진입부에 한정.</b> {@code ApplicationRunner}·
+ * {@code ApplicationReadyEvent} 리스너는 이 게이트와 무관하게 전환 전 색에서도 실행되므로
+ * 반드시 멱등해야 한다(현존 {@code AdminAccountInitializer} 는 멱등 확인됨 — 7차 리뷰).
  */
 @Slf4j
 @Component
@@ -67,5 +72,10 @@ public class SchedulerActivationGate {
   public boolean isActive() {
     Instant at = readyAt;
     return at != null && Duration.between(at, Instant.now(clock)).compareTo(grace) >= 0;
+  }
+
+  /** 유예 길이(ms) — initial-delay 계약 검증({@link SchedulerContractValidator}) 등에 쓴다. */
+  public long graceMillis() {
+    return grace.toMillis();
   }
 }

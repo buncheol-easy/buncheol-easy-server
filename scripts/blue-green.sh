@@ -56,7 +56,7 @@ case "$GRACE_SECONDS" in
   ''|*[!0-9]*) die "GRACE_SECONDS 는 정수(초)여야 한다: '$GRACE_SECONDS'" ;;
 esac
 if [ $((HEALTH_DEADLINE_SECONDS + DRAIN_SECONDS + 24)) -gt "$GRACE_SECONDS" ]; then
-  log "⚠️ 예산(헬스 ${HEALTH_DEADLINE_SECONDS}s + 드레인 ${DRAIN_SECONDS}s + 웜업·프로브 24s)이 기동 유예(${GRACE_SECONDS}s)를 초과 — 폐기되는 색이 스케줄러 부작용을 낼 수 있다. activation-grace 상향을 검토하라 (docs/39)"
+  log "⚠️ 예산(헬스 ${HEALTH_DEADLINE_SECONDS}s + 드레인 ${DRAIN_SECONDS}s + 웜업·프로브 24s)이 기동 유예(${GRACE_SECONDS}s)를 초과 — 폐기되는 색이 스케줄러 부작용을 낼 수 있다. activation-grace 를 올릴 때는 TRACKING_REFRESH_INITIAL_DELAY_MS 도 유예보다 크게 '함께' 올려야 한다(안 하면 앱이 기동 검증에서 fail-fast — docs/39)"
 fi
 
 # 동시 실행 잠금 — 워크플로 배포와 박스 수동 switch 가 겹치면 "방금 트래픽을 받기 시작한
@@ -70,7 +70,11 @@ acquire_lock() {
   # 고정 절대경로 — cwd 파생이면 다른 체크아웃에서 실행한 수동 switch 가 워크플로 배포와
   # 전혀 배제되지 않는다(컨테이너명은 고정이라 같은 컨테이너를 두 실행이 건드린다).
   local lock_file="${LOCK_FILE:-/home/ubuntu/.bce-blue-green.lock}"
-  exec 9>"$lock_file" || die "락 파일 열기 실패: $lock_file (소유자/권한 확인 — root 로 실행했었다면 rm 후 재시도)"
+  # exec 리다이렉션 실패는 bash 버전/모드에 따라 || 를 타지 않고 즉시 종료할 수 있다 —
+  # 안내 메시지를 보장하려면 일반 리다이렉션으로 먼저 열어본다 (7차 리뷰).
+  : > "$lock_file" 2>/dev/null \
+    || die "락 파일 열기 실패: $lock_file (소유자/권한 확인 — root 로 실행했었다면 rm 후 재시도)"
+  exec 9>"$lock_file"
   flock -w "${LOCK_WAIT_SECONDS:-120}" 9 \
     || die "다른 blue-green 작업이 ${LOCK_WAIT_SECONDS:-120}s 안에 끝나지 않았다 — status 로 상태 확인 후 재시도"
 }
@@ -271,7 +275,7 @@ stop_color() {
   local color="$1" ctr
   ctr=$(container_of "$color")
   if container_running "$ctr"; then
-    # stop_grace_period: 40s 가 컨테이너에 박혀 있어 docker stop 이 그대로 존중한다.
+    # stop_grace_period: 45s 가 컨테이너에 박혀 있어 docker stop 이 그대로 존중한다.
     docker stop "$ctr" > /dev/null
     log "${ctr} graceful 정지 (진행 중 요청은 Spring graceful 이 마무리)"
   fi
@@ -309,6 +313,26 @@ arm_cleanup() {
   # 끊기면 오는 시그널이 정확히 HUP 이고, 트랩 없는 HUP 은 EXIT 트랩도 태우지 않는다.
   trap 'cleanup_target; exit 129' HUP
 }
+
+# 전환 "성공 이후" 드레인 구간의 트랩 — 여기서 취소되면 정리 대상은 새 색이 아니라 "구 색"이다
+# (전환은 이미 끝났으므로 구 색 정지가 안전한 방향). 이게 없으면 드레인 30s 중의 취소가 구 색을
+# 살려 둬, 다음 배포의 reconcile 전까지 두 인스턴스가 스케줄러·메모리·DB 풀을 동시 점유한다
+# (7차 리뷰 — cancel-in-progress 는 롤백의 정상 동작이라 드문 경로가 아니다).
+OLD_COLOR=""
+finish_old_color() {
+  if [ -n "$OLD_COLOR" ]; then
+    stop_color "$OLD_COLOR"
+    OLD_COLOR=""
+  fi
+}
+arm_finish_old() {
+  OLD_COLOR="$1"
+  trap 'finish_old_color; exit 130' INT
+  trap 'finish_old_color; exit 143' TERM
+  trap 'finish_old_color; exit 129' HUP
+}
+# revert 가능 구간(생존 확인) 직전에는 해제해야 한다 — 그 안에서 구 색으로 되돌 수 있다.
+disarm_signals() { trap - INT TERM HUP; }
 
 cmd_deploy() {
   # 수동 실행 편의 — 셸 env 가 없으면 compose 와 같은 곳(.env 의 별칭 기본값)을 읽는다.
@@ -392,10 +416,12 @@ cmd_deploy() {
   warmup "$target_port"
 
   switch_nginx "$target_port"
-  CLEANUP_CTR=""   # 전환 성공 — 이제 새 색이 서빙 중이므로 trap 은 no-op
+  CLEANUP_CTR=""   # 전환 성공 — 새 색 정리 trap 은 no-op, 이제 취소 시 정리 대상은 구 색
+  arm_finish_old "$active"
 
   log "드레인 ${DRAIN_SECONDS}s — 구 색으로 이미 프록시된 요청이 끝나기를 기다린다"
   sleep "$DRAIN_SECONDS"
+  disarm_signals
   ensure_target_alive_or_revert "$target_port" "$active" "$target_ctr"
   stop_color "$active"
 
@@ -424,9 +450,11 @@ cmd_switch() {
   start_color "$target"
   wait_healthy "$target_port" "$target_ctr"
   switch_nginx "$target_port"
-  CLEANUP_CTR=""   # 전환 성공
+  CLEANUP_CTR=""   # 전환 성공 — 취소 시 정리 대상은 구 색 (deploy 와 동일 계약)
+  arm_finish_old "$active"
   log "드레인 ${DRAIN_SECONDS}s"
   sleep "$DRAIN_SECONDS"
+  disarm_signals
   ensure_target_alive_or_revert "$target_port" "$active" "$target_ctr"
   stop_color "$active"
   local running_img

@@ -59,6 +59,8 @@ x-backend-base: &backend-base
   # docker 기본 정지 유예 10초는 Spring graceful shutdown 을 SIGKILL 로 자른다 (docs/36 §5-1).
   # 예산: web graceful 30s + @Async executor 종료 대기(applicationTaskExecutor 5s →
   # trackingExecutor 5s, 빈 소멸 단계라 web "이후" 순차) = 최악 40s + 여유 5s.
+  # ⚠️ 이 산식은 in-flight + 얕은 큐(평시) 한정 — executor 대기는 타임아웃 시 강제 종료가
+  # 아니라 경고만 남기므로, 큐가 깊으면 45s 만료 SIGKILL 로 끝난다(7차 리뷰, 평시 큐 ~0).
   # application.yaml 의 server.shutdown / lifecycle 30s / task.execution.shutdown 명시와 짝.
   stop_grace_period: 45s
   healthcheck:

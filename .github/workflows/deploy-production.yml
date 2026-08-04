@@ -85,7 +85,7 @@ jobs:
     needs: build
     runs-on: [self-hosted, production]
     # 내부 최악 예산: checkout/rsync ~1m + 락 대기 2m + pull 5.5m(-k 유예 포함) + up 3.5m
-    # + 헬스 3m + 웜업 15s + 드레인 30s + 최종확인 5s + graceful 정지 40s ≈ 16.5m — 이보다
+    # + 헬스 3m + 웜업 15s + 드레인 30s + 최종확인 5s + graceful 정지 45s ≈ 16.6m — 이보다
     # 커야 OS 레벨 timeout 이 잡 취소보다 먼저 발화한다. 초과 취소 지점이 하필 "전환 후·
     # 구 색 정지 전"이면 두 색이 동시에 뜬 채 남는다 (3차 리뷰 산식 재계산)
     timeout-minutes: 20

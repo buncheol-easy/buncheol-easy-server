@@ -22,6 +22,9 @@
 # - ⚠️ redis 서비스 정의 변경은 블루-그린으로 무중단이 안 된다 — redis 는 두 색이 공유하는
 #   단일 컨테이너라 재생성 순간 활성 색의 커넥션이 끊긴다(리프레시 토큰 등). 배포 스크립트는
 #   redis 가 떠 있으면 건드리지 않으므로, 정의 변경은 별도 정비 창에서 수동 반영한다.
+# - ⚠️ `--remove-orphans` 금지 — 구 단일 컨테이너(buncheoleasy-backend)는 이제 이 프로젝트의
+#   orphan 이라 그 플래그 한 번에 소리 없이 삭제된다. 블루-그린 도입 직후엔 그게 유일한
+#   직전 버전 롤백 좌표다(안정화 후 수동 rm — docs/39).
 
 # 두 색의 공통 정의 — 차이는 컨테이너명·호스트 포트·profile 뿐이다.
 x-backend-base: &backend-base
@@ -53,10 +56,11 @@ x-backend-base: &backend-base
   # memory-swap 미지정 시 docker 기본은 2×memory — 상한 초과가 OOM-kill 이 아니라
   # 스왑 내려쓰기(= 7/29 실패 모드)로 새 나간다. 동일값 지정 = 스왑 사용 금지.
   memswap_limit: 1500m
-  # docker 기본 정지 유예 10초는 Spring graceful shutdown 기본 유예 30초를 SIGKILL 로 자른다
-  # — 진행 중 요청 유실 방지의 전제 (docs/36 §5-1). 유예값 계약은 application.yaml 의
-  # server.shutdown / spring.lifecycle.timeout-per-shutdown-phase(30s) 명시와 짝이다.
-  stop_grace_period: 40s
+  # docker 기본 정지 유예 10초는 Spring graceful shutdown 을 SIGKILL 로 자른다 (docs/36 §5-1).
+  # 예산: web graceful 30s + @Async executor 종료 대기(applicationTaskExecutor 5s →
+  # trackingExecutor 5s, 빈 소멸 단계라 web "이후" 순차) = 최악 40s + 여유 5s.
+  # application.yaml 의 server.shutdown / lifecycle 30s / task.execution.shutdown 명시와 짝.
+  stop_grace_period: 45s
   healthcheck:
     # "떴다"와 "서빙 가능하다"를 docker 가 구분하게 한다 (docs/36 §5-4). 진단·관측용 —
     # 배포 게이트는 스크립트의 "호스트" curl 이라 이 체크가 깨져도 배포는 막히지 않는다.

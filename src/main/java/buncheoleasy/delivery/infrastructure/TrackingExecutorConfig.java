@@ -23,6 +23,11 @@ public class TrackingExecutorConfig {
     // 큐가 가득 차면 제출 스레드가 직접 실행(CallerRuns) — 작업을 버리지 않되 무한 큐 성장을 막는다.
     executor.setQueueCapacity(1000);
     executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+    // 종료 시 큐를 폐기(shutdownNow)하지 않고 잠시 기다린다 — 블루-그린 드레인 막바지에
+    // 커밋된 추적 동기화가 유실되지 않게. 대기값은 compose stop_grace_period(45s) 예산 안
+    // (web graceful 30s 이후 빈 소멸 단계에서 소진 — docs/39, #92 6차 리뷰).
+    executor.setWaitForTasksToCompleteOnShutdown(true);
+    executor.setAwaitTerminationSeconds(5);
     return executor;
   }
 }

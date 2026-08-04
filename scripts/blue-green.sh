@@ -47,6 +47,18 @@ case "$HEALTH_DEADLINE_SECONDS" in
   ''|*[!0-9]*) die "HEALTH_DEADLINE_SECONDS 는 정수(초)여야 한다: '$HEALTH_DEADLINE_SECONDS'" ;;
 esac
 
+# 기동 유예 게이트와의 산술 계약 검증 — 예산(헬스+웜업 15s+드레인+프로브 9s)이 유예를 넘으면
+# "정지되는 색은 스케줄러 부작용 0" 보장이 조용히 깨진다. 유예는 이미지에 구워진 값(기본 300s,
+# app.scheduler.activation-grace)이라 스크립트는 알 수 없어, 기본값 가정 + GRACE_SECONDS 로
+# 알려받는다. 어긋나면 경고만 한다(배포 차단 사유는 아님 — docs/39, #92 6차 리뷰).
+GRACE_SECONDS="${GRACE_SECONDS:-300}"
+case "$GRACE_SECONDS" in
+  ''|*[!0-9]*) die "GRACE_SECONDS 는 정수(초)여야 한다: '$GRACE_SECONDS'" ;;
+esac
+if [ $((HEALTH_DEADLINE_SECONDS + DRAIN_SECONDS + 24)) -gt "$GRACE_SECONDS" ]; then
+  log "⚠️ 예산(헬스 ${HEALTH_DEADLINE_SECONDS}s + 드레인 ${DRAIN_SECONDS}s + 웜업·프로브 24s)이 기동 유예(${GRACE_SECONDS}s)를 초과 — 폐기되는 색이 스케줄러 부작용을 낼 수 있다. activation-grace 상향을 검토하라 (docs/39)"
+fi
+
 # 동시 실행 잠금 — 워크플로 배포와 박스 수동 switch 가 겹치면 "방금 트래픽을 받기 시작한
 # 컨테이너를 재생성"하는 경합이 가능하다(러너 큐는 잡끼리만 직렬화한다).
 # - 락 파일은 배포 디렉터리의 "부모"(/home/ubuntu, ubuntu 소유) — /var/lock 은 sticky 라
@@ -87,12 +99,17 @@ precheck_nginx() {
   # 잡아 오탐으로 전 배포를 막는다(셋업 절차 자체가 스니펫 백업을 남긴다).
   # 덤프 실패는 반드시 die — 파이프에 넣으면 "검사 불가"가 "우회 없음"으로 fail-open 되어,
   # sudo 미설정 시 "컨테이너를 건드리기 전에 중단"이라는 이 함수의 계약이 깨진다.
-  local dump
-  dump=$(sudo nginx -T 2>/dev/null) \
-    || die "sudo nginx -T 실패 — sudo 권한/Nginx 설정을 확인하라 (검사 불가 = 진행 불가)"
-  # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다. loopback 의 모든 표기를 잡는다.
-  if printf '%s\n' "$dump" | grep -qE '^[[:space:]]*proxy_pass[^;]*(127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0):808[01]'; then
-    die "upstream 을 우회해 8080/8081 을 직접 가리키는 실효 Nginx 설정이 있다 — 전환 불변식이 깨진다 (sudo nginx -T | grep proxy_pass 로 확인)"
+  # 한계(6차 리뷰): "직접 proxy_pass" 만 탐지한다 — 별도 upstream 블록을 경유한 간접 우회는
+  # 못 잡고, 반대로 무관한 서비스가 808[01] 을 쓰면 오탐한다. 오탐으로 배포가 막히면
+  # 구성 확인 후 SKIP_NGINX_BYPASS_CHECK=1 로 이 검사만 우회할 수 있다.
+  if [ "${SKIP_NGINX_BYPASS_CHECK:-0}" != "1" ]; then
+    local dump
+    dump=$(sudo nginx -T 2>/dev/null) \
+      || die "sudo nginx -T 실패 — sudo 권한/Nginx 설정을 확인하라 (검사 불가 = 진행 불가)"
+    # ^[[:space:]]* 앵커가 주석(# proxy_pass ...) 줄을 걸러낸다. loopback 의 모든 표기를 잡는다.
+    if printf '%s\n' "$dump" | grep -qE '^[[:space:]]*proxy_pass[^;]*(127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0):808[01]'; then
+      die "upstream 을 우회해 8080/8081 을 직접 가리키는 실효 Nginx 설정이 있다 — 전환 불변식이 깨진다 (sudo nginx -T | grep proxy_pass 로 확인. 무관 서비스 오탐이면 SKIP_NGINX_BYPASS_CHECK=1)"
+    fi
   fi
 }
 
@@ -116,9 +133,14 @@ active_color() {
 # upstream 파일 원자 교체 — tee 직접 쓰기는 truncate→write 사이 빈 파일 창이 생기고,
 # 그 창에 certbot deploy hook 등 외부 reload 가 겹치면 bce_backend 미정의로 실패한다
 # (서빙은 구 워커 유지로 안 죽지만 원인 불명 실패가 남는다). 같은 FS 의 mv 는 원자적.
+# .tmp 가 nginx 에 안 읽히는 건 include 패턴이 conf.d/*.conf 라는 전제 위다(우분투 기본) —
+# include conf.d/* 인 박스라면 .tmp 확장자도 로드되므로 이 전제가 깨진다.
+# 실패는 명시 die — set -e 무언사로 죽으면 "원복 시도가 실패했다"는 사실이 로그에 안 남는다.
 write_upstream() {
-  printf '%s\n' "$1" | sudo tee "${UPSTREAM_CONF}.tmp" > /dev/null
-  sudo mv "${UPSTREAM_CONF}.tmp" "$UPSTREAM_CONF"
+  printf '%s\n' "$1" | sudo tee "${UPSTREAM_CONF}.tmp" > /dev/null \
+    || die "upstream 임시 파일 쓰기 실패: ${UPSTREAM_CONF}.tmp (sudo/디스크 확인)"
+  sudo mv "${UPSTREAM_CONF}.tmp" "$UPSTREAM_CONF" \
+    || die "upstream 파일 교체(mv) 실패 — ${UPSTREAM_CONF}.tmp 상태를 확인하라"
 }
 
 switch_nginx() {
@@ -170,7 +192,7 @@ wait_healthy() {
       # 기본 300s > 이 데드라인 180s + 후속 창)가 실행을 막고 있어, 여기서 정지되는 색은
       # 부작용 0 으로 죽는다. (유예를 이 예산 밑으로 줄이면 그 보장이 깨진다 — docs/39)
       docker stop -t 5 "$ctr" > /dev/null 2>&1 || true
-      die "새 색(${ctr})이 헬스체크를 통과하지 못했다 — 정지시켰다. HTTP 서빙은 기존 색 그대로 (⚠️ 새 색 스케줄러 부작용은 이미 발생했을 수 있음)"
+      die "새 색(${ctr})이 헬스체크를 통과하지 못했다 — 정지시켰다. 서빙은 기존 색 그대로, 기동 유예 게이트 덕에 스케줄러 부작용도 없다."
     fi
     sleep 5
   done
@@ -191,7 +213,7 @@ verify_image() {
 # OOM 등) 새 색이 죽었다면, 아직 살아 있는 구 색으로 스위치를 되돌리고 중단한다.
 # "설정이 새 색을 가리킨다"(종단 게이트)와 "새 색이 실제로 응답한다"는 다른 명제다.
 ensure_target_alive_or_revert() {
-  local target_port="$1" old_color="$2" target_ctr="$3" i
+  local target_port="$1" old_color="$2" target_ctr="$3" i old_port
   # 단발 프로브는 full GC·순간 포화를 "죽었다"로 오판한다 — 3회(간격 3s) 모두 실패해야 되돌린다.
   for i in 1 2 3; do
     if curl -fsS --connect-timeout 3 --max-time 5 "http://127.0.0.1:${target_port}/actuator/health" > /dev/null 2>&1; then
@@ -199,7 +221,14 @@ ensure_target_alive_or_revert() {
     fi
     sleep 3
   done
-  switch_nginx "$(port_of "$old_color")"
+  # revert 전에 구 색 생존을 확인한다 — 구 색도 죽어 있으면(박스 압박으로 동시 OOM 등)
+  # 되돌리는 순간 "restart 로 살아날 수 있던 새 색을 확정 정지 + 확실히 죽은 구 색을 지목"
+  # = 100% 장애 고정이 된다. 둘 다 죽은 상황은 자동 판단으로 개선할 수 없다 — 사람을 부른다.
+  old_port=$(port_of "$old_color")
+  if ! curl -fsS --connect-timeout 3 --max-time 5 "http://127.0.0.1:${old_port}/actuator/health" > /dev/null 2>&1; then
+    die "새 색(${target_port}) 3회 무응답 + 구 색(${old_port})도 무응답 — 자동 revert 를 중단한다(새 색의 restart 자가복구 가능성을 남김). 즉시 수동 개입 필요: status 로 상태 확인 후 살릴 색을 정해 switch 하라."
+  fi
+  switch_nginx "$old_port"
   # 죽었다고 판정한 새 색을 정지 — restart: unless-stopped 의 크래시 루프가 mem_limit 를
   # 물고 스케줄러까지 재실행하는 것을 차단(wait_healthy 실패 경로와 같은 계약).
   # docker logs 는 정지된 컨테이너에서도 되므로 진단은 잃지 않는다.
@@ -347,7 +376,9 @@ cmd_deploy() {
   # 막으려던 "활성 색의 커넥션 단절"을 그 줄이 그대로 실행하게 된다 (5차 리뷰).
   # redis 정의 변경은 블루-그린으로 무중단이 안 되는 변경이다 — compose 헤더 참조.
   if ! container_running "buncheoleasy-redis"; then
-    timeout -k 30s 2m docker compose -f "$COMPOSE_FILE" up -d redis
+    # --wait: healthy 까지 대기 — 색 기동이 --no-deps 라 depends_on 의 healthy 조건이
+    # 우회되므로, 여기서 기다리지 않으면 새 색이 커넥션 실패 상태로 부팅한다 (6차 리뷰).
+    timeout -k 30s 2m docker compose -f "$COMPOSE_FILE" up -d --wait redis
   else
     log "redis 상주 중 — 건드리지 않는다 (정의 변경 반영은 별도 정비 창에서)"
   fi

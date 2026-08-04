@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
@@ -20,12 +21,12 @@ class SchedulerActivationGateTest {
   private final Clock clock =
       new Clock() {
         @Override
-        public java.time.ZoneId getZone() {
+        public ZoneId getZone() {
           return ZoneOffset.UTC;
         }
 
         @Override
-        public Clock withZone(final java.time.ZoneId zone) {
+        public Clock withZone(final ZoneId zone) {
           return this;
         }
 

@@ -80,7 +80,7 @@ public class ShippingAddress extends TimestampedEntity {
     this.isDefault = isDefault;
   }
 
-  /** 점포 코드 없는 생성 — 접수처 검색 이전 클라이언트와의 하위 호환용. */
+  /** 테스트 편의용 오버로드. */
   public static ShippingAddress create(
       final Long userId,
       final String shippingMethodName,
@@ -101,13 +101,13 @@ public class ShippingAddress extends TimestampedEntity {
     return new ShippingAddress(
         userId,
         ShippingMethod.of(shippingMethodName),
-        storeName,
+        storeName.trim(),
         normalizeStoreCode(storeCode),
         normalizedAlias,
         isDefault);
   }
 
-  /** 점포 코드 없는 수정 — 하위 호환용. 코드 유지/초기화 규칙은 6-인자 {@link #update} 를 따른다. */
+  /** 테스트 편의용 오버로드 — 코드 유지/초기화 규칙은 6-인자 {@link #update} 를 따른다. */
   public void update(
       final String shippingMethodName,
       final String storeName,
@@ -126,14 +126,16 @@ public class ShippingAddress extends TimestampedEntity {
       final String storeCode,
       final String alias,
       final boolean isDefault) {
+    // 앞뒤 공백만 다른 지점명을 "변경" 으로 오판해 코드를 지우지 않도록 트림 후 비교한다.
+    final String trimmedStoreName = storeName.trim();
     final String normalizedStoreCode = normalizeStoreCode(storeCode);
     if (normalizedStoreCode != null) {
       this.storeCode = normalizedStoreCode;
-    } else if (!this.storeName.equals(storeName)) {
+    } else if (!this.storeName.equals(trimmedStoreName)) {
       this.storeCode = null;
     }
     this.shippingMethod = ShippingMethod.of(shippingMethodName);
-    this.storeName = storeName;
+    this.storeName = trimmedStoreName;
     this.alias = normalizeAlias(alias);
     this.isDefault = isDefault;
   }

@@ -1,9 +1,9 @@
 package buncheoleasy.cvsstore.application;
 
 import buncheoleasy.cvsstore.domain.CvsBrand;
-import buncheoleasy.cvsstore.domain.CvsStore;
 import buncheoleasy.cvsstore.domain.CvsStoreCursor;
 import buncheoleasy.cvsstore.domain.CvsStoreRepository;
+import buncheoleasy.cvsstore.domain.RankedCvsStore;
 import buncheoleasy.cvsstore.dto.response.CvsStoreResponse;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.global.query.LikeEscaper;
@@ -29,23 +29,24 @@ public class CvsStoreService {
   public CursorResponse<CvsStoreResponse> searchStores(
       final String brandName, final String keyword, final String cursor, final int requestedSize) {
     final CvsBrand brand = CvsBrand.fromFilter(brandName);
-    final String trimmedKeyword = trimKeyword(keyword);
-    final String escapedKeyword = LikeEscaper.escape(trimmedKeyword);
+    final String escapedKeyword = LikeEscaper.escape(trimKeyword(keyword));
     final CvsStoreCursor parsedCursor = CvsStoreCursor.parse(cursor);
     final int safeSize = clampSize(requestedSize);
 
-    final List<CvsStore> fetched =
+    final List<RankedCvsStore> fetched =
         cvsStoreRepository.searchPickupStores(brand, escapedKeyword, parsedCursor, safeSize + 1);
     final boolean hasNext = fetched.size() > safeSize;
-    final List<CvsStore> visible = hasNext ? fetched.subList(0, safeSize) : fetched;
+    final List<RankedCvsStore> visible = hasNext ? fetched.subList(0, safeSize) : fetched;
 
     if (visible.isEmpty()) {
       return CursorResponse.empty();
     }
 
-    final List<CvsStoreResponse> items = visible.stream().map(CvsStoreResponse::from).toList();
+    final List<CvsStoreResponse> items =
+        visible.stream().map(hit -> CvsStoreResponse.from(hit.store())).toList();
+    final RankedCvsStore last = visible.getLast();
     final String nextCursor =
-        hasNext ? CvsStoreCursor.from(visible.getLast(), trimmedKeyword).encode() : null;
+        hasNext ? new CvsStoreCursor(last.groupRank(), last.store().getId()).encode() : null;
     return new CursorResponse<>(items, nextCursor, hasNext);
   }
 

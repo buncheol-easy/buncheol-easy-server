@@ -454,6 +454,8 @@ CREATE TABLE IF NOT EXISTS inbox_messages
 -- 데이터는 buncheoleasy-crawler 가 GS25(cvsnet)·CU(cupost) 조회 API 에서 수집해 배치로 적재/갱신한다.
 -- 서버는 읽기 전용. receive_yn = 접수(보내기) 가능, pickup_yn = 픽업(수령) 가능 —
 -- 접수·픽업 모두 불가한 점포는 원천 API 에 노출되지 않아 애초에 적재되지 않는다.
+-- [불변식] 갱신은 (brand, store_code) upsert 로만 한다 — 행의 id 는 재사용/재발급되지 않는다.
+--          검색 API 의 keyset 커서(id 기반)가 이 불변식에 의존하므로 TRUNCATE/재적재 방식으로 바꾸지 말 것.
 CREATE TABLE IF NOT EXISTS cvs_stores
 (
     id         BIGINT         NOT NULL AUTO_INCREMENT,

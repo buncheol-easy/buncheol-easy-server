@@ -72,7 +72,8 @@ class CvsStoreControllerDocsTest extends DocsTestSupport {
                             brand 는 GS25/CU 필터(미입력 시 전체)다. 픽업(수령) 가능 점포만 반환한다. 비로그인 호출 가능.
 
                             정렬: 지점명이 keyword 와 일치하는 매장을 먼저, 주소만 일치하는 매장을 뒤에 노출하며 \
-                            각 그룹 안에서는 id 오름차순이다. 커서는 직전 응답의 `nextCursor` 를 그대로 전달하는 불투명 토큰.
+                            각 그룹 안에서는 id 오름차순이다. 커서는 직전 응답의 `nextCursor` 를 그대로 전달하는 불투명 토큰으로, \
+                            검색 조건(keyword/brand)을 바꾸면 반드시 커서 없이 첫 페이지부터 다시 조회해야 한다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |

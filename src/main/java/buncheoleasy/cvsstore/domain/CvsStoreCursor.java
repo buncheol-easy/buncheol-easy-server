@@ -13,7 +13,12 @@ import buncheoleasy.global.exception.domain.ErrorCode;
  * </ul>
  *
  * <p>인코딩 형식: {@code <rank>_<id>} (예: {@code 0_42}). 첫 페이지는 {@link #firstPage()} 또는 {@code
- * parse(null)} / {@code parse("")} 로 표현하며 모든 필드가 {@code null} 이다.
+ * parse(null)} / {@code parse("")} 로 표현하며 모든 필드가 {@code null} 이다. 그룹 판정은 조회 시점에 어댑터가
+ * 태깅한다 ({@link RankedCvsStore}) — 서비스가 키워드 매칭을 재계산하지 않는다.
+ *
+ * <p>커서는 검색 조건(keyword/brand)과의 정합을 검증하지 않는다 — 조건을 바꾸면 클라이언트가 커서를 리셋해야 한다.
+ * 크롤러 적재 배치가 행을 갱신하면 페이징 도중 행이 건너뛰어지거나(픽업 불가 전환·지점명 변경으로 그룹 이동) 한 번 더
+ * 보일 수 있는데, 주 1회 갱신되는 마스터 데이터 특성상 드물어 허용한다.
  */
 public record CvsStoreCursor(Integer groupRank, Long id) {
 
@@ -51,17 +56,6 @@ public record CvsStoreCursor(Integer groupRank, Long id) {
     }
   }
 
-  /**
-   * 직전 페이지의 마지막 접수처로부터 다음 커서를 만든다. 그룹 판정은 지점명의 키워드 포함 여부(대소문자 무시 — MySQL {@code utf8mb4_unicode_ci}
-   * 매칭과 정합)로 하며, {@code trimmedKeyword} 는 이스케이프 전의 원문이어야 한다.
-   */
-  public static CvsStoreCursor from(final CvsStore store, final String trimmedKeyword) {
-    if (trimmedKeyword == null || containsIgnoreCase(store.getName(), trimmedKeyword)) {
-      return new CvsStoreCursor(RANK_NAME, store.getId());
-    }
-    return new CvsStoreCursor(RANK_ADDRESS, store.getId());
-  }
-
   public boolean isFirstPage() {
     return groupRank == null;
   }
@@ -74,9 +68,5 @@ public record CvsStoreCursor(Integer groupRank, Long id) {
   /** 호출 측은 {@link #isFirstPage()} 가 false 인 인스턴스만 넘긴다 (hasNext 분기 후 호출). */
   public String encode() {
     return groupRank + DELIMITER + id;
-  }
-
-  private static boolean containsIgnoreCase(final String source, final String target) {
-    return source.toLowerCase().contains(target.toLowerCase());
   }
 }

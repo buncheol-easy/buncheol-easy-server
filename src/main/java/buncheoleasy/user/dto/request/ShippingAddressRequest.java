@@ -14,7 +14,7 @@ public record ShippingAddressRequest(
     isDefault = isDefault != null && isDefault;
   }
 
-  /** 점포 코드 없는 생성 — 접수처 검색 이전 형식과의 하위 호환용. */
+  /** 테스트 편의용 — JSON 역직렬화는 canonical 생성자를 쓰므로 구 형식 하위 호환은 storeCode nullable 만으로 이미 성립한다. */
   public ShippingAddressRequest(
       final String shippingMethod,
       final String storeName,

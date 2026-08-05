@@ -13,6 +13,7 @@ import buncheoleasy.cvsstore.domain.CvsBrand;
 import buncheoleasy.cvsstore.domain.CvsStore;
 import buncheoleasy.cvsstore.domain.CvsStoreCursor;
 import buncheoleasy.cvsstore.domain.CvsStoreRepository;
+import buncheoleasy.cvsstore.domain.RankedCvsStore;
 import buncheoleasy.cvsstore.dto.response.CvsStoreResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -55,14 +56,20 @@ class CvsStoreServiceTest {
     return store;
   }
 
+  private static RankedCvsStore ranked(final int groupRank, final long id, final String name) {
+    return new RankedCvsStore(groupRank, store(id, name));
+  }
+
   @Nested
   @DisplayName("페이지네이션 테스트")
   class PaginationTest {
 
     @Test
     void size보다_많이_조회되면_hasNext와_nextCursor를_채운다() {
-      List<CvsStore> fetched =
-          IntStream.rangeClosed(1, 3).mapToObj(i -> store(i, "GS25강남" + i + "점")).toList();
+      List<RankedCvsStore> fetched =
+          IntStream.rangeClosed(1, 3)
+              .mapToObj(i -> ranked(CvsStoreCursor.RANK_NAME, i, "GS25강남" + i + "점"))
+              .toList();
       given(cvsStoreRepository.searchPickupStores(isNull(), isNull(), any(), eq(3)))
           .willReturn(fetched);
 
@@ -76,23 +83,26 @@ class CvsStoreServiceTest {
     }
 
     @Test
-    void 마지막_항목이_주소만_일치하면_주소_그룹_커서를_만든다() {
-      List<CvsStore> fetched =
-          List.of(store(1L, "GS25강남점"), store(2L, "GS25테헤란점"), store(3L, "GS25역삼점"));
+    void 마지막_항목의_그룹_태그로_다음_커서를_만든다() {
+      List<RankedCvsStore> fetched =
+          List.of(
+              ranked(CvsStoreCursor.RANK_NAME, 1L, "GS25강남점"),
+              ranked(CvsStoreCursor.RANK_ADDRESS, 2L, "GS25테헤란점"),
+              ranked(CvsStoreCursor.RANK_ADDRESS, 3L, "GS25역삼점"));
       given(cvsStoreRepository.searchPickupStores(isNull(), eq("강남"), any(), eq(3)))
           .willReturn(fetched);
 
       CursorResponse<CvsStoreResponse> response =
           cvsStoreService.searchStores(null, "강남", null, 2);
 
-      // 마지막 노출 항목(테헤란점)은 지점명에 "강남" 이 없다 → rank 1
+      // 마지막 노출 항목(테헤란점)은 어댑터가 주소 그룹으로 태깅 → rank 1
       assertThat(response.nextCursor()).isEqualTo("1_2");
     }
 
     @Test
     void 결과가_size_이하면_nextCursor가_없다() {
       given(cvsStoreRepository.searchPickupStores(isNull(), isNull(), any(), anyInt()))
-          .willReturn(List.of(store(1L, "GS25강남점")));
+          .willReturn(List.of(ranked(CvsStoreCursor.RANK_NAME, 1L, "GS25강남점")));
 
       CursorResponse<CvsStoreResponse> response =
           cvsStoreService.searchStores(null, null, null, 20);

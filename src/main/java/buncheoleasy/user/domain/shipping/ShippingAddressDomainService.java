@@ -15,7 +15,7 @@ public class ShippingAddressDomainService {
 
   private final ShippingAddressRepository shippingAddressRepository;
 
-  /** 점포 코드 없는 등록 — 접수처 검색 이전 클라이언트와의 하위 호환용. */
+  /** 테스트 편의용 오버로드. */
   @Transactional
   public ShippingAddress createShippingAddress(
       final Long userId,
@@ -54,7 +54,7 @@ public class ShippingAddressDomainService {
         ShippingAddress.create(userId, shippingMethod, storeName, storeCode, alias, isDefault));
   }
 
-  /** 점포 코드 없는 수정 — 하위 호환용. 코드 유지/초기화 규칙은 {@link ShippingAddress#update} 를 따른다. */
+  /** 테스트 편의용 오버로드 — 코드 유지/초기화 규칙은 {@link ShippingAddress#update} 를 따른다. */
   @Transactional
   public void updateShippingAddress(
       final Long userId,

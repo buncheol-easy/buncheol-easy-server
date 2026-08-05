@@ -6,6 +6,7 @@ import buncheoleasy.cvsstore.domain.CvsBrand;
 import buncheoleasy.cvsstore.domain.CvsStore;
 import buncheoleasy.cvsstore.domain.CvsStoreCursor;
 import buncheoleasy.cvsstore.domain.CvsStoreRepository;
+import buncheoleasy.cvsstore.domain.RankedCvsStore;
 import buncheoleasy.global.query.LikeEscaper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -78,52 +79,56 @@ class JpaCvsStoreRepositoryAdapterTest {
 
     @Test
     void 픽업_불가_점포는_조회되지_않는다() {
-      List<CvsStore> result =
+      List<RankedCvsStore> result =
           cvsStoreRepository.searchPickupStores(null, null, CvsStoreCursor.firstPage(), 10);
 
-      assertThat(result).extracting(CvsStore::getId).doesNotContain(cuPickupOnlyId);
+      assertThat(result).extracting(hit -> hit.store().getId()).doesNotContain(cuPickupOnlyId);
       assertThat(result).hasSize(4);
     }
 
     @Test
     void 브랜드_필터를_적용하면_해당_브랜드만_조회된다() {
-      List<CvsStore> result =
+      List<RankedCvsStore> result =
           cvsStoreRepository.searchPickupStores(
               CvsBrand.GS25, null, CvsStoreCursor.firstPage(), 10);
 
       assertThat(result)
-          .extracting(CvsStore::getId)
+          .extracting(hit -> hit.store().getId())
           .containsExactly(gsGangnamId, gsHongdaeId, gsTeheranId);
     }
 
     @Test
     void 키워드는_지점명_일치를_주소_일치보다_먼저_노출한다() {
-      List<CvsStore> result =
+      List<RankedCvsStore> result =
           cvsStoreRepository.searchPickupStores(null, "강남", CvsStoreCursor.firstPage(), 10);
 
       // 지점명 일치(강남점·강남타운점) 그룹이 먼저, 주소만 일치(테헤란점)가 뒤
       assertThat(result)
-          .extracting(CvsStore::getId)
+          .extracting(hit -> hit.store().getId())
           .containsExactly(gsGangnamId, cuGangnamId, gsTeheranId);
+      assertThat(result)
+          .extracting(RankedCvsStore::groupRank)
+          .containsExactly(
+              CvsStoreCursor.RANK_NAME, CvsStoreCursor.RANK_NAME, CvsStoreCursor.RANK_ADDRESS);
     }
 
     @Test
     void 주소로만_검색해도_조회된다() {
-      List<CvsStore> result =
+      List<RankedCvsStore> result =
           cvsStoreRepository.searchPickupStores(null, "마포구", CvsStoreCursor.firstPage(), 10);
 
-      assertThat(result).extracting(CvsStore::getId).containsExactly(gsHongdaeId);
+      assertThat(result).extracting(hit -> hit.store().getId()).containsExactly(gsHongdaeId);
     }
 
     @Test
     void 이스케이프된_와일드카드_문자는_리터럴로_매칭된다() {
       persistStore(CvsBrand.GS25, "V0004", "GS25백프로점100%", "서울 중구 명동길 5", true, true);
 
-      List<CvsStore> escaped =
+      List<RankedCvsStore> escaped =
           cvsStoreRepository.searchPickupStores(
               null, LikeEscaper.escape("100%"), CvsStoreCursor.firstPage(), 10);
 
-      assertThat(escaped).extracting(CvsStore::getName).containsExactly("GS25백프로점100%");
+      assertThat(escaped).extracting(hit -> hit.store().getName()).containsExactly("GS25백프로점100%");
     }
   }
 
@@ -133,19 +138,19 @@ class JpaCvsStoreRepositoryAdapterTest {
 
     @Test
     void 그룹_내에서는_id_오름차순으로_limit_만큼만_조회된다() {
-      List<CvsStore> result =
+      List<RankedCvsStore> result =
           cvsStoreRepository.searchPickupStores(null, null, CvsStoreCursor.firstPage(), 2);
 
-      assertThat(result).extracting(CvsStore::getId).containsExactly(gsGangnamId, cuGangnamId);
+      assertThat(result).extracting(hit -> hit.store().getId()).containsExactly(gsGangnamId, cuGangnamId);
     }
 
     @Test
     void 지점명_그룹_커서_이후를_조회하면_남은_지점명_그룹과_주소_그룹이_이어진다() {
       CvsStoreCursor cursor = new CvsStoreCursor(CvsStoreCursor.RANK_NAME, gsGangnamId);
 
-      List<CvsStore> result = cvsStoreRepository.searchPickupStores(null, "강남", cursor, 10);
+      List<RankedCvsStore> result = cvsStoreRepository.searchPickupStores(null, "강남", cursor, 10);
 
-      assertThat(result).extracting(CvsStore::getId).containsExactly(cuGangnamId, gsTeheranId);
+      assertThat(result).extracting(hit -> hit.store().getId()).containsExactly(cuGangnamId, gsTeheranId);
     }
 
     @Test
@@ -155,9 +160,9 @@ class JpaCvsStoreRepositoryAdapterTest {
           persistStore(CvsBrand.CU, "10003", "CU역삼중앙점", "서울 강남구 강남대로 7", true, true);
       CvsStoreCursor cursor = new CvsStoreCursor(CvsStoreCursor.RANK_ADDRESS, gsTeheranId);
 
-      List<CvsStore> result = cvsStoreRepository.searchPickupStores(null, "강남", cursor, 10);
+      List<RankedCvsStore> result = cvsStoreRepository.searchPickupStores(null, "강남", cursor, 10);
 
-      assertThat(result).extracting(CvsStore::getId).containsExactly(lateAddressMatchId);
+      assertThat(result).extracting(hit -> hit.store().getId()).containsExactly(lateAddressMatchId);
     }
 
     @Test
@@ -165,11 +170,11 @@ class JpaCvsStoreRepositoryAdapterTest {
       // GS25 + "강남": 지점명 그룹 [강남점], 주소 그룹 [테헤란점]
       CvsStoreCursor cursor = new CvsStoreCursor(CvsStoreCursor.RANK_NAME, gsGangnamId);
 
-      List<CvsStore> result =
+      List<RankedCvsStore> result =
           cvsStoreRepository.searchPickupStores(CvsBrand.GS25, "강남", cursor, 10);
 
       // 지점명 그룹의 CU강남타운점은 브랜드 필터로, 커서 이전 GS25강남점은 keyset 으로 제외
-      assertThat(result).extracting(CvsStore::getId).containsExactly(gsTeheranId);
+      assertThat(result).extracting(hit -> hit.store().getId()).containsExactly(gsTeheranId);
     }
   }
 }

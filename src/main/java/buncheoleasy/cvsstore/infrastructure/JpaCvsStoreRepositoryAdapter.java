@@ -1,9 +1,9 @@
 package buncheoleasy.cvsstore.infrastructure;
 
 import buncheoleasy.cvsstore.domain.CvsBrand;
-import buncheoleasy.cvsstore.domain.CvsStore;
 import buncheoleasy.cvsstore.domain.CvsStoreCursor;
 import buncheoleasy.cvsstore.domain.CvsStoreRepository;
+import buncheoleasy.cvsstore.domain.RankedCvsStore;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +12,7 @@ import org.springframework.stereotype.Repository;
 
 /**
  * {@link CvsStoreCursor} 의 그룹 순서대로 지점명 일치 그룹을 먼저 채우고, limit 이 남으면 주소만 일치 그룹으로 잇는다
- * ({@code buncheol} 목록 어댑터의 그룹 이어붙이기 방식과 동일).
+ * ({@code buncheol} 목록 어댑터의 그룹 이어붙이기 방식과 동일). 각 행에 소속 그룹을 태깅해 반환한다.
  */
 @Repository
 @RequiredArgsConstructor
@@ -21,36 +21,45 @@ public class JpaCvsStoreRepositoryAdapter implements CvsStoreRepository {
   private final JpaCvsStoreRepository jpaCvsStoreRepository;
 
   @Override
-  public List<CvsStore> searchPickupStores(
+  public List<RankedCvsStore> searchPickupStores(
       final CvsBrand brand,
       final String escapedKeyword,
       final CvsStoreCursor cursor,
       final int limit) {
     // 키워드가 없으면 주소 그룹이 존재하지 않는다 — 전체를 지점명 그룹 하나로 조회.
     if (escapedKeyword == null) {
-      return jpaCvsStoreRepository.searchByName(
-          brand, null, cursorIdInGroup(cursor, CvsStoreCursor.RANK_NAME), PageRequest.of(0, limit));
+      return jpaCvsStoreRepository
+          .searchByName(
+              brand,
+              null,
+              cursorIdInGroup(cursor, CvsStoreCursor.RANK_NAME),
+              PageRequest.of(0, limit))
+          .stream()
+          .map(store -> new RankedCvsStore(CvsStoreCursor.RANK_NAME, store))
+          .toList();
     }
 
-    final List<CvsStore> result = new ArrayList<>();
+    final List<RankedCvsStore> result = new ArrayList<>();
 
     if (cursor.isFirstPage() || cursor.isNameGroup()) {
-      result.addAll(
-          jpaCvsStoreRepository.searchByName(
+      jpaCvsStoreRepository
+          .searchByName(
               brand,
               escapedKeyword,
               cursorIdInGroup(cursor, CvsStoreCursor.RANK_NAME),
-              PageRequest.of(0, limit)));
+              PageRequest.of(0, limit))
+          .forEach(store -> result.add(new RankedCvsStore(CvsStoreCursor.RANK_NAME, store)));
     }
 
     final int remaining = limit - result.size();
     if (remaining > 0) {
-      result.addAll(
-          jpaCvsStoreRepository.searchByAddressOnly(
+      jpaCvsStoreRepository
+          .searchByAddressOnly(
               brand,
               escapedKeyword,
               cursorIdInGroup(cursor, CvsStoreCursor.RANK_ADDRESS),
-              PageRequest.of(0, remaining)));
+              PageRequest.of(0, remaining))
+          .forEach(store -> result.add(new RankedCvsStore(CvsStoreCursor.RANK_ADDRESS, store)));
     }
     return result;
   }

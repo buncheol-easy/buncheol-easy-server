@@ -29,6 +29,7 @@ public class ShippingAddressService {
         userId,
         request.shippingMethod(),
         request.storeName(),
+        request.storeCode(),
         request.alias(),
         request.isDefault());
   }
@@ -41,6 +42,7 @@ public class ShippingAddressService {
         addressId,
         request.shippingMethod(),
         request.storeName(),
+        request.storeCode(),
         request.alias(),
         request.isDefault());
   }
@@ -79,6 +81,7 @@ public class ShippingAddressService {
         shippingAddress.getId(),
         shippingAddress.getShippingMethod().name(),
         shippingAddress.getStoreName(),
+        shippingAddress.getStoreCode(),
         shippingAddress.getAlias(),
         shippingAddress.isDefault());
   }

@@ -177,4 +177,47 @@ class ShippingAddressTest {
       assertThat(address.isOwnedBy(2L)).isFalse();
     }
   }
+
+  @Nested
+  @DisplayName("점포 코드 테스트")
+  class StoreCodeTest {
+
+    @Test
+    void 점포_코드와_함께_생성하면_트림해서_보관한다() {
+      ShippingAddress address =
+          ShippingAddress.create(1L, "GS25_HALF", "GS25 강남역점", " VKK99 ", "회사", false);
+
+      assertThat(address.getStoreCode()).isEqualTo("VKK99");
+    }
+
+    @Test
+    void 코드_없는_수정에서_지점명이_그대로면_기존_코드를_유지한다() {
+      ShippingAddress address =
+          ShippingAddress.create(1L, "GS25_HALF", "GS25 강남역점", "VKK99", "회사", false);
+
+      address.update("GS25_HALF", "GS25 강남역점", null, "집", true);
+
+      assertThat(address.getStoreCode()).isEqualTo("VKK99");
+    }
+
+    @Test
+    void 코드_없는_수정에서_지점명이_바뀌면_기존_코드를_초기화한다() {
+      ShippingAddress address =
+          ShippingAddress.create(1L, "GS25_HALF", "GS25 강남역점", "VKK99", "회사", false);
+
+      address.update("GS25_HALF", "GS25 홍대점", null, "회사", false);
+
+      assertThat(address.getStoreCode()).isNull();
+    }
+
+    @Test
+    void 새_코드와_함께_수정하면_코드를_교체한다() {
+      ShippingAddress address =
+          ShippingAddress.create(1L, "GS25_HALF", "GS25 강남역점", "VKK99", "회사", false);
+
+      address.update("CU_HALF", "CU 홍대입구점", "10001", "회사", false);
+
+      assertThat(address.getStoreCode()).isEqualTo("10001");
+    }
+  }
 }

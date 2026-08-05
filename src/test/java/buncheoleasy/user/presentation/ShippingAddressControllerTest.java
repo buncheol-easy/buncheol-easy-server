@@ -163,8 +163,8 @@ class ShippingAddressControllerTest {
     given(shippingAddressService.getUserShippingAddresses(USER_ID))
         .willReturn(
             List.of(
-                ShippingAddressResponse.of(1L, "GS25_HALF", "GS25 강남역점", "회사", true),
-                ShippingAddressResponse.of(2L, "CU_HALF", "CU 홍대입구점", null, false)));
+                ShippingAddressResponse.of(1L, "GS25_HALF", "GS25 강남역점", "VKK99", "회사", true),
+                ShippingAddressResponse.of(2L, "CU_HALF", "CU 홍대입구점", null, null, false)));
 
     mockMvc
         .perform(get("/v1/users/me/shipping-addresses").with(mockAuth()))

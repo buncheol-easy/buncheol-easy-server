@@ -243,21 +243,21 @@ CREATE TABLE IF NOT EXISTS buncheol_images
 
 CREATE TABLE IF NOT EXISTS participations
 (
-    id                  BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id         BIGINT       NOT NULL,
-    buncheol_member_id  BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
-    participant_id      BIGINT       NOT NULL COMMENT '참여자',
-    shipping_address_id BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
-    amount              BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
-    shipping_fee        BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
-    refund_bank         VARCHAR(50)  NOT NULL COMMENT '환불 은행',
-    refund_account      VARCHAR(50)  NOT NULL COMMENT '환불 계좌번호',
-    refund_holder       VARCHAR(50)  NOT NULL COMMENT '환불 예금주',
-    due_at              DATETIME     NOT NULL COMMENT '입금 만료 시각 = min(점유+30분, deadline)',
-    confirmed_at        DATETIME     NULL COMMENT '개최자 입금확인 시각',
-    cancelled_at        DATETIME     NULL COMMENT '참여 취소 시각',
-    cancel_reason       VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED',
-    status              VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED',
+    id                    BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id           BIGINT       NOT NULL,
+    buncheol_member_id    BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
+    participant_id        BIGINT       NOT NULL COMMENT '참여자',
+    shipping_address_id   BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
+    amount                BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
+    shipping_fee          BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
+    refund_bank           VARCHAR(50)  NOT NULL COMMENT '환불 은행',
+    refund_account        VARCHAR(50)  NOT NULL COMMENT '환불 계좌번호',
+    refund_holder         VARCHAR(50)  NOT NULL COMMENT '환불 예금주',
+    due_at                DATETIME     NOT NULL COMMENT '입금 만료 시각 = min(점유+30분, deadline)',
+    confirmed_at          DATETIME     NULL COMMENT '개최자 입금확인 시각',
+    cancelled_at          DATETIME     NULL COMMENT '참여 취소 시각',
+    cancel_reason         VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED',
+    status                VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED',
     -- 오픈 이벤트 배송비 환급(배송비 돌려받기). ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc 참고).
     payback_status        VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
     payback_tweet_url     VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
@@ -266,15 +266,16 @@ CREATE TABLE IF NOT EXISTS participations
     payback_reject_reason VARCHAR(200) NULL COMMENT '환급 반려 사유 (재신청 시 초기화)',
     payback_amount        BIGINT       NULL COMMENT '신청 시점 배송비 스냅샷 (환급액 고정)',
     -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용 가상 컬럼: 활성 상태일 때만 멤버 슬롯 id 값을 갖고, 취소/만료되면 NULL 이 되어 슬롯이 다시 열린다.
-    active_member_id    BIGINT GENERATED ALWAYS AS (
-                            IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), buncheol_member_id, NULL)
-                            ) STORED COMMENT '활성 상태일 때만 buncheol_member_id 값 (선착순 유니크용)',
+    active_member_id      BIGINT GENERATED ALWAYS AS (
+                              IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), buncheol_member_id,
+                                 NULL)
+                              ) STORED COMMENT '활성 상태일 때만 buncheol_member_id 값 (선착순 유니크용)',
     -- 분철당 참여자 1명(중복 참여 금지) 보장용 가상 컬럼: 활성 상태일 때만 참여자 id 값을 갖고, 취소/만료되면 NULL 이 되어 재참여가 열린다.
     active_participant_id BIGINT GENERATED ALWAYS AS (
-                            IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), participant_id, NULL)
-                            ) STORED COMMENT '활성 상태일 때만 participant_id 값 (분철당 중복 참여 방지용)',
-    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                              IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), participant_id, NULL)
+                              ) STORED COMMENT '활성 상태일 때만 participant_id 값 (분철당 중복 참여 방지용)',
+    created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -318,21 +319,21 @@ CREATE TABLE IF NOT EXISTS participations
 
 CREATE TABLE IF NOT EXISTS deliveries
 (
-    id                     BIGINT       NOT NULL AUTO_INCREMENT,
-    participation_id       BIGINT       NOT NULL COMMENT '참여 ID',
-    shipping_method        VARCHAR(20)  NOT NULL COMMENT '배송 방식 스냅샷',
-    store_name             VARCHAR(100) NOT NULL COMMENT '편의점 지점명 스냅샷',
-    receiver_nickname      VARCHAR(20)  NOT NULL COMMENT '닉네임 스냅샷',
-    receiver_phone_number  VARCHAR(15)  NOT NULL COMMENT '연락처 스냅샷',
-    tracking_number        VARCHAR(100) NULL COMMENT '운송장 번호',
-    tracking_registered_at DATETIME     NULL COMMENT '운송장 등록 시각',
-    delivered_at           DATETIME     NULL COMMENT '배송 완료 시각',
-    received_at            DATETIME     NULL COMMENT '사용자 수령 완료 시각',
+    id                      BIGINT       NOT NULL AUTO_INCREMENT,
+    participation_id        BIGINT       NOT NULL COMMENT '참여 ID',
+    shipping_method         VARCHAR(20)  NOT NULL COMMENT '배송 방식 스냅샷',
+    store_name              VARCHAR(100) NOT NULL COMMENT '편의점 지점명 스냅샷',
+    receiver_nickname       VARCHAR(20)  NOT NULL COMMENT '닉네임 스냅샷',
+    receiver_phone_number   VARCHAR(15)  NOT NULL COMMENT '연락처 스냅샷',
+    tracking_number         VARCHAR(100) NULL COMMENT '운송장 번호',
+    tracking_registered_at  DATETIME     NULL COMMENT '운송장 등록 시각',
+    delivered_at            DATETIME     NULL COMMENT '배송 완료 시각',
+    received_at             DATETIME     NULL COMMENT '사용자 수령 완료 시각',
     -- 미수령 독촉 알림 1회 발송 dedup 마커. 기존 배포 DB 에는 수동 ALTER 필요.
-    pickup_reminder_sent_at DATETIME NULL COMMENT '미수령 독촉 알림 발송 시각',
-    status                 VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED' COMMENT 'SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED',
-    created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    pickup_reminder_sent_at DATETIME     NULL COMMENT '미수령 독촉 알림 발송 시각',
+    status                  VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED' COMMENT 'SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED',
+    created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -451,11 +452,7 @@ CREATE TABLE IF NOT EXISTS inbox_messages
   COLLATE = utf8mb4_unicode_ci;
 
 -- cvs_stores 테이블 생성 (편의점 택배 접수처 마스터 — 배송지 등록 화면의 지점 검색용)
--- 데이터는 buncheoleasy-crawler 가 GS25(cvsnet)·CU(cupost) 조회 API 에서 수집해 배치로 적재/갱신한다.
--- 서버는 읽기 전용. receive_yn = 접수(보내기) 가능, pickup_yn = 픽업(수령) 가능 —
--- 접수·픽업 모두 불가한 점포는 원천 API 에 노출되지 않아 애초에 적재되지 않는다.
--- [불변식] 갱신은 (brand, store_code) upsert 로만 한다 — 행의 id 는 재사용/재발급되지 않는다.
---          검색 API 의 keyset 커서(id 기반)가 이 불변식에 의존하므로 TRUNCATE/재적재 방식으로 바꾸지 말 것.
+-- 크롤러(buncheoleasy-crawler)가 수집·정규화해 S3 에 게시한 스냅샷을 CvsStoreSyncScheduler 가 매주 반영한다.
 CREATE TABLE IF NOT EXISTS cvs_stores
 (
     id         BIGINT         NOT NULL AUTO_INCREMENT,
@@ -471,12 +468,12 @@ CREATE TABLE IF NOT EXISTS cvs_stores
     receive_yn TINYINT(1)     NOT NULL COMMENT '택배 접수(보내기) 가능',
     pickup_yn  TINYINT(1)     NOT NULL COMMENT '택배 픽업(수령) 가능',
     created_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- 크롤러가 직접 쓰는 테이블이라 JPA @PreUpdate 가 돌지 않는다 — DB 레벨에서 갱신 시각을 보장한다
+    -- 갱신은 JPA(동기화 배치)가 하지만, 로컬 적재 스크립트 등 JPA 밖 쓰기도 갱신 시각이 남게 DB 레벨로 보강
     updated_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
-    -- 크롤러 배치의 (brand, store_code) upsert 기준
+    -- 동기화 배치의 (brand, store_code) upsert 기준 — 행의 id 는 재발급되지 않으며 검색 keyset 커서가 이에 의존한다
     UNIQUE KEY uk_cvs_stores_brand_code (brand, store_code),
     -- 접수처 검색 쿼리(WHERE pickup_yn AND brand ORDER BY id) 커버용
     INDEX idx_cvs_stores_pickup_brand (pickup_yn, brand, id),

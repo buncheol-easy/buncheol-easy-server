@@ -17,7 +17,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
  * 태깅한다 ({@link RankedCvsStore}) — 서비스가 키워드 매칭을 재계산하지 않는다.
  *
  * <p>커서는 검색 조건(keyword/brand)과의 정합을 검증하지 않는다 — 조건을 바꾸면 클라이언트가 커서를 리셋해야 한다.
- * 크롤러 적재 배치가 행을 갱신하면 페이징 도중 행이 건너뛰어지거나(픽업 불가 전환·지점명 변경으로 그룹 이동) 한 번 더
+ * 주간 동기화 배치가 행을 갱신하면 페이징 도중 행이 건너뛰어지거나(픽업 불가 전환·지점명 변경으로 그룹 이동) 한 번 더
  * 보일 수 있는데, 주 1회 갱신되는 마스터 데이터 특성상 드물어 허용한다.
  */
 public record CvsStoreCursor(Integer groupRank, Long id) {

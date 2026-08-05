@@ -18,8 +18,8 @@ import lombok.NoArgsConstructor;
 /**
  * 편의점 택배 접수처(반값택배 취급점) 마스터.
  *
- * <p>데이터는 크롤러(buncheoleasy-crawler)가 GS25(cvsnet)·CU(cupost) 조회 API 에서 수집해 배치로 적재·갱신한다. 서버는 읽기
- * 전용으로만 다루며, 배송지 등록 화면의 지점 검색에 쓰인다.
+ * <p>크롤러(buncheoleasy-crawler)가 GS25(cvsnet)·CU(cupost) 조회 API 에서 수집·정규화해 S3 에 게시하고, 서버의
+ * {@code CvsStoreSyncScheduler} 가 매주 diff 반영한다. 조회는 배송지 등록 화면의 지점 검색에 쓰인다.
  *
  * <ul>
  *   <li>{@code receiveYn}: 택배 접수(보내기) 가능 여부

@@ -17,6 +17,8 @@ interface JpaShippingAddressRepository extends JpaRepository<ShippingAddress, Lo
   boolean existsByUserIdAndShippingMethodAndStoreName(
       Long userId, ShippingMethod shippingMethod, String storeName);
 
+  List<ShippingAddress> findAllByStoreCodeIsNotNull();
+
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "update ShippingAddress sa set sa.isDefault = false "

@@ -20,6 +20,11 @@ public class JpaShippingAddressRepositoryAdapter implements ShippingAddressRepos
   }
 
   @Override
+  public List<ShippingAddress> findAllByStoreCodeIsNotNull() {
+    return jpaShippingAddressRepository.findAllByStoreCodeIsNotNull();
+  }
+
+  @Override
   public void delete(Long id) {
     jpaShippingAddressRepository.deleteById(id);
   }

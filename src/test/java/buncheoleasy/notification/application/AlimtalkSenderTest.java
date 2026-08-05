@@ -59,7 +59,9 @@ class AlimtalkSenderTest {
     assertThat(request.tplCode()).isEqualTo("TPL_001");
     assertThat(request.receiverPhone()).isEqualTo("01011112222");
     assertThat(request.subject()).isEqualTo("입금 확인 안내");
-    assertThat(request.message()).startsWith("철수님, 입금이 확인되었어요!").doesNotContain("#{");
+    assertThat(request.message())
+        .startsWith("철수님, 참여하신 분철의 입금이 확인되었어요!")
+        .doesNotContain("#{");
     // 등록본(광고추가형)과 동일하게 1번 채널 추가(AC) + 2번 웹링크(WL) 순서로 실린다.
     assertThat(request.buttons()).hasSize(2);
     assertThat(request.buttons().get(0).type()).isEqualTo(AlimtalkButtonType.AC);

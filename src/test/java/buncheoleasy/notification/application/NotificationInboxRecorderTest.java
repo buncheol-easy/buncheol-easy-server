@@ -74,11 +74,24 @@ class NotificationInboxRecorderTest {
   }
 
   @Test
-  void 운송장_알림은_외부_배송조회라_경로가_없다() {
+  void 운송장_알림의_경로는_참여_내역_화면을_가리킨다() {
+    // 본문이 "아래 배송조회 버튼" 을 언급하는데 수신함엔 배송조회 버튼이 없으므로 참여 내역으로 대체한다.
     Map<String, String> variables =
         Map.of("닉네임", "참여자", "분철명", "아이브 앨범", "멤버명", "안유진", "운송장번호", "123456789");
 
     InboxMessage saved = record(4L, AlimtalkTemplate.TRACKING_CU, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+  }
+
+  @Test
+  void 수령독촉_알림은_외부_배송조회라_경로가_없다() {
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "참여자", "분철명", "아이브 앨범", "멤버명", "안유진", "지점명", "GS25 역삼점", "운송장번호",
+            "123456789");
+
+    InboxMessage saved = record(4L, AlimtalkTemplate.PICKUP_REMINDER_GS25, variables);
 
     assertThat(saved.getLinkPath()).isNull();
   }

@@ -50,6 +50,13 @@ jobs:
           # 기본값은 "기본 브랜치 외 읽기 전용" — dev push·수동 실행이 캐시를 쓰고 PR 은 읽는다
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
+      - name: Shell lint (배포 스크립트)
+        # scripts/ 의 배포 스크립트는 리뷰로만 검증돼 왔다 — 문법·정적 검사를 CI 게이트로.
+        # ubuntu-latest 에 shellcheck 프리인스톨. -S warning: info 수준 소음은 게이트에서 제외.
+        run: |
+          bash -n scripts/*.sh
+          shellcheck -S warning scripts/*.sh
+
       - name: Build and run full test suite
         # build = 전체 test + bootJar/OpenAPI 조립 검증.
         # 힙 1g·메타스페이스 768m: build.gradle 기본값(512m/384m)은 2GB 배포 박스 기준 —

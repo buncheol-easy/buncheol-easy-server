@@ -36,7 +36,7 @@ class ShippingAddressControllerDocsTest extends DocsTestSupport {
                 .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 강남점\",\"alias\":\"회사\",\"isDefault\":true}"))
+                    "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 강남점\",\"storeCode\":\"VKK99\",\"alias\":\"회사\",\"isDefault\":true}"))
         .andExpect(status().isCreated())
         .andDo(
             document(
@@ -56,6 +56,11 @@ class ShippingAddressControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("shippingMethod")
                                 .description("배송 방식 (GS25_HALF / CU_HALF)"),
                             fieldWithPath("storeName").description("수령 매장 이름 (1~100자)"),
+                            fieldWithPath("storeCode")
+                                .description(
+                                    "접수처 검색(GET /v1/cvs-stores)에서 받은 원천 점포 코드 (20자 이하, 선택). "
+                                        + "수정 시 미전달하면 지점명이 그대로일 때만 기존 코드가 유지된다")
+                                .optional(),
                             fieldWithPath("alias").description("배송지 별칭 (10자 이하)").optional(),
                             fieldWithPath("isDefault")
                                 .description("기본 배송지 여부 (기본 false)")
@@ -69,8 +74,8 @@ class ShippingAddressControllerDocsTest extends DocsTestSupport {
     given(shippingAddressService.getUserShippingAddresses(USER_ID))
         .willReturn(
             List.of(
-                ShippingAddressResponse.of(1L, "GS25_HALF", "GS25 강남점", "회사", true),
-                ShippingAddressResponse.of(2L, "CU_HALF", "CU 광화문점", null, false)));
+                ShippingAddressResponse.of(1L, "GS25_HALF", "GS25 강남점", "VKK99", "회사", true),
+                ShippingAddressResponse.of(2L, "CU_HALF", "CU 광화문점", "16031", null, false)));
 
     // when & then
     mockMvc
@@ -90,6 +95,9 @@ class ShippingAddressControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].id").description("배송지 ID"),
                             fieldWithPath("[].shippingMethod").description("배송 방식"),
                             fieldWithPath("[].storeName").description("수령 매장 이름"),
+                            fieldWithPath("[].storeCode")
+                                .description("원천 점포 코드 (자유입력 등록분은 null)")
+                                .optional(),
                             fieldWithPath("[].alias").description("배송지 별칭").optional(),
                             fieldWithPath("[].isDefault").description("기본 배송지 여부"))
                         .build())));
@@ -104,7 +112,7 @@ class ShippingAddressControllerDocsTest extends DocsTestSupport {
                 .with(userAuth())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 광화문점\",\"alias\":\"회사\",\"isDefault\":false}"))
+                    "{\"shippingMethod\":\"GS25_HALF\",\"storeName\":\"GS25 광화문점\",\"storeCode\":\"V0021\",\"alias\":\"회사\",\"isDefault\":false}"))
         .andExpect(status().isNoContent())
         .andDo(
             document(
@@ -124,6 +132,11 @@ class ShippingAddressControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("shippingMethod")
                                 .description("배송 방식 (GS25_HALF / CU_HALF)"),
                             fieldWithPath("storeName").description("수령 매장 이름 (1~100자)"),
+                            fieldWithPath("storeCode")
+                                .description(
+                                    "접수처 검색(GET /v1/cvs-stores)에서 받은 원천 점포 코드 (20자 이하, 선택). "
+                                        + "수정 시 미전달하면 지점명이 그대로일 때만 기존 코드가 유지된다")
+                                .optional(),
                             fieldWithPath("alias").description("배송지 별칭 (10자 이하)").optional(),
                             fieldWithPath("isDefault")
                                 .description("기본 배송지 여부 (기본 false)")

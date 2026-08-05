@@ -1,8 +1,9 @@
 name: Deploy Backend Production
 
 # main push -> GitHub 호스팅 러너가 이미지를 빌드해 ECR 에 push 하고,
-# production EC2 의 self-hosted runner 는 pull + 컨테이너 교체만 한다.
-# 구조·근거는 deploy-staging.yml 과 동일(빌드를 박스 밖으로 — docs 35 §8-A).
+# production EC2 의 self-hosted runner 는 pull + 블루-그린 무중단 전환만 한다.
+# 구조·근거는 deploy-staging.yml 과 동일(빌드를 박스 밖으로 — docs 35 §8-A,
+# 무중단 전환 — docs/36 방안 1 · docs/39, scripts/blue-green.sh).
 # 차이: 트리거 main, 러너 라벨 production, 별칭 태그 prod, 진행 중 배포는 끊지 않음.
 on:
   push:
@@ -83,9 +84,11 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, production]
-    # 내부 최악 예산(pull 5m + up 3m + 헬스체크 3m = 11m)보다 커야
-    # OS 레벨 timeout 이 잡 취소보다 먼저 발화한다 (리뷰 #89 반영)
-    timeout-minutes: 15
+    # 내부 최악 예산: checkout/rsync ~1m + 락 대기 2m + pull 5.5m(-k 유예 포함) + up 3.5m
+    # + 헬스 3m + 웜업 15s + 드레인 30s + 최종확인 5s + graceful 정지 45s ≈ 16.6m — 이보다
+    # 커야 OS 레벨 timeout 이 잡 취소보다 먼저 발화한다. 초과 취소 지점이 하필 "전환 후·
+    # 구 색 정지 전"이면 두 색이 동시에 뜬 채 남는다 (3차 리뷰 산식 재계산)
+    timeout-minutes: 20
     env:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
@@ -101,61 +104,36 @@ jobs:
             --exclude='.env*' \
             "${GITHUB_WORKSPACE}/" /home/ubuntu/buncheol-easy-server/
 
-      - name: Pull image and swap container
+      - name: Blue-green deploy (무중단 전환)
+        # 제자리 교체(up -d 재생성)의 부팅 창 502 를 없앤다 — 비활성 색으로 기동 →
+        # 헬스 → Nginx upstream 전환(reload, 0초) → 드레인 → 구 색 graceful 정지.
+        # 헬스 게이트·이미지 대조·롤백 좌표 기록은 전부 스크립트 안에 있다 (docs/36 방안 1 · docs/39).
         run: |
           set -e
           cd /home/ubuntu/buncheol-easy-server
           export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
-
-          # 교체 전 현재 이미지를 남긴다 — 배포가 실패했을 때 이 값이 곧 롤백 좌표다 (4차 리뷰 반영)
-          prev=$(docker inspect -f '{{.Config.Image}}' buncheoleasy-backend 2>/dev/null || echo "none")
-          echo "::notice::롤백 좌표(직전 이미지): ${prev}"
-
-          # 박스는 pull 만 한다 — 빌드 부하 0 이 이 구조의 존재 이유.
-          # timeout 은 박스·네트워크 이상 시 잡이 매달리지 않게 하는 안전망(35 §11 교훈 유지).
-          timeout -k 30s 5m docker compose -f docker-compose.staging.yml pull backend
-          timeout -k 30s 3m docker compose -f docker-compose.staging.yml up -d
-
-          echo "Waiting for backend health check..."
-          # 벽시계 데드라인 — 재시도 횟수 × (curl 5s + sleep 5s) 곱셈 예산은 최악값이 주석과
-          # 어긋나기 쉽다(리뷰 재검토에서 실제 최악 6.6m 지적). curl 호출당 상한은 여전히 필수.
-          deadline=$((SECONDS + 180))
-          until curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:8080/actuator/health > /dev/null; do
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "Backend health check timed out after 180s"
-              docker logs buncheoleasy-backend --tail=100
-              exit 1
-            fi
-            echo "Backend is not ready yet..."
-            sleep 5
-          done
-          echo "Backend health check passed"
-
-          # 헬스체크는 "8080 이 살아있다"만 본다 — 떠 있는 게 방금 배포한 그 이미지인지 확인
-          # (promote 의 "별칭 = 지금 떠 있는 것" 불변식의 전제 — 리뷰 반영)
-          running=$(docker inspect -f '{{.Image}}' buncheoleasy-backend)
-          expected=$(docker image inspect -f '{{.Id}}' "$BACKEND_IMAGE")
-          if [ "$running" != "$expected" ]; then
-            echo "::error::떠 있는 컨테이너가 배포 대상 이미지가 아니다: $running != $expected"
-            exit 1
-          fi
+          bash scripts/blue-green.sh deploy
 
       - name: Post-mortem snapshot
         # cancelled() 포함 — 잡 타임아웃(=취소)이 가장 진단이 필요한 케이스다 (리뷰 #89 반영)
         if: failure() || cancelled()
         run: |
           cd /home/ubuntu/buncheol-easy-server || true
-          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           free -h || true
-          docker compose -f docker-compose.staging.yml ps || true
-          docker logs buncheoleasy-backend --tail=100 || true
+          cat /etc/nginx/conf.d/bce-backend-upstream.conf || true
+          docker ps -a --filter name=buncheoleasy-backend --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+          docker logs buncheoleasy-backend-blue --tail=50 || true
+          docker logs buncheoleasy-backend-green --tail=50 || true
+          # 레거시(블루-그린 도입 전 단일 컨테이너) — 첫 배포 진단용, 이후 무해한 no-op
+          docker logs buncheoleasy-backend --tail=50 || true
 
       - name: Retain last 3 images (rollback cache)
         # 박스 빌드가 없어져 builder prune 은 불필요해졌다. pull 된 sha- 이미지는 태그가 있어
         # image prune 으로 안 지워지므로 최근 3개만 남기고 정리한다(GitHub 불능 시 오프라인 롤백용).
         # 레지스트리 쪽 보존은 ECR lifecycle policy(sha- 최근 10개)가 담당한다.
         # ⚠️ 정렬은 이미지 Created(빌드 시각) 기준이지 pull 시각이 아니다 — 롤백으로 되돌린 옛
-        # 이미지는 이후 배포 몇 번이면 밀려날 수 있다(실행 중 이미지는 rmi 실패로 살아남음).
+        # 이미지는 이후 배포 몇 번이면 밀려날 수 있다(실행 중·정지 컨테이너가 참조하는 이미지는
+        # rmi 실패로 살아남음 — 정지된 구 색 컨테이너가 물고 있는 롤백 이미지도 그래서 안전).
         # 취소 시에는 돌지 않는다 — 롤백이 이 배포를 선점(취소)한 순간 오프라인 롤백 캐시를
         # 지우면 안 되기 때문 (리뷰 반영).
         if: success() || failure()

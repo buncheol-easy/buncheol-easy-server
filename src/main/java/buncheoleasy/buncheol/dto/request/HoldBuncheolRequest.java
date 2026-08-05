@@ -23,8 +23,8 @@ public record HoldBuncheolRequest(
     @NotBlank @Size(max = 200) String purchaseSite,
     @NotNull @Future Instant deadline,
     @NotNull @Positive Integer minHeadcount,
-    @Positive Integer gs25ShippingFee,
-    @Positive Integer cuShippingFee,
+    @PositiveOrZero Integer gs25ShippingFee,
+    @PositiveOrZero Integer cuShippingFee,
     @NotNull @PositiveOrZero Integer thumbnailIndex,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 

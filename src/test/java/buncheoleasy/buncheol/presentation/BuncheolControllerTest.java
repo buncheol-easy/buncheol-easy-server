@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.presentation;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -183,6 +184,81 @@ class BuncheolControllerTest {
       mockMvc
           .perform(multipart("/v1/buncheols").file(requestPart).file(imagePart).with(mockAuth()))
           .andExpect(status().isCreated());
+    }
+
+    @Test
+    void 배송비가_0원이어도_분철_개최에_성공하면_201을_반환한다() throws Exception {
+      // given — 0원은 개최자가 배송비를 받지 않는 무료 배송으로 허용한다(@PositiveOrZero).
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      String zeroShippingFeeJson =
+          """
+                    {
+                      "groupId": 100,
+                      "title": "테스트 분철 제목",
+                      "purchaseSite": "공식 스토어",
+                      "deadline": "%s",
+                      "minHeadcount": 3,
+                      "gs25ShippingFee": 0,
+                      "thumbnailIndex": 0,
+                      "buncheolMembers": [
+                        {"memberId": 200, "price": 50000}
+                      ]
+                    }
+                    """
+              .formatted(deadline);
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, zeroShippingFeeJson.getBytes());
+
+      // when & then — 201 은 DTO 검증 통과까지만 보증하므로, 0원이 매핑 중 탈락하지 않고 서비스까지
+      // 전달되는지도 함께 검증한다.
+      mockMvc
+          .perform(
+              multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isCreated());
+
+      then(buncheolService)
+          .should()
+          .holdBuncheol(
+              eq(HOST_ID),
+              argThat(request -> request.gs25ShippingFee() == 0 && request.cuShippingFee() == null),
+              any());
+    }
+
+    @Test
+    void 배송비가_음수면_400을_반환한다() throws Exception {
+      // given — 음수는 DTO 검증(@PositiveOrZero)에서 걸러진다.
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      String negativeShippingFeeJson =
+          """
+                    {
+                      "groupId": 100,
+                      "title": "테스트 분철 제목",
+                      "purchaseSite": "공식 스토어",
+                      "deadline": "%s",
+                      "minHeadcount": 3,
+                      "gs25ShippingFee": -100,
+                      "thumbnailIndex": 0,
+                      "buncheolMembers": [
+                        {"memberId": 200, "price": 50000}
+                      ]
+                    }
+                    """
+              .formatted(deadline);
+
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, negativeShippingFeeJson.getBytes());
+
+      // when & then
+      mockMvc
+          .perform(
+              multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
     }
 
     @Test

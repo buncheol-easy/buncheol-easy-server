@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -94,7 +95,45 @@ public class CvsStore extends TimestampedEntity {
     this.pickupYn = pickupYn;
   }
 
-  /** 크롤러가 직접 적재하는 테이블이라 서버 코드에서는 테스트 픽스처 용도로만 쓰인다. */
+  /**
+   * 스냅샷 값으로 마스터 행을 갱신한다. 변경이 있었으면 true. 좌표는 스케일 차이(DB DECIMAL(·,7) vs
+   * 스냅샷 원본)를 무시하도록 {@code compareTo} 로 비교한다.
+   */
+  public boolean applySnapshot(
+      final String name,
+      final String tel,
+      final String sido,
+      final String address,
+      final String postNo,
+      final BigDecimal latitude,
+      final BigDecimal longitude,
+      final boolean receiveYn,
+      final boolean pickupYn) {
+    final boolean changed =
+        !this.name.equals(name)
+            || !Objects.equals(this.tel, tel)
+            || !Objects.equals(this.sido, sido)
+            || !this.address.equals(address)
+            || !Objects.equals(this.postNo, postNo)
+            || this.latitude.compareTo(latitude) != 0
+            || this.longitude.compareTo(longitude) != 0
+            || this.receiveYn != receiveYn
+            || this.pickupYn != pickupYn;
+    if (!changed) {
+      return false;
+    }
+    this.name = name;
+    this.tel = tel;
+    this.sido = sido;
+    this.address = address;
+    this.postNo = postNo;
+    this.latitude = latitude;
+    this.longitude = longitude;
+    this.receiveYn = receiveYn;
+    this.pickupYn = pickupYn;
+    return true;
+  }
+
   public static CvsStore create(
       final CvsBrand brand,
       final String storeCode,

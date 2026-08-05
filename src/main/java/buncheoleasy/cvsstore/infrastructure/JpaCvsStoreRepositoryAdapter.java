@@ -1,6 +1,7 @@
 package buncheoleasy.cvsstore.infrastructure;
 
 import buncheoleasy.cvsstore.domain.CvsBrand;
+import buncheoleasy.cvsstore.domain.CvsStore;
 import buncheoleasy.cvsstore.domain.CvsStoreCursor;
 import buncheoleasy.cvsstore.domain.CvsStoreRepository;
 import buncheoleasy.cvsstore.domain.RankedCvsStore;
@@ -70,5 +71,23 @@ public class JpaCvsStoreRepositoryAdapter implements CvsStoreRepository {
       return null;
     }
     return cursor.id();
+  }
+
+  @Override
+  public List<CvsStore> findAll() {
+    return jpaCvsStoreRepository.findAll();
+  }
+
+  @Override
+  public void saveAll(final List<CvsStore> stores) {
+    jpaCvsStoreRepository.saveAll(stores);
+  }
+
+  @Override
+  public void deleteAllByIds(final List<Long> ids) {
+    if (ids.isEmpty()) {
+      return;
+    }
+    jpaCvsStoreRepository.deleteAllByIdInBatch(ids);
   }
 }

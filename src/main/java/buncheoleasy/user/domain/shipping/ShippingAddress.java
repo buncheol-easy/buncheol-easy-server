@@ -140,6 +140,14 @@ public class ShippingAddress extends TimestampedEntity {
     this.isDefault = isDefault;
   }
 
+  /**
+   * 지점명 정합성 배치 전용 — 마스터(cvs_stores) 지점명이 바뀐 배송지의 표시명을 따라 옮긴다. 사용자 수정 흐름은
+   * {@link #update} 를 쓴다.
+   */
+  public void renameStore(final String storeName) {
+    this.storeName = storeName;
+  }
+
   public boolean isSameAddress(final String shippingMethodName, final String storeName) {
     return this.shippingMethod.name().equals(shippingMethodName)
         && this.storeName.equals(storeName);

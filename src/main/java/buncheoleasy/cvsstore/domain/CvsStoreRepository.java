@@ -14,4 +14,11 @@ public interface CvsStoreRepository {
    */
   List<RankedCvsStore> searchPickupStores(
       CvsBrand brand, String escapedKeyword, CvsStoreCursor cursor, int limit);
+
+  /** 스냅샷 동기화 배치 전용 — 전량 diff 를 위해 마스터 전체를 읽는다 (~수만 행). */
+  List<CvsStore> findAll();
+
+  void saveAll(List<CvsStore> stores);
+
+  void deleteAllByIds(List<Long> ids);
 }

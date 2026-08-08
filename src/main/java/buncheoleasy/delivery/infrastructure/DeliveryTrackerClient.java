@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.LongSupplier;
@@ -48,7 +49,7 @@ public class DeliveryTrackerClient {
   /** rate limit 응답의 식별 문구. 에러 코드가 인증 실패와 같은 FORBIDDEN 이라 메시지로 구분할 수밖에 없다. */
   private static final String RATE_LIMIT_MESSAGE_MARKER = "rate limit";
 
-  /** rate limit 재시도 전 대기 — 초 단위 쿼터 창이 지나가기에 충분한 길이. */
+  /** rate limit 재시도 전 대기 — 초 단위 쿼터 창이 지나가기에 충분한 길이. 재시도도 스로틀 슬롯을 지나므로 지터 없이도 몰림이 없다. */
   private static final Duration RATE_LIMIT_RETRY_BACKOFF = Duration.ofSeconds(1);
 
   private final RestClient restClient;
@@ -247,7 +248,8 @@ public class DeliveryTrackerClient {
         .anyMatch(
             error ->
                 error.message() != null
-                    && error.message().toLowerCase().contains(RATE_LIMIT_MESSAGE_MARKER));
+                    // Locale.ROOT 필수 — 기본 로케일(예: 터키어)에 따라 소문자 변환이 달라져 판정이 조용히 깨진다.
+                    && error.message().toLowerCase(Locale.ROOT).contains(RATE_LIMIT_MESSAGE_MARKER));
   }
 
   /** 이벤트 시각(ISO-8601 오프셋 포함) 파싱. 형식이 예상과 다르면 null 을 돌려주고 호출자가 현재 시각으로 대체한다. */
@@ -273,7 +275,8 @@ public class DeliveryTrackerClient {
 
   /**
    * 호출 간 최소 간격을 직렬로 예약하는 스로틀. 슬롯 예약(동기화)과 대기(호출 스레드)를 분리해 락을 잡은 채 잠들지 않으며, 시간원은 단조
-   * 시계(nanoTime)를 주입받아 테스트를 허용한다.
+   * 시계(nanoTime)를 주입받아 테스트를 허용한다. 예약은 무조건 수락되므로 대기 시간에 상한이 없다 — 유입이 상한(초당 5콜)을 지속
+   * 초과하는 경로에서는 호출 스레드가 대기열 깊이만큼 묶인다(현재 호출량에선 비현실적, C2C 대량 등록 시 재검토 지점).
    */
   static final class CallThrottle {
 

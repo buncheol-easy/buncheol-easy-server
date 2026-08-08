@@ -6,4 +6,8 @@ public class DeliveryTrackerRateLimitException extends DeliveryTrackerException 
   public DeliveryTrackerRateLimitException(final String message) {
     super(message);
   }
+
+  public DeliveryTrackerRateLimitException(final String message, final Throwable cause) {
+    super(message, cause);
+  }
 }

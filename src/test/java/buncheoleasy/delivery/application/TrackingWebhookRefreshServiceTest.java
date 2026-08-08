@@ -6,7 +6,6 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 
 import buncheoleasy.delivery.application.TrackingWebhookRefreshService.RefreshOutcome;
-
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;

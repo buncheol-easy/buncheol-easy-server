@@ -57,7 +57,14 @@ public class TrackingWebhookRefreshScheduler {
     int renewedCount = 0;
     int renewFailedCount = 0;
     int pollFailedCount = 0;
+    int processedCount = 0;
     for (TrackedParcel target : targets) {
+      // 종료 시 스케줄링 풀은 shutdownNow 로 인터럽트된다(await-termination 미설정). 플래그가 서면 이후의
+      // 스로틀 대기가 전부 즉시 실패해 남은 건 전체가 오탐 ERROR 로 쏟아지므로, 여기서 끊고 다음 주기에 맡긴다.
+      if (Thread.currentThread().isInterrupted()) {
+        log.warn("추적 웹훅 갱신 중단(인터럽트) - 처리 {}/{}", processedCount, targets.size());
+        return;
+      }
       try {
         // 만료시각은 건별로 계산한다 — 배치가 길어져도 뒤쪽 운송장의 실효 TTL 이 깎이지 않게.
         Instant expirationTime = Instant.now(clock).plus(deliveryTrackerProperties.webhookTtl());
@@ -78,6 +85,7 @@ public class TrackingWebhookRefreshScheduler {
         pollFailedCount++;
         log.error("추적 웹훅 갱신 실패 - trackingNumber: {}", target.trackingNumber(), e);
       }
+      processedCount++;
     }
     log.info(
         "추적 웹훅 갱신 완료 - 대상: {}, 연장: {}, 연장실패: {}, 폴링실패: {}",

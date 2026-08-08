@@ -47,7 +47,7 @@ public class TrackingWebhookRefreshService {
     boolean renewed = true;
     try {
       deliveryTrackerClient.registerWebhook(carrierId, parcel.trackingNumber(), expirationTime);
-    } catch (DeliveryTrackerException e) {
+    } catch (RuntimeException e) {
       renewed = false;
       log.error(
           "추적 웹훅 재등록 실패 - trackingNumber={} (다음 주기에 재시도, 폴링은 계속)", parcel.trackingNumber(), e);

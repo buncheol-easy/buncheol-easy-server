@@ -207,6 +207,9 @@ delivery:
     connect-timeout: 3s
     # 추적 조회는 택배사 사이트 실시간 크롤링이라 수 초씩 걸릴 수 있다(5s 는 실측 타임아웃). 공식 권장 상한 15s.
     read-timeout: 15s
+    # 아웃바운드 호출 간 최소 간격. 쿼터가 초당 10콜이라 절반(초당 5콜)으로 억제한다 — 갱신 스케줄러가
+    # 배치를 무간격 연사하면 한도를 넘겨 꼬리 운송장이 전부 rate limit(FORBIDDEN)로 실패하던 문제의 예방선.
+    min-call-interval: ${DELIVERY_TRACKER_MIN_CALL_INTERVAL:200ms}
 
 aligo:
   alimtalk:

@@ -12,6 +12,7 @@ class DeliveryTrackerPropertiesTest {
 
   private static final Duration TTL = Duration.ofHours(48);
   private static final Duration TIMEOUT = Duration.ofSeconds(3);
+  private static final Duration MIN_CALL_INTERVAL = Duration.ofMillis(200);
 
   private DeliveryTrackerProperties create(
       final String apiUrl,
@@ -20,7 +21,8 @@ class DeliveryTrackerPropertiesTest {
       final String callbackUrl,
       final String webhookToken) {
     return new DeliveryTrackerProperties(
-        apiUrl, clientId, clientSecret, callbackUrl, webhookToken, TTL, TIMEOUT, TIMEOUT);
+        apiUrl, clientId, clientSecret, callbackUrl, webhookToken, TTL, TIMEOUT, TIMEOUT,
+        MIN_CALL_INTERVAL);
   }
 
   @Nested

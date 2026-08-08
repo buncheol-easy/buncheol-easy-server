@@ -21,7 +21,8 @@ public record DeliveryTrackerProperties(
     String webhookToken,
     @NotNull Duration webhookTtl,
     @NotNull Duration connectTimeout,
-    @NotNull Duration readTimeout) {
+    @NotNull Duration readTimeout,
+    @NotNull Duration minCallInterval) {
 
   /** 추적 조회·웹훅 등록을 호출할 수 있는 환경인지. 미설정 환경에서는 호출을 건너뛴다. */
   public boolean outboundEnabled() {

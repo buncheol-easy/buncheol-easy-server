@@ -61,14 +61,20 @@ public class TrackingWebhookRefreshScheduler {
       try {
         // 만료시각은 건별로 계산한다 — 배치가 길어져도 뒤쪽 운송장의 실효 TTL 이 깎이지 않게.
         Instant expirationTime = Instant.now(clock).plus(deliveryTrackerProperties.webhookTtl());
-        if (trackingWebhookRefreshService.refresh(target, expirationTime)) {
+        TrackingWebhookRefreshService.RefreshOutcome outcome =
+            trackingWebhookRefreshService.refresh(target, expirationTime);
+        if (outcome.renewed()) {
           renewedCount++;
         } else {
           // 연장 실패는 자동 추적을 조용히 죽이므로 요약에 따로 집계한다.
           renewFailedCount++;
         }
+        if (!outcome.polled()) {
+          pollFailedCount++;
+        }
       } catch (Exception e) {
-        // 한 건 실패가 배치 전체를 중단시키지 않도록 격리하고 다음 운송장으로 진행한다.
+        // 예상 밖 실패 백스톱 — 한 건이 배치 전체를 중단시키지 않게 격리한다. 연장·폴링 모두 보장 못 한 것으로 집계.
+        renewFailedCount++;
         pollFailedCount++;
         log.error("추적 웹훅 갱신 실패 - trackingNumber: {}", target.trackingNumber(), e);
       }

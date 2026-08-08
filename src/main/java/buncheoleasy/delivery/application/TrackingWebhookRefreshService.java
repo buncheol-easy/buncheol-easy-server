@@ -12,7 +12,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/** 운송장 단위로 ① 웹훅 재등록(TTL 연장, 등록 실패 자가 치유) ② 상태 폴링(콜백 유실 안전망)을 수행한다 — 둘은 독립이라 ①이 실패해도 ②는 진행한다. */
+/**
+ * 운송장 단위로 ① 웹훅 재등록(TTL 연장, 등록 실패 자가 치유) ② 상태 폴링(콜백 유실 안전망)을 수행한다 — 둘은 독립이라 ①이 실패해도 ②는
+ * 진행하며, 각 실패는 여기서 로깅하고 결과 플래그로 호출자에게 집계를 맡긴다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -38,22 +41,28 @@ public class TrackingWebhookRefreshService {
     return targets;
   }
 
-  /**
-   * 운송장 1건의 웹훅 연장 + 폴링. 연장 실패는 삼키고 폴링은 시도하며, 폴링 실패는 호출자에게 전파해 건별 격리·집계를 맡긴다.
-   *
-   * @return 웹훅 연장 성공 여부 (요약 집계용)
-   */
-  public boolean refresh(final TrackedParcel parcel, final Instant expirationTime) {
+  /** 운송장 1건의 웹훅 연장 + 폴링. 한쪽 실패가 다른 쪽을 막지 않으며, 둘 다 실패해도 각각 그대로 집계에 드러난다. */
+  public RefreshOutcome refresh(final TrackedParcel parcel, final Instant expirationTime) {
     String carrierId = DeliveryTrackerCarriers.carrierId(parcel.shippingMethod());
     boolean renewed = true;
     try {
       deliveryTrackerClient.registerWebhook(carrierId, parcel.trackingNumber(), expirationTime);
-    } catch (DeliveryTrackerException e) {
+    } catch (RuntimeException e) {
       renewed = false;
       log.error(
           "추적 웹훅 재등록 실패 - trackingNumber={} (다음 주기에 재시도, 폴링은 계속)", parcel.trackingNumber(), e);
     }
-    trackingSyncService.sync(carrierId, parcel.trackingNumber());
-    return renewed;
+    boolean polled = true;
+    try {
+      trackingSyncService.sync(carrierId, parcel.trackingNumber());
+    } catch (RuntimeException e) {
+      polled = false;
+      log.error(
+          "추적 상태 폴링 실패 - trackingNumber={} (웹훅 콜백·다음 주기가 안전망)", parcel.trackingNumber(), e);
+    }
+    return new RefreshOutcome(renewed, polled);
   }
+
+  /** 웹훅 연장·폴링 각각의 성공 여부. 실패 상세는 이미 로깅됐으므로 집계용 플래그만 담는다. */
+  public record RefreshOutcome(boolean renewed, boolean polled) {}
 }

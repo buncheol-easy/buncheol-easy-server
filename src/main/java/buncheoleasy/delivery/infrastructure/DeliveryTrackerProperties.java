@@ -21,7 +21,16 @@ public record DeliveryTrackerProperties(
     String webhookToken,
     @NotNull Duration webhookTtl,
     @NotNull Duration connectTimeout,
-    @NotNull Duration readTimeout) {
+    @NotNull Duration readTimeout,
+    @NotNull Duration minCallInterval) {
+
+  public DeliveryTrackerProperties {
+    // 0·음수는 스로틀을 조용히 무력화한다(음수면 슬롯이 뒤로 흘러 영구 무력화) — 기동 시점에 fail-fast.
+    if (minCallInterval != null && !minCallInterval.isPositive()) {
+      throw new IllegalArgumentException(
+          "delivery.tracker.min-call-interval 은 양수여야 한다: " + minCallInterval);
+    }
+  }
 
   /** 추적 조회·웹훅 등록을 호출할 수 있는 환경인지. 미설정 환경에서는 호출을 건너뛴다. */
   public boolean outboundEnabled() {

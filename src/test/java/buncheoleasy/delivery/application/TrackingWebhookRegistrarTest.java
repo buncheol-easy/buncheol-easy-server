@@ -52,7 +52,8 @@ class TrackingWebhookRegistrarTest {
             "token",
             TTL,
             Duration.ofSeconds(3),
-            Duration.ofSeconds(5));
+            Duration.ofSeconds(5),
+            Duration.ofMillis(200));
     registrar =
         new TrackingWebhookRegistrar(
             deliveryTrackerClient,

@@ -1,6 +1,7 @@
 package buncheoleasy.delivery.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +13,7 @@ class DeliveryTrackerPropertiesTest {
 
   private static final Duration TTL = Duration.ofHours(48);
   private static final Duration TIMEOUT = Duration.ofSeconds(3);
+  private static final Duration MIN_CALL_INTERVAL = Duration.ofMillis(200);
 
   private DeliveryTrackerProperties create(
       final String apiUrl,
@@ -20,7 +22,19 @@ class DeliveryTrackerPropertiesTest {
       final String callbackUrl,
       final String webhookToken) {
     return new DeliveryTrackerProperties(
-        apiUrl, clientId, clientSecret, callbackUrl, webhookToken, TTL, TIMEOUT, TIMEOUT);
+        apiUrl, clientId, clientSecret, callbackUrl, webhookToken, TTL, TIMEOUT, TIMEOUT,
+        MIN_CALL_INTERVAL);
+  }
+
+  @Test
+  void 호출_간격이_양수가_아니면_생성에_실패한다() {
+    // 0·음수는 스로틀을 조용히 무력화하므로(음수면 영구 무력화) 바인딩 시점에 fail-fast 한다.
+    assertThatThrownBy(
+            () ->
+                new DeliveryTrackerProperties(
+                    "https://api", "id", "secret", "http://cb", "token", TTL, TIMEOUT, TIMEOUT,
+                    Duration.ZERO))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Nested

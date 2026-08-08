@@ -90,6 +90,10 @@ public class ShippingAddressDomainService {
 
     if (isDefault) {
       shippingAddressRepository.clearDefaultByUserAndMethod(userId, shippingMethod, id);
+      // clearDefault 벌크 UPDATE 의 clearAutomatically 가 영속성 컨텍스트를 비워 위에서 로드한
+      // 엔티티가 detach 된다. detach 스냅샷을 고치면 더티체킹이 안 타 커밋 시 UPDATE 가 유실되므로
+      // 관리 상태 엔티티로 재조회한 뒤 수정한다.
+      shippingAddress = getShippingAddress(id);
     }
 
     shippingAddress.update(shippingMethod, storeName, storeCode, alias, isDefault);

@@ -1,11 +1,11 @@
 package buncheoleasy.delivery.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 
+import buncheoleasy.delivery.application.TrackingWebhookRefreshService.RefreshOutcome;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
@@ -38,33 +38,50 @@ class TrackingWebhookRefreshServiceTest {
   @Test
   void 운송장의_웹훅을_연장하고_최신_상태를_폴링한다() {
     // when & then
-    assertThat(trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION)).isTrue();
+    assertThat(trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION))
+        .isEqualTo(new RefreshOutcome(true, true));
     then(deliveryTrackerClient).should().registerWebhook("kr.cvsnet", "TRACK123", EXPIRATION);
     then(trackingSyncService).should().sync("kr.cvsnet", "TRACK123");
   }
 
   @Test
-  void 웹훅_재등록이_실패해도_폴링은_진행하고_실패를_돌려준다() {
+  void 웹훅_재등록이_실패해도_폴링은_진행하고_연장_실패를_돌려준다() {
     // 재등록과 폴링은 독립적인 안전망 — 한쪽 실패가 다른 쪽을 막으면 안 된다.
     willThrow(new DeliveryTrackerException("통신 오류"))
         .given(deliveryTrackerClient)
         .registerWebhook("kr.cvsnet", "TRACK123", EXPIRATION);
 
     // when & then
-    assertThat(trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION)).isFalse();
+    assertThat(trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION))
+        .isEqualTo(new RefreshOutcome(false, true));
     then(trackingSyncService).should().sync("kr.cvsnet", "TRACK123");
   }
 
   @Test
-  void 폴링_실패는_호출자에게_전파해_건별_격리를_맡긴다() {
-    // given
+  void 폴링이_실패해도_예외_대신_폴링_실패를_돌려준다() {
+    // 웹훅·폴링이 모두 실패한 건이 "폴링 실패" 로만 집계되던 왜곡을 막기 위해 예외 전파 대신 플래그로 돌려준다.
     willThrow(new DeliveryTrackerException("통신 오류"))
         .given(trackingSyncService)
         .sync("kr.cvsnet", "TRACK123");
 
     // when & then
-    assertThatThrownBy(() -> trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION))
-        .isInstanceOf(DeliveryTrackerException.class);
+    assertThat(trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION))
+        .isEqualTo(new RefreshOutcome(true, false));
+  }
+
+  @Test
+  void 웹훅_재등록과_폴링이_모두_실패하면_둘_다_실패로_돌려준다() {
+    // given
+    willThrow(new DeliveryTrackerException("rate limit"))
+        .given(deliveryTrackerClient)
+        .registerWebhook("kr.cvsnet", "TRACK123", EXPIRATION);
+    willThrow(new DeliveryTrackerException("rate limit"))
+        .given(trackingSyncService)
+        .sync("kr.cvsnet", "TRACK123");
+
+    // when & then
+    assertThat(trackingWebhookRefreshService.refresh(PARCEL, EXPIRATION))
+        .isEqualTo(new RefreshOutcome(false, false));
   }
 
   @Test

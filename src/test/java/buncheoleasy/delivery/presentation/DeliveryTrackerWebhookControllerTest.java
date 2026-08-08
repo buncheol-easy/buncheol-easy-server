@@ -90,7 +90,8 @@ class DeliveryTrackerWebhookControllerTest {
             "",
             Duration.ofHours(48),
             Duration.ofSeconds(3),
-            Duration.ofSeconds(5));
+            Duration.ofSeconds(5),
+            Duration.ofMillis(200));
     DeliveryTrackerWebhookController controller =
         new DeliveryTrackerWebhookController(trackingSyncService, tokenless);
 

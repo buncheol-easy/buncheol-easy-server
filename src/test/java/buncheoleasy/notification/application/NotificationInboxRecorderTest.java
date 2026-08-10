@@ -95,6 +95,16 @@ class NotificationInboxRecorderTest {
   }
 
   @Test
+  void 경로_변수가_누락되면_미치환_토큰이_남은_경로_대신_경로_없이_기록한다() {
+    // 발송 측 미치환 가드(AlimtalkSender)와 동일 정책 — 깨진 링크("/products/#{분철ID}/manage")가 저장되지 않아야 한다.
+    Map<String, String> variables = Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5");
+
+    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+
+    assertThat(saved.getLinkPath()).isNull();
+  }
+
+  @Test
   void 수령독촉_알림은_외부_배송조회라_경로가_없다() {
     Map<String, String> variables =
         Map.of(

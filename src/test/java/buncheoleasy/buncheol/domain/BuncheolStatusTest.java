@@ -14,9 +14,12 @@ class BuncheolStatusTest {
   class ActiveTest {
 
     @Test
-    void RECRUITING과_CONFIRMED만_포함한다() {
+    void RECRUITING과_PAYMENT_COLLECTING과_CONFIRMED만_포함한다() {
       assertThat(BuncheolStatus.active())
-          .containsExactlyInAnyOrder(BuncheolStatus.RECRUITING, BuncheolStatus.CONFIRMED);
+          .containsExactlyInAnyOrder(
+              BuncheolStatus.RECRUITING,
+              BuncheolStatus.PAYMENT_COLLECTING,
+              BuncheolStatus.CONFIRMED);
     }
 
     @Test

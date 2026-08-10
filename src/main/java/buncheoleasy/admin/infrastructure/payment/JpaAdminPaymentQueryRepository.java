@@ -33,7 +33,9 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           + "LEFT JOIN Delivery d ON d.participationId = p.id "
           + "LEFT JOIN ShippingAddress sa ON sa.id = p.shippingAddressId "
           + "WHERE (:statusFilter IS NULL OR :statusFilter = "
-          + "  CASE WHEN p.status = :awaitingStatus THEN 'AWAITING_CONFIRMATION' "
+          + "  CASE WHEN p.status = :appliedStatus THEN 'APPLIED' "
+          + "       WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus "
+          + "         THEN 'AWAITING_CONFIRMATION' "
           + "       WHEN p.status = :confirmedStatus THEN 'CONFIRMED' "
           + "       WHEN p.confirmedAt IS NOT NULL THEN 'REFUND_REQUIRED' "
           + "       ELSE 'CANCELLED' END) "
@@ -52,7 +54,9 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
       @Param("keyword") String keyword,
       @Param("cursorCreatedAt") Instant cursorCreatedAt,
       @Param("cursorId") Long cursorId,
+      @Param("appliedStatus") ParticipationStatus appliedStatus,
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("paymentSentStatus") ParticipationStatus paymentSentStatus,
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
       Pageable pageable);
 
@@ -70,15 +74,16 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
    * 집계라 항상 1행이며, 단일 {@code Object[]} 선언 시 Spring Data 가 이중 배열로 감싸므로 {@code List} 로 받는다.
    */
   @Query(
-      "SELECT COALESCE(SUM(CASE WHEN p.status = :awaitingStatus THEN 1 ELSE 0 END), 0), "
+      "SELECT COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus THEN 1 ELSE 0 END), 0), "
           + "COALESCE(SUM(CASE WHEN p.status = :confirmedStatus THEN 1 ELSE 0 END), 0), "
           + "COALESCE(SUM(CASE WHEN p.status = :cancelledStatus AND p.confirmedAt IS NOT NULL THEN 1 ELSE 0 END), 0), "
           + "COALESCE(SUM(CASE WHEN p.status = :cancelledStatus AND p.confirmedAt IS NULL THEN 1 ELSE 0 END), 0), "
           + "COUNT(p), "
-          + "COALESCE(SUM(CASE WHEN p.status = :awaitingStatus THEN p.amount + p.shippingFee ELSE 0 END), 0) "
+          + "COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus THEN p.amount + p.shippingFee ELSE 0 END), 0) "
           + "FROM Participation p")
   List<Object[]> summarize(
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("paymentSentStatus") ParticipationStatus paymentSentStatus,
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
       @Param("cancelledStatus") ParticipationStatus cancelledStatus);
 }

@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 public enum BuncheolMemberSaleStatus {
   // 활성 참여가 없어 누구나 참여할 수 있는 공석.
   AVAILABLE("판매중"),
+  // C2C: 누군가 무입금 신청으로 선점한 상태. 개최자 성사 확정 시 입금 단계로 넘어간다.
+  APPLIED("신청됨"),
   // 누군가 선점해 입금 확인을 기다리는 상태. 입금 기한이 지나면 다시 AVAILABLE 로 풀린다.
   AWAITING_PAYMENT("입금 확인 중"),
   // 입금 확인까지 끝나 판매가 완료된 상태.

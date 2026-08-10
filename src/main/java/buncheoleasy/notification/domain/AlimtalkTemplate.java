@@ -226,7 +226,7 @@ public enum AlimtalkTemplate {
 
       개최자가 입금 내역을 찾지 못해 '보냈어요' 표시를 해제했어요.
       입금 전이라면 아래 계좌로 기한 내에 입금 후 다시 '보냈어요'를 눌러주세요.
-      이미 보내셨다면 입금자명과 금액을 확인해 개최자 또는 분철이지에 문의해 주세요.
+      이미 보내셨다면 입금자명과 금액을 확인해 분철이지에 문의해 주세요.
 
       ▶ 분철명: #{분철명}
       ▶ 참여 멤버: #{멤버명}
@@ -236,7 +236,47 @@ public enum AlimtalkTemplate {
       """,
       List.of(
           AlimtalkButton.channelAdd(),
-          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)));
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  // --- C2C 개최자 대상 (여기까지는 전부 참여자 대상 — 개최자 알림톡은 이 두 건이 처음이다) ---
+
+  /** (개최자) C2C 모집 정원 충족 — 진행 확정을 눌러달라는 독촉. 정원이 미충족→충족으로 전이될 때마다 발송한다. */
+  C2C_BUNCHEOL_FULL(
+      "분철 정원 충족 안내",
+      """
+      #{닉네임}님, 개최하신 분철의 정원이 모두 찼어요!
+
+      분철 관리에서 진행 확정을 눌러주시면
+      참여자들에게 입금 안내가 자동으로 발송돼요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 신청 인원: #{신청인원}명\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("분철 관리 하러가기", BuncheolUrls.BUNCHEOL_MANAGE))),
+
+  /**
+   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인(또는 반려)해 달라는 요청. 마킹(슬롯) 건당 1건 발송하며, 다슬롯
+   * 참여자의 이체 1건과 대조할 수 있도록 입금자명(환불 계좌 예금주와 동일 — docs/46 §4.7-A1)을 함께 안내한다.
+   */
+  C2C_PAYMENT_SENT(
+      "입금 확인 요청 안내",
+      """
+      #{닉네임}님, 참여자가 입금 완료를 알렸어요.
+
+      입금 내역을 확인하신 뒤 분철 관리에서 '입금 확인'을 눌러주세요.
+      입금 내역을 찾을 수 없다면 '보냈어요' 표시를 반려할 수 있어요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}
+      ▶ 참여자: #{참여자닉네임}
+      ▶ 입금자명: #{입금자명}
+      ▶ 입금 금액: #{입금금액}원\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("입금 확인하러 가기", BuncheolUrls.BUNCHEOL_MANAGE)));
 
   // Aligo 알림톡 제목(subject_1, 필수 파라미터)이자 in-app 수신함 알림 제목. 카카오 기본형이라 본문 위 강조 타이틀(emtitle_1)은 쓰지 않는다.
   private final String subject;

@@ -85,6 +85,16 @@ class NotificationInboxRecorderTest {
   }
 
   @Test
+  void 개최자_알림의_경로는_분철ID를_치환한_분철_관리_화면을_가리킨다() {
+    Map<String, String> variables =
+        Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5", "분철ID", "77");
+
+    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/products/77/manage");
+  }
+
+  @Test
   void 수령독촉_알림은_외부_배송조회라_경로가_없다() {
     Map<String, String> variables =
         Map.of(

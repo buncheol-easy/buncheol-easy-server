@@ -17,6 +17,7 @@ import buncheoleasy.buncheol.application.participation.ParticipationDetailQueryS
 import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
@@ -173,7 +174,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 null,
-                new RefundAccountResponse("국민은행", "12345678", "홍길동")));
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -202,7 +203,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -319,7 +320,15 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].payback.refundAccount.account")
                                 .description("계좌번호"),
                             fieldWithPath("[].payback.refundAccount.holder")
-                                .description("예금주"))
+                                .description("예금주"),
+                            fieldWithPath("[].flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("[].paymentSentAt")
+                                .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("[].openChatUrl")
+                                .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
+                                .optional())
                         .build())));
   }
 
@@ -346,7 +355,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -423,7 +432,15 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description("환급 입금받을 계좌 (참여 시 등록한 환불계좌)"),
                             fieldWithPath("payback.refundAccount.bank").description("은행명"),
                             fieldWithPath("payback.refundAccount.account").description("계좌번호"),
-                            fieldWithPath("payback.refundAccount.holder").description("예금주"))
+                            fieldWithPath("payback.refundAccount.holder").description("예금주"),
+                            fieldWithPath("flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("paymentSentAt")
+                                .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("openChatUrl")
+                                .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
+                                .optional())
                         .build())));
   }
 

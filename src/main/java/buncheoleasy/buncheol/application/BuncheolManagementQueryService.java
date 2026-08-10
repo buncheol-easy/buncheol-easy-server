@@ -96,7 +96,9 @@ public class BuncheolManagementQueryService {
         buncheol.getMinHeadcount(),
         buncheolMembers.size(),
         confirmedParticipationIds.size(),
-        participants);
+        participants,
+        buncheol.getFlowType(),
+        buncheol.getPaymentDueAt());
   }
 
   // 멤버 슬롯 id → 그룹 멤버명. 멤버 슬롯 → 그룹 멤버 2단계로 해석한다. (group_members 누락 시 null 허용을 위해 HashMap 사용)
@@ -135,6 +137,7 @@ public class BuncheolManagementQueryService {
         participation.getDueAt(),
         participation.getConfirmedAt(),
         RefundAccountResponse.from(participation.getRefundAccount()),
-        delivery == null ? null : ManagementDeliveryResponse.from(delivery));
+        delivery == null ? null : ManagementDeliveryResponse.from(delivery),
+        participation.getPaymentSentAt());
   }
 }

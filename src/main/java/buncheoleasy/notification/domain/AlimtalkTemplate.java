@@ -159,7 +159,84 @@ public enum AlimtalkTemplate {
       """,
       List.of(
           AlimtalkButton.channelAdd(),
-          AlimtalkButton.webLink("재신청하러 가기", BuncheolUrls.MY_PARTICIPATIONS)));
+          AlimtalkButton.webLink("재신청하러 가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  // --- C2C 플로우 (docs/46 §6 — 문안은 docs/49 등록 신청본과 개행까지 동일해야 한다) ---
+
+  /** C2C 성사 확정·입금 안내. 확정 시 신청자 전원(유저 단위 합산) + 추가 모집 즉시입금 진입자(단건)에게 발송. */
+  C2C_BUNCHEOL_FINALIZED(
+      "분철 성사 안내",
+      """
+      #{닉네임}님, 신청하신 분철이 성사되었어요!
+
+      개최자가 진행을 확정했어요. 아래 계좌로 기한 내에 입금해 주시고,
+      입금 후에는 참여 내역에서 '보냈어요' 버튼을 꼭 눌러주세요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}
+      ▶ 입금 금액: #{입금금액}원
+      ▶ 입금 계좌: #{은행명} #{계좌번호} (예금주: #{예금주})
+      ▶ 입금 기한: #{입금기한}
+
+      기한 내 입금이 확인되지 않으면 참여가 자동 취소될 수 있어요.
+      분철이지는 통신판매중개자이며, 대금은 개최자 계좌로 직접 입금됩니다.\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  /** C2C 입금 기한 만료 자동 취소. 기존 PAYMENT_EXPIRED 는 플랫폼 환불 계좌 전제라 C2C 에 오안내(docs/46 §6.2). */
+  C2C_PAYMENT_EXPIRED(
+      "참여 자동 취소 안내",
+      """
+      #{닉네임}님, 입금 기한이 지나 참여가 자동 취소되었어요.
+
+      아직 입금 전이었다면 따로 하실 일은 없어요.
+      이미 입금하셨는데 '보냈어요'를 누르지 못해 취소되었다면
+      개최자 확인 후 처리를 도와드릴게요. 분철이지로 문의해 주세요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  /** C2C 미성사 취소(개최자 미확정 마감 등 — 무입금 신청 단계라 환불이 없다). */
+  C2C_BUNCHEOL_NOT_FINALIZED(
+      "분철 취소 안내",
+      """
+      #{닉네임}님, 신청하신 분철이 성사되지 않아 취소되었어요.
+
+      입금 전 단계에서 취소되어 돌려받을 금액은 없어요.
+      같은 분철이 다시 열리면 새로 신청하실 수 있어요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  /** C2C 개최자 반려 → 입금 재확인 안내 (연장된 새 기한 포함 — docs/46 §4.5). */
+  C2C_PAYMENT_RECHECK(
+      "입금 재확인 안내",
+      """
+      #{닉네임}님, 입금이 아직 확인되지 않았어요.
+
+      개최자가 입금 내역을 찾지 못해 '보냈어요' 표시를 해제했어요.
+      입금 전이라면 아래 계좌로 기한 내에 입금 후 다시 '보냈어요'를 눌러주세요.
+      이미 보내셨다면 입금자명과 금액을 확인해 개최자 또는 분철이지에 문의해 주세요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}
+      ▶ 입금 금액: #{입금금액}원
+      ▶ 입금 계좌: #{은행명} #{계좌번호} (예금주: #{예금주})
+      ▶ 입금 기한: #{입금기한}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS)));
 
   // Aligo 알림톡 제목(subject_1, 필수 파라미터)이자 in-app 수신함 알림 제목. 카카오 기본형이라 본문 위 강조 타이틀(emtitle_1)은 쓰지 않는다.
   private final String subject;

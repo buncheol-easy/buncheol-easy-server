@@ -4,7 +4,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
 
 /**
- * 운영자 관리 화면의 참여자 1건. 입금확인 대상(AWAITING_PAYMENT)·확정 참여(CONFIRMED)를 모두 노출하며, 환불 계좌와(확정 시) 배송 스냅샷을 포함한다.
+ * 운영자(개최자) 관리 화면의 참여자 1건. 활성 참여 전체를 노출하며, 환불 계좌와(확정 시) 배송 스냅샷을 포함한다. {@code paymentSentAt} 은
+ * C2C "보냈어요" 마킹 시각 — 개최자가 통장 대조 우선순위를 잡는 근거다(환불 계좌 예금주 = 입금자명 대조 키).
  */
 public record BuncheolManagementParticipantResponse(
     Long participationId,
@@ -16,4 +17,5 @@ public record BuncheolManagementParticipantResponse(
     Instant dueAt,
     Instant confirmedAt,
     RefundAccountResponse refundAccount,
-    ManagementDeliveryResponse delivery) {}
+    ManagementDeliveryResponse delivery,
+    Instant paymentSentAt) {}

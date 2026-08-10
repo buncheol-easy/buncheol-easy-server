@@ -17,6 +17,7 @@ import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
@@ -430,7 +431,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 1,
                 List.of(
                     new MyParticipationItemResponse(
-                        601L, 101L, ParticipationStatus.AWAITING_PAYMENT))));
+                        601L, 101L, ParticipationStatus.AWAITING_PAYMENT))), FlowType.LEGACY, null, null);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -592,6 +593,14 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("myParticipation.participations[].status")
                                 .description("참여 상태 (AWAITING_PAYMENT | CONFIRMED)")
+                                .optional(),
+                            fieldWithPath("flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("paymentDueAt")
+                                .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("openChatUrl")
+                                .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
                                 .optional())
                         .build())));
   }
@@ -650,7 +659,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 "유진팬",
                 "010-1234-5678",
                 "1234567890",
-                DeliveryStatus.SHIPPING));
+                DeliveryStatus.SHIPPING), null);
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
@@ -662,7 +671,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             Instant.parse("2026-05-26T00:30:00Z"),
             null,
             new RefundAccountResponse("신한은행", "87654321", "레이팬"),
-            null);
+            null, null);
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
@@ -674,7 +683,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             4,
             4,
             1,
-            List.of(confirmed, awaiting));
+            List.of(confirmed, awaiting), FlowType.LEGACY, null);
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -814,6 +823,15 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("participants[].delivery.status")
                                 .description(
                                     "배송 상태 (SNAPSHOTTED / SHIPPING / DELIVERED / RECEIVED)")
+                                .optional(),
+                            fieldWithPath("participants[].paymentSentAt")
+                                .description(
+                                    "C2C '보냈어요' 마킹 시각 — 개최자 통장 대조 우선순위 근거. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("paymentDueAt")
+                                .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
                                 .optional())
                         .build())));
   }

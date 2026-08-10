@@ -52,11 +52,17 @@ public class ParticipationDetailQueryService {
             .map(GroupMember::getName)
             .orElse(null);
 
-    // 입금확인중일 때만 개최자 계좌를 노출한다 (입금 완료/취소 후에는 노출하지 않는다).
-    HostAccountResponse hostAccount =
+    // 입금 대기(입금확인중·보냈어요)일 때만 개최자 계좌를 노출한다 (입금 완료/취소 후에는 노출하지 않는다).
+    // C2C 는 확정 시점 스냅샷 계좌를 쓴다 — 확정 후 개최자가 프로필 계좌를 바꿔도 안내가 어긋나지 않는다 (docs/46 §4.7-B1).
+    boolean paymentPending =
         participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
+            || participation.getStatus() == ParticipationStatus.PAYMENT_SENT;
+    HostAccountResponse hostAccount =
+        paymentPending
             ? HostAccountResponse.from(
-                userDomainService.getUser(buncheol.getHostId()).getBankAccount())
+                buncheol.isC2c()
+                    ? buncheol.getPaymentAccount()
+                    : userDomainService.getUser(buncheol.getHostId()).getBankAccount())
             : null;
 
     Delivery delivery = deliveryRepository.findByParticipationId(participationId).orElse(null);
@@ -77,6 +83,9 @@ public class ParticipationDetailQueryService {
         participation.getDueAt(),
         participation.getConfirmedAt(),
         hostAccount,
-        payback);
+        payback,
+        buncheol.getFlowType(),
+        participation.getPaymentSentAt(),
+        buncheol.getOpenChatUrl());
   }
 }

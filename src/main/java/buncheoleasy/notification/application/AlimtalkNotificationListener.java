@@ -1,15 +1,25 @@
 package buncheoleasy.notification.application;
 
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
+import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
+import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
+import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
+import buncheoleasy.user.domain.BankAccount;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,19 +61,25 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.PAYMENT_CONFIRMED, view.participant().getPhoneNumber().value(), variables);
   }
 
-  /** (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함. 입금했다면 환불 대상이다. */
+  /**
+   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함. LEGACY 는 플랫폼 환불 안내, C2C 는 돈이 개최자 계좌로 가는 직거래라 문의
+   * 유도 문안으로 갈린다 (docs/46 §6.2).
+   */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentExpired(final PaymentExpiredEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    AlimtalkTemplate template =
+        view.buncheol().isC2c()
+            ? AlimtalkTemplate.C2C_PAYMENT_EXPIRED
+            : AlimtalkTemplate.PAYMENT_EXPIRED;
     Map<String, String> variables =
         Map.of(
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName());
-    recordSafely(view.participant().getId(), AlimtalkTemplate.PAYMENT_EXPIRED, variables);
-    sender.send(
-        AlimtalkTemplate.PAYMENT_EXPIRED, view.participant().getPhoneNumber().value(), variables);
+    recordSafely(view.participant().getId(), template, variables);
+    sender.send(template, view.participant().getPhoneNumber().value(), variables);
   }
 
   /** (참여자) 참여한 분철의 진행이 확정됨(최소 인원 충족). */
@@ -83,22 +99,124 @@ public class AlimtalkNotificationListener {
         variables);
   }
 
-  /** (참여자) 참여한 분철이 취소됨(개최자 취소 또는 최소 인원 미달). 입금했다면 환불 대상이다. */
+  /**
+   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). C2C 무입금 단계(입금확인·보냈어요 이력 없음)는 환불이 없다는 미성사 문안으로,
+   * 입금 이력이 있으면 기존 환불 안내 문안으로 보낸다 — C2C 의 환불 주체는 개최자다(직거래).
+   */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolCancelled(final BuncheolCancelledEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    boolean c2cNoPayment =
+        view.buncheol().isC2c()
+            && view.participation().getConfirmedAt() == null
+            && view.participation().getPaymentSentAt() == null;
+    AlimtalkTemplate template =
+        c2cNoPayment ? AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED : AlimtalkTemplate.BUNCHEOL_CANCELLED;
+    Map<String, String> variables =
+        c2cNoPayment
+            ? Map.of(
+                "닉네임", view.participant().getNickname().value(),
+                "분철명", view.buncheol().getTitle(),
+                "멤버명", view.memberName())
+            : Map.of(
+                "닉네임", view.participant().getNickname().value(),
+                "분철명", view.buncheol().getTitle(),
+                "멤버명", view.memberName(),
+                "취소사유", event.reason().getDescription());
+    recordSafely(view.participant().getId(), template, variables);
+    sender.send(template, view.participant().getPhoneNumber().value(), variables);
+  }
+
+  /** (참여자) C2C 분철 성사 확정 — 입금 안내를 유저 단위로 합산해 1건씩 발송한다 (docs/46 §4.7-A3). */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBuncheolCollectingStarted(final BuncheolCollectingStartedEvent event) {
+    List<ParticipationView> views = assembler.loadAwaitingViewsByBuncheol(event.buncheolId());
+    Map<Long, List<ParticipationView>> byParticipant =
+        views.stream()
+            .collect(
+                Collectors.groupingBy(
+                    view -> view.participant().getId(), LinkedHashMap::new, Collectors.toList()));
+    byParticipant.values().forEach(this::sendFinalizedNotice);
+  }
+
+  /** (참여자) C2C 추가 모집 즉시입금 진입 — 이미 성사된 분철의 빈 슬롯 참여라 입금 안내를 바로 보낸다 (docs/46 §4.7-E1). */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onParticipationCreated(final ParticipationCreatedEvent event) {
+    // LEGACY 신규 참여는 알림톡 없음(현행 유지 — 계좌는 응답으로 안내, 운영 관제는 슬랙). C2C 무입금 신청(APPLIED)도 발송 없음.
+    if (event.flowType() != FlowType.C2C) {
+      return;
+    }
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    if (view.participation().getStatus() != ParticipationStatus.AWAITING_PAYMENT) {
+      return;
+    }
+    sendC2cPaymentGuide(
+        view,
+        AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
+        view.memberName(),
+        view.paymentAmount(),
+        view.participation().getDueAt());
+  }
+
+  /** (참여자) C2C 개최자가 "보냈어요" 를 반려함 — 연장된 새 기한을 담아 입금 재확인을 안내한다 (docs/46 §4.5). */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onPaymentRecheckRequested(final PaymentRecheckRequestedEvent event) {
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    sendC2cPaymentGuide(
+        view,
+        AlimtalkTemplate.C2C_PAYMENT_RECHECK,
+        view.memberName(),
+        view.paymentAmount(),
+        view.participation().getDueAt());
+  }
+
+  // 다슬롯 참여자에게는 멤버명 "호시 외 1"·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).
+  private void sendFinalizedNotice(final List<ParticipationView> group) {
+    ParticipationView first = group.get(0);
+    long totalAmount = group.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    String memberName =
+        group.size() == 1
+            ? first.memberName()
+            : first.memberName() + " 외 " + (group.size() - 1);
+    sendC2cPaymentGuide(
+        first,
+        AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
+        memberName,
+        totalAmount,
+        first.buncheol().getPaymentDueAt());
+  }
+
+  // C2C 입금 안내 계열(성사 확정·추가 모집·재확인) 공용 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
+  private void sendC2cPaymentGuide(
+      final ParticipationView view,
+      final AlimtalkTemplate template,
+      final String memberName,
+      final long amount,
+      final Instant dueAt) {
+    BankAccount account = view.buncheol().getPaymentAccount();
+    if (account == null || dueAt == null) {
+      log.error(
+          "C2C 계좌·기한 스냅샷이 없어 입금 안내를 건너뜀 - buncheolId={}, participationId={}",
+          view.buncheol().getId(),
+          view.participation().getId());
+      return;
+    }
     Map<String, String> variables =
         Map.of(
             "닉네임", view.participant().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
-            "멤버명", view.memberName(),
-            "취소사유", event.reason().getDescription());
-    recordSafely(view.participant().getId(), AlimtalkTemplate.BUNCHEOL_CANCELLED, variables);
-    sender.send(
-        AlimtalkTemplate.BUNCHEOL_CANCELLED,
-        view.participant().getPhoneNumber().value(),
-        variables);
+            "멤버명", memberName,
+            "입금금액", AlimtalkFormats.amount(amount),
+            "은행명", account.bank(),
+            "계좌번호", account.account(),
+            "예금주", account.holder(),
+            "입금기한", AlimtalkFormats.dueAt(dueAt));
+    recordSafely(view.participant().getId(), template, variables);
+    sender.send(template, view.participant().getPhoneNumber().value(), variables);
   }
 
   /** (참여자) 내가 참여한 건의 운송장이 등록됨. 택배사(CU/GS25)에 따라 템플릿이 갈린다. */

@@ -113,7 +113,10 @@ public class BuncheolDetailQueryService {
         shippingOptions,
         memberResponses,
         hostedByMe,
-        myParticipation);
+        myParticipation,
+        buncheol.getFlowType(),
+        buncheol.getPaymentDueAt(),
+        buncheol.getOpenChatUrl());
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(

@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
@@ -71,7 +72,7 @@ class SecurityConfigTest {
                   List.of(),
                   List.of(),
                   false,
-                  null));
+                  null, FlowType.LEGACY, null, null));
 
       mockMvc.perform(get("/v1/buncheols/{id}", 10L)).andExpect(status().isOk());
     }

@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -59,7 +60,9 @@ public class BuncheolService {
     List<Long> memberIds = extractDistinctMemberIds(request.buncheolMembers());
     groupDomainService.getGroupMembersByIdsInGroup(request.groupId(), memberIds);
 
-    Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, request.toParams());
+    // C2C 개최 오픈 전까지 개최 API 는 운영진(can_host) 전용이라 LEGACY 고정.
+    // 오픈 시 자격 게이트(성인·연락처)와 함께 플로우 결정 로직으로 교체한다 (docs/46 §3-8·§7.1-8).
+    Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, request.toParams(FlowType.LEGACY));
 
     List<BuncheolMemberParams> memberParams =
         request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();

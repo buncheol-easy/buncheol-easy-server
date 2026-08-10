@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
@@ -536,7 +537,7 @@ class JpaDeliveryRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null, FlowType.LEGACY, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();

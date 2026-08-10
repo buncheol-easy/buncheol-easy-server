@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
@@ -51,7 +52,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 3000, null, FlowType.LEGACY, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -181,7 +182,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
                   Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS),
                   1,
                   3000,
-                  null),
+                  null, FlowType.LEGACY, null),
               Instant.now());
       buncheolRepository.save(another);
       em.flush();
@@ -373,7 +374,7 @@ class JpaBuncheolImageRepositoryAdapterTest {
                 Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS),
                 1,
                 3000,
-                null),
+                null, FlowType.LEGACY, null),
             Instant.now());
     buncheolRepository.save(another);
     em.flush();

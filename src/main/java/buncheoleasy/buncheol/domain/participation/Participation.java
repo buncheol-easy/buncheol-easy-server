@@ -81,8 +81,10 @@ public class Participation extends TimestampedEntity {
   // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 참여와 동시에 입력받는다.
   @Embedded private RefundAccount refundAccount;
 
-  // 입금 만료 시각 = min(점유 시각 + 30분, 분철 deadline). 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
-  @Column(name = "due_at", nullable = false, updatable = false)
+  // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
+  // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변.
+  // C2C = 성사 확정 시 일괄 산정(APPLIED 단계는 NULL), 개최자 반려 시 연장될 수 있어 CAS 로 갱신된다 (docs/46 §4.5).
+  @Column(name = "due_at")
   private Instant dueAt;
 
   // 개최자가 입금을 수동 확인한 시각. CONFIRMED 진입 시 세팅.
@@ -100,6 +102,10 @@ public class Participation extends TimestampedEntity {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
+
+  // C2C: 참여자가 "보냈어요" 를 누른 시각. 반려(마킹 해제)·철회 후에도 보존하는 분쟁 증거 타임스탬프 (docs/46 §1.1).
+  @Column(name = "payment_sent_at")
+  private Instant paymentSentAt;
 
   // --- 오픈 이벤트 배송비 환급(배송비 돌려받기) ---
   // 저장 값은 NONE/REQUESTED/COMPLETED/REJECTED 뿐이다. 신청 가능(ELIGIBLE)·만료(EXPIRED)는 이벤트
@@ -146,6 +152,30 @@ public class Participation extends TimestampedEntity {
         dueAt);
   }
 
+  /**
+   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 개최자 성사 확정 시 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다. 환불
+   * 계좌(입금자명)는 신청 시점에 스냅샷한다 — 개최자 통장 대조 키 + 입금 후 취소 시 환불 계좌.
+   */
+  public static Participation createApplied(
+      final Long buncheolId,
+      final Long buncheolMemberId,
+      final Long participantId,
+      final Long shippingAddressId,
+      final long amount,
+      final long shippingFee,
+      final RefundAccount refundAccount) {
+    return new Participation(
+        buncheolId,
+        buncheolMemberId,
+        participantId,
+        shippingAddressId,
+        amount,
+        shippingFee,
+        refundAccount,
+        null,
+        ParticipationStatus.APPLIED);
+  }
+
   private Participation(
       final Long buncheolId,
       final Long buncheolMemberId,
@@ -155,7 +185,29 @@ public class Participation extends TimestampedEntity {
       final long shippingFee,
       final RefundAccount refundAccount,
       final Instant dueAt) {
-    validate(refundAccount, dueAt);
+    this(
+        buncheolId,
+        buncheolMemberId,
+        participantId,
+        shippingAddressId,
+        amount,
+        shippingFee,
+        refundAccount,
+        requireDueAt(dueAt),
+        ParticipationStatus.AWAITING_PAYMENT);
+  }
+
+  private Participation(
+      final Long buncheolId,
+      final Long buncheolMemberId,
+      final Long participantId,
+      final Long shippingAddressId,
+      final long amount,
+      final long shippingFee,
+      final RefundAccount refundAccount,
+      final Instant dueAt,
+      final ParticipationStatus status) {
+    validate(refundAccount);
     this.buncheolId = buncheolId;
     this.buncheolMemberId = buncheolMemberId;
     this.participantId = participantId;
@@ -164,7 +216,7 @@ public class Participation extends TimestampedEntity {
     this.shippingFee = shippingFee;
     this.refundAccount = refundAccount;
     this.dueAt = dueAt;
-    this.status = ParticipationStatus.AWAITING_PAYMENT;
+    this.status = status;
   }
 
   /** 실제 입금 총액 = 멤버 금액 + 배송비. */
@@ -197,9 +249,17 @@ public class Participation extends TimestampedEntity {
     }
   }
 
-  private void validate(final RefundAccount refundAccount, final Instant dueAt) {
-    if (refundAccount == null || dueAt == null) {
+  private void validate(final RefundAccount refundAccount) {
+    if (refundAccount == null) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
+  }
+
+  // 즉시 입금 경로(LEGACY·C2C 추가 모집)는 입금 기한이 필수다. APPLIED 신청만 기한 없이 생성된다.
+  private static Instant requireDueAt(final Instant dueAt) {
+    if (dueAt == null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+    }
+    return dueAt;
   }
 }

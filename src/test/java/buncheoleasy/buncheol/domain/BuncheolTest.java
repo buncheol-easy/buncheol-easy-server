@@ -26,7 +26,7 @@ class BuncheolTest {
 
   private BuncheolParams validParams() {
     return new BuncheolParams(
-        1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+        1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
   }
 
   @Nested
@@ -69,7 +69,7 @@ class BuncheolTest {
     void groupId가_null이면_예외가_발생한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(null, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(null, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -89,7 +89,7 @@ class BuncheolTest {
     void 제목이_null이거나_빈_값이면_예외가_발생한다(String title) {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, title, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, title, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -104,7 +104,7 @@ class BuncheolTest {
       String longTitle = "가".repeat(201);
       BuncheolParams params =
           new BuncheolParams(
-              1L, longTitle, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+              1L, longTitle, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -122,7 +122,7 @@ class BuncheolTest {
     void 설명이_null이어도_생성에_성공한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -135,7 +135,7 @@ class BuncheolTest {
       String longDescription = "가".repeat(701);
       BuncheolParams params =
           new BuncheolParams(
-              1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+              1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -153,7 +153,7 @@ class BuncheolTest {
     void 마감일이_null이면_예외가_발생한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", null, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", null, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -167,7 +167,7 @@ class BuncheolTest {
       // given
       Instant pastDeadline = Instant.now().minus(1, ChronoUnit.DAYS);
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -180,7 +180,7 @@ class BuncheolTest {
     void 마감일이_현재보다_미래이고_정각이면_유효하다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -193,7 +193,7 @@ class BuncheolTest {
       Instant notOnTheHour =
           Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS).plusSeconds(1);
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", notOnTheHour, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", notOnTheHour, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -212,7 +212,7 @@ class BuncheolTest {
     void 최소_인원이_1_미만이면_예외가_발생한다(int minHeadcount) {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, minHeadcount, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, minHeadcount, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -225,7 +225,7 @@ class BuncheolTest {
     void 최소_인원이_1_이상이면_유효하다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 1, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 1, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))

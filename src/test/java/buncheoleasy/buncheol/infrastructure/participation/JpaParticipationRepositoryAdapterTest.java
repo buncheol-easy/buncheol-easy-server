@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
@@ -80,7 +81,7 @@ class JpaParticipationRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, minHeadcount, 3000, null),
+            new BuncheolParams(groupId, "제목", null, "스토어명", deadline, minHeadcount, 3000, null, FlowType.LEGACY, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -418,13 +419,14 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("uq_participations_active_participant — 분철당 활성 참여 1건 DB 가드")
+  @DisplayName("분철당 참여자 유니크 제거 — C2C 다슬롯 허용 (docs/46 §7.1-11)")
   class ActiveParticipantUniqueGuardTest {
 
     @Test
-    void 같은_분철에_같은_참여자의_활성_참여를_중복_삽입하면_유니크_제약에_걸린다() {
-      // 서비스 사전 체크의 check-then-insert 갭(동시 이중 요청)을 DB 유니크가 최종 차단하는지 검증한다.
-      // 다른 멤버 슬롯이라도 같은 (분철, 참여자) 활성 참여면 막힌다.
+    void 같은_분철의_다른_멤버_슬롯에_같은_참여자가_중복_참여할_수_있다() {
+      // uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됐다. 같은 (분철, 참여자)의
+      // 활성 참여가 2건 공존할 수 있고, LEGACY 의 1인 1슬롯은 앱 가드(BCH-075)가 담당한다.
+      // 같은 슬롯의 중복 점유는 여전히 uq_participations_active_member 가 차단한다.
       Long buncheolId = createBuncheol();
       Long slotA = createBuncheolMember(buncheolId);
       Long otherMember = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "중복가드멤버");
@@ -439,18 +441,20 @@ class JpaParticipationRepositoryAdapterTest {
           ParticipationStatus.AWAITING_PAYMENT,
           null);
 
-      assertThatThrownBy(
-              () ->
-                  insertParticipation(
-                      buncheolId,
-                      slotB,
-                      participantId,
-                      insertShippingAddress(participantId, "유니크가드_2"),
-                      30_000L,
-                      Instant.now().plus(30, ChronoUnit.MINUTES),
-                      ParticipationStatus.AWAITING_PAYMENT,
-                      null))
-          .isInstanceOf(DuplicateKeyException.class);
+      insertParticipation(
+          buncheolId,
+          slotB,
+          participantId,
+          insertShippingAddress(participantId, "유니크가드_2"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThat(
+              participationRepository.existsActiveByBuncheolIdAndParticipantId(
+                  buncheolId, participantId))
+          .isTrue();
     }
 
     @Test

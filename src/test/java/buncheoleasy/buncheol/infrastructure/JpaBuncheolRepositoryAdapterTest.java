@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
@@ -47,7 +48,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
   private BuncheolParams validParams() {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null);
+    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null, FlowType.LEGACY, null);
   }
 
   private Buncheol persistAndDetach(Buncheol buncheol) {
@@ -120,7 +121,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null, FlowType.LEGACY, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -132,7 +133,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000, FlowType.LEGACY, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -427,7 +428,7 @@ class JpaBuncheolRepositoryAdapterTest {
     private BuncheolParams paramsWithTitleAndDescription(
         Long gId, String title, String description) {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null);
+      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null, FlowType.LEGACY, null);
     }
 
     private void linkMember(Long buncheolId, Long memberId) {

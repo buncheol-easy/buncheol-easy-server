@@ -22,17 +22,36 @@ public class UserDomainService {
   private final Clock clock;
 
   /**
-   * 소셜 로그인 회원 조회/생성. name·phoneNumber 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지 않는다 —
-   * 마이페이지에서 수정한 값을 보호한다.
+   * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
+   * 않는다 — 마이페이지에서 수정한 값을 보호한다. 단 연령대는 예외: 마이페이지 수정 대상이 아니고 시간이 지나면 구간이 바뀌므로 재로그인 때마다 카카오 최신값으로
+   * 갱신한다(기존 가입자의 추가 동의 수집 경로 — docs/50).
    */
+  @Transactional
   public User getOrCreateBySocialLogin(
       final SocialInfo socialInfo,
       final String email,
       final String name,
-      final String phoneNumber) {
+      final String phoneNumber,
+      final String ageRange,
+      final boolean ageRangeWithdrawn) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber));
+        .map(user -> refreshAgeRange(user, ageRange, ageRangeWithdrawn))
+        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
+  }
+
+  /**
+   * 재로그인 시 연령대를 카카오 최신 상태로 맞춘다 — 철회 확정 신호가 오면 지체 없이 파기(PIPA), 새 값이 오면 갱신, 신호가 없으면(미동의였던 그대로·조회
+   * 실패) 기존 값을 유지한다.
+   */
+  private User refreshAgeRange(
+      final User user, final String ageRange, final boolean ageRangeWithdrawn) {
+    if (ageRangeWithdrawn) {
+      user.clearAgeRange();
+    } else if (ageRange != null) {
+      user.updateAgeRange(ageRange);
+    }
+    return user;
   }
 
   public boolean isValidUser(final Long id) {
@@ -133,7 +152,8 @@ public class UserDomainService {
       final SocialInfo socialInfo,
       final String email,
       final String name,
-      final String phoneNumber) {
+      final String phoneNumber,
+      final String ageRange) {
     User newUser =
         User.create(
             socialInfo.provider().name(),
@@ -146,6 +166,9 @@ public class UserDomainService {
     // 동의창에서 전화번호까지 받은 경우 profileCompleted 로 전이되어 추가정보 화면 없이 가입이 완결된다.
     if (phoneNumber != null) {
       newUser.updatePhoneNumber(phoneNumber);
+    }
+    if (ageRange != null) {
+      newUser.updateAgeRange(ageRange);
     }
     return userRepository.save(newUser);
   }

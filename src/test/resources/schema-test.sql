@@ -32,6 +32,7 @@ CREATE TABLE users
     profile_completed   BOOLEAN      NOT NULL DEFAULT FALSE,
     can_host            BOOLEAN      NOT NULL DEFAULT FALSE,
     marketing_agreed_at TIMESTAMP    NULL,
+    age_range           VARCHAR(10)  NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP    NULL,

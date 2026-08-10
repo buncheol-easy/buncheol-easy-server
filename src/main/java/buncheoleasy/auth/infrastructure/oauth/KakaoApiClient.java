@@ -16,7 +16,7 @@ import org.springframework.web.client.RestClient;
  * 카카오 REST API 클라이언트. OIDC ID 토큰에는 이름·전화번호 클레임이 없으므로 로그인 성공 직후 사용자 access token 으로 보강 조회한다.
  *
  * <ul>
- *   <li>{@code /v2/user/me}: kakao_account 의 name·phone_number (검수 승인된 동의항목만 내려옴)
+ *   <li>{@code /v2/user/me}: kakao_account 의 name·phone_number·age_range (검수/권한 승인된 동의항목만 내려옴)
  *   <li>{@code /v2/user/service_terms}: 간편가입 동의창에서 받은 약관 동의 내역
  * </ul>
  */
@@ -38,7 +38,7 @@ public class KakaoApiClient {
         RestClient.builder().baseUrl(apiBaseUrl).requestFactory(requestFactory).build();
   }
 
-  /** 이름·전화번호 보강 조회. 전화번호는 서비스 표준 형식(01x…)으로 정규화해 반환한다. */
+  /** 이름·전화번호·연령대 보강 조회. 전화번호는 서비스 표준 형식(01x…)으로 정규화해 반환한다. */
   public KakaoUserInfo getUserInfo(final String accessToken) {
     KakaoUserMeResponse response =
         restClient
@@ -49,11 +49,13 @@ public class KakaoApiClient {
             .body(KakaoUserMeResponse.class);
 
     if (response == null || response.kakaoAccount() == null) {
-      return new KakaoUserInfo(null, null);
+      return new KakaoUserInfo(null, null, null, null);
     }
     return new KakaoUserInfo(
         response.kakaoAccount().name(),
-        KakaoPhoneNumberNormalizer.normalize(response.kakaoAccount().phoneNumber()));
+        KakaoPhoneNumberNormalizer.normalize(response.kakaoAccount().phoneNumber()),
+        response.kakaoAccount().ageRange(),
+        response.kakaoAccount().ageRangeNeedsAgreement());
   }
 
   /** 간편가입 약관 동의 내역 조회. */
@@ -80,13 +82,22 @@ public class KakaoApiClient {
         .toList();
   }
 
-  public record KakaoUserInfo(String name, String phoneNumber) {}
+  /**
+   * ageRangeNeedsAgreement: 카카오가 내려주는 "연령대 동의 필요" 신호. true = 미동의/철회 확정(저장값 파기 대상),
+   * false = 동의 상태, null = 신호 없음(권한 미설정·조회 실패 — 기존 값 유지).
+   */
+  public record KakaoUserInfo(
+      String name, String phoneNumber, String ageRange, Boolean ageRangeNeedsAgreement) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   record KakaoUserMeResponse(@JsonProperty("kakao_account") KakaoAccount kakaoAccount) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record KakaoAccount(String name, @JsonProperty("phone_number") String phoneNumber) {}
+    record KakaoAccount(
+        String name,
+        @JsonProperty("phone_number") String phoneNumber,
+        @JsonProperty("age_range") String ageRange,
+        @JsonProperty("age_range_needs_agreement") Boolean ageRangeNeedsAgreement) {}
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS users
     -- NULL = 미동의/철회. 광고성 정보는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장.
     -- 기존 배포 DB 에는 수동 ALTER 필요.
     marketing_agreed_at DATETIME     NULL COMMENT '마케팅 정보 수신 동의 일시',
+    -- 카카오 연령대(선택 동의). 개최자 성인 확인 참조용 — 재로그인 시 최신값 갱신, NULL = 미동의/미수집.
+    -- 기존 배포 DB 에는 수동 ALTER 필요 (docs/50).
+    age_range           VARCHAR(10)  NULL COMMENT '카카오 연령대 (예: 20~29)',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          DATETIME     NULL COMMENT '회원탈퇴 soft delete',

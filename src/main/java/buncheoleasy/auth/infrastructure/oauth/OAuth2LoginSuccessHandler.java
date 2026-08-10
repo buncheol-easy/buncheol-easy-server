@@ -74,6 +74,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 profile.email(),
                 profile.name(),
                 profile.phoneNumber(),
+                profile.ageRange(),
                 serviceTerms));
     log.debug(
         "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
@@ -102,15 +103,15 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     }
   }
 
-  /** 이름·전화번호가 클레임에 없으면 카카오 API 로 보강한다. 실패는 로깅만 하고 가입을 막지 않는다. */
+  /** 이름·전화번호·연령대가 클레임에 없으면 카카오 API 로 보강한다. 실패는 로깅만 하고 가입을 막지 않는다. */
   private OAuth2UserProfile enrichFromKakaoApi(
       final OAuth2UserProfile profile, final String kakaoAccessToken) {
-    if (profile.name() != null && profile.phoneNumber() != null) {
+    if (profile.name() != null && profile.phoneNumber() != null && profile.ageRange() != null) {
       return profile;
     }
     try {
       KakaoApiClient.KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
-      return profile.withUserInfo(userInfo.name(), userInfo.phoneNumber());
+      return profile.withUserInfo(userInfo.name(), userInfo.phoneNumber(), userInfo.ageRange());
     } catch (RuntimeException exception) {
       log.warn("카카오 사용자 정보 보강 조회 실패: {}", exception.getMessage());
       return profile;

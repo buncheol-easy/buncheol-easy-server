@@ -22,17 +22,25 @@ public class UserDomainService {
   private final Clock clock;
 
   /**
-   * 소셜 로그인 회원 조회/생성. name·phoneNumber 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지 않는다 —
-   * 마이페이지에서 수정한 값을 보호한다.
+   * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
+   * 않는다 — 마이페이지에서 수정한 값을 보호한다. 단 연령대는 예외: 마이페이지 수정 대상이 아니고 시간이 지나면 구간이 바뀌므로 재로그인 때마다 카카오 최신값으로
+   * 갱신한다(기존 가입자의 추가 동의 수집 경로 — docs/50).
    */
+  @Transactional
   public User getOrCreateBySocialLogin(
       final SocialInfo socialInfo,
       final String email,
       final String name,
-      final String phoneNumber) {
+      final String phoneNumber,
+      final String ageRange) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber));
+        .map(
+            user -> {
+              user.updateAgeRange(ageRange);
+              return user;
+            })
+        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
   }
 
   public boolean isValidUser(final Long id) {
@@ -133,7 +141,8 @@ public class UserDomainService {
       final SocialInfo socialInfo,
       final String email,
       final String name,
-      final String phoneNumber) {
+      final String phoneNumber,
+      final String ageRange) {
     User newUser =
         User.create(
             socialInfo.provider().name(),
@@ -147,6 +156,7 @@ public class UserDomainService {
     if (phoneNumber != null) {
       newUser.updatePhoneNumber(phoneNumber);
     }
+    newUser.updateAgeRange(ageRange);
     return userRepository.save(newUser);
   }
 }

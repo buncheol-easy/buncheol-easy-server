@@ -141,6 +141,17 @@ public enum ErrorCode {
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),
 
+  // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
+  BUNCHEOL_FLOW_NOT_SUPPORTED(
+      "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CANCEL_NOT_ALLOWED(
+      "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
+  PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED(
+      "BCH-087", "현재 상태에서는 '보냈어요' 처리를 할 수 없습니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_OPEN_CHAT_URL_INVALID(
+      "BCH-088", "카카오 오픈채팅 링크 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

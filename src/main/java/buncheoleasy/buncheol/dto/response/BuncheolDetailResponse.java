@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import java.time.Instant;
 import java.util.List;
 
@@ -27,4 +28,7 @@ public record BuncheolDetailResponse(
     List<ShippingOptionResponse> shippingOptions,
     List<BuncheolMemberDetailResponse> members,
     boolean hostedByMe,
-    MyParticipationSummaryResponse myParticipation) {}
+    MyParticipationSummaryResponse myParticipation,
+    FlowType flowType,
+    Instant paymentDueAt,
+    String openChatUrl) {}

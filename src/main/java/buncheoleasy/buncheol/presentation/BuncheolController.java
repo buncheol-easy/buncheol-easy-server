@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
@@ -103,6 +104,28 @@ public class BuncheolController {
       @RequestPart(value = "images") final List<MultipartFile> images) {
     buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
     return ResponseEntity.status(HttpStatus.CREATED).build();
+  }
+
+  /**
+   * C2C 개최자 성사 확정 API (docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금 대기로 전이하고, 입금 안내가 발송된다. 정원
+   * 미달 재량 확정·마감 전 조기 확정 허용.
+   */
+  @PostMapping("/{id}/confirm")
+  public ResponseEntity<BuncheolConfirmResponse> confirmRecruitment(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
+    return ResponseEntity.ok(
+        BuncheolConfirmResponse.from(buncheolService.confirmRecruitment(hostId, id)));
+  }
+
+  /**
+   * C2C 입금 수집 종료(부분 확정) API (docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행을 확정한다.
+   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 확인/반려로 먼저 정리).
+   */
+  @PostMapping("/{id}/finalize-collected")
+  public ResponseEntity<Void> finalizeCollected(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
+    buncheolService.finalizeCollected(hostId, id);
+    return ResponseEntity.noContent().build();
   }
 
   @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

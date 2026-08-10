@@ -37,7 +37,9 @@ public class JpaAdminPaymentQueryRepositoryAdapter implements AdminPaymentQueryR
             escapedKeyword,
             cursor.createdAt(),
             cursor.id(),
+            ParticipationStatus.APPLIED,
             ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT,
             ParticipationStatus.CONFIRMED,
             PageRequest.of(0, limit))
         .stream()
@@ -60,6 +62,7 @@ public class JpaAdminPaymentQueryRepositoryAdapter implements AdminPaymentQueryR
         jpaAdminPaymentQueryRepository
             .summarize(
                 ParticipationStatus.AWAITING_PAYMENT,
+                ParticipationStatus.PAYMENT_SENT,
                 ParticipationStatus.CONFIRMED,
                 ParticipationStatus.CANCELLED)
             .getFirst();

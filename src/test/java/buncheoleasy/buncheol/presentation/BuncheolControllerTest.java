@@ -24,6 +24,7 @@ import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
@@ -763,7 +764,7 @@ class BuncheolControllerTest {
                   1,
                   List.of(
                       new MyParticipationItemResponse(
-                          601L, 101L, ParticipationStatus.AWAITING_PAYMENT))));
+                          601L, 101L, ParticipationStatus.AWAITING_PAYMENT))), FlowType.LEGACY, null, null);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -809,7 +810,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null);
+              null, FlowType.LEGACY, null, null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -839,7 +840,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null);
+              null, FlowType.LEGACY, null, null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -885,7 +886,7 @@ class BuncheolControllerTest {
                   "유진팬",
                   "010-1234-5678",
                   "1234567890",
-                  DeliveryStatus.SHIPPING));
+                  DeliveryStatus.SHIPPING), null);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
@@ -897,7 +898,7 @@ class BuncheolControllerTest {
               Instant.parse("2026-05-26T00:30:00Z"),
               null,
               new RefundAccountResponse("신한은행", "87654321", "레이팬"),
-              null);
+              null, null);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,
@@ -909,7 +910,7 @@ class BuncheolControllerTest {
               4,
               4,
               1,
-              List.of(confirmed, awaiting));
+              List.of(confirmed, awaiting), FlowType.LEGACY, null);
       given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
       mockMvc

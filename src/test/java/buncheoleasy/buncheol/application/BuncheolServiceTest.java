@@ -110,6 +110,7 @@ class BuncheolServiceTest {
         3,
         3000,
         null,
+        null,
         thumbnailIndex,
         members);
   }

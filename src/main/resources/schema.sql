@@ -166,10 +166,17 @@ CREATE TABLE IF NOT EXISTS buncheols
     min_headcount     INT          NOT NULL COMMENT '분철 진행 최소 인원',
     gs25_shipping_fee INT          NULL COMMENT 'GS25반값택배 배송비',
     cu_shipping_fee   INT          NULL COMMENT 'CU반값택배 배송비',
-    status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | CONFIRMED | CANCELLED(인원미달 자동취소) | HOST_CANCELLED(개최자 취소, 목록·상세 비노출)',
-    finalized_at      DATETIME     NULL COMMENT '마감 판정(진행확정/취소) 시각',
+    status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | PAYMENT_COLLECTING(C2C 입금 수집중) | CONFIRMED | CANCELLED(인원미달/미성사 자동취소) | HOST_CANCELLED(개최자 취소, 목록·상세 비노출)',
+    finalized_at      DATETIME     NULL COMMENT '마감 판정(진행확정/취소) 시각. C2C 는 개최자 성사 확정 시각',
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- C2C 플로우 병존(그랜드파더링) 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
+    flow_type         VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY(즉시 입금+페이액션) | C2C(신청→확정→입금 직거래)',
+    payment_due_at    DATETIME     NULL COMMENT 'C2C: 개최자 성사 확정 시 산정한 일괄 입금 기한',
+    open_chat_url     VARCHAR(200) NULL COMMENT 'C2C: 개최자 오픈채팅 링크(선택) — 참여자 소통 채널',
+    payment_bank      VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 은행 (확정 후 프로필 변경과 무관하게 안내 계좌 고정)',
+    payment_account   VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 계좌번호',
+    payment_holder    VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 예금주',
 
     PRIMARY KEY (id),
 
@@ -253,11 +260,11 @@ CREATE TABLE IF NOT EXISTS participations
     refund_bank           VARCHAR(50)  NOT NULL COMMENT '환불 은행',
     refund_account        VARCHAR(50)  NOT NULL COMMENT '환불 계좌번호',
     refund_holder         VARCHAR(50)  NOT NULL COMMENT '환불 예금주',
-    due_at                DATETIME     NOT NULL COMMENT '입금 만료 시각 = min(점유+30분, deadline)',
+    due_at                DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
     confirmed_at          DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at          DATETIME     NULL COMMENT '참여 취소 시각',
-    cancel_reason         VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED',
-    status                VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED',
+    cancel_reason         VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED | USER_CANCELLED(C2C 자발 취소)',
+    status                VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED | APPLIED(C2C 신청) | PAYMENT_SENT(C2C 보냈어요)',
     -- 오픈 이벤트 배송비 환급(배송비 돌려받기). ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc 참고).
     payback_status        VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
     payback_tweet_url     VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
@@ -267,22 +274,36 @@ CREATE TABLE IF NOT EXISTS participations
     payback_amount        BIGINT       NULL COMMENT '신청 시점 배송비 스냅샷 (환급액 고정)',
     -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용 가상 컬럼: 활성 상태일 때만 멤버 슬롯 id 값을 갖고, 취소/만료되면 NULL 이 되어 슬롯이 다시 열린다.
     active_member_id      BIGINT GENERATED ALWAYS AS (
-                              IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), buncheol_member_id,
-                                 NULL)
+                              IF(status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED'),
+                                 buncheol_member_id, NULL)
                               ) STORED COMMENT '활성 상태일 때만 buncheol_member_id 값 (선착순 유니크용)',
-    -- 분철당 참여자 1명(중복 참여 금지) 보장용 가상 컬럼: 활성 상태일 때만 참여자 id 값을 갖고, 취소/만료되면 NULL 이 되어 재참여가 열린다.
+    -- 활성 참여자 가상 컬럼. 과거 (buncheol_id, active_participant_id) 유니크로 분철당 1인 1참여를 강제했으나,
+    -- C2C 다슬롯 허용(docs/46 §7.1-11)으로 유니크는 제거 — LEGACY 의 1인 1슬롯은 앱 가드(BCH-075)가 담당한다.
     active_participant_id BIGINT GENERATED ALWAYS AS (
-                              IF(status IN ('AWAITING_PAYMENT', 'CONFIRMED'), participant_id, NULL)
-                              ) STORED COMMENT '활성 상태일 때만 participant_id 값 (분철당 중복 참여 방지용)',
+                              IF(status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED'),
+                                 participant_id, NULL)
+                              ) STORED COMMENT '활성 상태일 때만 participant_id 값 (LEGACY 중복 참여 가드 보조)',
     created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
+    payment_sent_at       DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
+    -- 분철 flow_type 비정규화 (조건부 INSERT 가 buncheols 에서 복사). generated column 은 타 테이블을 참조할 수
+    -- 없어, LEGACY 전용 1인 1참여 유니크를 위해 참여 행에 내려받는다.
+    flow_type             VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT '분철 flow_type 비정규화 — LEGACY 1인 1참여 유니크용',
+    -- LEGACY 분철당 참여자 1명 보장용 가상 컬럼. C2C 는 다슬롯 허용(docs/46 §7.1-11)이라 LEGACY 조건이 붙는다.
+    legacy_active_participant_id BIGINT GENERATED ALWAYS AS (
+                              IF(flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED'),
+                                 participant_id, NULL)
+                              ) STORED COMMENT 'LEGACY 활성 참여일 때만 participant_id 값 (분철당 중복 참여 방지용)',
 
     PRIMARY KEY (id),
 
     -- 멤버 슬롯당 활성 참여 1건 (선착순). 동시 참여 시 두 번째 INSERT 가 이 제약에 막혀 DuplicateKey 로 떨어진다.
     UNIQUE INDEX uq_participations_active_member (active_member_id),
-    -- 분철당 참여자 1명 (중복 참여 금지, 오픈 이벤트 정책). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
-    UNIQUE INDEX uq_participations_active_participant (buncheol_id, active_participant_id),
+    -- (제거됨) uq_participations_active_participant — C2C 다슬롯 허용으로 DROP (docs/46 §2.3-4).
+    -- LEGACY 분철당 참여자 1명 (중복 참여 금지). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
+    -- C2C 참여는 legacy_active_participant_id 가 NULL 이라 이 유니크의 영향을 받지 않는다.
+    UNIQUE INDEX uq_participations_legacy_active_participant (buncheol_id, legacy_active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
     -- 입금 만료 스케줄러 폴링(status='AWAITING_PAYMENT' AND due_at<=now)용

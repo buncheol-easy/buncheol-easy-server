@@ -4,7 +4,10 @@ import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.global.page.Cursorable;
+import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -28,6 +31,7 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   private static final int TITLE_MAX_LENGTH = 200;
   private static final int DESCRIPTION_MAX_LENGTH = 700;
   private static final int PURCHASE_SITE_MAX_LENGTH = 200;
+  private static final int OPEN_CHAT_URL_MAX_LENGTH = 200;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -64,8 +68,34 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   private BuncheolStatus status;
 
   // 분철이 RECRUITING → CONFIRMED/CANCELLED 로 마감 판정된 시각 (호스트 취소 또는 마감 스케줄러).
+  // C2C 는 개최자 성사 확정(PAYMENT_COLLECTING 진입) 시각.
   @Column(name = "finalized_at")
   private Instant finalizedAt;
+
+  // --- C2C 플로우 병존 (docs/46 §0.1) ---
+
+  // 분철 단위 플로우 구분. 기존 분철·운영진 개최는 LEGACY 로 현행 그대로, 새 플로우는 C2C 분철에만 적용한다.
+  @Enumerated(EnumType.STRING)
+  @Column(name = "flow_type", nullable = false, length = 10, updatable = false)
+  private FlowType flowType;
+
+  // C2C: 개최자 성사 확정 시 산정한 일괄 입금 기한. PAYMENT_COLLECTING 진입 CAS 에서 세팅한다.
+  @Column(name = "payment_due_at")
+  private Instant paymentDueAt;
+
+  // C2C: 개최자 오픈채팅 링크(선택) — 참여자 소통 채널 (docs/46 §7.1-10).
+  @Column(name = "open_chat_url", length = 200)
+  private String openChatUrl;
+
+  // C2C: 확정 시점 개최자 계좌 스냅샷. 확정 후 개최자가 프로필 계좌를 바꿔도 이미 안내된 입금 계좌가
+  // 어긋나지 않게 고정한다 (docs/46 §4.7-B1). LEGACY 는 사용하지 않는다(실시간 조회 유지).
+  @Embedded
+  @AttributeOverrides({
+    @AttributeOverride(name = "bank", column = @Column(name = "payment_bank", length = 50)),
+    @AttributeOverride(name = "account", column = @Column(name = "payment_account", length = 50)),
+    @AttributeOverride(name = "holder", column = @Column(name = "payment_holder", length = 50))
+  })
+  private BankAccount paymentAccount;
 
   public static Buncheol create(final Long hostId, final BuncheolParams params, final Instant now) {
     return new Buncheol(hostId, params, now);
@@ -82,6 +112,12 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     this.minHeadcount = params.minHeadcount();
     this.shippingFeePolicy = ShippingFeePolicy.of(params.gs25ShippingFee(), params.cuShippingFee());
     this.status = BuncheolStatus.RECRUITING;
+    this.flowType = params.flowType();
+    this.openChatUrl = params.openChatUrl();
+  }
+
+  public boolean isC2c() {
+    return flowType == FlowType.C2C;
   }
 
   public void updateContent(final String title, final String description) {
@@ -134,6 +170,27 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     validatePurchaseSite(params.purchaseSite());
     validateDeadline(params.deadline(), now);
     validateMinHeadcount(params.minHeadcount());
+    validateFlowType(params.flowType());
+    validateOpenChatUrl(params.openChatUrl());
+  }
+
+  private void validateFlowType(final FlowType value) {
+    if (value == null) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+    }
+  }
+
+  // 오픈채팅 링크는 선택 입력. 있으면 카카오 오픈채팅 도메인 형식만 허용하고(임의 외부 링크 유도 방지 — docs/46 §4.6),
+  // 공백·제어문자가 저장돼 화면·알림에 그대로 노출되는 것을 막는다.
+  private void validateOpenChatUrl(final String value) {
+    if (value == null) {
+      return;
+    }
+    if (value.length() > OPEN_CHAT_URL_MAX_LENGTH
+        || !value.startsWith("https://open.kakao.com/")
+        || value.chars().anyMatch(c -> Character.isWhitespace(c) || Character.isISOControl(c))) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_INVALID);
+    }
   }
 
   private void validateHostAndParams(final Long hostId, final BuncheolParams params) {

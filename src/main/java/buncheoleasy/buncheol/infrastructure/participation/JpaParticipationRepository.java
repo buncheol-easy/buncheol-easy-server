@@ -27,7 +27,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
           + "WHERE p.participantId = :participantId "
-          + "AND (p.status = :awaitingStatus "
+          + "AND (p.status IN :pendingStatuses "
           + "  OR (p.status = :confirmedStatus "
           + "    AND (p.paybackStatus = :requestedPaybackStatus "
           + "      OR NOT EXISTS ("
@@ -35,7 +35,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
   boolean existsUnfinishedByParticipantId(
       @Param("participantId") Long participantId,
-      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
       @Param("requestedPaybackStatus") PaybackStatus requestedPaybackStatus,
       @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
@@ -147,5 +147,80 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("requestedStatus") PaybackStatus requestedStatus,
       @Param("rejectedStatus") PaybackStatus rejectedStatus,
       @Param("reason") String reason,
+      @Param("now") Instant now);
+
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /**
+   * C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT). 기한 경과 검사 없음 — 기한 직전 입금 보호가 목적이며, 만료
+   * 스케줄러 CAS 와 경합하면 정확히 한쪽만 성공한다 (docs/46 §4.2).
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :sentStatus, p.paymentSentAt = :now, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.status = :awaitingStatus")
+  int markPaymentSentIfAwaiting(
+      @Param("id") Long id,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("sentStatus") ParticipationStatus sentStatus,
+      @Param("now") Instant now);
+
+  /**
+   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT 복귀). 참여자 철회(기한 유지)와 개최자 반려(기한 연장 — docs/46
+   * §4.5)가 공용하며, {@code paymentSentAt} 은 분쟁 증거로 보존한다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :awaitingStatus, p.dueAt = :dueAt, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.status = :sentStatus")
+  int revertPaymentSentIfSent(
+      @Param("id") Long id,
+      @Param("sentStatus") ParticipationStatus sentStatus,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("dueAt") Instant dueAt,
+      @Param("now") Instant now);
+
+  /** C2C 참여자 자발 취소 CAS — 신청(APPLIED)·입금 대기(AWAITING_PAYMENT)에서만 (docs/46 §5 구간 ①·②). */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.status IN :cancellableStatuses")
+  int cancelIfStatusIn(
+      @Param("id") Long id,
+      @Param("cancellableStatuses") Collection<ParticipationStatus> cancellableStatuses,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
+      @Param("now") Instant now);
+
+  /**
+   * C2C 개최자 수동 입금확인 CAS — 입금 대기(AWAITING_PAYMENT·PAYMENT_SENT)면 기한 경과와 무관하게 CONFIRMED 로 전이한다
+   * (개최자 확인이 늦어도 유효 — docs/46 §3-6).
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :confirmedStatus, p.confirmedAt = :now, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.status IN :payableStatuses")
+  int confirmPaymentIfPayable(
+      @Param("id") Long id,
+      @Param("payableStatuses") Collection<ParticipationStatus> payableStatuses,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("now") Instant now);
+
+  /** C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :awaitingStatus, p.dueAt = :dueAt, p.updatedAt = :now "
+          + "WHERE p.buncheolId = :buncheolId AND p.status = :appliedStatus")
+  int startPaymentCollecting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("appliedStatus") ParticipationStatus appliedStatus,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("dueAt") Instant dueAt,
       @Param("now") Instant now);
 }

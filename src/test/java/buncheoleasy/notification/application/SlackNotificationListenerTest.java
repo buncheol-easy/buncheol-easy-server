@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -74,7 +75,7 @@ class SlackNotificationListenerTest {
           .willReturn(
               new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
 
-      listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
+      listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
 
       @SuppressWarnings("unchecked")
       ArgumentCaptor<List<Map<String, Object>>> blocksCaptor =
@@ -115,7 +116,7 @@ class SlackNotificationListenerTest {
           .willReturn(
               new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
 
-      listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
+      listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
 
       @SuppressWarnings("unchecked")
       ArgumentCaptor<List<Map<String, Object>>> blocksCaptor =
@@ -133,7 +134,7 @@ class SlackNotificationListenerTest {
     void skipsAssemblyWhenDisabled() {
       given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(false);
 
-      listener.onParticipationCreated(new ParticipationCreatedEvent(1L));
+      listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
 
       then(assembler).should(never()).loadByParticipation(any());
       then(slackWebhookClient).should(never()).send(any(), anyString(), anyList());

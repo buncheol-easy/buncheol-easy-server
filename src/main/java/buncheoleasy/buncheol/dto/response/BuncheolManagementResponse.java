@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,4 +16,6 @@ public record BuncheolManagementResponse(
     int minHeadcount,
     int memberCount,
     int confirmedCount,
-    List<BuncheolManagementParticipantResponse> participants) {}
+    List<BuncheolManagementParticipantResponse> participants,
+    FlowType flowType,
+    Instant paymentDueAt) {}

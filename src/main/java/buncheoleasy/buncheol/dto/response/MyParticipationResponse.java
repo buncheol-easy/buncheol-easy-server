@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
@@ -39,4 +40,7 @@ public record MyParticipationResponse(
     HostAccountResponse hostAccount,
     String refundHolder,
     MyParticipationDeliveryResponse delivery,
-    ShippingFeePaybackResponse payback) {}
+    ShippingFeePaybackResponse payback,
+    FlowType flowType,
+    Instant paymentSentAt,
+    String openChatUrl) {}

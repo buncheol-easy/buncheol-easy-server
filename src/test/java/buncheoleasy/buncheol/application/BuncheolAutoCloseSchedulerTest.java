@@ -67,6 +67,8 @@ class BuncheolAutoCloseSchedulerTest {
     buncheolAutoCloseScheduler.closeByFallbackPolling();
 
     then(buncheolAutoCloseService).should().findExpiredBuncheolIds(NOW);
+    // C2C 데드엔드 정리 폴링은 마감 폴링과 독립으로 항상 1회 수행된다.
+    then(buncheolAutoCloseService).should().findOverdueCollectingIds(NOW);
     then(buncheolAutoCloseService).shouldHaveNoMoreInteractions();
   }
 

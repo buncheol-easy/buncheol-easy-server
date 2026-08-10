@@ -9,6 +9,7 @@ import buncheoleasy.admin.domain.payment.AdminPaymentView;
 import buncheoleasy.admin.domain.payment.BuncheolConfirmedCount;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
@@ -69,7 +70,7 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, title, null, "스토어", deadline, 1, 3000, null),
+            new BuncheolParams(groupId, title, null, "스토어", deadline, 1, 3000, null, FlowType.LEGACY, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();

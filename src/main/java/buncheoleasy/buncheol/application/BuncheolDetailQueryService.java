@@ -113,7 +113,10 @@ public class BuncheolDetailQueryService {
         shippingOptions,
         memberResponses,
         hostedByMe,
-        myParticipation);
+        myParticipation,
+        buncheol.getFlowType(),
+        buncheol.getPaymentDueAt(),
+        buncheol.getOpenChatUrl());
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(
@@ -144,9 +147,12 @@ public class BuncheolDetailQueryService {
       return BuncheolMemberSaleStatus.AVAILABLE;
     }
     return switch (active.getStatus()) {
+      case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
       case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
+      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정 — 단 만료 면제라 dueAt 카운트다운은 노출하지 않는다.
+      case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
-      // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 두 상태만 온다).
+      // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
       case CANCELLED -> BuncheolMemberSaleStatus.AVAILABLE;
     };
   }

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,6 +18,7 @@ import buncheoleasy.buncheol.application.participation.ParticipationDetailQueryS
 import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
@@ -173,7 +175,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 null,
-                new RefundAccountResponse("국민은행", "12345678", "홍길동")));
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -202,7 +204,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -319,7 +321,15 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].payback.refundAccount.account")
                                 .description("계좌번호"),
                             fieldWithPath("[].payback.refundAccount.holder")
-                                .description("예금주"))
+                                .description("예금주"),
+                            fieldWithPath("[].flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("[].paymentSentAt")
+                                .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("[].openChatUrl")
+                                .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
+                                .optional())
                         .build())));
   }
 
@@ -346,7 +356,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")));
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -423,7 +433,15 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description("환급 입금받을 계좌 (참여 시 등록한 환불계좌)"),
                             fieldWithPath("payback.refundAccount.bank").description("은행명"),
                             fieldWithPath("payback.refundAccount.account").description("계좌번호"),
-                            fieldWithPath("payback.refundAccount.holder").description("예금주"))
+                            fieldWithPath("payback.refundAccount.holder").description("예금주"),
+                            fieldWithPath("flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("paymentSentAt")
+                                .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("openChatUrl")
+                                .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
+                                .optional())
                         .build())));
   }
 
@@ -485,6 +503,116 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .description(
                             "개최자가 실제 입금을 확인해 입금확인중(AWAITING_PAYMENT) 참여를 CONFIRMED 로 전환한다. 입금 기한 내에만"
                                 + " 가능하며, 개최자 본인만 호출할 수 있다.")
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .build())));
+  }
+
+  @Test
+  void C2C_참여자_보냈어요_마킹() throws Exception {
+    mockMvc
+        .perform(post("/v1/participations/{participationId}/payment-sent", 500L).with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-payment-sent",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("C2C 참여자 '보냈어요' 마킹")
+                        .description(
+                            """
+                            입금 후 참여자가 입금 사실을 마킹한다 (`AWAITING_PAYMENT` → `PAYMENT_SENT`). 마킹된 참여는
+                            입금 만료 대상에서 제외되고 개최자의 입금확인을 기다린다. 기한 경과 검사는 하지 않으며(기한 직전 입금 보호),
+                            이미 마킹된 상태의 재요청은 멱등 성공한다. C2C 분철 전용이다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
+                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | 입금 대기 상태가 아님 (만료·취소·확정됨) |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .build())));
+  }
+
+  @Test
+  void C2C_참여자_보냈어요_철회() throws Exception {
+    mockMvc
+        .perform(
+            delete("/v1/participations/{participationId}/payment-sent", 500L).with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-payment-sent-revert",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("C2C 참여자 '보냈어요' 철회")
+                        .description(
+                            "오마킹 셀프 수정. `PAYMENT_SENT` 를 `AWAITING_PAYMENT` 로 되돌린다(기한 유지). 이미 입금 대기로"
+                                + " 돌아가 있으면 멱등 성공한다. C2C 분철 전용이다.")
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .build())));
+  }
+
+  @Test
+  void C2C_개최자_미입금_반려() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participations/{participationId}/reject-payment", 500L).with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-reject-payment",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("C2C 개최자 미입금 반려")
+                        .description(
+                            """
+                            개최자가 통장에서 입금 내역을 찾지 못한 '보냈어요' 를 반려한다. 취소가 아니라 `AWAITING_PAYMENT` 로
+                            복귀시키고 입금 기한을 `max(기존 기한, 지금+24h)` 로 연장하며, 참여자에게 연장된 새 기한을 담은 입금
+                            재확인 알림이 발송된다. C2C 분철 전용이며 개최자 본인만 호출할 수 있다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
+                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | '보냈어요' 상태가 아님 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
+                        .build())));
+  }
+
+  @Test
+  void C2C_참여자_자발_취소() throws Exception {
+    mockMvc
+        .perform(delete("/v1/participations/{participationId}", 500L).with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participations-cancel",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Participation")
+                        .summary("C2C 참여자 자발 취소")
+                        .description(
+                            """
+                            참여자가 스스로 참여를 취소한다 (docs/46 §5 취소 3구간). 신청(`APPLIED`)·입금 대기
+                            (`AWAITING_PAYMENT`) 단계에서만 가능하고, '보냈어요' 이후는 돈이 개최자에게 간 구간이라
+                            문의 경유로 안내된다. C2C 분철 전용이다(LEGACY 는 현행대로 취소 경로 없음).
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
+                            | 409 | `BCH-086` (`PARTICIPATION_CANCEL_NOT_ALLOWED`) | 취소 불가 구간 ('보냈어요'·입금확인 후 — 문의 경유) |
+                            """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
                         .build())));

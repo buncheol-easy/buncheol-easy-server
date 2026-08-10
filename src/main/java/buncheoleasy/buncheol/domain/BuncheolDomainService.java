@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.BankAccount;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,12 @@ public class BuncheolDomainService {
         > 0) {
       return BuncheolStatus.RECRUITING;
     }
+    // C2C 입금 수집중 취소 (docs/46 §7.1-6 — 기한 경과 후 개최자 선택지). LEGACY 는 이 상태가 없어 영향 없다.
+    if (buncheolRepository.finalizeIfStatus(
+            buncheolId, BuncheolStatus.PAYMENT_COLLECTING, BuncheolStatus.HOST_CANCELLED, now)
+        > 0) {
+      return BuncheolStatus.PAYMENT_COLLECTING;
+    }
     if (buncheolRepository.finalizeIfStatus(
             buncheolId, BuncheolStatus.CANCELLED, BuncheolStatus.HOST_CANCELLED, now)
         > 0) {
@@ -73,8 +80,61 @@ public class BuncheolDomainService {
     throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
   }
 
+  /** C2C 확정 유예 경과 미성사 취소 CAS (RECRUITING → CANCELLED — docs/46 §7.1-5). 호출 측 {@code @Transactional} 필수. */
+  public boolean cancelUnconfirmedC2c(final Long buncheolId, final Instant now) {
+    return buncheolRepository.finalizeIfStatus(
+            buncheolId, BuncheolStatus.RECRUITING, BuncheolStatus.CANCELLED, now)
+        > 0;
+  }
+
   /** 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
   public boolean hasUnfinishedBuncheolHostedBy(final Long hostId) {
     return buncheolRepository.existsUnfinishedByHostId(hostId);
+  }
+
+  // --- C2C 플로우 전이 (docs/46 §4) ---
+
+  /**
+   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 전이에 성공하면 true (false 면 RECRUITING 이 아니거나 C2C 분철이 아님)
+   */
+  public boolean startCollecting(
+      final Long buncheolId,
+      final Instant paymentDueAt,
+      final BankAccount hostAccount,
+      final Instant now) {
+    return buncheolRepository.startCollectingIfRecruiting(
+            buncheolId,
+            paymentDueAt,
+            hostAccount.bank(),
+            hostAccount.account(),
+            hostAccount.holder(),
+            now)
+        > 0;
+  }
+
+  /**
+   * C2C 전원 입금확인 시 진행확정 CAS (PAYMENT_COLLECTING → CONFIRMED). 미확정 활성 참여가 남아 있으면 전이하지 않는다.
+   * 호출 측 {@code @Transactional} 필수.
+   */
+  public boolean confirmIfAllCollected(final Long buncheolId, final Instant now) {
+    return buncheolRepository.confirmIfAllCollected(buncheolId, now) > 0;
+  }
+
+  /**
+   * C2C 데드엔드 정리 CAS — 입금 수집중인데 활성 참여가 하나도 남지 않았으면(확정 0건) 미성사 취소한다 (docs/46 §7.1-6 보완).
+   * 확정 참여가 있으면 전이하지 않고 개최자 선택(부분 확정/취소)을 기다린다. 호출 측 {@code @Transactional} 필수.
+   */
+  public boolean cancelCollectingIfEmpty(final Long buncheolId, final Instant now) {
+    return buncheolRepository.cancelIfCollectingAndEmpty(buncheolId, now) > 0;
+  }
+
+  /** C2C 참여 생성 직렬화용 잠금 조회 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public Buncheol getBuncheolForUpdate(final Long id) {
+    return buncheolRepository
+        .findByIdForUpdate(id)
+        .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
   }
 }

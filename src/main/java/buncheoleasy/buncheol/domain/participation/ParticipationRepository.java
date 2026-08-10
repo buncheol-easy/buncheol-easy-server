@@ -14,6 +14,14 @@ public interface ParticipationRepository {
    */
   boolean saveIfRecruiting(Participation participation);
 
+  /**
+   * C2C 추가 모집: 분철이 입금 수집중({@code PAYMENT_COLLECTING})일 때만 참여를 INSERT 한다 (원자적 — docs/46 §4.7-E1).
+   * 진행확정(CONFIRMED) 이후에는 삽입되지 않는다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return 입금 수집중이라 INSERT 된 경우 true, 아니면 false
+   */
+  boolean saveIfCollecting(Participation participation);
+
   Optional<Participation> findById(Long id);
 
   /** 내 참여 목록 (참여자별 최신순). */
@@ -79,6 +87,30 @@ public interface ParticipationRepository {
    * @return 전이에 성공하면 true
    */
   boolean expirePaymentIfOverdue(Long participationId, Instant now);
+
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /** C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT, 기한 경과 검사 없음). */
+  boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
+
+  /**
+   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code
+   * dueAt} 을 함께 세팅한다. {@code paymentSentAt} 은 보존.
+   */
+  boolean revertPaymentSentIfSent(Long participationId, Instant dueAt, Instant now);
+
+  /** C2C 참여자 자발 취소 CAS — APPLIED·AWAITING_PAYMENT 에서만 USER_CANCELLED 로 전이 (docs/46 §5). */
+  boolean cancelByUserIfCancellable(Long participationId, Instant now);
+
+  /** C2C 개최자 수동 입금확인 CAS — AWAITING_PAYMENT·PAYMENT_SENT 에서 기한 경과와 무관하게 CONFIRMED 로 전이. */
+  boolean confirmPaymentIfPayable(Long participationId, Instant now);
+
+  /**
+   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1).
+   *
+   * @return 전이된 참여 수
+   */
+  int startPaymentCollecting(Long buncheolId, Instant dueAt, Instant now);
 
   /**
    * 분철의 활성 참여를 모두 CANCELLED({@link ParticipationCancelReason#BUNCHEOL_CANCELLED}) 로 일괄 전이한다. 호스트

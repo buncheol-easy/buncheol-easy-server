@@ -52,7 +52,11 @@ public class NotificationInboxRecorder {
               TRACKING_CU,
               TRACKING_GS25,
               PAYBACK_COMPLETED,
-              PAYBACK_REJECTED ->
+              PAYBACK_REJECTED,
+              C2C_BUNCHEOL_FINALIZED,
+              C2C_PAYMENT_EXPIRED,
+              C2C_BUNCHEOL_NOT_FINALIZED,
+              C2C_PAYMENT_RECHECK ->
           PATH_MY_PARTICIPATIONS;
       case PICKUP_REMINDER_CU, PICKUP_REMINDER_GS25 -> null;
     };

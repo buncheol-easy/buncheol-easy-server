@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.request;
 
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
@@ -25,10 +26,12 @@ public record HoldBuncheolRequest(
     @NotNull @Positive Integer minHeadcount,
     @PositiveOrZero Integer gs25ShippingFee,
     @PositiveOrZero Integer cuShippingFee,
+    @Size(max = 200) String openChatUrl,
     @NotNull @PositiveOrZero Integer thumbnailIndex,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
-  public BuncheolParams toParams() {
+  // 플로우는 요청이 아니라 서버가 결정한다(운영진=LEGACY 선택 가능, 일반 유저=강제 C2C — docs/46 §3-8).
+  public BuncheolParams toParams(final FlowType flowType) {
     return new BuncheolParams(
         groupId,
         title,
@@ -37,6 +40,8 @@ public record HoldBuncheolRequest(
         deadline,
         minHeadcount,
         gs25ShippingFee,
-        cuShippingFee);
+        cuShippingFee,
+        flowType,
+        openChatUrl);
   }
 }

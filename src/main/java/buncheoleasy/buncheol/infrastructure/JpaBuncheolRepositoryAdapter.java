@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.delivery.domain.DeliveryStatus;
@@ -11,6 +12,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -119,11 +121,15 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
 
   @Override
   public boolean existsUnfinishedByHostId(Long hostId) {
+    // C2C 입금 수집중(PAYMENT_COLLECTING) 분철도 개최자 탈퇴를 막는다 (docs/46 §4.7-D2).
     return jpaBuncheolRepository.existsUnfinishedByHostId(
         hostId,
-        BuncheolStatus.RECRUITING,
+        Set.of(BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING),
         BuncheolStatus.CONFIRMED,
-        ParticipationStatus.AWAITING_PAYMENT,
+        Set.of(
+            ParticipationStatus.APPLIED,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT),
         ParticipationStatus.CONFIRMED,
         DeliveryStatus.finished());
   }
@@ -135,9 +141,36 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public List<Long> findRecruitingIdsPastDeadline(final Instant now, final int limit) {
+  public List<Long> findRecruitingIdsPastDeadline(
+      final Instant now, final Instant c2cGraceCutoff, final int limit) {
     return jpaBuncheolRepository.findIdsByStatusAndDeadlineBefore(
-        BuncheolStatus.RECRUITING, now, PageRequest.of(0, limit));
+        BuncheolStatus.RECRUITING,
+        FlowType.LEGACY,
+        FlowType.C2C,
+        now,
+        c2cGraceCutoff,
+        PageRequest.of(0, limit));
+  }
+
+  @Override
+  public List<Long> findCollectingIdsPastPaymentDue(final Instant now, final int limit) {
+    return jpaBuncheolRepository.findIdsByStatusAndPaymentDueBefore(
+        BuncheolStatus.PAYMENT_COLLECTING, now, PageRequest.of(0, limit));
+  }
+
+  @Override
+  public int cancelIfCollectingAndEmpty(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.cancelIfCollectingAndEmpty(
+        buncheolId,
+        BuncheolStatus.PAYMENT_COLLECTING,
+        ParticipationStatus.active(),
+        BuncheolStatus.CANCELLED,
+        now);
+  }
+
+  @Override
+  public Optional<Buncheol> findByIdForUpdate(final Long id) {
+    return jpaBuncheolRepository.findByIdForUpdate(id);
   }
 
   @Override
@@ -167,6 +200,40 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         buncheolId,
         totalSlots,
         BuncheolStatus.RECRUITING,
+        ParticipationStatus.CONFIRMED,
+        BuncheolStatus.CONFIRMED,
+        now);
+  }
+
+  @Override
+  public int startCollectingIfRecruiting(
+      final Long buncheolId,
+      final Instant paymentDueAt,
+      final String bank,
+      final String account,
+      final String holder,
+      final Instant now) {
+    return jpaBuncheolRepository.startCollectingIfRecruiting(
+        buncheolId,
+        BuncheolStatus.RECRUITING,
+        BuncheolStatus.PAYMENT_COLLECTING,
+        FlowType.C2C,
+        paymentDueAt,
+        bank,
+        account,
+        holder,
+        now);
+  }
+
+  @Override
+  public int confirmIfAllCollected(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.confirmIfAllCollected(
+        buncheolId,
+        BuncheolStatus.PAYMENT_COLLECTING,
+        Set.of(
+            ParticipationStatus.APPLIED,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT),
         ParticipationStatus.CONFIRMED,
         BuncheolStatus.CONFIRMED,
         now);

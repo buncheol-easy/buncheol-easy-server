@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TimeZone;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -63,16 +64,44 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
 
-  /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
-  private static final String INSERT_IF_RECRUITING_SQL =
+  // flow_type 은 buncheols 에서 복사해 비정규화한다 — LEGACY 전용 1인 1참여 유니크
+  // (uq_participations_legacy_active_participant)의 generated column 이 참조하기 위함.
+  private static final String INSERT_COLUMNS_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
           + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account, refund_holder,"
-          + " due_at, status, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
+          + " due_at, status, flow_type, created_at, updated_at) "
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+
+  /**
+   * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
+   *
+   * <p>⚠️ "APPLIED 신청은 RECRUITING 분철에만 생긴다"(성사 확정 일괄 전이에서 누락되는 orphan APPLIED 방지)는 정합성은, MySQL
+   * REPEATABLE READ 에서 INSERT ... SELECT 의 소스 행(buncheols)에 공유 락이 걸려 성사 확정 UPDATE 와 직렬화되는 동작에
+   * 의존한다. READ COMMITTED 로 낮추면 소스 읽기가 비잠금 consistent read 가 되어 이 보장이 깨진다 — 격리수준을 바꾸려면 이 SQL 에
+   * FOR SHARE 를 명시할 것 (docs/46 §4.7-C1).
+   */
+  private static final String INSERT_IF_RECRUITING_SQL =
+      INSERT_COLUMNS_SQL
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
+
+  /**
+   * C2C 추가 모집: 분철이 입금 수집중일 때만 삽입하는 conditional INSERT (docs/46 §4.7-E1). 입금 수집은 deadline 이후
+   * 구간이므로 마감 조건 없이 상태만 확인한다 — 진행확정(CONFIRMED) 전이 후에는 삽입되지 않는다.
+   */
+  private static final String INSERT_IF_COLLECTING_SQL =
+      INSERT_COLUMNS_SQL + "FROM buncheols WHERE id = ? AND status = 'PAYMENT_COLLECTING'";
 
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
+    return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_SQL);
+  }
+
+  @Override
+  public boolean saveIfCollecting(final Participation participation) {
+    return saveIfBuncheolCondition(participation, INSERT_IF_COLLECTING_SQL);
+  }
+
+  private boolean saveIfBuncheolCondition(final Participation participation, final String sql) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     int affected;
     try {
@@ -80,8 +109,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           jdbcTemplate.update(
               connection -> {
                 PreparedStatement ps =
-                    connection.prepareStatement(
-                        INSERT_IF_RECRUITING_SQL, Statement.RETURN_GENERATED_KEYS);
+                    connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
                 ps.setLong(1, participation.getBuncheolId());
                 ps.setLong(2, participation.getBuncheolMemberId());
                 ps.setLong(3, participation.getParticipantId());
@@ -91,7 +119,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setString(7, participation.getRefundAccount().bank());
                 ps.setString(8, participation.getRefundAccount().account());
                 ps.setString(9, participation.getRefundAccount().holder());
-                ps.setTimestamp(10, Timestamp.from(participation.getDueAt()), UTC);
+                // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
+                ps.setTimestamp(
+                    10,
+                    participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
+                    UTC);
                 ps.setString(11, participation.getStatus().name());
                 ps.setLong(12, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
@@ -99,7 +131,10 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
               keyHolder);
     } catch (DuplicateKeyException ex) {
       // 어느 유니크 제약에 걸렸는지 인덱스명으로 구분한다 (서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단).
-      if (isViolationOf(ex, "uq_participations_active_participant")) {
+      // LEGACY 1인 1참여는 uq_participations_legacy_active_participant 가 담당하고(C2C 는 다슬롯 허용이라
+      // 해당 generated column 이 NULL — docs/46 §7.1-11), 구 인덱스명은 ALTER 전 환경 호환용으로 함께 매칭한다.
+      if (isViolationOf(ex, "uq_participations_legacy_active_participant")
+          || isViolationOf(ex, "uq_participations_active_participant")) {
         // 같은 분철에 참여자의 활성 참여가 이미 존재(분철당 중복 참여 금지).
         throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
       }
@@ -136,9 +171,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsUnfinishedByParticipantId(final Long participantId) {
+    // C2C 신청(APPLIED)·보냈어요(PAYMENT_SENT) 상태도 진행 중 참여로 보고 탈퇴를 막는다 (docs/46 §4.7-D1).
     return jpaParticipationRepository.existsUnfinishedByParticipantId(
         participantId,
-        ParticipationStatus.AWAITING_PAYMENT,
+        Set.of(
+            ParticipationStatus.APPLIED,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT),
         ParticipationStatus.CONFIRMED,
         PaybackStatus.REQUESTED,
         DeliveryStatus.finished());
@@ -230,6 +269,59 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
         ParticipationStatus.active(),
         ParticipationStatus.CANCELLED,
         ParticipationCancelReason.BUNCHEOL_CANCELLED,
+        now);
+  }
+
+  @Override
+  public boolean markPaymentSentIfAwaiting(final Long participationId, final Instant now) {
+    return jpaParticipationRepository.markPaymentSentIfAwaiting(
+            participationId,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT,
+            now)
+        > 0;
+  }
+
+  @Override
+  public boolean revertPaymentSentIfSent(
+      final Long participationId, final Instant dueAt, final Instant now) {
+    return jpaParticipationRepository.revertPaymentSentIfSent(
+            participationId,
+            ParticipationStatus.PAYMENT_SENT,
+            ParticipationStatus.AWAITING_PAYMENT,
+            dueAt,
+            now)
+        > 0;
+  }
+
+  @Override
+  public boolean cancelByUserIfCancellable(final Long participationId, final Instant now) {
+    return jpaParticipationRepository.cancelIfStatusIn(
+            participationId,
+            Set.of(ParticipationStatus.APPLIED, ParticipationStatus.AWAITING_PAYMENT),
+            ParticipationStatus.CANCELLED,
+            ParticipationCancelReason.USER_CANCELLED,
+            now)
+        > 0;
+  }
+
+  @Override
+  public boolean confirmPaymentIfPayable(final Long participationId, final Instant now) {
+    return jpaParticipationRepository.confirmPaymentIfPayable(
+            participationId,
+            Set.of(ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT),
+            ParticipationStatus.CONFIRMED,
+            now)
+        > 0;
+  }
+
+  @Override
+  public int startPaymentCollecting(final Long buncheolId, final Instant dueAt, final Instant now) {
+    return jpaParticipationRepository.startPaymentCollecting(
+        buncheolId,
+        ParticipationStatus.APPLIED,
+        ParticipationStatus.AWAITING_PAYMENT,
+        dueAt,
         now);
   }
 

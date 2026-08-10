@@ -147,11 +147,18 @@ public class MyParticipationQueryService {
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
-    boolean awaitingPayment = participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT;
+    // 입금 대기(입금확인중·보냈어요)일 때만 계좌를 노출한다. C2C 는 확정 시점 스냅샷 계좌 (docs/46 §3-5·§4.7-B1).
+    boolean paymentPending =
+        participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
+            || participation.getStatus() == ParticipationStatus.PAYMENT_SENT;
     HostAccountResponse hostAccount =
-        awaitingPayment ? hostAccountByHostId.get(buncheol.getHostId()) : null;
+        !paymentPending
+            ? null
+            : buncheol.isC2c()
+                ? HostAccountResponse.from(buncheol.getPaymentAccount())
+                : hostAccountByHostId.get(buncheol.getHostId());
     // 입금자명 안내용. 참여 시점 예금주명이라 프로필의 현재 계좌와 다를 수 있고, 자동 입금확인은 이 값으로 매칭한다.
-    String refundHolder = awaitingPayment ? participation.getRefundAccount().holder() : null;
+    String refundHolder = paymentPending ? participation.getRefundAccount().holder() : null;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
@@ -175,6 +182,9 @@ public class MyParticipationQueryService {
         ShippingFeePaybackResponse.of(
             participation,
             shippingFeePaybackPolicy.deriveStatus(participation, delivery, now),
-            shippingFeePaybackPolicy.submitDeadline(participation, delivery)));
+            shippingFeePaybackPolicy.submitDeadline(participation, delivery)),
+        buncheol.getFlowType(),
+        participation.getPaymentSentAt(),
+        buncheol.getOpenChatUrl());
   }
 }

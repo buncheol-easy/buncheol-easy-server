@@ -3,6 +3,7 @@ package buncheoleasy.deposit.application;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
@@ -34,6 +35,10 @@ public class DepositOrderListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
+    // C2C 는 개최자 개인 계좌 직거래(개최자 수동 확인)라 페이액션 자동확인을 적용하지 않는다 (docs/46 §3-2).
+    if (event.flowType() == FlowType.C2C) {
+      return;
+    }
     if (!payActionClient.isEnabled()) {
       return;
     }

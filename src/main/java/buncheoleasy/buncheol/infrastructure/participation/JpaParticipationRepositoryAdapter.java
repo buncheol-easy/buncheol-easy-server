@@ -63,16 +63,35 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
 
-  /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
-  private static final String INSERT_IF_RECRUITING_SQL =
+  private static final String INSERT_COLUMNS_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
           + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account, refund_holder,"
           + " due_at, status, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() "
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+
+  /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
+  private static final String INSERT_IF_RECRUITING_SQL =
+      INSERT_COLUMNS_SQL
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
+
+  /**
+   * C2C 추가 모집: 분철이 입금 수집중일 때만 삽입하는 conditional INSERT (docs/46 §4.7-E1). 입금 수집은 deadline 이후
+   * 구간이므로 마감 조건 없이 상태만 확인한다 — 진행확정(CONFIRMED) 전이 후에는 삽입되지 않는다.
+   */
+  private static final String INSERT_IF_COLLECTING_SQL =
+      INSERT_COLUMNS_SQL + "FROM buncheols WHERE id = ? AND status = 'PAYMENT_COLLECTING'";
 
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
+    return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_SQL);
+  }
+
+  @Override
+  public boolean saveIfCollecting(final Participation participation) {
+    return saveIfBuncheolCondition(participation, INSERT_IF_COLLECTING_SQL);
+  }
+
+  private boolean saveIfBuncheolCondition(final Participation participation, final String sql) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     int affected;
     try {
@@ -80,8 +99,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           jdbcTemplate.update(
               connection -> {
                 PreparedStatement ps =
-                    connection.prepareStatement(
-                        INSERT_IF_RECRUITING_SQL, Statement.RETURN_GENERATED_KEYS);
+                    connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
                 ps.setLong(1, participation.getBuncheolId());
                 ps.setLong(2, participation.getBuncheolMemberId());
                 ps.setLong(3, participation.getParticipantId());
@@ -91,7 +109,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setString(7, participation.getRefundAccount().bank());
                 ps.setString(8, participation.getRefundAccount().account());
                 ps.setString(9, participation.getRefundAccount().holder());
-                ps.setTimestamp(10, Timestamp.from(participation.getDueAt()), UTC);
+                // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
+                ps.setTimestamp(
+                    10,
+                    participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
+                    UTC);
                 ps.setString(11, participation.getStatus().name());
                 ps.setLong(12, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
@@ -99,6 +121,8 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
               keyHolder);
     } catch (DuplicateKeyException ex) {
       // 어느 유니크 제약에 걸렸는지 인덱스명으로 구분한다 (서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단).
+      // uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됐지만(docs/46 §2.3-4),
+      // ALTER 선행이 어긋난 환경에서 페일세이프로 동작하도록 분기는 남겨둔다.
       if (isViolationOf(ex, "uq_participations_active_participant")) {
         // 같은 분철에 참여자의 활성 참여가 이미 존재(분철당 중복 참여 금지).
         throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);

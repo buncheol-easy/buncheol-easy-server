@@ -4,6 +4,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,22 @@ public class ParticipationDomainService {
 
   public boolean createParticipationIfRecruiting(final Participation participation) {
     return participationRepository.saveIfRecruiting(participation);
+  }
+
+  /** C2C 추가 모집 INSERT — 분철이 입금 수집중(PAYMENT_COLLECTING)인지 원자 확인 (docs/46 §4.7-E1). */
+  public boolean createParticipationIfCollecting(final Participation participation) {
+    return participationRepository.saveIfCollecting(participation);
+  }
+
+  /**
+   * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 활성 참여 수는 슬롯 수 이하라 분철 단위 조회 후
+   * 필터링으로 충분하다.
+   */
+  public Optional<Participation> findFirstActiveInBuncheol(
+      final Long buncheolId, final Long participantId) {
+    return participationRepository.findActiveByBuncheolId(buncheolId).stream()
+        .filter(participation -> participation.getParticipantId().equals(participantId))
+        .findFirst();
   }
 
   public Participation getParticipation(final Long id) {

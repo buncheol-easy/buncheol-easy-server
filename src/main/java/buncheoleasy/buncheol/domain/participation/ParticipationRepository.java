@@ -14,6 +14,14 @@ public interface ParticipationRepository {
    */
   boolean saveIfRecruiting(Participation participation);
 
+  /**
+   * C2C 추가 모집: 분철이 입금 수집중({@code PAYMENT_COLLECTING})일 때만 참여를 INSERT 한다 (원자적 — docs/46 §4.7-E1).
+   * 진행확정(CONFIRMED) 이후에는 삽입되지 않는다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return 입금 수집중이라 INSERT 된 경우 true, 아니면 false
+   */
+  boolean saveIfCollecting(Participation participation);
+
   Optional<Participation> findById(Long id);
 
   /** 내 참여 목록 (참여자별 최신순). */

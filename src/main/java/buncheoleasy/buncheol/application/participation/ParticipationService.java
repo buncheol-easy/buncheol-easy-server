@@ -4,11 +4,13 @@ import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -18,6 +20,7 @@ import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -31,6 +34,9 @@ public class ParticipationService {
 
   // 참여(개최자 계좌 노출) 시점부터 입금 만료까지의 기본 창. 단, deadline 을 넘지 않도록 클램프한다.
   private static final Duration PAYMENT_WINDOW = Duration.ofMinutes(30);
+
+  // C2C 입금 창(24h — docs/46 §7.1-3). 성사 확정 후 일괄 기한과 추가 모집(즉시입금 진입)의 개별 기한이 같은 창을 쓴다.
+  public static final Duration C2C_PAYMENT_WINDOW = Duration.ofHours(24);
 
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
@@ -58,6 +64,12 @@ public class ParticipationService {
     userDomainService.requireProfileCompleted(participantId);
 
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+
+    // C2C 는 신청(무입금)→확정→입금 플로우라 별도 경로로 처리한다. LEGACY 경로는 이하 현행 그대로 (docs/46 §0.1-3).
+    if (buncheol.isC2c()) {
+      return participateC2c(buncheol, participantId, request, now);
+    }
+
     buncheol.validateRecruiting(now);
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
@@ -102,11 +114,120 @@ public class ParticipationService {
     }
 
     // 개최자(MVP 운영자)가 입금 기한 내에 확인·입금확인할 수 있도록 커밋 후 운영자 슬랙 채널로 신규 참여를 알린다.
-    eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId()));
+    eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.LEGACY));
 
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
     return new ParticipateResult(
         participation.getId(), participation.getTotalAmount(), dueAt, hostAccount);
+  }
+
+  /**
+   * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)엔 무입금 신청(APPLIED)으로 슬롯을 선점하고, 성사 확정 후 입금
+   * 수집중(PAYMENT_COLLECTING)엔 빈 슬롯에 즉시입금(AWAITING_PAYMENT, 개별 24h)으로 진입한다(추가 모집 — §4.7-E1).
+   *
+   * <p>다슬롯 일관성(§4.7-A1·A2): 같은 분철에 기존 활성 참여가 있으면 배송지·환불계좌(입금자명)를 강제로 재사용하고 배송비는 첫 참여에만
+   * 부과한다 — 개최자 통장 대조(입금자명 1개)와 배송 1묶음을 보장한다. 요청의 배송지·환불계좌 입력은 무시된다(FE 는 프리필+잠금).
+   */
+  private ParticipateResult participateC2c(
+      final Buncheol buncheol,
+      final Long participantId,
+      final ParticipateRequest request,
+      final Instant now) {
+    if (buncheol.isHost(participantId)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
+    }
+    if (request.buncheolMemberId() == null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+    }
+    BuncheolMember member =
+        buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheol.getId());
+
+    Optional<Participation> existing =
+        participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId);
+    final Long shippingAddressId;
+    final long shippingFee;
+    final RefundAccount refundAccount;
+    if (existing.isPresent()) {
+      shippingAddressId = existing.get().getShippingAddressId();
+      shippingFee = 0L;
+      refundAccount = existing.get().getRefundAccount();
+    } else {
+      ShippingAddress shippingAddress =
+          participationShippingAddressResolver.resolve(
+              participantId, buncheol, request.shippingAddressId());
+      shippingAddressId = shippingAddress.getId();
+      shippingFee = buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
+      refundAccount = request.toRefundAccount();
+    }
+
+    return switch (buncheol.getStatus()) {
+      case RECRUITING -> applyC2c(buncheol, participantId, member, shippingAddressId, shippingFee, refundAccount, now);
+      case PAYMENT_COLLECTING ->
+          joinCollectingC2c(buncheol, participantId, member, shippingAddressId, shippingFee, refundAccount, now);
+      default -> throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    };
+  }
+
+  /** C2C 무입금 신청 (RECRUITING → APPLIED 슬롯 선점). 신청 단계는 계좌·기한 없이 응답한다 (docs/46 §3-1). */
+  private ParticipateResult applyC2c(
+      final Buncheol buncheol,
+      final Long participantId,
+      final BuncheolMember member,
+      final Long shippingAddressId,
+      final long shippingFee,
+      final RefundAccount refundAccount,
+      final Instant now) {
+    // deadline 경과(확정 유예 대기) 구간의 신규 신청 차단 — docs/46 §4.7-E3. INSERT 의 원자 조건과 이중 방어.
+    buncheol.validateRecruiting(now);
+
+    Participation participation =
+        Participation.createApplied(
+            buncheol.getId(),
+            member.getId(),
+            participantId,
+            shippingAddressId,
+            member.getPrice(),
+            shippingFee,
+            refundAccount);
+    if (!participationDomainService.createParticipationIfRecruiting(participation)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
+    return new ParticipateResult(participation.getId(), participation.getTotalAmount(), null, null);
+  }
+
+  /**
+   * C2C 추가 모집 — 성사 확정 후 빈 슬롯 즉시입금 진입 (docs/46 §4.7-E1). 분철은 이미 성사됐으므로 개별 24h 기한으로 바로 입금
+   * 대기(AWAITING_PAYMENT)에 들어가고, 계좌는 확정 시점 스냅샷(§4.7-B1)을 안내한다.
+   */
+  private ParticipateResult joinCollectingC2c(
+      final Buncheol buncheol,
+      final Long participantId,
+      final BuncheolMember member,
+      final Long shippingAddressId,
+      final long shippingFee,
+      final RefundAccount refundAccount,
+      final Instant now) {
+    Instant dueAt = now.plus(C2C_PAYMENT_WINDOW);
+    Participation participation =
+        Participation.create(
+            buncheol.getId(),
+            member.getId(),
+            participantId,
+            shippingAddressId,
+            member.getPrice(),
+            shippingFee,
+            refundAccount,
+            dueAt);
+    if (!participationDomainService.createParticipationIfCollecting(participation)) {
+      // 진행확정(CONFIRMED) 전이 직후 등 — 추가 모집이 이미 닫힘.
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
+    return new ParticipateResult(
+        participation.getId(), participation.getTotalAmount(), dueAt, buncheol.getPaymentAccount());
   }
 
   /**

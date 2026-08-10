@@ -238,7 +238,7 @@ public enum AlimtalkTemplate {
           AlimtalkButton.channelAdd(),
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
-  // --- C2C 개최자 대상 (여기까지는 전부 참여자 대상 — 개최자 알림톡은 이 두 건이 처음이다) ---
+  // --- C2C 개최자 대상 ---
 
   /** (개최자) C2C 모집 정원 충족 — 진행 확정을 눌러달라는 독촉. 정원이 미충족→충족으로 전이될 때마다 발송한다. */
   C2C_BUNCHEOL_FULL(

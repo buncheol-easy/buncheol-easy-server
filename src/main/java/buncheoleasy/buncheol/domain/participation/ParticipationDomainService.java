@@ -45,7 +45,7 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId);
   }
 
-  /** 분철의 활성 참여 수 잠금 조회(current read). RR 스냅샷이 아닌 최신 커밋 기준 판정(C2C 정원 충족)용 — 포트 javadoc 참고. */
+  /** 분철의 활성 참여 수 잠금 조회(current read) — C2C 정원 충족 판정용, 포트 javadoc 참고. */
   public long countActiveByBuncheolIdForUpdate(final Long buncheolId) {
     return participationRepository.countActiveByBuncheolIdForUpdate(buncheolId);
   }

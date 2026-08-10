@@ -44,8 +44,7 @@ public class NotificationInboxRecorder {
     inboxMessageRepository.save(notification);
   }
 
-  // 발송 측 가드(AlimtalkSender)와 동일 정책 — 변수 누락으로 #{...} 토큰이 남은 경로가 저장되면 깨진 링크가 조용히
-  // 노출되므로, 경로만 비우고 알림 본문은 그대로 남긴다.
+  // 발송 측 가드(AlimtalkSender)와 동일 정책 — 미치환 토큰이 남은 깨진 경로는 저장하지 않고 경로만 비운다.
   private String renderLinkPath(final AlimtalkTemplate template, final Map<String, String> variables) {
     String linkPath = AlimtalkPlaceholders.replace(resolveLinkPath(template), variables);
     if (linkPath != null && linkPath.contains("#{")) {
@@ -58,7 +57,6 @@ public class NotificationInboxRecorder {
   // 알림톡 버튼 목적지(BuncheolUrls)와 동일한 화면의 in-app 상대 경로. 배송조회 버튼은 외부 연결이라 in-app 에 동일
   // 목적지가 없는데, 운송장(TRACKING_*)은 본문이 "아래 배송조회 버튼" 을 언급하므로 수신함에서 버튼 없는 알림이 되지 않게
   // 참여 내역으로 보낸다. 수령 독촉(PICKUP_REMINDER_*)은 본문이 버튼을 언급하지 않아 경로 없이 둔다.
-  // 개최자 대상(분철 관리)은 분철별 경로라 #{분철ID} 를 변수로 치환해 저장한다.
   private String resolveLinkPath(final AlimtalkTemplate template) {
     return switch (template) {
       case PAYMENT_CONFIRMED,

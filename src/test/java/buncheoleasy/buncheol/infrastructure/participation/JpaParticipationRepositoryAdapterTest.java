@@ -867,7 +867,6 @@ class JpaParticipationRepositoryAdapterTest {
   @DisplayName("countActiveByBuncheolIdForUpdate — 활성 참여 잠금 카운트 (C2C 정원 충족 판정)")
   class CountActiveByBuncheolIdForUpdateTest {
 
-    // 잠금 조회(FOR UPDATE)가 id 프로젝션과 함께 실제 실행되는지까지 겸해 검증한다 (H2 는 집계 + FOR UPDATE 불가라 id 로 센다).
     @Test
     void 활성_상태만_세고_CANCELLED_는_제외한다() {
       Long buncheolId = createBuncheol();

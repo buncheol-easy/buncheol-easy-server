@@ -601,7 +601,6 @@ class ParticipationServiceTest {
       stubC2cRecruitingBuncheol();
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(Collections.nCopies(2, buncheolMember()));
-      // 정원 판정은 RR 스냅샷이 아닌 잠금 조회(current read) 카운트를 써야 한다 — 일반 조회 카운트로 회귀하면 실패.
       given(participationDomainService.countActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
           .willReturn(2L);
 
@@ -654,7 +653,6 @@ class ParticipationServiceTest {
 
     @Test
     void 이미_마킹된_재요청은_멱등_처리하고_이벤트를_다시_발행하지_않는다() {
-      // 더블탭 재요청에 개최자 알림이 중복 발송되면 안 된다.
       Participation participation = stubC2cParticipation();
       given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(false);
       given(participation.getStatus()).willReturn(ParticipationStatus.PAYMENT_SENT);

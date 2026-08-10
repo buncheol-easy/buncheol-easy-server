@@ -64,10 +64,7 @@ public interface ParticipationRepository {
   /** 단일 분철의 활성 참여 전체 (호스트 관리 화면 + 분철 취소 시 알림 대상). */
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
-  /**
-   * 단일 분철의 활성 참여 수를 잠금 조회(current read)로 센다 (C2C 정원 충족 판정용). RR 스냅샷이 아닌 최신 커밋 기준이 필요할 때만 쓴다 —
-   * 일반 조회로 세면 분철 행 락 대기 중 커밋된 타 참여가 안 보여 충족을 놓친다.
-   */
+  /** 단일 분철의 활성 참여 수 잠금 조회(current read) — RR 스냅샷이 아닌 최신 커밋 기준이 필요한 C2C 정원 충족 판정용. */
   long countActiveByBuncheolIdForUpdate(Long buncheolId);
 
   /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */

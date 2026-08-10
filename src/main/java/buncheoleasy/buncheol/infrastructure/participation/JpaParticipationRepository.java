@@ -66,10 +66,12 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 
-  /** 활성 참여 id 잠금 조회(current read) — 정원 충족 판정용. 집계 + FOR UPDATE 는 H2 미지원이라 id 프로젝션으로 세운다. */
+  /** 활성 참여의 참여자 id 잠금 조회(current read, 행당 1건) — 정원 충족 판정용. 집계 + FOR UPDATE 는 H2 미지원이라 프로젝션으로 세운다. */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("SELECT p.id FROM Participation p WHERE p.buncheolId = :buncheolId AND p.status IN :statuses")
-  List<Long> findIdsByBuncheolIdAndStatusInForUpdate(
+  @Query(
+      "SELECT p.participantId FROM Participation p "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses")
+  List<Long> findParticipantIdsByBuncheolIdAndStatusInForUpdate(
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 

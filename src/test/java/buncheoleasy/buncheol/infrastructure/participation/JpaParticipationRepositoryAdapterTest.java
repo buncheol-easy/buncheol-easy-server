@@ -864,8 +864,8 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("countActiveByBuncheolIdForUpdate — 활성 참여 잠금 카운트 (C2C 정원 충족 판정)")
-  class CountActiveByBuncheolIdForUpdateTest {
+  @DisplayName("findActiveParticipantIdsByBuncheolIdForUpdate — 활성 참여자 id 잠금 조회 (C2C 정원 충족 판정)")
+  class FindActiveParticipantIdsForUpdateTest {
 
     @Test
     void 활성_상태만_세고_CANCELLED_는_제외한다() {
@@ -906,18 +906,20 @@ class JpaParticipationRepositoryAdapterTest {
           ParticipationStatus.CANCELLED,
           ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
-      long count = participationRepository.countActiveByBuncheolIdForUpdate(buncheolId);
+      List<Long> participantIds =
+          participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
 
-      assertThat(count).isEqualTo(2);
+      assertThat(participantIds).containsExactlyInAnyOrder(participantId, otherParticipantId);
     }
 
     @Test
-    void 활성_참여가_없으면_0_을_반환한다() {
+    void 활성_참여가_없으면_빈_리스트를_반환한다() {
       Long buncheolId = createBuncheol();
 
-      long count = participationRepository.countActiveByBuncheolIdForUpdate(buncheolId);
+      List<Long> participantIds =
+          participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
 
-      assertThat(count).isZero();
+      assertThat(participantIds).isEmpty();
     }
   }
 

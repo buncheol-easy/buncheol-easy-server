@@ -64,4 +64,11 @@ public class JpaInboxMessageRepositoryAdapter implements InboxMessageRepository 
   public List<InboxMessage> findBanners() {
     return jpaInboxMessageRepository.findBanners(InboxMessageType.NOTICE);
   }
+
+  @Override
+  public boolean existsRecentNotification(
+      final Long recipientId, final String title, final String linkPath, final Instant after) {
+    return jpaInboxMessageRepository.existsByRecipientIdAndTitleAndLinkPathAndCreatedAtAfter(
+        recipientId, title, linkPath, after);
+  }
 }

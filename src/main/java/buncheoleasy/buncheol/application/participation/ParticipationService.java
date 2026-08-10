@@ -21,6 +21,7 @@ import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -207,14 +208,18 @@ public class ParticipationService {
   /**
    * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 카운트는 반드시 잠금 조회(current
    * read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어
-   * 충족을 놓친다. 행 락 직렬화 덕에 미충족→충족 전이마다 1회 발행되며, 취소 후 재충족 시 재발송은 의도된 동작.
+   * 충족을 놓친다. 행 락 직렬화 덕에 미충족→충족 전이마다 1회 발행되며, 취소 후 재충족 시 재발송은 의도된 동작(스팸 상한은 리스너 쿨다운이 담당).
+   *
+   * <p>락 순서 규약: 분철 행(X) → 참여 행(X) 순서 고정. 참여 행을 먼저 잠근 뒤 분철 행을 갱신하는 경로가 RECRUITING 구간에 추가되면
+   * 데드락 사이클이 생긴다 (입금확인 경로는 PAYMENT_COLLECTING 이후라 현재는 겹치지 않는다).
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
-    long activeCount =
-        participationDomainService.countActiveByBuncheolIdForUpdate(buncheol.getId());
-    if (activeCount >= totalSlots) {
-      eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), activeCount));
+    List<Long> participantIds =
+        participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
+    if (participantIds.size() >= totalSlots) {
+      long applicantCount = participantIds.stream().distinct().count();
+      eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), applicantCount));
     }
   }
 

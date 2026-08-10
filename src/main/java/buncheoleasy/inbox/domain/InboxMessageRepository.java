@@ -1,6 +1,7 @@
 package buncheoleasy.inbox.domain;
 
 import buncheoleasy.global.page.Cursor;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,4 +26,7 @@ public interface InboxMessageRepository {
 
   /** 홈 배너가 등록된(banner_image_url 채워진) 공지를 전체 조회한다. {@code id DESC}(최신순), 개수 제한 없음. */
   List<InboxMessage> findBanners();
+
+  /** {@code after} 이후 같은 수신자·제목·경로의 알림 기록이 있는지 (동일 알림 재발송 쿨다운 판정용). */
+  boolean existsRecentNotification(Long recipientId, String title, String linkPath, Instant after);
 }

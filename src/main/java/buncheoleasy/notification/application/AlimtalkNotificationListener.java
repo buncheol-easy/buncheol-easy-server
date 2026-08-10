@@ -18,6 +18,8 @@ import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
 import buncheoleasy.user.domain.BankAccount;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,9 +45,13 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class AlimtalkNotificationListener {
 
+  // 취소→재신청 루프로 정원 충족이 반복돼도 개최자 독촉은 이 간격당 1회로 제한한다 (알림톡은 건당 과금).
+  private static final Duration BUNCHEOL_FULL_RESEND_COOLDOWN = Duration.ofMinutes(30);
+
   private final NotificationAssembler assembler;
   private final AlimtalkSender sender;
   private final NotificationInboxRecorder inboxRecorder;
+  private final Clock clock;
 
   /** (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. */
   @Async
@@ -173,7 +179,10 @@ public class AlimtalkNotificationListener {
         view.participation().getDueAt());
   }
 
-  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 미충족→충족 전이마다 발송된다. */
+  /**
+   * (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 미충족→충족 전이마다 발송되는데, 취소→재신청 반복으로
+   * 무제한 재발송이 가능한 외부 트리거라 분철·개최자 단위 쿨다운(수신함 최근 기록 기준)으로 상한을 건다.
+   */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolFull(final BuncheolFullEvent event) {
@@ -182,9 +191,15 @@ public class AlimtalkNotificationListener {
         Map.of(
             "닉네임", view.host().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
-            "신청인원", String.valueOf(event.appliedCount()),
+            "신청인원", String.valueOf(event.applicantCount()),
             // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
             "분철ID", String.valueOf(view.buncheol().getId()));
+    Instant cooldownStart = Instant.now(clock).minus(BUNCHEOL_FULL_RESEND_COOLDOWN);
+    if (inboxRecorder.hasRecentRecord(
+        view.host().getId(), AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables, cooldownStart)) {
+      log.info("정원 충족 알림 쿨다운 내 재발송 스킵 - buncheolId={}", event.buncheolId());
+      return;
+    }
     recordSafely(view.host().getId(), AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
     sender.send(
         AlimtalkTemplate.C2C_BUNCHEOL_FULL, view.host().getPhoneNumber().value(), variables);

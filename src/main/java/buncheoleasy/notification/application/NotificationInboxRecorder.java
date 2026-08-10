@@ -4,6 +4,7 @@ import buncheoleasy.inbox.domain.InboxMessage;
 import buncheoleasy.inbox.domain.InboxMessageRepository;
 import buncheoleasy.notification.domain.AlimtalkPlaceholders;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
+import java.time.Instant;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +45,17 @@ public class NotificationInboxRecorder {
     inboxMessageRepository.save(notification);
   }
 
-  // 발송 측 가드(AlimtalkSender)와 동일 정책 — 미치환 토큰이 남은 깨진 경로는 저장하지 않고 경로만 비운다.
+  /** {@code after} 이후 같은 수신자에게 같은 템플릿·경로(분철)의 알림을 이미 기록했는지 — 재발송 쿨다운 판정용. */
+  public boolean hasRecentRecord(
+      final Long recipientId,
+      final AlimtalkTemplate template,
+      final Map<String, String> variables,
+      final Instant after) {
+    return inboxMessageRepository.existsRecentNotification(
+        recipientId, template.subject(), renderLinkPath(template, variables), after);
+  }
+
+  // 발송 측 가드(AlimtalkSender)와 같은 판정 기준이되, 발송을 막지 않고 경로만 비운다 — in-app 기록은 남겨야 하므로.
   private String renderLinkPath(final AlimtalkTemplate template, final Map<String, String> variables) {
     String linkPath = AlimtalkPlaceholders.replace(resolveLinkPath(template), variables);
     if (linkPath != null && linkPath.contains("#{")) {

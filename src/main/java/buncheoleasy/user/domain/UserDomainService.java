@@ -32,15 +32,26 @@ public class UserDomainService {
       final String email,
       final String name,
       final String phoneNumber,
-      final String ageRange) {
+      final String ageRange,
+      final boolean ageRangeWithdrawn) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .map(
-            user -> {
-              user.updateAgeRange(ageRange);
-              return user;
-            })
+        .map(user -> refreshAgeRange(user, ageRange, ageRangeWithdrawn))
         .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
+  }
+
+  /**
+   * 재로그인 시 연령대를 카카오 최신 상태로 맞춘다 — 철회 확정 신호가 오면 지체 없이 파기(PIPA), 새 값이 오면 갱신, 신호가 없으면(미동의였던 그대로·조회
+   * 실패) 기존 값을 유지한다.
+   */
+  private User refreshAgeRange(
+      final User user, final String ageRange, final boolean ageRangeWithdrawn) {
+    if (ageRangeWithdrawn) {
+      user.clearAgeRange();
+    } else if (ageRange != null) {
+      user.updateAgeRange(ageRange);
+    }
+    return user;
   }
 
   public boolean isValidUser(final Long id) {
@@ -156,7 +167,9 @@ public class UserDomainService {
     if (phoneNumber != null) {
       newUser.updatePhoneNumber(phoneNumber);
     }
-    newUser.updateAgeRange(ageRange);
+    if (ageRange != null) {
+      newUser.updateAgeRange(ageRange);
+    }
     return userRepository.save(newUser);
   }
 }

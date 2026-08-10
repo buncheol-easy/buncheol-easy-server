@@ -28,6 +28,7 @@ public class User extends TimestampedEntity {
   private static final String NICKNAME_PREFIX = "Guest";
   private static final int RANDOM_SUFFIX_LENGTH = 10;
   private static final int ADULT_AGE_LOWER_BOUND = 20;
+  private static final int AGE_RANGE_MAX_LENGTH = 10;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -128,10 +129,16 @@ public class User extends TimestampedEntity {
   }
 
   // null/blank 는 무시한다 — 카카오 보강 조회 실패나 미동의 재로그인이 기존 값을 지우면 안 된다.
+  // 컬럼 길이(VARCHAR(10)) 초과 값도 무시 — 이 경로는 try/catch 밖이라 커밋 실패가 로그인 자체를 깨기 때문.
   public void updateAgeRange(final String newValue) {
-    if (newValue != null && !newValue.isBlank()) {
+    if (newValue != null && !newValue.isBlank() && newValue.length() <= AGE_RANGE_MAX_LENGTH) {
       this.ageRange = newValue;
     }
+  }
+
+  /** 카카오에서 연령대 동의 철회가 확정 신호로 확인된 경우 지체 없이 파기한다 (PIPA). */
+  public void clearAgeRange() {
+    this.ageRange = null;
   }
 
   /**
@@ -186,7 +193,7 @@ public class User extends TimestampedEntity {
 
   // TODO: 탈퇴 정책 보강 필요.
   //  1) 활성 분철(RECRUITING~SETTLING)·미정산 결제가 있으면 탈퇴 거부 (애플리케이션 레이어에서 검증).
-  //  2) 모든 거래가 종료된 뒤 PII(phoneNumber·bankAccount·email) 를 NULL/해시로 익명화.
+  //  2) 모든 거래가 종료된 뒤 PII(phoneNumber·bankAccount·email·ageRange) 를 NULL/해시로 익명화.
   //  PIPA 상 탈퇴 시 즉시 파기가 원칙이나, 결제 기록(전자상거래법 5년)은 분리 보관해야 한다.
   public void withdraw(final Instant now) {
     this.deletedAt = now;

@@ -473,6 +473,27 @@ class UserTest {
       assertThat(user.getAgeRange()).isEqualTo("20~29");
     }
 
+    @Test
+    void 컬럼_길이를_넘는_값은_무시된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateAgeRange("20~29");
+
+      user.updateAgeRange("예상밖의아주긴연령대값문자열");
+
+      assertThat(user.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 동의_철회_시_연령대가_파기된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateAgeRange("20~29");
+
+      user.clearAgeRange();
+
+      assertThat(user.getAgeRange()).isNull();
+      assertThat(user.isVerifiedAdult()).isFalse();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"20~29", "30~39", "40~49", "90~"})
     void 구간_하한이_20_이상이면_성인으로_확인된다(String ageRange) {

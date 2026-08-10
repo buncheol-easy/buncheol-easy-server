@@ -36,7 +36,12 @@ public class SocialLoginService {
     SocialInfo socialInfo = SocialInfo.of(command.provider(), command.providerId());
     User user =
         userDomainService.getOrCreateBySocialLogin(
-            socialInfo, command.email(), command.name(), command.phoneNumber(), command.ageRange());
+            socialInfo,
+            command.email(),
+            command.name(),
+            command.phoneNumber(),
+            command.ageRange(),
+            command.ageRangeWithdrawn());
 
     if (command.serviceTerms() != null && !command.serviceTerms().isEmpty()) {
       try {

@@ -71,7 +71,7 @@ class SocialLoginServiceTest {
 
       given(
               userDomainService.getOrCreateBySocialLogin(
-                  any(SocialInfo.class), eq(email), isNull(), isNull(), isNull()))
+                  any(SocialInfo.class), eq(email), isNull(), isNull(), isNull(), eq(false)))
           .willReturn(user);
       given(jwtTokenProvider.issueTokens(userId)).willReturn(expected);
 
@@ -82,7 +82,7 @@ class SocialLoginServiceTest {
       ArgumentCaptor<SocialInfo> captor = ArgumentCaptor.forClass(SocialInfo.class);
       then(userDomainService)
           .should()
-          .getOrCreateBySocialLogin(captor.capture(), eq(email), isNull(), isNull(), isNull());
+          .getOrCreateBySocialLogin(captor.capture(), eq(email), isNull(), isNull(), isNull(), eq(false));
       assertThat(captor.getValue().provider().name()).isEqualTo("KAKAO");
       assertThat(captor.getValue().providerId()).isEqualTo(providerId);
 
@@ -108,7 +108,8 @@ class SocialLoginServiceTest {
                   eq("sync@example.com"),
                   eq("김실명"),
                   eq("01012345678"),
-                  eq("20~29")))
+                  eq("20~29"),
+                  eq(false)))
           .willReturn(user);
       given(jwtTokenProvider.issueTokens(userId))
           .willReturn(new TokenPair("access", "refresh"));
@@ -116,7 +117,7 @@ class SocialLoginServiceTest {
       // when
       socialLoginService.login(
           new SocialLoginCommand(
-              "KAKAO", "sync_1", "sync@example.com", "김실명", "01012345678", "20~29", terms));
+              "KAKAO", "sync_1", "sync@example.com", "김실명", "01012345678", "20~29", false, terms));
 
       // then
       then(userDomainService)
@@ -136,7 +137,7 @@ class SocialLoginServiceTest {
 
       given(
               userDomainService.getOrCreateBySocialLogin(
-                  any(SocialInfo.class), eq("sync2@example.com"), isNull(), isNull(), isNull()))
+                  any(SocialInfo.class), eq("sync2@example.com"), isNull(), isNull(), isNull(), eq(false)))
           .willReturn(user);
       willThrow(new RuntimeException("DB 오류"))
           .given(userDomainService)
@@ -146,7 +147,7 @@ class SocialLoginServiceTest {
       // when
       TokenPair result =
           socialLoginService.login(
-              new SocialLoginCommand("KAKAO", "sync_2", "sync2@example.com", null, null, null, terms));
+              new SocialLoginCommand("KAKAO", "sync_2", "sync2@example.com", null, null, null, false, terms));
 
       // then
       assertThat(result).isEqualTo(expected);

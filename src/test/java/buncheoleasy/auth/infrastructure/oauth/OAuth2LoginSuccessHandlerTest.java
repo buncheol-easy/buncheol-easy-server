@@ -133,7 +133,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(authorizedClientService.loadAuthorizedClient("kakao", "provider-id"))
           .willReturn(authorizedClient);
       given(kakaoApiClient.getUserInfo("kakao-access-token"))
-          .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678", "20~29"));
+          .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678", "20~29", false));
       given(kakaoApiClient.getServiceTerms("kakao-access-token")).willReturn(terms);
       given(socialLoginService.login(any(SocialLoginCommand.class)))
           .willReturn(new TokenPair("access", "refresh"));

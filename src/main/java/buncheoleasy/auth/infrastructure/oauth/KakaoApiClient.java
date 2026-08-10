@@ -49,12 +49,13 @@ public class KakaoApiClient {
             .body(KakaoUserMeResponse.class);
 
     if (response == null || response.kakaoAccount() == null) {
-      return new KakaoUserInfo(null, null, null);
+      return new KakaoUserInfo(null, null, null, null);
     }
     return new KakaoUserInfo(
         response.kakaoAccount().name(),
         KakaoPhoneNumberNormalizer.normalize(response.kakaoAccount().phoneNumber()),
-        response.kakaoAccount().ageRange());
+        response.kakaoAccount().ageRange(),
+        response.kakaoAccount().ageRangeNeedsAgreement());
   }
 
   /** 간편가입 약관 동의 내역 조회. */
@@ -81,7 +82,12 @@ public class KakaoApiClient {
         .toList();
   }
 
-  public record KakaoUserInfo(String name, String phoneNumber, String ageRange) {}
+  /**
+   * ageRangeNeedsAgreement: 카카오가 내려주는 "연령대 동의 필요" 신호. true = 미동의/철회 확정(저장값 파기 대상),
+   * false = 동의 상태, null = 신호 없음(권한 미설정·조회 실패 — 기존 값 유지).
+   */
+  public record KakaoUserInfo(
+      String name, String phoneNumber, String ageRange, Boolean ageRangeNeedsAgreement) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   record KakaoUserMeResponse(@JsonProperty("kakao_account") KakaoAccount kakaoAccount) {
@@ -90,7 +96,8 @@ public class KakaoApiClient {
     record KakaoAccount(
         String name,
         @JsonProperty("phone_number") String phoneNumber,
-        @JsonProperty("age_range") String ageRange) {}
+        @JsonProperty("age_range") String ageRange,
+        @JsonProperty("age_range_needs_agreement") Boolean ageRangeNeedsAgreement) {}
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)

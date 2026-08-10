@@ -2,9 +2,11 @@ package buncheoleasy.buncheol.infrastructure;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import org.springframework.data.domain.Pageable;
@@ -88,12 +90,12 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   @Query(
       "SELECT COUNT(b) > 0 FROM Buncheol b "
           + "WHERE b.hostId = :hostId "
-          + "AND (b.status = :recruitingStatus "
+          + "AND (b.status IN :openStatuses "
           + "  OR (b.status = :confirmedStatus "
           + "    AND EXISTS ("
           + "      SELECT p FROM Participation p "
           + "      WHERE p.buncheolId = b.id "
-          + "      AND (p.status = :awaitingParticipationStatus "
+          + "      AND (p.status IN :pendingParticipationStatuses "
           + "        OR (p.status = :confirmedParticipationStatus "
           + "          AND NOT EXISTS ("
           + "            SELECT d FROM Delivery d "
@@ -101,9 +103,9 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "            AND d.status IN :finishedDeliveryStatuses))))))")
   boolean existsUnfinishedByHostId(
       @Param("hostId") Long hostId,
-      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("openStatuses") Set<BuncheolStatus> openStatuses,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
-      @Param("awaitingParticipationStatus") ParticipationStatus awaitingParticipationStatus,
+      @Param("pendingParticipationStatuses") Set<ParticipationStatus> pendingParticipationStatuses,
       @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
       @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 
@@ -181,6 +183,52 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("buncheolId") Long buncheolId,
       @Param("totalSlots") long totalSlots,
       @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("now") Instant now);
+
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /**
+   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다 —
+   * 확정 후 개최자가 프로필 계좌를 바꿔도 안내 계좌가 어긋나지 않는다 (docs/46 §4.1·§4.7-B1).
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :collectingStatus, b.paymentDueAt = :paymentDueAt, b.finalizedAt = :now, "
+          + "    b.paymentAccount.bank = :bank, b.paymentAccount.account = :account, "
+          + "    b.paymentAccount.holder = :holder, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus AND b.flowType = :c2cFlow")
+  int startCollectingIfRecruiting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("collectingStatus") BuncheolStatus collectingStatus,
+      @Param("c2cFlow") FlowType c2cFlow,
+      @Param("paymentDueAt") Instant paymentDueAt,
+      @Param("bank") String bank,
+      @Param("account") String account,
+      @Param("holder") String holder,
+      @Param("now") Instant now);
+
+  /**
+   * C2C 전원 입금확인 CAS: 미확정 활성 참여(APPLIED·AWAITING_PAYMENT·PAYMENT_SENT)가 없고 확정 참여가 1건 이상이면
+   * PAYMENT_COLLECTING → CONFIRMED 로 전이한다. 서브쿼리 current-read 의존은 {@code confirmIfAllSlotsConfirmed}
+   * 주석 참조.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :confirmedStatus, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.buncheolId = b.id AND p.status IN :pendingStatuses) "
+          + "AND EXISTS (SELECT p2 FROM Participation p2 "
+          + "  WHERE p2.buncheolId = b.id AND p2.status = :confirmedParticipationStatus)")
+  int confirmIfAllCollected(
+      @Param("buncheolId") Long buncheolId,
+      @Param("collectingStatus") BuncheolStatus collectingStatus,
+      @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
       @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
       @Param("now") Instant now);

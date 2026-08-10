@@ -88,6 +88,30 @@ public interface ParticipationRepository {
    */
   boolean expirePaymentIfOverdue(Long participationId, Instant now);
 
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /** C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT, 기한 경과 검사 없음). */
+  boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
+
+  /**
+   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code
+   * dueAt} 을 함께 세팅한다. {@code paymentSentAt} 은 보존.
+   */
+  boolean revertPaymentSentIfSent(Long participationId, Instant dueAt, Instant now);
+
+  /** C2C 참여자 자발 취소 CAS — APPLIED·AWAITING_PAYMENT 에서만 USER_CANCELLED 로 전이 (docs/46 §5). */
+  boolean cancelByUserIfCancellable(Long participationId, Instant now);
+
+  /** C2C 개최자 수동 입금확인 CAS — AWAITING_PAYMENT·PAYMENT_SENT 에서 기한 경과와 무관하게 CONFIRMED 로 전이. */
+  boolean confirmPaymentIfPayable(Long participationId, Instant now);
+
+  /**
+   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1).
+   *
+   * @return 전이된 참여 수
+   */
+  int startPaymentCollecting(Long buncheolId, Instant dueAt, Instant now);
+
   /**
    * 분철의 활성 참여를 모두 CANCELLED({@link ParticipationCancelReason#BUNCHEOL_CANCELLED}) 로 일괄 전이한다. 호스트
    * 취소·최소 인원 미달로 분철이 취소될 때 호출된다. 입금확인된 참여도 함께 취소되며 환불은 운영자가 오프라인으로 처리한다.

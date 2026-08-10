@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.BankAccount;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -76,5 +77,36 @@ public class BuncheolDomainService {
   /** 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
   public boolean hasUnfinishedBuncheolHostedBy(final Long hostId) {
     return buncheolRepository.existsUnfinishedByHostId(hostId);
+  }
+
+  // --- C2C 플로우 전이 (docs/46 §4) ---
+
+  /**
+   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 전이에 성공하면 true (false 면 RECRUITING 이 아니거나 C2C 분철이 아님)
+   */
+  public boolean startCollecting(
+      final Long buncheolId,
+      final Instant paymentDueAt,
+      final BankAccount hostAccount,
+      final Instant now) {
+    return buncheolRepository.startCollectingIfRecruiting(
+            buncheolId,
+            paymentDueAt,
+            hostAccount.bank(),
+            hostAccount.account(),
+            hostAccount.holder(),
+            now)
+        > 0;
+  }
+
+  /**
+   * C2C 전원 입금확인 시 진행확정 CAS (PAYMENT_COLLECTING → CONFIRMED). 미확정 활성 참여가 남아 있으면 전이하지 않는다.
+   * 호출 측 {@code @Transactional} 필수.
+   */
+  public boolean confirmIfAllCollected(final Long buncheolId, final Instant now) {
+    return buncheolRepository.confirmIfAllCollected(buncheolId, now) > 0;
   }
 }

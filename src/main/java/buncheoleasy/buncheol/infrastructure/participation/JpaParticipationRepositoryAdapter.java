@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TimeZone;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -160,9 +161,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsUnfinishedByParticipantId(final Long participantId) {
+    // C2C 신청(APPLIED)·보냈어요(PAYMENT_SENT) 상태도 진행 중 참여로 보고 탈퇴를 막는다 (docs/46 §4.7-D1).
     return jpaParticipationRepository.existsUnfinishedByParticipantId(
         participantId,
-        ParticipationStatus.AWAITING_PAYMENT,
+        Set.of(
+            ParticipationStatus.APPLIED,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT),
         ParticipationStatus.CONFIRMED,
         PaybackStatus.REQUESTED,
         DeliveryStatus.finished());
@@ -254,6 +259,59 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
         ParticipationStatus.active(),
         ParticipationStatus.CANCELLED,
         ParticipationCancelReason.BUNCHEOL_CANCELLED,
+        now);
+  }
+
+  @Override
+  public boolean markPaymentSentIfAwaiting(final Long participationId, final Instant now) {
+    return jpaParticipationRepository.markPaymentSentIfAwaiting(
+            participationId,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT,
+            now)
+        > 0;
+  }
+
+  @Override
+  public boolean revertPaymentSentIfSent(
+      final Long participationId, final Instant dueAt, final Instant now) {
+    return jpaParticipationRepository.revertPaymentSentIfSent(
+            participationId,
+            ParticipationStatus.PAYMENT_SENT,
+            ParticipationStatus.AWAITING_PAYMENT,
+            dueAt,
+            now)
+        > 0;
+  }
+
+  @Override
+  public boolean cancelByUserIfCancellable(final Long participationId, final Instant now) {
+    return jpaParticipationRepository.cancelIfStatusIn(
+            participationId,
+            Set.of(ParticipationStatus.APPLIED, ParticipationStatus.AWAITING_PAYMENT),
+            ParticipationStatus.CANCELLED,
+            ParticipationCancelReason.USER_CANCELLED,
+            now)
+        > 0;
+  }
+
+  @Override
+  public boolean confirmPaymentIfPayable(final Long participationId, final Instant now) {
+    return jpaParticipationRepository.confirmPaymentIfPayable(
+            participationId,
+            Set.of(ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT),
+            ParticipationStatus.CONFIRMED,
+            now)
+        > 0;
+  }
+
+  @Override
+  public int startPaymentCollecting(final Long buncheolId, final Instant dueAt, final Instant now) {
+    return jpaParticipationRepository.startPaymentCollecting(
+        buncheolId,
+        ParticipationStatus.APPLIED,
+        ParticipationStatus.AWAITING_PAYMENT,
+        dueAt,
         now);
   }
 

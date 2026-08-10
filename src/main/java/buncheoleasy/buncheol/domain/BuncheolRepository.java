@@ -81,4 +81,23 @@ public interface BuncheolRepository {
    * @return 갱신된 행 수 (0 이면 아직 매진 아님 / 최소인원 미달 / 이미 마감됨)
    */
   int confirmIfAllSlotsConfirmed(Long buncheolId, long totalSlots, Instant now);
+
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /**
+   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * C2C 분철에만 적용된다(flow_type 조건). {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 RECRUITING 이 아니거나 C2C 분철이 아님)
+   */
+  int startCollectingIfRecruiting(
+      Long buncheolId, Instant paymentDueAt, String bank, String account, String holder, Instant now);
+
+  /**
+   * C2C 전원 입금확인 CAS: 미확정 활성 참여가 없고 확정 참여가 1건 이상일 때만 PAYMENT_COLLECTING → CONFIRMED 로 전이한다.
+   * {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 아직 미확정 참여가 남았거나 입금 수집중이 아님)
+   */
+  int confirmIfAllCollected(Long buncheolId, Instant now);
 }

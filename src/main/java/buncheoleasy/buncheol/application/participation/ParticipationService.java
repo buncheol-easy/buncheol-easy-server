@@ -280,7 +280,13 @@ public class ParticipationService {
 
   private void doConfirmPayment(final Participation participation, final Buncheol buncheol) {
     final Instant now = Instant.now(clock);
-    participationDomainService.confirmPayment(participation.getId(), now);
+    if (buncheol.isC2c()) {
+      // C2C 는 "보냈어요"(PAYMENT_SENT) 상태도 확인 대상이고, 개최자 확인이 늦어도 유효하도록 기한 경과 검사를
+      // 하지 않는다 (docs/46 §3-6).
+      participationDomainService.confirmPaymentPayable(participation.getId(), now);
+    } else {
+      participationDomainService.confirmPayment(participation.getId(), now);
+    }
     applyPaymentConfirmed(participation, buncheol, now);
   }
 
@@ -291,7 +297,116 @@ public class ParticipationService {
     deliverySnapshotCreator.create(participation);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participation.getId()));
 
-    confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
+    if (buncheol.isC2c()) {
+      confirmBuncheolIfAllCollected(buncheol, now);
+    } else {
+      confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
+    }
+  }
+
+  /**
+   * C2C: 이 입금확인으로 미확정 활성 참여가 더 없으면(전원 입금확인) 분철을 PAYMENT_COLLECTING → CONFIRMED 로 전이한다 (docs/46
+   * §4.3). 판정·전이는 CAS 서브쿼리로 원자화돼 마지막 두 건을 동시에 확인하는 경합에서도 한쪽만 후속(진행확정 알림)을 수행한다.
+   */
+  private void confirmBuncheolIfAllCollected(final Buncheol buncheol, final Instant now) {
+    if (buncheolDomainService.confirmIfAllCollected(buncheol.getId(), now)) {
+      buncheolConfirmedFinalizer.finalizeConfirmed(buncheol.getId());
+    }
+  }
+
+  // --- C2C 참여자·개최자 액션 (docs/46 §4.2·§4.4·§4.5) ---
+
+  /**
+   * C2C 참여자 "보냈어요" 마킹 (AWAITING_PAYMENT → PAYMENT_SENT, docs/46 §4.2). 기한 경과 검사 없음 — 기한 직전 입금
+   * 보호가 목적이며, 만료 스케줄러가 먼저 취소했으면 상태 위반으로 안내한다. 더블탭 등 재요청은 멱등 처리한다.
+   */
+  @Transactional
+  public void markPaymentSent(final Long participantId, final Long participationId) {
+    final Instant now = Instant.now(clock);
+    Participation participation = participationDomainService.getParticipation(participationId);
+    participation.validateOwnedBy(participantId);
+    requireC2c(participation);
+
+    if (participationDomainService.markPaymentSent(participationId, now)) {
+      return;
+    }
+    if (participationDomainService.getParticipation(participationId).getStatus()
+        == ParticipationStatus.PAYMENT_SENT) {
+      return; // 멱등: 이미 마킹됨
+    }
+    throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+  }
+
+  /**
+   * C2C 참여자 마킹 철회 (PAYMENT_SENT → AWAITING_PAYMENT 복귀, 기한 유지 — 오마킹 셀프 수정). {@code paymentSentAt}
+   * 은 분쟁 증거로 보존된다. 이미 입금 대기로 돌아가 있으면 멱등 처리한다.
+   */
+  @Transactional
+  public void revertPaymentSent(final Long participantId, final Long participationId) {
+    final Instant now = Instant.now(clock);
+    Participation participation = participationDomainService.getParticipation(participationId);
+    participation.validateOwnedBy(participantId);
+    requireC2c(participation);
+
+    if (participationDomainService.revertPaymentSent(
+        participationId, participation.getDueAt(), now)) {
+      return;
+    }
+    if (participationDomainService.getParticipation(participationId).getStatus()
+        == ParticipationStatus.AWAITING_PAYMENT) {
+      return; // 멱등: 이미 철회됨
+    }
+    throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+  }
+
+  /**
+   * C2C 개최자 미입금 반려 (docs/46 §4.5 — 취소가 아니라 재입금 기회). PAYMENT_SENT 를 AWAITING_PAYMENT 로 되돌리고 기한을
+   * max(기존, now+24h) 로 연장한 뒤, 커밋 후 재확인 알림(연장된 새 기한 포함)을 트리거한다.
+   */
+  @Transactional
+  public void rejectPaymentSent(final Long hostId, final Long participationId) {
+    final Instant now = Instant.now(clock);
+    Participation participation = participationDomainService.getParticipation(participationId);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    buncheol.validateOwner(hostId);
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    Instant extended = now.plus(C2C_PAYMENT_WINDOW);
+    Instant newDueAt =
+        participation.getDueAt() != null && participation.getDueAt().isAfter(extended)
+            ? participation.getDueAt()
+            : extended;
+    if (!participationDomainService.revertPaymentSent(participationId, newDueAt, now)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+    }
+
+    eventPublisher.publishEvent(new PaymentRecheckRequestedEvent(participationId));
+  }
+
+  /**
+   * C2C 참여자 자발 취소 (docs/46 §5). 신청(APPLIED)·입금 대기(AWAITING_PAYMENT)에서만 허용하고, 보냈어요·입금확인 이후는 돈이
+   * 개최자에게 간 구간이라 문의 경유로 안내한다(§5 구간 ②′·③).
+   */
+  @Transactional
+  public void cancelByParticipant(final Long participantId, final Long participationId) {
+    final Instant now = Instant.now(clock);
+    Participation participation = participationDomainService.getParticipation(participationId);
+    participation.validateOwnedBy(participantId);
+    requireC2c(participation);
+
+    if (!participationDomainService.cancelByUser(participationId, now)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  /** C2C 전용 액션 가드 — LEGACY 참여에는 새 플로우 API 를 제공하지 않는다 (docs/46 §4.4). */
+  private void requireC2c(final Participation participation) {
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
   }
 
   /**

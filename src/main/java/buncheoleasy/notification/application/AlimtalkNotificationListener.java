@@ -3,10 +3,12 @@ package buncheoleasy.notification.application;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
+import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
+import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -169,6 +171,45 @@ public class AlimtalkNotificationListener {
         view.memberName(),
         view.paymentAmount(),
         view.participation().getDueAt());
+  }
+
+  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 미충족→충족 전이마다 발송된다. */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBuncheolFull(final BuncheolFullEvent event) {
+    BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "신청인원", String.valueOf(event.appliedCount()),
+            // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
+            "분철ID", String.valueOf(view.buncheol().getId()));
+    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    sender.send(
+        AlimtalkTemplate.C2C_BUNCHEOL_FULL, view.host().getPhoneNumber().value(), variables);
+  }
+
+  /**
+   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인(또는 반려)해 달라고 요청한다. 마킹(슬롯) 건당 1건이라 다슬롯 참여자는
+   * 슬롯 수만큼 발송될 수 있고, 금액도 슬롯별 금액이다 — 이체 1건과의 대조는 입금자명(환불 계좌 예금주, docs/46 §4.7-A1)으로 한다.
+   */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onPaymentSent(final PaymentSentEvent event) {
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "멤버명", view.memberName(),
+            "참여자닉네임", view.participant().getNickname().value(),
+            "입금자명", view.participation().getRefundAccount().holder(),
+            "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
+            "분철ID", String.valueOf(view.buncheol().getId()));
+    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
+    sender.send(
+        AlimtalkTemplate.C2C_PAYMENT_SENT, view.host().getPhoneNumber().value(), variables);
   }
 
   /** (참여자) C2C 개최자가 "보냈어요" 를 반려함 — 연장된 새 기한을 담아 입금 재확인을 안내한다 (docs/46 §4.5). */

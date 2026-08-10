@@ -42,6 +42,12 @@ public class NotificationAssembler {
         participation, buncheol, memberName, participant, host, participation.getTotalAmount());
   }
 
+  public BuncheolHostView loadBuncheolHost(final Long buncheolId) {
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    User host = userDomainService.getUser(buncheol.getHostId());
+    return new BuncheolHostView(buncheol, host);
+  }
+
   public Delivery loadDelivery(final Long deliveryId) {
     return deliveryDomainService.getDelivery(deliveryId);
   }

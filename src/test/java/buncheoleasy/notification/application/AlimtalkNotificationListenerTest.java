@@ -10,12 +10,15 @@ import static org.mockito.Mockito.verify;
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
+import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
@@ -47,6 +50,7 @@ class AlimtalkNotificationListenerTest {
   private static final Long PARTICIPATION_ID = 50L;
   private static final Long DELIVERY_ID = 10L;
   private static final String PARTICIPANT_PHONE = "01011112222";
+  private static final String HOST_PHONE = "01033334444";
 
   @Nested
   @DisplayName("입금 확인(onPaymentConfirmed)")
@@ -319,6 +323,67 @@ class AlimtalkNotificationListenerTest {
           .containsEntry("반려사유", "비공개 계정이라 확인 불가")
           .containsEntry("환급금액", "3,500");
       verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.PAYBACK_REJECTED), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 정원 충족(onBuncheolFull)")
+  class BuncheolFull {
+
+    @Test
+    @DisplayName("개최자에게 C2C_BUNCHEOL_FULL 발송 + 변수 매핑(버튼 경로용 분철ID 포함) + 수신함 기록")
+    void sendsToHost() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(77L);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      given(assembler.loadBuncheolHost(77L)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onBuncheolFull(new BuncheolFullEvent(77L, 5));
+
+      Map<String, String> variables = captureSend(AlimtalkTemplate.C2C_BUNCHEOL_FULL, HOST_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "개최자닉")
+          .containsEntry("분철명", "세븐틴 미니 12집 분철")
+          .containsEntry("신청인원", "5")
+          .containsEntry("분철ID", "77");
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FULL), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 보냈어요(onPaymentSent)")
+  class PaymentSent {
+
+    @Test
+    @DisplayName("개최자에게 C2C_PAYMENT_SENT 발송 + 통장 대조용 입금자명 포함 변수 매핑 + 수신함 기록")
+    void sendsToHost() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(77L);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      Participation participation = mock(Participation.class);
+      given(participation.getRefundAccount())
+          .willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+      User participant = mock(User.class);
+      given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(new ParticipationView(participation, buncheol, "호시", participant, host, 25_000L));
+
+      listener.onPaymentSent(new PaymentSentEvent(PARTICIPATION_ID));
+
+      Map<String, String> variables = captureSend(AlimtalkTemplate.C2C_PAYMENT_SENT, HOST_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "개최자닉")
+          .containsEntry("분철명", "세븐틴 미니 12집 분철")
+          .containsEntry("멤버명", "호시")
+          .containsEntry("참여자닉네임", "참여자닉")
+          .containsEntry("입금자명", "홍길동")
+          .containsEntry("입금금액", "25,000")
+          .containsEntry("분철ID", "77");
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_PAYMENT_SENT), any());
     }
   }
 

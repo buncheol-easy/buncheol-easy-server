@@ -141,9 +141,36 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public List<Long> findRecruitingIdsPastDeadline(final Instant now, final int limit) {
+  public List<Long> findRecruitingIdsPastDeadline(
+      final Instant now, final Instant c2cGraceCutoff, final int limit) {
     return jpaBuncheolRepository.findIdsByStatusAndDeadlineBefore(
-        BuncheolStatus.RECRUITING, now, PageRequest.of(0, limit));
+        BuncheolStatus.RECRUITING,
+        FlowType.LEGACY,
+        FlowType.C2C,
+        now,
+        c2cGraceCutoff,
+        PageRequest.of(0, limit));
+  }
+
+  @Override
+  public List<Long> findCollectingIdsPastPaymentDue(final Instant now, final int limit) {
+    return jpaBuncheolRepository.findIdsByStatusAndPaymentDueBefore(
+        BuncheolStatus.PAYMENT_COLLECTING, now, PageRequest.of(0, limit));
+  }
+
+  @Override
+  public int cancelIfCollectingAndEmpty(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.cancelIfCollectingAndEmpty(
+        buncheolId,
+        BuncheolStatus.PAYMENT_COLLECTING,
+        ParticipationStatus.active(),
+        BuncheolStatus.CANCELLED,
+        now);
+  }
+
+  @Override
+  public Optional<Buncheol> findByIdForUpdate(final Long id) {
+    return jpaBuncheolRepository.findByIdForUpdate(id);
   }
 
   @Override

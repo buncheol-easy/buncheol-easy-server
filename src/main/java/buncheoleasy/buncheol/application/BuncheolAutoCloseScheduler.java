@@ -55,6 +55,11 @@ public class BuncheolAutoCloseScheduler {
       return;
     }
     Instant now = Instant.now(clock);
+    closeExpiredRecruiting(now);
+    cleanUpDeadCollecting(now);
+  }
+
+  private void closeExpiredRecruiting(final Instant now) {
     List<Long> expiredIds = buncheolAutoCloseService.findExpiredBuncheolIds(now);
     if (expiredIds.isEmpty()) {
       return;
@@ -74,5 +79,33 @@ public class BuncheolAutoCloseScheduler {
       }
     }
     log.info("분철 자동 마감 완료 - 대상: {}, 마감: {}, 실패: {}", expiredIds.size(), closedCount, failedCount);
+  }
+
+  // C2C 입금 수집 데드엔드 정리 — 기한 경과 + 활성 참여 0(확정 0건)이면 미성사 취소해 PAYMENT_COLLECTING 영구 정체를 막는다.
+  private void cleanUpDeadCollecting(final Instant now) {
+    List<Long> overdueIds = buncheolAutoCloseService.findOverdueCollectingIds(now);
+    if (overdueIds.isEmpty()) {
+      return;
+    }
+
+    int cancelledCount = 0;
+    int failedCount = 0;
+    for (Long buncheolId : overdueIds) {
+      try {
+        if (buncheolAutoCloseService.cancelDeadCollecting(buncheolId, now)) {
+          cancelledCount++;
+        }
+      } catch (Exception e) {
+        failedCount++;
+        log.error("C2C 입금 수집 데드엔드 정리 실패 - buncheolId: {}", buncheolId, e);
+      }
+    }
+    if (cancelledCount > 0 || failedCount > 0) {
+      log.info(
+          "C2C 입금 수집 데드엔드 정리 - 대상: {}, 취소: {}, 실패: {}",
+          overdueIds.size(),
+          cancelledCount,
+          failedCount);
+    }
   }
 }

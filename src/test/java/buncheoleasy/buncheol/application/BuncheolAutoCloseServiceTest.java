@@ -61,13 +61,15 @@ class BuncheolAutoCloseServiceTest {
 
     @Test
     void deadline이_지난_RECRUITING_분철_id를_조회한다() {
-      given(buncheolRepository.findRecruitingIdsPastDeadline(NOW, 100))
+      // C2C 는 확정 유예(48h) 컷오프를 함께 전달해 유예 중 분철을 쿼리에서 거른다.
+      Instant graceCutoff = NOW.minus(48, ChronoUnit.HOURS);
+      given(buncheolRepository.findRecruitingIdsPastDeadline(NOW, graceCutoff, 100))
           .willReturn(List.of(1L, 2L, 3L));
 
       List<Long> result = buncheolAutoCloseService.findExpiredBuncheolIds(NOW);
 
       assertThat(result).containsExactly(1L, 2L, 3L);
-      then(buncheolRepository).should().findRecruitingIdsPastDeadline(NOW, 100);
+      then(buncheolRepository).should().findRecruitingIdsPastDeadline(NOW, graceCutoff, 100);
     }
   }
 
@@ -143,6 +145,7 @@ class BuncheolAutoCloseServiceTest {
     @Test
     void C2C_분철은_확정_유예가_지나면_미성사_취소하고_취소_이벤트를_발행한다() {
       Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheol.isC2c()).willReturn(true);
       given(buncheol.getDeadline()).willReturn(NOW.minus(49, ChronoUnit.HOURS)); // 유예(48h) 경과
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);

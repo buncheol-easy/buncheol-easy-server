@@ -5,12 +5,15 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -121,13 +124,52 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("statuses") Set<BuncheolStatus> statuses,
       Pageable pageable);
 
-  // deadline 이 지난 특정 상태(RECRUITING) 분철 id 만 deadline 오름차순으로 조회. 자동 마감 폴링용. limit 은 Pageable 로 제어.
+  // 마감 판정 대상 분철 id (자동 마감 폴링용, deadline 오름차순). LEGACY 는 deadline 즉시, C2C 는 확정 유예(48h)까지
+  // 지나야 대상이 된다 (docs/46 §7.1-5) — 유예 중 C2C 분철이 매 주기 배치 슬롯(LIMIT)을 잠식하지 않게 쿼리에서 거른다.
   @Query(
       "SELECT b.id FROM Buncheol b "
-          + "WHERE b.status = :status AND b.deadline <= :now "
+          + "WHERE b.status = :status AND ("
+          + "  (b.flowType = :legacyFlow AND b.deadline <= :now) "
+          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :graceCutoff)) "
           + "ORDER BY b.deadline ASC")
   List<Long> findIdsByStatusAndDeadlineBefore(
+      @Param("status") BuncheolStatus status,
+      @Param("legacyFlow") FlowType legacyFlow,
+      @Param("c2cFlow") FlowType c2cFlow,
+      @Param("now") Instant now,
+      @Param("graceCutoff") Instant graceCutoff,
+      Pageable pageable);
+
+  // 입금 수집중(PAYMENT_COLLECTING)이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용).
+  @Query(
+      "SELECT b.id FROM Buncheol b "
+          + "WHERE b.status = :status AND b.paymentDueAt <= :now "
+          + "ORDER BY b.paymentDueAt ASC")
+  List<Long> findIdsByStatusAndPaymentDueBefore(
       @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
+
+  /**
+   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건) 미성사 취소한다. 확정 참여가 있으면
+   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6). {@code finalizedAt} 은 성사 확정 시각을 보존한다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :cancelledStatus, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)")
+  int cancelIfCollectingAndEmpty(
+      @Param("buncheolId") Long buncheolId,
+      @Param("collectingStatus") BuncheolStatus collectingStatus,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
+      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
+      @Param("now") Instant now);
+
+  /** C2C 참여 생성 직렬화용 잠금 조회 — 다슬롯 첫 참여 판정(배송비 1회·스냅샷 일치)의 TOCTOU 방지 (docs/46 §4.7-A1·A2). */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT b FROM Buncheol b WHERE b.id = :id")
+  Optional<Buncheol> findByIdForUpdate(@Param("id") Long id);
 
   // expectedStatus → newStatus CAS UPDATE (호스트 취소 공용: RECRUITING/CANCELLED → HOST_CANCELLED).
   // 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.

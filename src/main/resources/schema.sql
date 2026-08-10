@@ -287,13 +287,23 @@ CREATE TABLE IF NOT EXISTS participations
     updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
     payment_sent_at       DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
+    -- 분철 flow_type 비정규화 (조건부 INSERT 가 buncheols 에서 복사). generated column 은 타 테이블을 참조할 수
+    -- 없어, LEGACY 전용 1인 1참여 유니크를 위해 참여 행에 내려받는다.
+    flow_type             VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT '분철 flow_type 비정규화 — LEGACY 1인 1참여 유니크용',
+    -- LEGACY 분철당 참여자 1명 보장용 가상 컬럼. C2C 는 다슬롯 허용(docs/46 §7.1-11)이라 LEGACY 조건이 붙는다.
+    legacy_active_participant_id BIGINT GENERATED ALWAYS AS (
+                              IF(flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED'),
+                                 participant_id, NULL)
+                              ) STORED COMMENT 'LEGACY 활성 참여일 때만 participant_id 값 (분철당 중복 참여 방지용)',
 
     PRIMARY KEY (id),
 
     -- 멤버 슬롯당 활성 참여 1건 (선착순). 동시 참여 시 두 번째 INSERT 가 이 제약에 막혀 DuplicateKey 로 떨어진다.
     UNIQUE INDEX uq_participations_active_member (active_member_id),
     -- (제거됨) uq_participations_active_participant — C2C 다슬롯 허용으로 DROP (docs/46 §2.3-4).
-    -- LEGACY 의 분철당 1인 1참여는 앱 가드(BCH-075, flow_type 분기)가 담당하고, 같은 슬롯 동시 신청은 위 유니크가 여전히 차단한다.
+    -- LEGACY 분철당 참여자 1명 (중복 참여 금지). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
+    -- C2C 참여는 legacy_active_participant_id 가 NULL 이라 이 유니크의 영향을 받지 않는다.
+    UNIQUE INDEX uq_participations_legacy_active_participant (buncheol_id, legacy_active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
     -- 입금 만료 스케줄러 폴링(status='AWAITING_PAYMENT' AND due_at<=now)용

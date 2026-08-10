@@ -64,13 +64,22 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   private final JpaParticipationRepository jpaParticipationRepository;
   private final JdbcTemplate jdbcTemplate;
 
+  // flow_type 은 buncheols 에서 복사해 비정규화한다 — LEGACY 전용 1인 1참여 유니크
+  // (uq_participations_legacy_active_participant)의 generated column 이 참조하기 위함.
   private static final String INSERT_COLUMNS_SQL =
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
           + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account, refund_holder,"
-          + " due_at, status, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+          + " due_at, status, flow_type, created_at, updated_at) "
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
 
-  /** 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT. */
+  /**
+   * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
+   *
+   * <p>⚠️ "APPLIED 신청은 RECRUITING 분철에만 생긴다"(성사 확정 일괄 전이에서 누락되는 orphan APPLIED 방지)는 정합성은, MySQL
+   * REPEATABLE READ 에서 INSERT ... SELECT 의 소스 행(buncheols)에 공유 락이 걸려 성사 확정 UPDATE 와 직렬화되는 동작에
+   * 의존한다. READ COMMITTED 로 낮추면 소스 읽기가 비잠금 consistent read 가 되어 이 보장이 깨진다 — 격리수준을 바꾸려면 이 SQL 에
+   * FOR SHARE 를 명시할 것 (docs/46 §4.7-C1).
+   */
   private static final String INSERT_IF_RECRUITING_SQL =
       INSERT_COLUMNS_SQL
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
@@ -122,9 +131,10 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
               keyHolder);
     } catch (DuplicateKeyException ex) {
       // 어느 유니크 제약에 걸렸는지 인덱스명으로 구분한다 (서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단).
-      // uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됐지만(docs/46 §2.3-4),
-      // ALTER 선행이 어긋난 환경에서 페일세이프로 동작하도록 분기는 남겨둔다.
-      if (isViolationOf(ex, "uq_participations_active_participant")) {
+      // LEGACY 1인 1참여는 uq_participations_legacy_active_participant 가 담당하고(C2C 는 다슬롯 허용이라
+      // 해당 generated column 이 NULL — docs/46 §7.1-11), 구 인덱스명은 ALTER 전 환경 호환용으로 함께 매칭한다.
+      if (isViolationOf(ex, "uq_participations_legacy_active_participant")
+          || isViolationOf(ex, "uq_participations_active_participant")) {
         // 같은 분철에 참여자의 활성 참여가 이미 존재(분철당 중복 참여 금지).
         throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
       }

@@ -77,7 +77,7 @@ public class ParticipationService {
 
     // 단일 선택 정책: 분철당 참여 1건(멤버 1명). 활성(입금확인중·확정) 참여가 있으면 중복 참여를 막고,
     // 취소·만료된 참여는 재참여를 허용한다. 이 사전 체크의 check-then-insert 갭(동시 이중 요청)은
-    // uq_participations_active_participant 유니크가 최종 차단한다.
+    // uq_participations_legacy_active_participant 유니크가 최종 차단한다 (C2C 는 다슬롯 허용이라 미적용).
     if (participationDomainService.hasActiveParticipationInBuncheol(buncheolId, participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_JOINED_BUNCHEOL);
     }
@@ -129,10 +129,15 @@ public class ParticipationService {
    * 부과한다 — 개최자 통장 대조(입금자명 1개)와 배송 1묶음을 보장한다. 요청의 배송지·환불계좌 입력은 무시된다(FE 는 프리필+잠금).
    */
   private ParticipateResult participateC2c(
-      final Buncheol buncheol,
+      final Buncheol loaded,
       final Long participantId,
       final ParticipateRequest request,
       final Instant now) {
+    // 분철 행 락으로 참여 생성을 직렬화한다 — 같은 유저의 동시 다슬롯 신청에서 "첫 참여 판정"(배송비 1회·배송지/입금자명
+    // 스냅샷 재사용)이 둘 다 첫 참여로 오판되는 check-then-insert 레이스를 막는다 (docs/46 §4.7-A1·A2).
+    // 성사 확정·취소 CAS 와도 직렬화되어 상태 판정이 안정된다. 분철당 참여 빈도가 낮아 락 경합 부담은 미미하다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(loaded.getId());
+
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }
@@ -266,6 +271,12 @@ public class ParticipationService {
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     final Instant now = Instant.now(clock);
+
+    // C2C 는 페이액션 주문을 등록하지 않아 정상 경로에선 웹훅이 오지 않지만, 방어적으로 자동확정을 차단한다 (docs/46 §3-2).
+    // NOT_CONFIRMABLE 로 돌려 운영자 슬랙 알림 경로를 태운다 — 도달했다면 조사할 이상 신호다.
+    if (buncheol.isC2c()) {
+      return SystemPaymentConfirmResult.NOT_CONFIRMABLE;
+    }
 
     if (!participationDomainService.confirmPaymentIfAwaiting(participationId, now)) {
       return participationDomainService.getParticipation(participationId).getStatus()

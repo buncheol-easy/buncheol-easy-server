@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -138,6 +139,14 @@ public class BuncheolService {
       throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
 
+    // 전이 대상 스냅샷 — 알림 이벤트에 실어 리스너가 "커밋 시점 전이 건"만 발송하게 한다 (실행 시점 재조회는 그 사이
+    // 들어온 추가 모집 참여와 중복 발송된다). 분철 CAS 선점 후라 이 목록과 아래 일괄 전이는 같은 집합이다.
+    List<Long> appliedIds =
+        participationDomainService.findActiveByBuncheolId(buncheolId).stream()
+            .filter(participation -> participation.getStatus() == ParticipationStatus.APPLIED)
+            .map(Participation::getId)
+            .toList();
+
     int awaitingCount =
         participationDomainService.startPaymentCollecting(buncheolId, paymentDueAt, now);
     if (awaitingCount == 0) {
@@ -146,7 +155,7 @@ public class BuncheolService {
     }
 
     // 커밋 후 성사 확정·입금 안내 알림톡(신청자 전원, 유저 단위 합산 — docs/46 §4.7-A3)과 수신함 기록을 트리거한다.
-    eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId));
+    eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId, appliedIds));
     return new BuncheolConfirmResult(
         buncheolId, BuncheolStatus.PAYMENT_COLLECTING, paymentDueAt, awaitingCount);
   }

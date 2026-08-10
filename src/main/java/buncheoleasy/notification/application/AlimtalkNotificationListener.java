@@ -7,10 +7,10 @@ import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
-import buncheoleasy.buncheol.domain.FlowType;
-import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
+import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
@@ -19,8 +19,8 @@ import buncheoleasy.user.domain.BankAccount;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -132,7 +132,17 @@ public class AlimtalkNotificationListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolCollectingStarted(final BuncheolCollectingStartedEvent event) {
-    List<ParticipationView> views = assembler.loadAwaitingViewsByBuncheol(event.buncheolId());
+    // 커밋 시점 전이 대상 스냅샷(event.participationIds)만 발송한다 — 실행 시점 상태 재조회는 그 사이 들어온
+    // 추가 모집 참여(onParticipationCreated 로 개별 안내를 받음)가 섞여 중복 발송된다. 커밋~실행 사이에
+    // 취소·확정된 건은 입금 안내가 무의미하므로 상태 필터로 거른다.
+    List<ParticipationView> views =
+        event.participationIds().stream()
+            .map(assembler::loadByParticipation)
+            .filter(
+                view ->
+                    view.participation().getStatus() == ParticipationStatus.AWAITING_PAYMENT
+                        || view.participation().getStatus() == ParticipationStatus.PAYMENT_SENT)
+            .toList();
     Map<Long, List<ParticipationView>> byParticipant =
         views.stream()
             .collect(

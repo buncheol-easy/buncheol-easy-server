@@ -32,9 +32,31 @@ public class BuncheolAutoCloseService {
   private final DeliveryDomainService deliveryDomainService;
   private final ApplicationEventPublisher eventPublisher;
 
-  /** {@code now} 기준 deadline 이 지난 RECRUITING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
+  /**
+   * {@code now} 기준 마감 판정 대상 RECRUITING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. C2C 는 확정
+   * 유예(48h)까지 지난 분철만 대상이다 — 유예 중 분철이 배치를 잠식하지 않게 쿼리에서 거른다.
+   */
   public List<Long> findExpiredBuncheolIds(final Instant now) {
-    return buncheolRepository.findRecruitingIdsPastDeadline(now, BATCH_SIZE);
+    return buncheolRepository.findRecruitingIdsPastDeadline(
+        now, now.minus(C2C_CONFIRM_GRACE), BATCH_SIZE);
+  }
+
+  /** {@code now} 기준 일괄 입금 기한이 지난 PAYMENT_COLLECTING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
+  public List<Long> findOverdueCollectingIds(final Instant now) {
+    return buncheolRepository.findCollectingIdsPastPaymentDue(now, BATCH_SIZE);
+  }
+
+  /**
+   * C2C 입금 수집 데드엔드 정리 (docs/46 §7.1-6 보완). 기한이 지났고 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건)
+   * 미성사 취소한다 — 개최자가 선택할 것(부분 확정/취소)이 없는 유일한 케이스라 자동화해도 §7.1-6(개최자 선택)과 충돌하지 않는다.
+   * 방치 시 분철이 PAYMENT_COLLECTING 에 영구 정체해 목록 노출·개최자 탈퇴 차단이 이어지는 문제를 막는다.
+   *
+   * <p>참여자 알림은 없다 — 전원이 이미 만료/자발취소 시점에 개별 취소 안내를 받았다. 확정 참여가 있으면 CAS 가 전이하지 않고 개최자
+   * 선택을 기다린다.
+   */
+  @Transactional
+  public boolean cancelDeadCollecting(final Long buncheolId, final Instant now) {
+    return buncheolDomainService.cancelCollectingIfEmpty(buncheolId, now);
   }
 
   /**
@@ -48,8 +70,9 @@ public class BuncheolAutoCloseService {
   public boolean finalizeExpired(final Long buncheolId, final Instant now) {
     // C2C 는 마감 판정 규칙이 다르다 — deadline 은 신청 마감일 뿐이고, 확정 유예(48h) 안에는 개최자의 성사 확정을
     // 기다린다. 분기 없이 LEGACY 판정을 태우면 전원 무입금 신청(APPLIED)이라 정각에 전부 미달 취소돼 버린다 (docs/46 §1.2).
-    if (buncheolDomainService.getBuncheol(buncheolId).isC2c()) {
-      return finalizeExpiredC2c(buncheolId, now);
+    Buncheol target = buncheolDomainService.getBuncheol(buncheolId);
+    if (target.isC2c()) {
+      return finalizeExpiredC2c(target, now);
     }
 
     // 입금확인 인원 카운트·최소 인원 비교·상태 전이를 단일 CAS(CASE+서브쿼리)로 원자화한다. 카운트를 별도 SELECT 로 먼저 읽으면
@@ -74,15 +97,15 @@ public class BuncheolAutoCloseService {
    * PAYMENT_COLLECTING 으로 바뀌어 폴링 대상에서 빠진다), 유예가 지나면 미성사 취소(CANCELLED)하고 신청자 전원에게 취소를 알린다.
    * 돈이 오간 적 없는 단계라 환불은 발생하지 않는다.
    */
-  private boolean finalizeExpiredC2c(final Long buncheolId, final Instant now) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+  private boolean finalizeExpiredC2c(final Buncheol buncheol, final Instant now) {
+    // 폴링 쿼리가 유예 경과 분철만 주지만, cron 경계·수동 호출 대비 이중 방어로 유예를 재확인한다.
     if (now.isBefore(buncheol.getDeadline().plus(C2C_CONFIRM_GRACE))) {
       return false;
     }
-    if (!buncheolDomainService.cancelUnconfirmedC2c(buncheolId, now)) {
+    if (!buncheolDomainService.cancelUnconfirmedC2c(buncheol.getId(), now)) {
       return false; // 그 사이 확정·취소됨 (CAS 경합).
     }
-    finalizeAsCancelled(buncheolId, now, BuncheolCancelReason.NOT_FINALIZED);
+    finalizeAsCancelled(buncheol.getId(), now, BuncheolCancelReason.NOT_FINALIZED);
     return true;
   }
 

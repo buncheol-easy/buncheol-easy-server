@@ -419,42 +419,78 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("분철당 참여자 유니크 제거 — C2C 다슬롯 허용 (docs/46 §7.1-11)")
+  @DisplayName("분철당 참여자 유니크 — LEGACY 전용 (C2C 다슬롯 허용, docs/46 §7.1-11)")
   class ActiveParticipantUniqueGuardTest {
 
     @Test
-    void 같은_분철의_다른_멤버_슬롯에_같은_참여자가_중복_참여할_수_있다() {
-      // uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됐다. 같은 (분철, 참여자)의
-      // 활성 참여가 2건 공존할 수 있고, LEGACY 의 1인 1슬롯은 앱 가드(BCH-075)가 담당한다.
+    void C2C_참여는_같은_분철의_다른_멤버_슬롯에_중복_참여할_수_있다() {
+      // C2C 는 flow_type 조건 때문에 legacy_active_participant_id 가 NULL 이라 유니크의 영향을 받지 않는다.
       // 같은 슬롯의 중복 점유는 여전히 uq_participations_active_member 가 차단한다.
       Long buncheolId = createBuncheol();
       Long slotA = createBuncheolMember(buncheolId);
       Long otherMember = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "중복가드멤버");
       Long slotB = createBuncheolMember(buncheolId, otherMember);
-      insertParticipation(
-          buncheolId,
-          slotA,
-          participantId,
-          insertShippingAddress(participantId, "유니크가드_1"),
-          30_000L,
-          Instant.now().plus(30, ChronoUnit.MINUTES),
-          ParticipationStatus.AWAITING_PAYMENT,
-          null);
-
-      insertParticipation(
-          buncheolId,
-          slotB,
-          participantId,
-          insertShippingAddress(participantId, "유니크가드_2"),
-          30_000L,
-          Instant.now().plus(30, ChronoUnit.MINUTES),
-          ParticipationStatus.AWAITING_PAYMENT,
-          null);
+      insertC2cParticipation(
+          buncheolId, slotA, participantId, insertShippingAddress(participantId, "유니크가드_1"));
+      insertC2cParticipation(
+          buncheolId, slotB, participantId, insertShippingAddress(participantId, "유니크가드_2"));
 
       assertThat(
               participationRepository.existsActiveByBuncheolIdAndParticipantId(
                   buncheolId, participantId))
           .isTrue();
+    }
+
+    @Test
+    void LEGACY_참여는_같은_분철에_활성_참여를_중복_삽입하면_유니크_제약에_걸린다() {
+      // 서비스 사전 체크의 check-then-insert 갭(동시 이중 요청)을
+      // uq_participations_legacy_active_participant 가 최종 차단하는지 검증한다.
+      Long buncheolId = createBuncheol();
+      Long slotA = createBuncheolMember(buncheolId);
+      Long otherMember = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "레거시가드멤버");
+      Long slotB = createBuncheolMember(buncheolId, otherMember);
+      insertParticipation(
+          buncheolId,
+          slotA,
+          participantId,
+          insertShippingAddress(participantId, "레거시가드_1"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThatThrownBy(
+              () ->
+                  insertParticipation(
+                      buncheolId,
+                      slotB,
+                      participantId,
+                      insertShippingAddress(participantId, "레거시가드_2"),
+                      30_000L,
+                      Instant.now().plus(30, ChronoUnit.MINUTES),
+                      ParticipationStatus.AWAITING_PAYMENT,
+                      null))
+          .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    // C2C 참여 삽입 헬퍼 — flow_type='C2C' 를 명시한다 (기본 헬퍼는 컬럼 DEFAULT 인 LEGACY 로 들어간다).
+    private void insertC2cParticipation(
+        final Long buncheolId, final Long buncheolMemberId, final Long userId, final Long addressId) {
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+              + " shipping_address_id, amount, refund_bank, refund_account, refund_holder,"
+              + " due_at, status, flow_type)"
+              + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'C2C')",
+          buncheolId,
+          buncheolMemberId,
+          userId,
+          addressId,
+          30_000L,
+          REFUND_ACCOUNT.bank(),
+          REFUND_ACCOUNT.account(),
+          REFUND_ACCOUNT.holder(),
+          Timestamp.from(Instant.now().plus(24, ChronoUnit.HOURS)),
+          ParticipationStatus.AWAITING_PAYMENT.name());
     }
 
     @Test

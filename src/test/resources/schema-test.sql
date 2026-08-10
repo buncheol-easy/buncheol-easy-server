@@ -215,6 +215,9 @@ CREATE TABLE participations
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- C2C 컬럼 (schema.sql participations 와 동일 구성)
     payment_sent_at     TIMESTAMP    NULL,
+    flow_type           VARCHAR(10)  NOT NULL DEFAULT 'LEGACY',
+    -- LEGACY 전용 1인 1참여 유니크용 (C2C 다슬롯 허용 — schema.sql 과 동일)
+    legacy_active_participant_id BIGINT AS (CASE WHEN flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN participant_id END),
 
     PRIMARY KEY (id),
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -225,6 +228,7 @@ CREATE TABLE participations
 
 CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_member_id);
 -- uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됨 (docs/46 §2.3-4)
+CREATE UNIQUE INDEX uq_participations_legacy_active_participant ON participations (buncheol_id, legacy_active_participant_id);
 CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
 CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);

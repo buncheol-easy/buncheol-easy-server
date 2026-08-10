@@ -180,13 +180,15 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     }
   }
 
-  // 오픈채팅 링크는 선택 입력. 있으면 카카오 오픈채팅 도메인 형식만 허용한다(임의 외부 링크 유도 방지 — docs/46 §4.6).
+  // 오픈채팅 링크는 선택 입력. 있으면 카카오 오픈채팅 도메인 형식만 허용하고(임의 외부 링크 유도 방지 — docs/46 §4.6),
+  // 공백·제어문자가 저장돼 화면·알림에 그대로 노출되는 것을 막는다.
   private void validateOpenChatUrl(final String value) {
     if (value == null) {
       return;
     }
     if (value.length() > OPEN_CHAT_URL_MAX_LENGTH
-        || !value.startsWith("https://open.kakao.com/")) {
+        || !value.startsWith("https://open.kakao.com/")
+        || value.chars().anyMatch(c -> Character.isWhitespace(c) || Character.isISOControl(c))) {
       throw new BusinessException(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_INVALID);
     }
   }

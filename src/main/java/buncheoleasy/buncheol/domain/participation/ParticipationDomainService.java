@@ -45,6 +45,11 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId);
   }
 
+  /** 분철의 활성 참여 수 잠금 조회(current read). RR 스냅샷이 아닌 최신 커밋 기준 판정(C2C 정원 충족)용 — 포트 javadoc 참고. */
+  public long countActiveByBuncheolIdForUpdate(final Long buncheolId) {
+    return participationRepository.countActiveByBuncheolIdForUpdate(buncheolId);
+  }
+
   /** 분철의 입금확인(CONFIRMED) 참여 전체. 진행확정 시 배송 스냅샷·알림 대상. */
   public List<Participation> findConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.findConfirmedByBuncheolId(buncheolId);

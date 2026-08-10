@@ -601,8 +601,9 @@ class ParticipationServiceTest {
       stubC2cRecruitingBuncheol();
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(Collections.nCopies(2, buncheolMember()));
-      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Collections.nCopies(2, mock(Participation.class)));
+      // 정원 판정은 RR 스냅샷이 아닌 잠금 조회(current read) 카운트를 써야 한다 — 일반 조회 카운트로 회귀하면 실패.
+      given(participationDomainService.countActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(2L);
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
@@ -615,8 +616,8 @@ class ParticipationServiceTest {
       stubC2cRecruitingBuncheol();
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(Collections.nCopies(3, buncheolMember()));
-      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID))
-          .willReturn(Collections.nCopies(2, mock(Participation.class)));
+      given(participationDomainService.countActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(2L);
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
@@ -660,7 +661,8 @@ class ParticipationServiceTest {
 
       participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
 
-      then(eventPublisher).should(never()).publishEvent(any());
+      // publishEvent(any()) 는 ApplicationEvent 오버로드로 바인딩돼 record 이벤트 발행을 못 잡는다 — 상호작용 자체를 검증.
+      then(eventPublisher).shouldHaveNoInteractions();
     }
 
     @Test
@@ -675,7 +677,7 @@ class ParticipationServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
 
-      then(eventPublisher).should(never()).publishEvent(any());
+      then(eventPublisher).shouldHaveNoInteractions();
     }
   }
 

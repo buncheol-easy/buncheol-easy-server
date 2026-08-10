@@ -6,12 +6,14 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -61,6 +63,17 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses "
           + "ORDER BY p.createdAt ASC, p.id ASC")
   List<Participation> findByBuncheolIdAndStatusIn(
+      @Param("buncheolId") Long buncheolId,
+      @Param("statuses") Collection<ParticipationStatus> statuses);
+
+  /**
+   * 활성 참여 id 잠금 조회(FOR UPDATE, current read). RR 트랜잭션은 첫 일반 조회 시점의 스냅샷을 계속 보므로, 락 대기 중 커밋된 타
+   * 참여까지 세야 하는 판정(정원 충족)은 이 잠금 조회로 최신 커밋 기준을 읽는다. COUNT 집계에 FOR UPDATE 를 못 붙이는 DB(H2)가 있어 id
+   * 프로젝션으로 돌려주고 호출자가 센다.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT p.id FROM Participation p WHERE p.buncheolId = :buncheolId AND p.status IN :statuses")
+  List<Long> findIdsByBuncheolIdAndStatusInForUpdate(
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 

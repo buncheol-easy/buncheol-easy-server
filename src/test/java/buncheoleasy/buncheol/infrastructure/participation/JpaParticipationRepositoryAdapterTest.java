@@ -864,6 +864,65 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("countActiveByBuncheolIdForUpdate — 활성 참여 잠금 카운트 (C2C 정원 충족 판정)")
+  class CountActiveByBuncheolIdForUpdateTest {
+
+    // 잠금 조회(FOR UPDATE)가 id 프로젝션과 함께 실제 실행되는지까지 겸해 검증한다 (H2 는 집계 + FOR UPDATE 불가라 id 로 센다).
+    @Test
+    void 활성_상태만_세고_CANCELLED_는_제외한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "다른멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long otherParticipantId = TestUserFixture.insertUser(jdbcTemplate, "other_cnt_xx");
+      Long addrA = insertShippingAddress(participantId, "주매장A");
+      Long addrB = insertShippingAddress(otherParticipantId, "타매장B");
+      Long addrC = insertShippingAddress(otherParticipantId, "타매장C");
+
+      insertParticipation(
+          buncheolId,
+          bmId,
+          participantId,
+          addrA,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          buncheolId,
+          bmId2,
+          otherParticipantId,
+          addrB,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      insertParticipation(
+          buncheolId,
+          bmId,
+          otherParticipantId,
+          addrC,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      long count = participationRepository.countActiveByBuncheolIdForUpdate(buncheolId);
+
+      assertThat(count).isEqualTo(2);
+    }
+
+    @Test
+    void 활성_참여가_없으면_0_을_반환한다() {
+      Long buncheolId = createBuncheol();
+
+      long count = participationRepository.countActiveByBuncheolIdForUpdate(buncheolId);
+
+      assertThat(count).isZero();
+    }
+  }
+
+  @Nested
   @DisplayName("findConfirmedByBuncheolId / countConfirmedByBuncheolId — 입금확인 참여만")
   class ConfirmedByBuncheolIdTest {
 

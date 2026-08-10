@@ -205,15 +205,18 @@ public class ParticipationService {
   }
 
   /**
-   * C2C 정원 충족 감지 — 이 신청으로 전 멤버 슬롯이 활성 참여로 채워졌으면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). {@code
-   * participateC2c} 의 분철 행 락이 참여 생성을 직렬화하므로 마지막 빈 슬롯을 채운 트랜잭션만 조건을 만족한다 — 미충족→충족 전이마다 정확히
-   * 1회 발행되고, 자발 취소로 빠졌다 다시 차면 재발송된다(개최자가 아직 확정 전이니 독촉이 다시 가는 게 의도). 자발 취소는 행 락을 잡지 않아 판정과
-   * 커밋 사이에 슬롯이 빠지면 이미 안 찬 분철에 독촉이 갈 수 있지만, 개최자가 관리 화면에서 현황을 확인하므로 오안내 영향은 없다.
+   * C2C 정원 충족 감지 — 이 신청으로 전 멤버 슬롯이 활성 참여로 채워졌으면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 카운트는 잠금
+   * 조회(current read)로 센다 — participate 진입부의 일반 조회가 RR 스냅샷을 행 락 획득 전에 확정하므로, 비잠금 조회로 세면 락 대기 중
+   * 커밋된 타 참여가 안 보여 마지막 슬롯을 채우고도 미충족으로 오판한다(이벤트 영구 누락). {@code participateC2c} 의 분철 행 락이 참여
+   * 생성을 직렬화하므로 current read 기준 마지막 빈 슬롯을 채운 트랜잭션만 조건을 만족한다 — 미충족→충족 전이마다 1회 발행되고, 자발 취소로
+   * 빠졌다 다시 차면 재발송된다(개최자가 아직 확정 전이니 독촉이 다시 가는 게 의도). 판정과 커밋 사이의 자발 취소로 이미 안 찬 분철에 독촉이 갈 수
+   * 있지만, 개최자가 관리 화면에서 현황을 확인하므로 오안내 영향은 없다.
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
-    long activeCount = participationDomainService.findActiveByBuncheolId(buncheol.getId()).size();
-    if (activeCount == totalSlots) {
+    long activeCount =
+        participationDomainService.countActiveByBuncheolIdForUpdate(buncheol.getId());
+    if (activeCount >= totalSlots) {
       eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), activeCount));
     }
   }

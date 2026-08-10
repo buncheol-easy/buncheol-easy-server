@@ -16,6 +16,7 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -111,16 +112,52 @@ class BuncheolAutoCloseServiceTest {
     }
 
     @Test
-    void CAS_마감에_실패하면_재조회없이_후속_처리_없이_false를_반환한다() {
+    void CAS_마감에_실패하면_후속_처리_없이_false를_반환한다() {
+      // 플로우 분기용 선조회만 있고(isC2c=false 기본값), CAS 실패 후 상태 재조회·후속 처리는 없다.
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(false);
 
       boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
 
       assertThat(result).isFalse();
-      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
       then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void C2C_분철은_확정_유예_안에는_마감하지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getDeadline()).willReturn(NOW.minus(1, ChronoUnit.HOURS)); // 유예(48h) 내
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isFalse();
+      then(buncheolDomainService).should(never()).cancelUnconfirmedC2c(anyLong(), any());
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+    }
+
+    @Test
+    void C2C_분철은_확정_유예가_지나면_미성사_취소하고_취소_이벤트를_발행한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getDeadline()).willReturn(NOW.minus(49, ChronoUnit.HOURS)); // 유예(48h) 경과
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.cancelUnconfirmedC2c(BUNCHEOL_ID, NOW)).willReturn(true);
+      Participation cancelled = mock(Participation.class);
+      given(cancelled.getId()).willReturn(702L);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isTrue();
+      then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
     }
   }
 }

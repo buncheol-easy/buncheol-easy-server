@@ -110,10 +110,6 @@ public class UserDomainService {
     getUser(id).requireProfileCompleted();
   }
 
-  public void requireCanHost(final Long id) {
-    getUser(id).requireCanHost();
-  }
-
   public boolean canHost(final Long id) {
     return getUser(id).isCanHost();
   }

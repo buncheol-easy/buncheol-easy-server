@@ -166,6 +166,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
+                            | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
+                            | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
                             | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 카카오 로그인 재동의(연령대 제공)로 해소 가능 |
                             | 403 | `USR-033` (`USER_NOT_ADULT`) | C2C 개최 자격 — 미성년자는 개최 불가 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
@@ -214,7 +216,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "keepImageIds": [Long],         // 유지할 기존 이미지 ID
                               "thumbnailImageId": Long?,      // 유지 이미지 중 대표사진으로 지정할 ID (keepImageIds 에 포함돼야 함)
                               "thumbnailIndex": Integer?,     // 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base) — 둘 중 정확히 하나 필수
-                              "openChatUrl": String?          // null = 기존 값 유지, "" = 링크 제거, 값 = https://open.kakao.com/ 형식 검증 후 교체
+                              "openChatUrl": String?          // null = 기존 값 유지, 빈 문자열/공백 = 링크 제거, 값 = https://open.kakao.com/ 형식 검증 후 교체
                             }
                             ```
 
@@ -382,8 +384,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("items[].status")
                                 .description(
                                     "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감) |"
-                                        + " `CANCELLED`(인원미달 자동취소). 목록은 `HOST_CANCELLED`(개최자 취소)만"
-                                        + " 제외하므로 이 셋만 내려간다"),
+                                        + " `CANCELLED`(인원미달 자동취소). 목록은 이 셋만 내려간다 —"
+                                        + " `HOST_CANCELLED`(개최자 취소)와 `PAYMENT_COLLECTING`(C2C 입금"
+                                        + " 수집중)은 제외된다 (수집중 분철의 목록 노출은 후속 검토)"),
                             fieldWithPath("items[].flowType")
                                 .description(
                                     "참여 플로우 — `LEGACY`(운영진 개최, 즉시 입금) | `C2C`(사용자 개최,"

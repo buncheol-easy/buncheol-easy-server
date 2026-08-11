@@ -185,12 +185,6 @@ public class User extends TimestampedEntity {
     this.canHost = true;
   }
 
-  public void requireCanHost() {
-    if (!this.canHost) {
-      throw new BusinessException(ErrorCode.USER_CANNOT_HOST);
-    }
-  }
-
   // TODO: 탈퇴 정책 보강 필요.
   //  1) 활성 분철(RECRUITING~SETTLING)·미정산 결제가 있으면 탈퇴 거부 (애플리케이션 레이어에서 검증).
   //  2) 모든 거래가 종료된 뒤 PII(phoneNumber·bankAccount·email·ageRange) 를 NULL/해시로 익명화.

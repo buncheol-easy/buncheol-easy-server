@@ -423,6 +423,41 @@ class BuncheolServiceTest {
     }
 
     @Test
+    void 일반_유저는_활성_개최_상한을_넘으면_예외가_발생한다() {
+      // given — 자격 게이트(목 no-op) 통과 후 상한 검증에서 차단되는 경우
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED))
+          .given(buncheolDomainService)
+          .validateActiveHostedLimit(HOST_ID);
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+    }
+
+    @Test
+    void 운영진의_C2C_선택도_가입_완료는_요구한다() {
+      // given — 성인 확인은 건너뛰지만 연락처(분쟁 처리 근거)는 운영진에게도 요구한다.
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(HOST_ID);
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.C2C);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+
+    @Test
     void 자격_게이트에_걸리면_분철이_저장되지_않는다() {
       // given — 연령대 미확인(USR-032)이 게이트에서 던져지는 경우
       willThrow(new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED))

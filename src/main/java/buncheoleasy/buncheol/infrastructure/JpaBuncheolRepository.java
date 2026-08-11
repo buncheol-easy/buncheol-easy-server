@@ -20,6 +20,8 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
+  long countByHostIdAndStatusIn(Long hostId, Set<BuncheolStatus> statuses);
+
   List<Buncheol> findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
       Long hostId, BuncheolStatus excludedStatus);
 

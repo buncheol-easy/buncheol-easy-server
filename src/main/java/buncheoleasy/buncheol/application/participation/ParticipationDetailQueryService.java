@@ -69,8 +69,10 @@ public class ParticipationDetailQueryService {
     ShippingFeePaybackResponse payback =
         ShippingFeePaybackResponse.of(
             participation,
-            shippingFeePaybackPolicy.deriveStatus(participation, delivery, Instant.now(clock)),
-            shippingFeePaybackPolicy.submitDeadline(participation, delivery));
+            shippingFeePaybackPolicy.deriveStatus(
+                participation, buncheol.getFlowType(), delivery, Instant.now(clock)),
+            shippingFeePaybackPolicy.submitDeadline(
+                participation, buncheol.getFlowType(), delivery));
 
     return new ParticipationDetailResponse(
         participation.getId(),

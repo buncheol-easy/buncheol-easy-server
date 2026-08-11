@@ -13,7 +13,7 @@ import java.util.List;
  * @param thumbnailImageId 유지할 기존 이미지 중 대표사진으로 지정할 이미지 id ({@code keepImageIds} 에 포함돼야 한다)
  * @param thumbnailIndex 신규 업로드 이미지(images 파트) 중 대표사진으로 쓸 인덱스(0-base)
  * @param openChatUrl 오픈채팅 링크 수정(선택 — docs/51 §3-1-2). null = 기존 값 유지(필드를 안 보내는 구 클라이언트 호환), 빈
- *     문자열 = 링크 제거, 값 = 형식 검증 후 교체
+ *     문자열·공백 = 링크 제거, 값 = 형식 검증 후 교체
  */
 public record BuncheolModifyRequest(
     @NotBlank @Size(max = 200) String title,

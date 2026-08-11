@@ -156,6 +156,9 @@ public enum ErrorCode {
       "BCH-087", "현재 상태에서는 '보냈어요' 처리를 할 수 없습니다.", HttpStatus.CONFLICT),
   BUNCHEOL_OPEN_CHAT_URL_INVALID(
       "BCH-088", "카카오 오픈채팅 링크 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+  // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
+  BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
+      "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

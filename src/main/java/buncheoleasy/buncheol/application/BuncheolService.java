@@ -82,12 +82,19 @@ public class BuncheolService {
    */
   private FlowType resolveHostFlowType(final Long hostId, final FlowType requested) {
     if (userDomainService.canHost(hostId)) {
-      return requested != null ? requested : FlowType.LEGACY;
+      FlowType resolved = requested != null ? requested : FlowType.LEGACY;
+      if (resolved == FlowType.C2C) {
+        // C2C 직거래는 개최자 연락처가 분쟁 처리의 근거라, 성인 확인은 건너뛰는 운영진도 가입 완료(전화번호)는 요구한다.
+        userDomainService.requireProfileCompleted(hostId);
+      }
+      return resolved;
     }
     if (requested == FlowType.LEGACY) {
       throw new BusinessException(ErrorCode.USER_CANNOT_HOST);
     }
     userDomainService.requireC2cHostQualification(hostId);
+    // 상한은 자격 게이트 통과자에게만 의미가 있으므로 마지막에 검사한다 (운영진은 미적용 — 이벤트 대량 개최 허용).
+    buncheolDomainService.validateActiveHostedLimit(hostId);
     return FlowType.C2C;
   }
 

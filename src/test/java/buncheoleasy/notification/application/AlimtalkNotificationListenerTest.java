@@ -28,9 +28,6 @@ import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.PhoneNumber;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,7 +36,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,7 +47,6 @@ class AlimtalkNotificationListenerTest {
   @Mock private NotificationAssembler assembler;
   @Mock private AlimtalkSender sender;
   @Mock private NotificationInboxRecorder inboxRecorder;
-  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-08-10T12:00:00Z"), ZoneOffset.UTC);
 
   private static final Long PARTICIPATION_ID = 50L;
   private static final Long DELIVERY_ID = 10L;
@@ -358,23 +353,20 @@ class AlimtalkNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("쿨다운 내 같은 분철·개최자 기록이 있으면 발송·기록을 건너뛴다")
-    void skipsWithinCooldown() {
+    @DisplayName("개최자 전화번호가 미등록이면 수신함 기록만 남기고 발송은 건너뛴다")
+    void skipsSendWhenHostPhoneMissing() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(77L);
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
       User host = mock(User.class);
       given(host.getNickname()).willReturn(Nickname.of("개최자닉"));
       given(host.getId()).willReturn(3L);
+      given(host.getPhoneNumber()).willReturn(null);
       given(assembler.loadBuncheolHost(77L)).willReturn(new BuncheolHostView(buncheol, host));
-      given(
-              inboxRecorder.hasRecentRecord(
-                  eq(3L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FULL), any(), any()))
-          .willReturn(true);
 
       listener.onBuncheolFull(new BuncheolFullEvent(77L, 5));
 
-      verify(inboxRecorder, never()).record(any(), any(), any());
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FULL), any());
       verify(sender, never()).send(any(), any(), any());
     }
   }

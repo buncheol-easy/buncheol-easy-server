@@ -274,4 +274,12 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
       @Param("now") Instant now);
+
+  /** C2C 정원 충족 알림 마킹 CAS: 미발송(IS NULL)일 때만 성공해 분철당 1회 발송을 보장한다. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.fullNotifiedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.fullNotifiedAt IS NULL")
+  int markFullNotifiedIfFirst(@Param("buncheolId") Long buncheolId, @Param("now") Instant now);
 }

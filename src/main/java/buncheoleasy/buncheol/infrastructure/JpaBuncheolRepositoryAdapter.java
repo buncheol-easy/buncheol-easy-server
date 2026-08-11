@@ -238,4 +238,9 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         BuncheolStatus.CONFIRMED,
         now);
   }
+
+  @Override
+  public boolean markFullNotifiedIfFirst(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.markFullNotifiedIfFirst(buncheolId, now) > 0;
+  }
 }

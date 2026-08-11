@@ -606,6 +606,7 @@ class ParticipationServiceTest {
       // 3슬롯을 2명이 채움(한 명이 2슬롯) — 신청 인원은 distinct 참여자 수여야 한다.
       given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
           .willReturn(List.of(100L, 100L, 200L));
+      given(buncheolDomainService.markFullNotifiedIfFirst(BUNCHEOL_ID, NOW)).willReturn(true);
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
@@ -619,7 +620,22 @@ class ParticipationServiceTest {
     }
 
     @Test
-    void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
+    void 이미_알림을_보낸_분철은_정원이_다시_차도_이벤트를_발행하지_않는다() {
+      // 취소→재신청 반복으로 정원이 재충족돼도 마킹 CAS(false)가 재발송을 막는다.
+      stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(2, buncheolMember()));
+      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(100L, 200L));
+      given(buncheolDomainService.markFullNotifiedIfFirst(BUNCHEOL_ID, NOW)).willReturn(false);
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
+    }
+
+    @Test
+    void 빈_슬롯이_남아_있으면_마킹_없이_이벤트를_발행하지_않는다() {
       stubC2cRecruitingBuncheol();
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
           .willReturn(Collections.nCopies(3, buncheolMember()));
@@ -630,6 +646,7 @@ class ParticipationServiceTest {
 
       then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
       then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
+      then(buncheolDomainService).should(never()).markFullNotifiedIfFirst(anyLong(), any());
     }
 
     @Test

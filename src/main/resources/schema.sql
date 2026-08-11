@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS buncheols
     payment_bank      VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 은행 (확정 후 프로필 변경과 무관하게 안내 계좌 고정)',
     payment_account   VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 계좌번호',
     payment_holder    VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 예금주',
+    full_notified_at  DATETIME     NULL COMMENT 'C2C: 정원 충족 개최자 알림 발송 시각 — IS NULL 조건 CAS 로 분철당 1회 발송 보장',
 
     PRIMARY KEY (id),
 

@@ -138,6 +138,7 @@ CREATE TABLE buncheols
     payment_bank      VARCHAR(50)  NULL,
     payment_account   VARCHAR(50)  NULL,
     payment_holder    VARCHAR(50)  NULL,
+    full_notified_at  TIMESTAMP    NULL,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheols_host FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE,

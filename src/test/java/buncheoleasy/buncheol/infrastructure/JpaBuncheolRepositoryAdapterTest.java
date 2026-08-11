@@ -684,4 +684,24 @@ class JpaBuncheolRepositoryAdapterTest {
       return id;
     }
   }
+
+  @Nested
+  @DisplayName("markFullNotifiedIfFirst — 정원 충족 알림 마킹 CAS")
+  class MarkFullNotifiedIfFirstTest {
+
+    @Test
+    void 최초_마킹만_성공하고_재마킹은_실패한다() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+      boolean first = buncheolRepository.markFullNotifiedIfFirst(buncheol.getId(), now);
+      boolean second = buncheolRepository.markFullNotifiedIfFirst(buncheol.getId(), now.plusSeconds(60));
+
+      assertThat(first).isTrue();
+      assertThat(second).isFalse();
+      em.clear();
+      Buncheol reloaded = buncheolRepository.findById(buncheol.getId()).orElseThrow();
+      assertThat(reloaded.getFullNotifiedAt()).isEqualTo(now);
+    }
+  }
 }

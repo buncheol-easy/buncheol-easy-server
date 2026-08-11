@@ -201,23 +201,28 @@ public class ParticipationService {
     }
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
-    publishFullIfAllSlotsApplied(buncheol);
+    publishFullIfAllSlotsApplied(buncheol, now);
     return new ParticipateResult(participation.getId(), participation.getTotalAmount(), null, null);
   }
 
   /**
-   * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 카운트는 반드시 잠금 조회(current
+   * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 취소→재신청으로 정원이 다시 차도
+   * {@code markFullNotifiedIfFirst} CAS 가 분철당 1회만 발행을 허용한다(무제한 재발송 차단). 카운트는 반드시 잠금 조회(current
    * read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어
-   * 충족을 놓친다. 행 락 직렬화 덕에 미충족→충족 전이마다 1회 발행되며, 취소 후 재충족 시 재발송은 의도된 동작(스팸 상한은 리스너 쿨다운이 담당).
+   * 충족을 놓친다.
    *
-   * <p>락 순서 규약: 분철 행(X) → 참여 행(X) 순서 고정. 참여 행을 먼저 잠근 뒤 분철 행을 갱신하는 경로가 RECRUITING 구간에 추가되면
-   * 데드락 사이클이 생긴다 (입금확인 경로는 PAYMENT_COLLECTING 이후라 현재는 겹치지 않는다).
+   * <p>락 순서 규약: 분철 행(X) → 참여 행(X) 순서 고정. 현재 역순(참여 행 → 분철 행) 경로는 LEGACY 입금확인뿐인데 이 판정은 C2C
+   * 분철만 타므로 같은 분철 행을 함께 잡을 일이 없다 — 안전의 근거는 상태 구간이 아니라 플로우 타입 분리다. C2C 플로우 안에서 참여 행을 먼저
+   * 잠그는 경로가 생기면 데드락 사이클이 된다.
    */
-  private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
+  private void publishFullIfAllSlotsApplied(final Buncheol buncheol, final Instant now) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
     List<Long> participantIds =
         participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
-    if (participantIds.size() >= totalSlots) {
+    if (participantIds.size() < totalSlots) {
+      return;
+    }
+    if (buncheolDomainService.markFullNotifiedIfFirst(buncheol.getId(), now)) {
       long applicantCount = participantIds.stream().distinct().count();
       eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), applicantCount));
     }

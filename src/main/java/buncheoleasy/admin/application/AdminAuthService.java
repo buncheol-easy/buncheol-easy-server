@@ -92,9 +92,16 @@ public class AdminAuthService {
   }
 
   /**
-   * 제한 키를 계정 조회 기준과 맞춘다. {@code admins} 테이블은 {@code utf8mb4_unicode_ci}(대소문자 무시 + PAD SPACE)라
-   * {@code Buncheol-Admin}·{@code "buncheol-admin "} 이 모두 같은 계정을 찾는데, 정규화하지 않으면 Redis 키만 달라져 한도를
-   * 변형 개수만큼 우회할 수 있다.
+   * 제한 키를 계정 조회 기준과 맞춘다. {@code admins} 는 {@code utf8mb4_unicode_ci} 라 {@code Buncheol-Admin} 이
+   * 같은 계정을 찾는데, 정규화하지 않으면 Redis 키만 달라져 한도를 우회할 수 있다.
+   *
+   * <p>이 콜레이션은 대소문자뿐 아니라 <b>악센트도 무시</b>하므로({@code 'a' = 'á'}) {@code toLowerCase} 만으로는
+   * 등가가 아니다. 등가를 성립시키는 것은 {@code AdminLoginRequest} 의 ASCII {@code @Pattern} 이다 —
+   * 입력이 ASCII 로 좁혀진 뒤에야 이 정규화가 콜레이션과 같은 결과를 낸다. 컨트롤러를 거치지 않는
+   * 직접 호출(부트스트랩·테스트)은 {@code AdminAccountInitializer} 가 같은 형식을 강제한다.
+   *
+   * <p>{@code strip()} 은 콜레이션(PAD SPACE — 뒤쪽만 무시)보다 넓게 자르지만, {@code @Pattern} 이 공백을 아예
+   * 막으므로 HTTP 경로에서는 도달하지 않는다. 직접 호출용 방어로만 남긴다.
    */
   private String normalizeLoginId(final String loginId) {
     return loginId.strip().toLowerCase(Locale.ROOT);

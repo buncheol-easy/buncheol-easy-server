@@ -98,14 +98,7 @@ public class MyBookmarkedBuncheolQueryService {
         buncheolMemberNameResolver.resolveNames(visibleBuncheolIds, takenBuncheolMemberIds);
 
     return filtered.stream()
-        .map(
-            bm ->
-                toResponse(
-                    bm,
-                    buncheolById,
-                    groupNameById,
-                    thumbnailByBuncheolId,
-                    memberNames))
+        .map(bm -> toResponse(bm, buncheolById, groupNameById, thumbnailByBuncheolId, memberNames))
         .toList();
   }
 

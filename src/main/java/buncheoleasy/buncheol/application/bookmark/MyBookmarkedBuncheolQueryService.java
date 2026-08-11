@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -32,6 +33,7 @@ public class MyBookmarkedBuncheolQueryService {
   private final GroupRepository groupRepository;
   private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
+  private final ParticipationRepository participationRepository;
   private final UserFavoriteGroupRepository userFavoriteGroupRepository;
 
   @Transactional(readOnly = true)
@@ -89,8 +91,11 @@ public class MyBookmarkedBuncheolQueryService {
         buncheolImageRepository.findThumbnailsByBuncheolIds(visibleBuncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
-    Map<Long, List<String>> memberNamesByBuncheolId =
-        buncheolMemberNameResolver.findNamesByBuncheolIds(visibleBuncheolIds);
+    // 활성 참여가 점유한 슬롯을 빼면 "아직 안 팔린" 멤버 — 공개 목록과 동일 기준.
+    Set<Long> takenBuncheolMemberIds =
+        Set.copyOf(participationRepository.findActiveBuncheolMemberIds(visibleBuncheolIds));
+    BuncheolMemberNameResolver.MemberNames memberNames =
+        buncheolMemberNameResolver.resolveNames(visibleBuncheolIds, takenBuncheolMemberIds);
 
     return filtered.stream()
         .map(
@@ -100,7 +105,7 @@ public class MyBookmarkedBuncheolQueryService {
                     buncheolById,
                     groupNameById,
                     thumbnailByBuncheolId,
-                    memberNamesByBuncheolId))
+                    memberNames))
         .toList();
   }
 
@@ -156,7 +161,7 @@ public class MyBookmarkedBuncheolQueryService {
       final Map<Long, Buncheol> buncheolById,
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId,
-      final Map<Long, List<String>> memberNamesByBuncheolId) {
+      final BuncheolMemberNameResolver.MemberNames memberNames) {
     Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
     return new MyBookmarkedBuncheolResponse(
         bookmark.getId(),
@@ -166,6 +171,7 @@ public class MyBookmarkedBuncheolQueryService {
         buncheol.getDeadline(),
         groupNameById.get(buncheol.getGroupId()),
         thumbnailByBuncheolId.get(buncheol.getId()),
-        memberNamesByBuncheolId.getOrDefault(buncheol.getId(), List.of()));
+        memberNames.all().getOrDefault(buncheol.getId(), List.of()),
+        memberNames.available().getOrDefault(buncheol.getId(), List.of()));
   }
 }

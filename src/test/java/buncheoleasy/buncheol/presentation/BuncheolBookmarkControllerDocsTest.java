@@ -100,7 +100,8 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
             Instant.parse("2026-06-01T12:00:00Z"),
             "뉴진스",
             "https://cdn.example.com/buncheol-thumb.jpg",
-            List.of("민지", "하니", "다니엘", "해린", "혜인"));
+            List.of("민지", "하니", "다니엘", "해린", "혜인"),
+            List.of("민지", "다니엘", "혜인"));
     given(
             myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
                 USER_ID, BookmarkSortOption.LATEST, false, false))
@@ -142,6 +143,7 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
                             - `thumbnailUrl` 은 분철에 등록된 이미지 중 **가장 먼저 등록된 1장의 URL**. 이미지가 없으면 `null`
                             - `deadline` 은 UTC ISO-8601 (예: `2026-06-01T12:00:00Z`)
                             - `memberNames` 는 분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 분철에 멤버 슬롯을 **등록한 순서** 로 정렬 (`BuncheolMember.id` ASC). 멤버가 없으면 빈 배열
+                            - `availableMemberNames` 는 아직 안 팔린(활성 참여가 없는) 멤버 이름 리스트. 공개 목록 조회와 동일 기준·동일 정렬이며, 전 슬롯이 팔린 분철은 빈 배열
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .queryParameters(
@@ -171,7 +173,10 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
                                 .description("분철 대표사진 URL (개최자 지정, 미지정 시 첫 이미지). 이미지가 없으면 `null`")
                                 .optional(),
                             fieldWithPath("[].memberNames")
-                                .description("분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 슬롯을 등록한 순서로 정렬"))
+                                .description("분철에 포함된 K-pop 멤버 이름 리스트. 호스트가 슬롯을 등록한 순서로 정렬"),
+                            fieldWithPath("[].availableMemberNames")
+                                .description(
+                                    "아직 안 팔린(활성 참여가 없는) 멤버 이름 리스트. 같은 정렬 기준이며 전 슬롯이 팔리면 빈 배열"))
                         .build())));
   }
 }

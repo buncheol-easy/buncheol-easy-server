@@ -648,7 +648,8 @@ class BuncheolControllerTest {
               5,
               7L,
               createdAt,
-              "https://cdn.example.com/buncheol-10-thumb.jpg");
+              "https://cdn.example.com/buncheol-10-thumb.jpg",
+            FlowType.LEGACY);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 

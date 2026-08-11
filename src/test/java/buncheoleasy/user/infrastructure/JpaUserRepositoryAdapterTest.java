@@ -260,20 +260,20 @@ class JpaUserRepositoryAdapterTest {
       // given
       User saved = persistAndDetach(User.create("KAKAO", "123456", "test@example.com"));
       User initial = userRepository.findById(saved.getId()).orElseThrow();
-      initial.updateBankAccount("국민은행", "111", "홍길동");
+      initial.updateBankAccount("국민은행", "11112222", "홍길동");
       em.flush();
       em.clear();
 
       // when
       User managed = userRepository.findById(saved.getId()).orElseThrow();
-      managed.updateBankAccount("신한은행", "222", "김철수");
+      managed.updateBankAccount("신한은행", "22223333", "김철수");
       em.flush();
       em.clear();
 
       // then
       User found = userRepository.findById(saved.getId()).orElseThrow();
       assertThat(found.getBankAccount().bank()).isEqualTo("신한은행");
-      assertThat(found.getBankAccount().account()).isEqualTo("222");
+      assertThat(found.getBankAccount().account()).isEqualTo("22223333");
       assertThat(found.getBankAccount().holder()).isEqualTo("김철수");
     }
   }

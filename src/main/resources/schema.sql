@@ -290,6 +290,7 @@ CREATE TABLE IF NOT EXISTS participations
     updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
     payment_sent_at       DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
+    payment_rejected_at   DATETIME     NULL COMMENT 'C2C: 개최자 "입금 못 찾음" 반려 시각 — 재마킹 시 NULL 초기화(최근 상태가 반려인지 판정). 셀프 철회는 NULL 유지',
     -- 분철 flow_type 비정규화 (조건부 INSERT 가 buncheols 에서 복사). generated column 은 타 테이블을 참조할 수
     -- 없어, LEGACY 전용 1인 1참여 유니크를 위해 참여 행에 내려받는다.
     flow_type             VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT '분철 flow_type 비정규화 — LEGACY 1인 1참여 유니크용',

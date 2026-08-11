@@ -175,7 +175,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 null,
-                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -204,7 +204,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -327,6 +327,11 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
+                            fieldWithPath("[].paymentRejectedAt")
+                                .description(
+                                    "C2C 개최자 반려('입금 못 찾음') 시각. status=AWAITING_PAYMENT 와 함께 오면 재확인이 필요한 상태다. "
+                                        + "재마킹 시 null 로 초기화되며, 참여자 셀프 철회는 null")
+                                .optional(),
                             fieldWithPath("[].openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
                                 .optional())
@@ -356,7 +361,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -438,6 +443,11 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("paymentRejectedAt")
+                                .description(
+                                    "C2C 개최자 반려('입금 못 찾음') 시각. status=AWAITING_PAYMENT 와 함께 오면 재확인이 필요한 상태다. "
+                                        + "재마킹 시 null 로 초기화되며, 참여자 셀프 철회는 null")
                                 .optional(),
                             fieldWithPath("openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")

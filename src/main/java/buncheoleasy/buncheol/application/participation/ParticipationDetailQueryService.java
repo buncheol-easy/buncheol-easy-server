@@ -88,6 +88,7 @@ public class ParticipationDetailQueryService {
         payback,
         buncheol.getFlowType(),
         participation.getPaymentSentAt(),
+        participation.getPaymentRejectedAt(),
         buncheol.getOpenChatUrl());
   }
 }

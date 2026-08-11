@@ -14,6 +14,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HoldBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -98,12 +99,12 @@ public class BuncheolController {
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<Void> holdBuncheol(
+  public ResponseEntity<HoldBuncheolResponse> holdBuncheol(
       @AuthenticationPrincipal final Long hostId,
       @Valid @RequestPart("request") final HoldBuncheolRequest request,
       @RequestPart(value = "images") final List<MultipartFile> images) {
-    buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
-    return ResponseEntity.status(HttpStatus.CREATED).build();
+    Long buncheolId = buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
+    return ResponseEntity.status(HttpStatus.CREATED).body(HoldBuncheolResponse.of(buncheolId));
   }
 
   /**

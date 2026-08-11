@@ -46,7 +46,9 @@ public class BuncheolService {
   private final Clock clock;
 
   @Transactional
-  public void holdBuncheol(
+  // 생성된 분철 id 를 반환한다 — FE 가 생성 직후 목록을 재조회해 제목·그룹명으로 새 분철을 찾던 것을 대체한다
+  // (docs/53 Q-15: 동일 제목 재개최 시 잘못 매칭될 수 있었다).
+  public Long holdBuncheol(
       final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
     FlowType flowType = resolveHostFlowType(hostId, request.flowType());
 
@@ -73,6 +75,8 @@ public class BuncheolService {
       eventPublisher.publishEvent(
           new BuncheolImageUploadEvent(buncheol.getId(), images, request.thumbnailIndex()));
     }
+
+    return buncheol.getId();
   }
 
   /**

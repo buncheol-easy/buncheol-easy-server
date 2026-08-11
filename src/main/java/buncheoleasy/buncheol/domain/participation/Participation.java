@@ -107,6 +107,13 @@ public class Participation extends TimestampedEntity {
   @Column(name = "payment_sent_at")
   private Instant paymentSentAt;
 
+  // C2C: 개최자가 "입금 못 찾음" 으로 반려한 시각 (docs/53 Q-03). 개최자 반려와 참여자 셀프 철회가 같은 CAS 를 쓰는데
+  // 응답만으로는 구분이 안 돼 참여자에게 재확인 안내를 띄울 수 없었다 — 반려에만 값을 넣어 구분한다.
+  // 재마킹("보냈어요") 시 NULL 로 초기화한다. 안 그러면 반려 → 재마킹 → 셀프 철회 후에도 반려 표시가 남는다.
+  // 분쟁 증거는 paymentSentAt 이 이미 보존하므로 여기서 이력을 남길 필요는 없다.
+  @Column(name = "payment_rejected_at")
+  private Instant paymentRejectedAt;
+
   // --- 오픈 이벤트 배송비 환급(배송비 돌려받기) ---
   // 저장 값은 NONE/REQUESTED/COMPLETED/REJECTED 뿐이다. 신청 가능(ELIGIBLE)·만료(EXPIRED)는 이벤트
   // 설정(환경변수)+배송 상태로 조회 시 파생한다 (PaybackStatus javadoc 참고).

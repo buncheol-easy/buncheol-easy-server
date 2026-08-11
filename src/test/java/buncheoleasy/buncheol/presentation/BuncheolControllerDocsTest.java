@@ -173,6 +173,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
+                        .responseFields(
+                            fieldWithPath("buncheolId")
+                                .description(
+                                    "생성된 분철 id. 생성 직후 상세·관리 화면으로 바로 이동할 때 쓴다 (docs/53 Q-15 — 목록 재조회 후 제목 매칭 불필요)"))
                         .build())));
   }
 
@@ -260,7 +264,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             5,
             7L,
             createdAt,
-            "https://cdn.example.com/buncheol-10-thumb.jpg");
+            "https://cdn.example.com/buncheol-10-thumb.jpg",
+            FlowType.LEGACY);
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -289,7 +294,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].createdAt").description("분철 개최 일시"),
                             fieldWithPath("[].thumbnailUrl")
                                 .description("분철 대표 이미지 URL. 이미지가 없으면 null")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].flowType")
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"))
                         .build())));
   }
 

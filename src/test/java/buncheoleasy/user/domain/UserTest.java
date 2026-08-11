@@ -333,12 +333,12 @@ class UserTest {
     @Test
     void 계좌를_갱신하면_새_값으로_덮어쓴다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updateBankAccount("국민은행", "111", "홍길동");
+      user.updateBankAccount("국민은행", "11112222", "홍길동");
 
-      user.updateBankAccount("신한은행", "222", "김철수");
+      user.updateBankAccount("신한은행", "22223333", "김철수");
 
       assertThat(user.getBankAccount().bank()).isEqualTo("신한은행");
-      assertThat(user.getBankAccount().account()).isEqualTo("222");
+      assertThat(user.getBankAccount().account()).isEqualTo("22223333");
       assertThat(user.getBankAccount().holder()).isEqualTo("김철수");
     }
 
@@ -355,7 +355,7 @@ class UserTest {
     @Test
     void 계좌_등록_상태에서_requireBankAccount는_통과한다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updateBankAccount("국민은행", "111", "홍길동");
+      user.updateBankAccount("국민은행", "11112222", "홍길동");
 
       assertThatCode(user::requireBankAccount).doesNotThrowAnyException();
     }

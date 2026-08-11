@@ -369,6 +369,23 @@ class AlimtalkNotificationListenerTest {
       verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FULL), any());
       verify(sender, never()).send(any(), any(), any());
     }
+
+    @Test
+    @DisplayName("같은 분철의 정원 충족 이벤트가 반복돼도 1회만 발송·기록한다")
+    void sendsOncePerBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(77L);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      given(assembler.loadBuncheolHost(77L)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onBuncheolFull(new BuncheolFullEvent(77L, 5));
+      listener.onBuncheolFull(new BuncheolFullEvent(77L, 5));
+
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FULL), any());
+      verify(sender).send(eq(AlimtalkTemplate.C2C_BUNCHEOL_FULL), eq(HOST_PHONE), any());
+    }
   }
 
   @Nested

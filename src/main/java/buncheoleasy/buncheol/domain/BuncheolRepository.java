@@ -105,13 +105,6 @@ public interface BuncheolRepository {
    */
   int confirmIfAllCollected(Long buncheolId, Instant now);
 
-  /**
-   * C2C 정원 충족 알림 마킹 CAS — 미발송({@code full_notified_at IS NULL})일 때만 성공한다 (분철당 1회 발송 보장).
-   *
-   * @return 마킹에 성공했으면 {@code true} (이미 발송된 분철이면 {@code false})
-   */
-  boolean markFullNotifiedIfFirst(Long buncheolId, Instant now);
-
   /** 입금 수집중이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용, 기한 오름차순). */
   List<Long> findCollectingIdsPastPaymentDue(Instant now, int limit);
 

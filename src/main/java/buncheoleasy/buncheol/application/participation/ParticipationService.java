@@ -201,28 +201,24 @@ public class ParticipationService {
     }
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
-    publishFullIfAllSlotsApplied(buncheol, now);
+    publishFullIfAllSlotsApplied(buncheol);
     return new ParticipateResult(participation.getId(), participation.getTotalAmount(), null, null);
   }
 
   /**
-   * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 취소→재신청으로 정원이 다시 차도
-   * {@code markFullNotifiedIfFirst} CAS 가 분철당 1회만 발행을 허용한다(무제한 재발송 차단). 카운트는 반드시 잠금 조회(current
-   * read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어
-   * 충족을 놓친다.
+   * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 미충족→충족 전이마다 발행하고,
+   * 취소→재신청 루프의 중복 발송 차단은 리스너의 인메모리 가드가 담당한다. 카운트는 반드시 잠금 조회(current read)여야 한다 —
+   * participate 진입부 일반 조회가 RR 스냅샷을 행 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다.
    *
    * <p>락 순서 규약: 분철 행(X) → 참여 행(X) 순서 고정. 현재 역순(참여 행 → 분철 행) 경로는 LEGACY 입금확인뿐인데 이 판정은 C2C
    * 분철만 타므로 같은 분철 행을 함께 잡을 일이 없다 — 안전의 근거는 상태 구간이 아니라 플로우 타입 분리다. C2C 플로우 안에서 참여 행을 먼저
    * 잠그는 경로가 생기면 데드락 사이클이 된다.
    */
-  private void publishFullIfAllSlotsApplied(final Buncheol buncheol, final Instant now) {
+  private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
     List<Long> participantIds =
         participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
-    if (participantIds.size() < totalSlots) {
-      return;
-    }
-    if (buncheolDomainService.markFullNotifiedIfFirst(buncheol.getId(), now)) {
+    if (participantIds.size() >= totalSlots) {
       long applicantCount = participantIds.stream().distinct().count();
       eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), applicantCount));
     }

@@ -87,10 +87,6 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   @Column(name = "open_chat_url", length = 200)
   private String openChatUrl;
 
-  // C2C: 정원 충족 개최자 알림 발송 시각. IS NULL 조건 CAS(markFullNotifiedIfFirst)로 분철당 1회 발송을 보장한다.
-  @Column(name = "full_notified_at")
-  private Instant fullNotifiedAt;
-
   // C2C: 확정 시점 개최자 계좌 스냅샷. 확정 후 개최자가 프로필 계좌를 바꿔도 이미 안내된 입금 계좌가
   // 어긋나지 않게 고정한다 (docs/46 §4.7-B1). LEGACY 는 사용하지 않는다(실시간 조회 유지).
   @Embedded

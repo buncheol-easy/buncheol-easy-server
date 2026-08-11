@@ -23,6 +23,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +49,10 @@ public class AlimtalkNotificationListener {
   private final NotificationAssembler assembler;
   private final AlimtalkSender sender;
   private final NotificationInboxRecorder inboxRecorder;
+
+  // 정원 충족 알림을 보낸 분철 id. 취소→재신청 루프의 무제한 재발송(알림톡 건당 과금)을 막는 베스트 에포트 가드로,
+  // 재시작·배포 전환 시 초기화돼 그 후 재충족되면 1건 더 갈 수 있다 — 정확한 1회 보장이 아니라 스팸 차단이 목적.
+  private final Set<Long> fullNotifiedBuncheolIds = ConcurrentHashMap.newKeySet();
 
   /** (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. */
   @Async
@@ -174,10 +180,13 @@ public class AlimtalkNotificationListener {
         view.participation().getDueAt());
   }
 
-  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 발행 측 CAS 가 분철당 최초 1회를 보장한다. */
+  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 분철당 1회만 발송한다(인메모리 가드). */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolFull(final BuncheolFullEvent event) {
+    if (!fullNotifiedBuncheolIds.add(event.buncheolId())) {
+      return;
+    }
     BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
     Map<String, String> variables =
         Map.of(

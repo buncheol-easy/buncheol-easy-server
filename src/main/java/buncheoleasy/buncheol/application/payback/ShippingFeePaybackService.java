@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.application.payback;
 
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ShippingFeePaybackService {
 
+  private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
   private final DeliveryRepository deliveryRepository;
   private final ShippingFeePaybackPolicy policy;
@@ -50,7 +52,13 @@ public class ShippingFeePaybackService {
     }
 
     Delivery delivery = deliveryRepository.findByParticipationId(participationId).orElse(null);
-    PaybackStatus derived = policy.deriveStatus(participation, delivery, now);
+    // 환급은 운영진(LEGACY) 분철 전용 — 분철 flowType 을 판정에 함께 넘긴다 (C2C 셀프 환급 차단).
+    PaybackStatus derived =
+        policy.deriveStatus(
+            participation,
+            buncheolDomainService.getBuncheol(participation.getBuncheolId()).getFlowType(),
+            delivery,
+            now);
     if (derived != PaybackStatus.ELIGIBLE
         && derived != PaybackStatus.REJECTED
         && derived != PaybackStatus.REQUESTED) {

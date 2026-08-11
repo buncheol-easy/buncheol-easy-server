@@ -120,6 +120,12 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
+  public long countActiveByHostId(Long hostId) {
+    return jpaBuncheolRepository.countByHostIdAndStatusIn(
+        hostId, Set.of(BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING));
+  }
+
+  @Override
   public boolean existsUnfinishedByHostId(Long hostId) {
     // C2C 입금 수집중(PAYMENT_COLLECTING) 분철도 개최자 탈퇴를 막는다 (docs/46 §4.7-D2).
     return jpaBuncheolRepository.existsUnfinishedByHostId(

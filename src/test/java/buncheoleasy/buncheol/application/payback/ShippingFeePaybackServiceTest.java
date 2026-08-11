@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -43,6 +44,7 @@ class ShippingFeePaybackServiceTest {
   private static final ShippingFeePaybackRequest REQUEST =
       new ShippingFeePaybackRequest(TWEET_URL + "?s=20");
 
+  @Mock private buncheoleasy.buncheol.domain.BuncheolDomainService buncheolDomainService;
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private DeliveryRepository deliveryRepository;
   @Mock private ShippingFeePaybackPolicy policy;
@@ -57,17 +59,24 @@ class ShippingFeePaybackServiceTest {
   void setUp() {
     service =
         new ShippingFeePaybackService(
+            buncheolDomainService,
             participationDomainService,
             deliveryRepository,
             policy,
             eventPublisher,
             Clock.fixed(NOW, ZoneOffset.UTC));
     given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
+    // 환급 판정에 분철 flowType 이 필요해졌다 — 기본 픽스처는 운영진(LEGACY) 분철.
+    buncheoleasy.buncheol.domain.Buncheol buncheol =
+        org.mockito.Mockito.mock(buncheoleasy.buncheol.domain.Buncheol.class);
+    given(buncheol.getFlowType()).willReturn(FlowType.LEGACY);
+    given(participation.getBuncheolId()).willReturn(1L);
+    given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
     given(participation.getRefundAccount())
         .willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
     given(deliveryRepository.findByParticipationId(PARTICIPATION_ID))
         .willReturn(Optional.of(delivery));
-    given(policy.deriveStatus(participation, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.ELIGIBLE);
     given(
             participationDomainService.isPaybackTweetUrlUsedByOther(
@@ -90,7 +99,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 반려_상태에서도_재신청할_수_있다() {
-    given(policy.deriveStatus(participation, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.REJECTED);
 
     service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST);
@@ -117,7 +126,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 환급_대상이_아니면_PAYBACK_NOT_ELIGIBLE_예외가_발생한다() {
-    given(policy.deriveStatus(participation, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.NONE);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -128,7 +137,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 신청_마감이_지나면_PAYBACK_NOT_ELIGIBLE_예외가_발생한다() {
-    given(policy.deriveStatus(participation, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.EXPIRED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -139,7 +148,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 확인중_상태에서는_트윗_링크_수정으로_재제출할_수_있다() {
-    given(policy.deriveStatus(participation, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.REQUESTED);
 
     service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST);
@@ -154,7 +163,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 입금_완료된_건이면_상태_충돌_예외가_발생한다() {
-    given(policy.deriveStatus(participation, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.COMPLETED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))

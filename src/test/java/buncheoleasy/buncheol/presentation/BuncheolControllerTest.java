@@ -704,6 +704,7 @@ class BuncheolControllerTest {
               10L,
               "뉴진스 1집 분철",
               BuncheolStatus.RECRUITING,
+              FlowType.LEGACY,
               deadline,
               3,
               false,

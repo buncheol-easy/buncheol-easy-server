@@ -373,23 +373,12 @@ class UserTest {
     }
 
     @Test
-    void 개최_권한이_없으면_requireCanHost_호출_시_예외가_발생한다() {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-
-      assertThatThrownBy(user::requireCanHost)
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
-    }
-
-    @Test
-    void 개최_권한을_부여하면_requireCanHost는_통과한다() {
+    void 개최_권한을_부여하면_isCanHost가_true가_된다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
 
       user.allowHosting();
 
       assertThat(user.isCanHost()).isTrue();
-      assertThatCode(user::requireCanHost).doesNotThrowAnyException();
     }
   }
 

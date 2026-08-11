@@ -30,6 +30,55 @@ class BuncheolTest {
   }
 
   @Nested
+  @DisplayName("오픈채팅 링크 수정 테스트")
+  class UpdateOpenChatUrlTest {
+
+    private Buncheol withOpenChatUrl(String url) {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      buncheol.updateOpenChatUrl(url);
+      return buncheol;
+    }
+
+    @Test
+    void null_은_기존_값을_유지한다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.updateOpenChatUrl(null);
+
+      assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/gAbCdEf");
+    }
+
+    @Test
+    void 빈_문자열은_링크를_제거한다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.updateOpenChatUrl("");
+
+      assertThat(buncheol.getOpenChatUrl()).isNull();
+    }
+
+    @Test
+    void 유효한_값은_검증_후_교체된다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.updateOpenChatUrl("https://open.kakao.com/o/newLink");
+
+      assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/newLink");
+    }
+
+    @Test
+    void 형식이_틀리면_예외가_발생하고_기존_값이_유지된다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      assertThatThrownBy(() -> buncheol.updateOpenChatUrl("https://evil.example.com/x"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_INVALID);
+      assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/gAbCdEf");
+    }
+  }
+
+  @Nested
   @DisplayName("Buncheol 생성 테스트")
   class CreateTest {
 

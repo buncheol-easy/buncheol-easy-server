@@ -19,6 +19,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -111,13 +112,31 @@ class BuncheolServiceTest {
         3000,
         null,
         null,
+        null,
         thumbnailIndex,
+        members);
+  }
+
+  private HoldBuncheolRequest holdRequestWithFlow(
+      List<BuncheolMemberRequest> members, FlowType flowType) {
+    return new HoldBuncheolRequest(
+        GROUP_ID,
+        "테스트 분철 제목",
+        "분철 설명입니다.",
+        "공식 스토어",
+        Instant.now().plus(7, ChronoUnit.DAYS),
+        3,
+        3000,
+        null,
+        null,
+        flowType,
+        0,
         members);
   }
 
   // 대표사진 지정은 필수라 기본 픽스처는 신규 이미지 0번을 지정한다.
   private BuncheolModifyRequest modifyRequest() {
-    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, 0);
+    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, 0, null);
   }
 
   @Nested
@@ -315,12 +334,100 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 개최_권한이_없는_유저면_예외가_발생한다() {
-      // given
-      willThrow(new BusinessException(ErrorCode.USER_CANNOT_HOST))
-          .given(userDomainService)
-          .requireCanHost(HOST_ID);
+    void 일반_유저는_자격_게이트를_거쳐_C2C로_강제된다() {
+      // given — canHost=false(기본 목 동작)인 일반 유저
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
 
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(userDomainService).should().requireC2cHostQualification(HOST_ID);
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.C2C);
+    }
+
+    @Test
+    void 일반_유저가_LEGACY를_요청하면_USER_CANNOT_HOST_예외가_발생한다() {
+      // given — LEGACY 는 페이액션·운영 절차가 붙는 운영진 전용 방식이라 일반 유저 요청은 거부한다.
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.LEGACY);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+
+      then(userDomainService).should(never()).requireC2cHostQualification(any());
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+    }
+
+    @Test
+    void 운영진은_기본_LEGACY로_개최되고_자격_게이트를_타지_않는다() {
+      // given
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(userDomainService).should(never()).requireC2cHostQualification(any());
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.LEGACY);
+    }
+
+    @Test
+    void 운영진은_C2C_개최를_선택할_수_있다() {
+      // given
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.C2C);
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.C2C);
+    }
+
+    @Test
+    void 일반_유저는_활성_개최_상한을_넘으면_예외가_발생한다() {
+      // given — 자격 게이트(목 no-op) 통과 후 상한 검증에서 차단되는 경우
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED))
+          .given(buncheolDomainService)
+          .validateActiveHostedLimit(HOST_ID);
       HoldBuncheolRequest request =
           holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
 
@@ -328,7 +435,44 @@ class BuncheolServiceTest {
       assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+          .isEqualTo(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+    }
+
+    @Test
+    void 운영진의_C2C_선택도_가입_완료는_요구한다() {
+      // given — 성인 확인은 건너뛰지만 연락처(분쟁 처리 근거)는 운영진에게도 요구한다.
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(HOST_ID);
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.C2C);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+
+    @Test
+    void 자격_게이트에_걸리면_분철이_저장되지_않는다() {
+      // given — 연령대 미확인(USR-032)이 게이트에서 던져지는 경우
+      willThrow(new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED))
+          .given(userDomainService)
+          .requireC2cHostQualification(HOST_ID);
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_AGE_NOT_VERIFIED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
     }
 
     @Test
@@ -359,7 +503,7 @@ class BuncheolServiceTest {
     void 제목과_설명만_갱신되고_이미지는_keepImageIds_기준으로_정리된다() {
       // given
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 1L, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 1L, null, null);
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -401,10 +545,28 @@ class BuncheolServiceTest {
     }
 
     @Test
+    void 오픈채팅_링크_수정이_도메인_서비스로_위임된다() {
+      // given — 링크 값의 유지/제거/검증 계약은 엔티티(updateOpenChatUrl)가 책임진다.
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest(
+              "수정 제목", "수정 설명", List.of(1L, 2L), 1L, null, "https://open.kakao.com/o/gAbCdEf");
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
+
+      // then
+      then(buncheolDomainService)
+          .should()
+          .updateBuncheolOpenChatUrl(buncheol, "https://open.kakao.com/o/gAbCdEf");
+    }
+
+    @Test
     void thumbnailImageId를_지정하면_기존_이미지로_대표사진을_교체한다() {
       // given
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 2L, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 2L, null, null);
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
 
@@ -424,7 +586,7 @@ class BuncheolServiceTest {
     void thumbnailIndex를_지정하면_기존_플래그를_해제하고_이벤트에_인덱스를_전달한다() {
       // given — 신규 업로드 이미지가 대표가 될 예정이므로 기존 플래그만 해제하고, 지정은 커밋 후 리스너가 수행한다.
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, 0);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, 0, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -445,7 +607,7 @@ class BuncheolServiceTest {
     void 대표사진을_지정하지_않으면_예외가_발생하고_이미지_변경이_진행되지_않는다() {
       // given — 대표사진 지정은 필수(둘 중 정확히 하나)다.
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, null, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);

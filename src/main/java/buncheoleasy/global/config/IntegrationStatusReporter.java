@@ -1,6 +1,6 @@
 package buncheoleasy.global.config;
 
-import buncheoleasy.delivery.infrastructure.DeliveryTrackerClient;
+import buncheoleasy.delivery.infrastructure.DeliveryTrackerProperties;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
 import buncheoleasy.notification.domain.SlackChannel;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
 public class IntegrationStatusReporter {
 
   private final PayActionClient payActionClient;
-  private final DeliveryTrackerClient deliveryTrackerClient;
+  private final DeliveryTrackerProperties deliveryTrackerProperties;
   private final SlackWebhookClient slackWebhookClient;
 
   @EventListener(ApplicationReadyEvent.class)
@@ -35,13 +35,26 @@ public class IntegrationStatusReporter {
     log.info(
         "외부 연동 상태: payaction={}, delivery-tracker={}, slack[{}]",
         onOff(payActionClient.isEnabled()),
-        onOff(deliveryTrackerClient.isEnabled()),
+        deliveryTrackerStatus(),
         Arrays.stream(SlackChannel.values())
             .map(channel -> channel + "=" + onOff(slackWebhookClient.isEnabled(channel)))
             .collect(Collectors.joining(", ")));
   }
 
-  private String onOff(final boolean enabled) {
+  /**
+   * delivery-tracker 는 아웃바운드 크리덴셜과 웹훅 토큰이 모두 있어야 켜진다. OFF 하나로 뭉치면 "어디부터 볼지"를 알려주지 못하므로
+   * 꺼졌을 때만 두 축을 풀어 보여준다.
+   */
+  private String deliveryTrackerStatus() {
+    boolean outbound = deliveryTrackerProperties.outboundEnabled();
+    boolean webhook = deliveryTrackerProperties.webhookEnabled();
+    if (outbound && webhook) {
+      return "ON";
+    }
+    return "OFF(outbound=%s, webhook=%s)".formatted(onOff(outbound), onOff(webhook));
+  }
+
+  private static String onOff(final boolean enabled) {
     return enabled ? "ON" : "OFF";
   }
 }

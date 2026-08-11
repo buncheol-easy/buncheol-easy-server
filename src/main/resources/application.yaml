@@ -94,10 +94,13 @@ logging:
     buncheoleasy: ${LOG_LEVEL_APP:INFO}
     # TRACE 면 정적 리소스·헬스체크·프리플라이트까지 요청마다 필터 체인 진행을 남긴다.
     org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
-    # Boot 내장 로깅 그룹 — org.springframework.jdbc.core + org.hibernate.SQL 을 함께 잡는다
-    # (Boot 4.0.5 LoggingApplicationListener 확인). format_sql: true 와 겹쳐 쿼리 1건이 여러
-    # 줄이 되므로 기본은 꺼둔다. DEBUG 이상에서만 출력되므로 WARN = 꺼짐.
-    sql: ${LOG_LEVEL_SQL:WARN}
+    # Boot 의 sql 그룹(jdbc.core + hibernate.SQL)을 쓰지 않고 개별 키로 둔다 — 그룹은 풀리면서
+    # 자식 로거를 명시 지정하는데, application-test.yaml 은 부모(org.springframework.jdbc)를
+    # 잡고 있어 명시값이 상속을 이겨 테스트의 SQL 로그가 꺼진다. 그룹 키와 개별 로거 키를 파일마다
+    # 섞으면 계속 밟으므로 개별 키로 통일한다.
+    # format_sql: true 와 겹쳐 쿼리 1건이 여러 줄이 되므로 기본은 꺼둔다(DEBUG 이상에서만 출력).
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    org.springframework.jdbc.core: ${LOG_LEVEL_SQL:WARN}
 
 jwt:
   secret:

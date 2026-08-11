@@ -8,6 +8,7 @@ import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.global.ratelimit.FixedWindowRateLimiter;
+import java.util.Locale;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,15 +19,25 @@ import org.springframework.transaction.annotation.Transactional;
  * 더미 해시와 BCrypt 비교를 수행해 응답 시간을 맞춘다 — 에러 메시지·타이밍 어느 쪽으로도 계정 존재 여부를 열거할 수 없게 한다. 실패는 감사 로그로 남긴다
  * (저속 크리덴셜 스터핑 탐지용). 성공 시 role claim 이 실린 관리자 access token 을 발급한다 (refresh 없음 — 만료 시 재로그인).
  *
- * <p>여기에 더해 <b>호출 횟수 제한</b>을 둔다. 위 방어들은 "어느 계정이 있는지"를 감추지만 추측 자체의 속도는 줄이지 못하는데, 관리자 토큰은 12시간
- * 유효하고 {@code /v1/admin/**} 전체 — 임의 참여의 입금확인, 배송비 환급 승인/반려 — 에 접근하므로 무제한 온라인 추측을 허용할 수 없다.
+ * <p>여기에 더해 <b>로그인 ID 축 호출 제한</b>을 둔다. 위 방어들은 "어느 계정이 있는지"를 감추지만 추측 자체의 속도는 줄이지 못하는데, 관리자 토큰은
+ * 12시간 유효하고 {@code /v1/admin/**} 전체 — 임의 참여의 입금확인, 배송비 환급 승인/반려 — 에 접근하므로 무제한 온라인 추측을 허용할 수 없다.
+ *
+ * <p><b>IP 축 제한은 두지 않는다.</b> 브라우저 트래픽이 프론트(Next.js)의 {@code /api/backend} 프록시를 거치는데 그 프록시가
+ * {@code X-Real-IP}/{@code X-Forwarded-For} 를 전달하지 않아, 모든 관리자 로그인이 프록시 IP 하나로 수렴한다. 그 상태의 IP 한도는
+ * 개인별 제한이 아니라 <b>전역 예산</b>이 되어, 익명 공격자가 소량의 요청만으로 모든 운영자의 로그인을 상시 차단할 수 있다(= 입금확인·환급 처리 전면
+ * 중단). ID 축 잠금은 계정 1개 + 짧은 윈도우로 피해가 한정되지만 IP 축은 그렇지 않다. 프록시가 실제 클라이언트 IP 를 전달하게 된 뒤에 도입한다.
+ *
+ * <p>제한기의 fail-open 계약(Redis 장애 시 통과)을 그대로 받아들인다 — fail-closed 로 두면 Redis 한 대의 장애가 곧 관리자 로그인 전면
+ * 차단(= 입금확인·환급 처리 중단)이 된다. 이 제한은 비밀번호 검증을 대체하지 않는 부가 방어선이라 잠시 없는 쪽이 손해가 작다.
+ *
+ * <p>ID 축도 계정 잠금이라 제3자가 운영자 ID 로 도배하면 잠금 자체가 DoS 가 된다. 윈도우를 짧게(기본 10분) 유지해 자동 해제되게 하는 것이 그
+ * 완화책이고, 근본 해결은 관리자 계정 다중화다.
  */
 @Slf4j
 @Service
 public class AdminAuthService {
 
   private static final String LOGIN_ID_KEY_PREFIX = "ADMIN_LOGIN:id:";
-  private static final String IP_KEY_PREFIX = "ADMIN_LOGIN:ip:";
 
   private final AdminRepository adminRepository;
   private final PasswordEncoder passwordEncoder;
@@ -50,29 +61,16 @@ public class AdminAuthService {
     this.enumerationGuardHash = passwordEncoder.encode("enumeration-timing-guard");
   }
 
-  /**
-   * @param clientIp 호출 제한 키로 쓸 클라이언트 IP ({@code ClientIpResolver} 로 해석한 값)
-   */
   @Transactional(readOnly = true)
-  public AdminLoginResponse login(
-      final String loginId, final String rawPassword, final String clientIp) {
-    String loginIdKey = LOGIN_ID_KEY_PREFIX + loginId;
-    String ipKey = IP_KEY_PREFIX + clientIp;
+  public AdminLoginResponse login(final String loginId, final String rawPassword) {
+    String loginIdKey = LOGIN_ID_KEY_PREFIX + normalizeLoginId(loginId);
 
-    // 두 카운터를 모두 올린 뒤 판정한다 — 단축 평가로 한쪽을 건너뛰면, loginId 한도에 먼저 걸린 공격자가
-    // 아이디를 바꿔가며 훑을 때 IP 카운터가 멈춰 스프레이 공격을 놓친다.
-    boolean withinLoginIdLimit =
-        rateLimiter.tryAcquire(
-            loginIdKey,
-            rateLimitProperties.maxAttemptsPerLoginId(),
-            rateLimitProperties.window());
-    boolean withinIpLimit =
-        rateLimiter.tryAcquire(
-            ipKey, rateLimitProperties.maxAttemptsPerIp(), rateLimitProperties.window());
-
-    if (!withinLoginIdLimit || !withinIpLimit) {
-      // 한도 초과는 BCrypt 비교 전에 끊는다 — 요청 폭주가 그대로 CPU 부하가 되지 않도록.
-      log.warn("관리자 로그인 호출 제한 초과. loginId={}, clientIp={}", loginId, clientIp);
+    if (!rateLimiter.tryAcquire(
+        loginIdKey, rateLimitProperties.maxAttemptsPerLoginId(), rateLimitProperties.window())) {
+      // 한도 초과는 조회·BCrypt 비교 전에 끊는다 — 요청 폭주가 그대로 CPU 부하가 되지 않도록.
+      // loginId 는 공격자가 제어하는 값이라 로그에 싣지 않는다 — 거부 경로는 BCrypt 비용이 없어
+      // 실패 로그보다 훨씬 높은 rps 로 찍히고, @Size(max=50) 은 개행을 막지 못해 라인 위조가 된다.
+      log.warn("관리자 로그인 호출 제한 초과 - 자격증명 검증 없이 거부");
       throw new BusinessException(ErrorCode.ADMIN_LOGIN_RATE_LIMITED);
     }
 
@@ -89,8 +87,16 @@ public class AdminAuthService {
     // 정상 사용이 확인됐으므로 누적을 되돌린다. 리셋이 없으면 오타를 몇 번 낸 운영자가 성공 후에도
     // 남은 윈도우 동안 재로그인을 못 하게 된다 (관리자 토큰은 refresh 가 없어 재로그인 빈도가 있다).
     rateLimiter.reset(loginIdKey);
-    rateLimiter.reset(ipKey);
 
     return new AdminLoginResponse(jwtTokenProvider.createAdminAccessToken(admin.getId()));
+  }
+
+  /**
+   * 제한 키를 계정 조회 기준과 맞춘다. {@code admins} 테이블은 {@code utf8mb4_unicode_ci}(대소문자 무시 + PAD SPACE)라
+   * {@code Buncheol-Admin}·{@code "buncheol-admin "} 이 모두 같은 계정을 찾는데, 정규화하지 않으면 Redis 키만 달라져 한도를
+   * 변형 개수만큼 우회할 수 있다.
+   */
+  private String normalizeLoginId(final String loginId) {
+    return loginId.strip().toLowerCase(Locale.ROOT);
   }
 }

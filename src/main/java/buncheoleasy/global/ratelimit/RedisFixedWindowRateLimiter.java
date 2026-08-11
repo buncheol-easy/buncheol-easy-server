@@ -32,12 +32,7 @@ public class RedisFixedWindowRateLimiter implements FixedWindowRateLimiter {
 
   private final StringRedisTemplate redisTemplate;
 
-  /**
-   * {@inheritDoc}
-   *
-   * <p><b>fail-open</b>: Redis 장애 시 제한 없이 통과시킨다. 이 제한은 부가 방어선이고, fail-closed 로 두면 Redis 한 대의 장애가
-   * 곧 의견 접수 중단·관리자 로그인 전면 차단(= 입금확인·환급 처리 중단)이 된다. 제한이 잠시 없는 쪽보다 손해가 크다.
-   */
+  /** {@inheritDoc} Redis 장애는 로깅 후 통과({@code true})로 처리한다 — 인터페이스의 fail-open 계약. */
   @Override
   public boolean tryAcquire(final String key, final int limit, final Duration window) {
     try {

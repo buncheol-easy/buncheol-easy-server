@@ -20,6 +20,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.global.ratelimit.FixedWindowRateLimiter;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,8 +37,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AdminAuthServiceTest {
 
   private static final String LOGIN_ID_KEY = "ADMIN_LOGIN:id:buncheol-admin";
-  private static final String IP_KEY = "ADMIN_LOGIN:ip:1.2.3.4";
-  private static final String CLIENT_IP = "1.2.3.4";
 
   @Mock private AdminRepository adminRepository;
   @Mock private PasswordEncoder passwordEncoder;
@@ -56,7 +55,7 @@ class AdminAuthServiceTest {
             passwordEncoder,
             jwtTokenProvider,
             rateLimiter,
-            new AdminLoginRateLimitProperties(5, 20, Duration.ofMinutes(10)));
+            new AdminLoginRateLimitProperties(5, Duration.ofMinutes(10)));
   }
 
   private Admin admin(final Long id) {
@@ -78,7 +77,7 @@ class AdminAuthServiceTest {
 
       // when
       AdminLoginResponse response =
-          adminAuthService.login("buncheol-admin", "raw-password", CLIENT_IP);
+          adminAuthService.login("buncheol-admin", "raw-password");
 
       // then
       assertThat(response.accessToken()).isEqualTo("admin-access-token");
@@ -90,7 +89,7 @@ class AdminAuthServiceTest {
       given(adminRepository.findByLoginId("unknown")).willReturn(Optional.empty());
 
       // when & then
-      assertThatThrownBy(() -> adminAuthService.login("unknown", "raw-password", CLIENT_IP))
+      assertThatThrownBy(() -> adminAuthService.login("unknown", "raw-password"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.ADMIN_LOGIN_FAILED);
@@ -106,7 +105,7 @@ class AdminAuthServiceTest {
 
       // when & then
       assertThatThrownBy(
-              () -> adminAuthService.login("buncheol-admin", "wrong-password", CLIENT_IP))
+              () -> adminAuthService.login("buncheol-admin", "wrong-password"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.ADMIN_LOGIN_FAILED);
@@ -120,13 +119,12 @@ class AdminAuthServiceTest {
   class RateLimitTest {
 
     @Test
-    void 로그인_ID_한도를_넘으면_비밀번호_비교_전에_거부한다() {
+    void 한도를_넘으면_조회와_비밀번호_비교_전에_거부한다() {
       // given
       given(rateLimiter.tryAcquire(eq(LOGIN_ID_KEY), anyInt(), any())).willReturn(false);
 
       // when & then
-      assertThatThrownBy(
-              () -> adminAuthService.login("buncheol-admin", "raw-password", CLIENT_IP))
+      assertThatThrownBy(() -> adminAuthService.login("buncheol-admin", "raw-password"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.ADMIN_LOGIN_RATE_LIMITED);
@@ -138,45 +136,33 @@ class AdminAuthServiceTest {
     }
 
     @Test
-    void IP_한도를_넘으면_로그인_ID_한도가_남아있어도_거부한다() {
-      // given — 로그인 ID 를 바꿔가며 훑는 스프레이는 IP 축에서만 잡힌다
-      given(rateLimiter.tryAcquire(eq(IP_KEY), anyInt(), any())).willReturn(false);
-
-      // when & then
-      assertThatThrownBy(
-              () -> adminAuthService.login("buncheol-admin", "raw-password", CLIENT_IP))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.ADMIN_LOGIN_RATE_LIMITED);
-    }
-
-    @Test
-    void 로그인_ID_한도에_걸려도_IP_카운터는_함께_올린다() {
-      // given — 단축 평가로 IP 카운터를 건너뛰면 아이디를 바꿔가며 훑는 공격이 IP 축에서 누락된다
+    void 대소문자와_앞뒤_공백이_달라도_같은_제한_키를_쓴다() {
+      // admins 는 utf8mb4_unicode_ci(대소문자 무시 + PAD SPACE)라 아래 변형이 모두 같은 계정을
+      // 찾는다. 정규화하지 않으면 Redis 키만 달라져 한도를 변형 개수만큼 우회할 수 있다.
+      // given
       given(rateLimiter.tryAcquire(eq(LOGIN_ID_KEY), anyInt(), any())).willReturn(false);
 
-      // when
-      assertThatThrownBy(
-              () -> adminAuthService.login("buncheol-admin", "raw-password", CLIENT_IP))
-          .isInstanceOf(BusinessException.class);
-
-      // then
-      then(rateLimiter).should().tryAcquire(eq(IP_KEY), anyInt(), any());
+      // when & then
+      for (String variant : List.of("Buncheol-Admin", "BUNCHEOL-ADMIN", "  buncheol-admin  ")) {
+        assertThatThrownBy(() -> adminAuthService.login(variant, "raw-password"))
+            .isInstanceOf(BusinessException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.ADMIN_LOGIN_RATE_LIMITED);
+      }
     }
 
     @Test
-    void 로그인에_성공하면_두_축의_실패_누적을_초기화한다() {
+    void 로그인에_성공하면_실패_누적을_초기화한다() {
       // given — 리셋이 없으면 오타를 몇 번 낸 운영자가 성공 후에도 남은 윈도우 동안 재로그인을 못 한다
       given(adminRepository.findByLoginId("buncheol-admin")).willReturn(Optional.of(admin(1L)));
       given(passwordEncoder.matches("raw-password", "encoded-hash")).willReturn(true);
       given(jwtTokenProvider.createAdminAccessToken(1L)).willReturn("admin-access-token");
 
       // when
-      adminAuthService.login("buncheol-admin", "raw-password", CLIENT_IP);
+      adminAuthService.login("buncheol-admin", "raw-password");
 
       // then
       then(rateLimiter).should().reset(LOGIN_ID_KEY);
-      then(rateLimiter).should().reset(IP_KEY);
     }
 
     @Test
@@ -186,8 +172,7 @@ class AdminAuthServiceTest {
       given(passwordEncoder.matches("wrong-password", "encoded-hash")).willReturn(false);
 
       // when
-      assertThatThrownBy(
-              () -> adminAuthService.login("buncheol-admin", "wrong-password", CLIENT_IP))
+      assertThatThrownBy(() -> adminAuthService.login("buncheol-admin", "wrong-password"))
           .isInstanceOf(BusinessException.class);
 
       // then

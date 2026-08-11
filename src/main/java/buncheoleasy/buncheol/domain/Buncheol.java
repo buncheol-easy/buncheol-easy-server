@@ -127,6 +127,19 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     this.description = description;
   }
 
+  // 수정 계약 (docs/51 §3-1-2): null = 유지(필드를 안 보내는 구 클라이언트 호환), 빈 문자열 = 제거, 값 = 검증 후 교체.
+  public void updateOpenChatUrl(final String value) {
+    if (value == null) {
+      return;
+    }
+    if (value.isBlank()) {
+      this.openChatUrl = null;
+      return;
+    }
+    validateOpenChatUrl(value);
+    this.openChatUrl = value;
+  }
+
   public void validateOwner(final Long userId) {
     if (!isHost(userId)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION);

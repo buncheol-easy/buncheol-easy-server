@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,11 +16,15 @@ import java.util.List;
  *
  * <p>{@code shippingFeePaybackTarget} 은 오픈 이벤트 배송비 환급 대상 분철(전 슬롯 0원 + 이벤트 활성) 여부로, 목록 카드의
  * "배송비 돌려받는 무료 분철" 배지 판정에 쓴다.
+ *
+ * <p>{@code flowType} 은 카드의 상태 배지·dim 판정을 상세 화면과 같은 기준으로 통일하기 위한 필드다 (docs/51 §3-1-2 — 이전에는 카드가
+ * 상태값으로 플로우를 추정했다).
  */
 public record BuncheolSummaryResponse(
     Long id,
     String title,
     BuncheolStatus status,
+    FlowType flowType,
     Instant deadline,
     int minHeadcount,
     boolean bookmarked,

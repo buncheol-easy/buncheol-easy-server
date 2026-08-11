@@ -135,6 +135,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
                               "gs25ShippingFee": Integer?,    // 0 이상 (0원 = 무료 배송), gs25/cu 중 최소 1개 필수
                               "cuShippingFee": Integer?,      // 0 이상 (0원 = 무료 배송), gs25/cu 중 최소 1개 필수
+                              "openChatUrl": String?,         // 선택, https://open.kakao.com/ 시작·200자 이하 — 참여자 소통 채널
+                              "flowType": String?,            // 선택 ("LEGACY"|"C2C") — null 이면 서버 결정: 일반 유저 = C2C 강제, 운영진(can_host) = LEGACY 기본에 C2C 선택 가능
                               "thumbnailIndex": Integer,      // 필수, 대표사진으로 쓸 images 파트 내 인덱스(0-base)
                               "buncheolMembers": [
                                 {
@@ -162,6 +164,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-045` (`BUNCHEOL_IMAGE_REQUIRED`) | 이미지가 0장 |
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
+                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
+                            | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
+                            | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 카카오 로그인 재동의(연령대 제공)로 해소 가능 |
+                            | 403 | `USR-033` (`USER_NOT_ADULT`) | C2C 개최 자격 — 미성년자는 개최 불가 |
+                            | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .build())));
@@ -197,7 +204,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             """
                             multipart/form-data PUT.
 
-                            모집중(RECRUITING)이고 마감 전인 분철만 수정 가능하며, 제목·설명·이미지만 변경할 수 있다.
+                            모집중(RECRUITING)이고 마감 전인 분철만 수정 가능하며, 제목·설명·이미지·오픈채팅 링크만 변경할 수 있다.
 
                             **request 파트** (application/json, 필수)
                             ```json
@@ -206,7 +213,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "description": String?,         // 선택, 700자 이하
                               "keepImageIds": [Long],         // 유지할 기존 이미지 ID
                               "thumbnailImageId": Long?,      // 유지 이미지 중 대표사진으로 지정할 ID (keepImageIds 에 포함돼야 함)
-                              "thumbnailIndex": Integer?      // 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base) — 둘 중 정확히 하나 필수
+                              "thumbnailIndex": Integer?,     // 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base) — 둘 중 정확히 하나 필수
+                              "openChatUrl": String?          // null = 기존 값 유지, "" = 링크 제거, 값 = https://open.kakao.com/ 형식 검증 후 교체
                             }
                             ```
 
@@ -226,6 +234,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-046` (`BUNCHEOL_KEEP_IMAGE_INVALID`) | `keepImageIds` 에 해당 분철의 이미지가 아닌 ID 포함 |
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 신규 images 파트 범위를 벗어남 |
+                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 400 | `BCH-048` (`BUNCHEOL_THUMBNAIL_IMAGE_INVALID`) | `thumbnailImageId` 가 `keepImageIds` 에 없음 |
                             | 400 | `BCH-049` (`BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED`) | `thumbnailImageId` 와 `thumbnailIndex` 동시 지정 |
                             | 400 | `BCH-083` (`BUNCHEOL_THUMBNAIL_REQUIRED`) | 대표사진 지정(`thumbnailImageId`/`thumbnailIndex`) 누락 |
@@ -290,6 +299,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             10L,
             "뉴진스 1집 분철",
             BuncheolStatus.RECRUITING,
+            FlowType.C2C,
             deadline,
             3,
             true,
@@ -374,6 +384,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "분철 진행 상태 — `RECRUITING`(모집중) | `CONFIRMED`(마감) |"
                                         + " `CANCELLED`(인원미달 자동취소). 목록은 `HOST_CANCELLED`(개최자 취소)만"
                                         + " 제외하므로 이 셋만 내려간다"),
+                            fieldWithPath("items[].flowType")
+                                .description(
+                                    "참여 플로우 — `LEGACY`(운영진 개최, 즉시 입금) | `C2C`(사용자 개최,"
+                                        + " 신청→확정→입금). 카드 배지·dim 판정을 상세와 동일 기준으로 통일하기"
+                                        + " 위한 필드"),
                             fieldWithPath("items[].deadline")
                                 .description("분철 모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("items[].minHeadcount").description("분철 진행 최소 인원"),

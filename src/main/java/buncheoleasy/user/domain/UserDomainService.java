@@ -114,6 +114,25 @@ public class UserDomainService {
     getUser(id).requireCanHost();
   }
 
+  public boolean canHost(final Long id) {
+    return getUser(id).isCanHost();
+  }
+
+  /**
+   * C2C 개최 자격 게이트 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
+   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분해 던진다.
+   */
+  public void requireC2cHostQualification(final Long id) {
+    User user = getUser(id);
+    user.requireProfileCompleted();
+    if (user.getAgeRange() == null) {
+      throw new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED);
+    }
+    if (!user.isVerifiedAdult()) {
+      throw new BusinessException(ErrorCode.USER_NOT_ADULT);
+    }
+  }
+
   public boolean isNicknameDuplicate(final String nickname, final Long excludeId) {
     return userRepository.existsByNicknameExcludingId(nickname, excludeId);
   }

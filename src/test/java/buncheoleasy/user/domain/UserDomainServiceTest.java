@@ -155,6 +155,62 @@ class UserDomainServiceTest {
   }
 
   @Nested
+  @DisplayName("C2C 개최 자격 게이트 테스트")
+  class RequireC2cHostQualificationTest {
+
+    private User qualifiedUser() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      user.updateAgeRange("20~29");
+      return user;
+    }
+
+    @Test
+    void 전화번호와_성인_연령대가_있으면_통과한다() {
+      User user = qualifiedUser();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      userDomainService.requireC2cHostQualification(1L);
+    }
+
+    @Test
+    void 가입_미완료면_프로필_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+
+    @Test
+    void 연령대가_없으면_재동의_유도용_USER_AGE_NOT_VERIFIED_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_AGE_NOT_VERIFIED);
+    }
+
+    @Test
+    void 연령대_구간이_성인_미만이면_USER_NOT_ADULT_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      user.updateAgeRange("15~19");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NOT_ADULT);
+    }
+  }
+
+  @Nested
   @DisplayName("약관 동의 내역 갱신 테스트")
   class UpdateServiceTermAgreementsTest {
 

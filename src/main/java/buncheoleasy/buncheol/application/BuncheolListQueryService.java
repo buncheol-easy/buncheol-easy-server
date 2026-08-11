@@ -106,6 +106,7 @@ public class BuncheolListQueryService {
                         b.getId(),
                         b.getTitle(),
                         b.getStatus(),
+                        b.getFlowType(),
                         b.getDeadline(),
                         b.getMinHeadcount(),
                         bookmarkedBuncheolIds.contains(b.getId()),

@@ -16,6 +16,8 @@ import java.util.List;
 /**
  * @param thumbnailIndex 대표사진으로 쓸 이미지의 images 파트 내 인덱스(0-base, 필수). 이미지 저장 순서는 업로드 순서를 그대로 따르고, 대표사진
  *     여부만 별도 플래그로 기록된다.
+ * @param flowType 개최 방식(선택). null 이면 서버가 결정한다 — 일반 유저 = C2C 강제(LEGACY 요청은 USR-031 거부), 운영진(can_host) =
+ *     LEGACY 기본에 C2C 선택 가능 (docs/46 §3-8).
  */
 public record HoldBuncheolRequest(
     @NotNull Long groupId,
@@ -27,11 +29,12 @@ public record HoldBuncheolRequest(
     @PositiveOrZero Integer gs25ShippingFee,
     @PositiveOrZero Integer cuShippingFee,
     @Size(max = 200) String openChatUrl,
+    FlowType flowType,
     @NotNull @PositiveOrZero Integer thumbnailIndex,
     @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
 
-  // 플로우는 요청이 아니라 서버가 결정한다(운영진=LEGACY 선택 가능, 일반 유저=강제 C2C — docs/46 §3-8).
-  public BuncheolParams toParams(final FlowType flowType) {
+  // 인자의 resolvedFlowType 은 서버 결정값 — 요청 필드 flowType 을 그대로 쓰지 않는다(자격 게이트 경유).
+  public BuncheolParams toParams(final FlowType resolvedFlowType) {
     return new BuncheolParams(
         groupId,
         title,
@@ -41,7 +44,7 @@ public record HoldBuncheolRequest(
         minHeadcount,
         gs25ShippingFee,
         cuShippingFee,
-        flowType,
+        resolvedFlowType,
         openChatUrl);
   }
 }

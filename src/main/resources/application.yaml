@@ -84,13 +84,18 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+# 기본값은 운영 기준(INFO/WARN)이다. 이 프로젝트엔 Spring 프로파일이 없어 이 파일이 곧 운영 설정이고,
+# 배포 경로 어디에도 LOGGING_LEVEL_* 오버라이드가 없다 — 여기 하드코딩한 레벨이 그대로 프로덕션에 간다.
+# 상세 로그가 필요하면 로컬 .env 에서만 올린다 (예: LOG_LEVEL_APP=DEBUG, LOG_LEVEL_SQL=DEBUG).
 logging:
   level:
-    buncheoleasy.buncheol: TRACE
-    org.springframework.security: TRACE  # TRACE로 변경하면 더 자세함
-    buncheoleasy.auth: TRACE
-    org.springframework.jdbc: TRACE
-    org.hibernate.SQL: DEBUG
+    root: ${LOG_LEVEL_ROOT:INFO}
+    # buncheoleasy.buncheol / .auth 를 따로 잡던 것을 루트 패키지 하나로 합쳤다.
+    buncheoleasy: ${LOG_LEVEL_APP:INFO}
+    # TRACE 면 정적 리소스·헬스체크·프리플라이트까지 요청마다 필터 체인 진행을 남긴다.
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    # format_sql: true 와 겹쳐 쿼리 1건이 여러 줄이 된다. DEBUG 이상에서만 출력되므로 WARN = 꺼짐.
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
 
 jwt:
   secret:

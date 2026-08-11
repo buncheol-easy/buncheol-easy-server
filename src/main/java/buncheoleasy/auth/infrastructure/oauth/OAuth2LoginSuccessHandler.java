@@ -77,8 +77,9 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 profile.ageRange(),
                 profile.ageRangeWithdrawn(),
                 serviceTerms));
-    log.debug(
-        "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
+    // providerId(카카오 회원 고유 식별자)는 남기지 않는다 — 장애 대응으로 LOG_LEVEL_APP=DEBUG 를
+    // 올리는 순간, 즉 로그를 여러 사람이 들여다보는 때에 매 로그인마다 외부 식별자가 적재된다.
+    log.debug("OAuth2 로그인 성공: provider={}", profile.provider());
 
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());

@@ -94,8 +94,10 @@ logging:
     buncheoleasy: ${LOG_LEVEL_APP:INFO}
     # TRACE 면 정적 리소스·헬스체크·프리플라이트까지 요청마다 필터 체인 진행을 남긴다.
     org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
-    # format_sql: true 와 겹쳐 쿼리 1건이 여러 줄이 된다. DEBUG 이상에서만 출력되므로 WARN = 꺼짐.
-    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    # Boot 내장 로깅 그룹 — org.springframework.jdbc.core + org.hibernate.SQL 을 함께 잡는다
+    # (Boot 4.0.5 LoggingApplicationListener 확인). format_sql: true 와 겹쳐 쿼리 1건이 여러
+    # 줄이 되므로 기본은 꺼둔다. DEBUG 이상에서만 출력되므로 WARN = 꺼짐.
+    sql: ${LOG_LEVEL_SQL:WARN}
 
 jwt:
   secret:

@@ -10,6 +10,7 @@ import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +23,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 @Component
 @Slf4j
@@ -91,11 +93,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     // 지우기 전에 이미 전송된다. 브라우저 히스토리에도 남는다. 콜백 진입 즉시 해시를 읽고
     // history.replaceState 로 제거하는 후속 조치가 클라 쪽에 필요하다 (server#116 리뷰 참고).
     //
-    // 별도 인코딩은 하지 않는다: JWT compact serialization 은 base64url([A-Za-z0-9_-])과 '.' 뿐이라
-    // 프래그먼트에서 이스케이프가 필요한 문자가 없다. 토큰이 opaque 형식으로 바뀌면 이 전제가 깨진다.
+    // encodeFragment 는 현재 토큰(base64url + '.')과 '=' 에 대해 no-op 이다 — RFC 3986 의
+    // fragment 는 pchar 를 허용하고 pchar 에 sub-delims('=')와 unreserved 가 포함된다.
+    // 토큰 형식이 바뀌어 '%'·공백·'#' 이 섞이면 그때 자동으로 올바르게 이스케이프된다.
     String redirectUrl =
         UriComponentsBuilder.fromUriString(loginCallbackUrl)
-            .fragment("accessToken=" + token.accessToken())
+            .fragment(
+                UriUtils.encodeFragment(
+                    "accessToken=" + token.accessToken(), StandardCharsets.UTF_8))
             .build()
             .toUriString();
     response.sendRedirect(redirectUrl);

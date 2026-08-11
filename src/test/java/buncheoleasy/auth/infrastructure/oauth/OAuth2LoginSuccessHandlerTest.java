@@ -70,7 +70,7 @@ class OAuth2LoginSuccessHandlerTest {
   class OnAuthenticationSuccessTest {
 
     @Test
-    void 프로필을_추출하고_로그인한_뒤_액세스토큰은_쿼리로_리프레시토큰은_쿠키로_내려준다() throws Exception {
+    void 프로필을_추출하고_로그인한_뒤_액세스토큰은_프래그먼트로_리프레시토큰은_쿠키로_내려준다() throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       OAuth2AuthenticationToken authentication =
@@ -98,12 +98,42 @@ class OAuth2LoginSuccessHandlerTest {
       assertThat(captor.getValue().email()).isEqualTo("test@example.com");
       assertThat(response.getStatus()).isEqualTo(302);
       assertThat(response.getRedirectedUrl())
-          .isEqualTo(FRONTEND_CALLBACK_URL + "?accessToken=access");
+          .isEqualTo(FRONTEND_CALLBACK_URL + "#accessToken=access");
       assertThat(response.getHeader(HttpHeaders.SET_COOKIE))
           .contains("refreshToken=refresh")
           .contains("HttpOnly")
           .contains("Path=/v1/auth")
           .contains("SameSite=Lax");
+    }
+
+    @Test
+    void 액세스토큰은_쿼리스트링에_실리지_않고_JWT_형태_그대로_프래그먼트에_보존된다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      OAuth2UserProfile profile =
+          new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com");
+      String jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3IiwiZXhwIjo5OTk5fQ.s1gn-4tur3_Xyz";
+
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal)).willReturn(profile);
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willReturn(new TokenPair(jwt, "refresh"));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      String redirectedUrl = response.getRedirectedUrl();
+      assertThat(redirectedUrl).isEqualTo(FRONTEND_CALLBACK_URL + "#accessToken=" + jwt);
+      // 프래그먼트 앞(= 서버로 전송되는 구간)에는 토큰 흔적이 없어야 한다.
+      assertThat(redirectedUrl.substring(0, redirectedUrl.indexOf('#')))
+          .doesNotContain(jwt)
+          .doesNotContain("accessToken");
     }
 
     @Test

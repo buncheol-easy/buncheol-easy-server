@@ -83,9 +83,15 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
 
+    // 액세스 토큰은 쿼리가 아니라 프래그먼트(#)로 넘긴다. 프래그먼트는 서버로 전송되지 않아
+    // nginx/ALB 액세스 로그·Referer 헤더에 남지 않고, 프론트의 페이지뷰 분석(PostHog $current_url,
+    // GA page_location)에도 실리지 않는다 — 쿼리로 넘기면 유효기간 2시간 JWT 원문이 그대로 외부
+    // 분석 서비스로 나간다. 프론트 수신부는 AuthCallbackContent 의 getHashToken.
+    // 별도 인코딩은 하지 않는다: JWT compact serialization 은 base64url([A-Za-z0-9_-])과 '.' 뿐이라
+    // 프래그먼트에서 이스케이프가 필요한 문자가 없다.
     String redirectUrl =
         UriComponentsBuilder.fromUriString(loginCallbackUrl)
-            .queryParam("accessToken", token.accessToken())
+            .fragment("accessToken=" + token.accessToken())
             .build()
             .toUriString();
     response.sendRedirect(redirectUrl);

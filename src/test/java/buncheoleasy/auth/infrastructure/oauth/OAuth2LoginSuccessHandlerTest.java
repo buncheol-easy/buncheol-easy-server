@@ -56,13 +56,17 @@ class OAuth2LoginSuccessHandlerTest {
       new RefreshTokenCookieFactory(1209600, false);
 
   private OAuth2LoginSuccessHandler createHandler() {
+    return createHandler(FRONTEND_CALLBACK_URL);
+  }
+
+  private OAuth2LoginSuccessHandler createHandler(final String loginCallbackUrl) {
     return new OAuth2LoginSuccessHandler(
         List.of(profileExtractor),
         socialLoginService,
         refreshTokenCookieFactory,
         authorizedClientService,
         kakaoApiClient,
-        FRONTEND_CALLBACK_URL);
+        loginCallbackUrl);
   }
 
   @Nested
@@ -107,9 +111,10 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    void 액세스토큰은_쿼리스트링에_실리지_않고_JWT_형태_그대로_프래그먼트에_보존된다() throws Exception {
+    void JWT_는_인코딩_없이_프래그먼트에_원문_그대로_보존된다() throws Exception {
+      // base64url([A-Za-z0-9_-]) + '.' 은 프래그먼트에서 이스케이프가 불필요하다는 전제를 고정한다.
       // given
-      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2LoginSuccessHandler handler = createHandler(FRONTEND_CALLBACK_URL);
       OAuth2AuthenticationToken authentication =
           new OAuth2AuthenticationToken(
               principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
@@ -128,12 +133,36 @@ class OAuth2LoginSuccessHandlerTest {
       handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
 
       // then
-      String redirectedUrl = response.getRedirectedUrl();
-      assertThat(redirectedUrl).isEqualTo(FRONTEND_CALLBACK_URL + "#accessToken=" + jwt);
-      // 프래그먼트 앞(= 서버로 전송되는 구간)에는 토큰 흔적이 없어야 한다.
-      assertThat(redirectedUrl.substring(0, redirectedUrl.indexOf('#')))
-          .doesNotContain(jwt)
-          .doesNotContain("accessToken");
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(FRONTEND_CALLBACK_URL + "#accessToken=" + jwt);
+    }
+
+    @Test
+    void 콜백_URL에_쿼리가_있어도_프래그먼트는_쿼리_뒤에_붙는다() throws Exception {
+      // FRONTEND_LOGIN_CALLBACK_URL 은 env 라 쿼리가 붙은 값이 들어올 수 있다. UriComponentsBuilder 의
+      // 조립 순서(?query 다음 #fragment)에 의존하므로 계약으로 고정한다.
+      // given
+      OAuth2LoginSuccessHandler handler =
+          createHandler("http://localhost:3000/login/callback?foo=bar");
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      OAuth2UserProfile profile =
+          new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com");
+
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal)).willReturn(profile);
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willReturn(new TokenPair("access", "refresh"));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo("http://localhost:3000/login/callback?foo=bar#accessToken=access");
     }
 
     @Test

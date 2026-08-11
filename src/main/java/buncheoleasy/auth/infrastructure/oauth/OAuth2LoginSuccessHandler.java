@@ -83,12 +83,16 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
 
-    // 액세스 토큰은 쿼리가 아니라 프래그먼트(#)로 넘긴다. 프래그먼트는 서버로 전송되지 않아
-    // nginx/ALB 액세스 로그·Referer 헤더에 남지 않고, 프론트의 페이지뷰 분석(PostHog $current_url,
-    // GA page_location)에도 실리지 않는다 — 쿼리로 넘기면 유효기간 2시간 JWT 원문이 그대로 외부
-    // 분석 서비스로 나간다. 프론트 수신부는 AuthCallbackContent 의 getHashToken.
+    // 액세스 토큰은 쿼리가 아니라 프래그먼트(#)로 넘긴다. 프래그먼트는 서버로 전송되지 않으므로
+    // nginx/ALB 액세스 로그와 Referer 헤더에서 유효기간 2시간 JWT 원문이 사라진다.
+    //
+    // ⚠️ 이것만으로 클라이언트 측 유출까지 막히지는 않는다. PostHog $current_url / GA page_location 은
+    // location.href 기반이라 해시를 포함하고, 페이지뷰는 초기 로드에 캡처되므로 프론트가 해시를 읽어
+    // 지우기 전에 이미 전송된다. 브라우저 히스토리에도 남는다. 콜백 진입 즉시 해시를 읽고
+    // history.replaceState 로 제거하는 후속 조치가 클라 쪽에 필요하다 (server#116 리뷰 참고).
+    //
     // 별도 인코딩은 하지 않는다: JWT compact serialization 은 base64url([A-Za-z0-9_-])과 '.' 뿐이라
-    // 프래그먼트에서 이스케이프가 필요한 문자가 없다.
+    // 프래그먼트에서 이스케이프가 필요한 문자가 없다. 토큰이 opaque 형식으로 바뀌면 이 전제가 깨진다.
     String redirectUrl =
         UriComponentsBuilder.fromUriString(loginCallbackUrl)
             .fragment("accessToken=" + token.accessToken())

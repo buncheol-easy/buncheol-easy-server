@@ -121,15 +121,22 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
 -- groups 테이블 생성
 CREATE TABLE IF NOT EXISTS `groups`
 (
-    id         BIGINT       NOT NULL AUTO_INCREMENT,
-    name       VARCHAR(100) NOT NULL COMMENT '그룹명',
-    image      VARCHAR(500) NULL COMMENT '이미지 URL',
-    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    name        VARCHAR(100) NOT NULL COMMENT '그룹명',
+    image       VARCHAR(500) NULL COMMENT '이미지 URL',
+    -- 공백·구두점 제거 + 소문자 정규화. 검색어 쪽 정규화는 SearchText.normalize 가 같은 규칙으로 수행한다.
+    -- 그룹은 SQL 로 직접 시드되므로(애플리케이션 쓰기 경로 없음) 값을 DB 가 계산하게 해 INSERT 누락을 원천 차단한다.
+    search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )) STORED COMMENT '검색용 정규화 그룹명',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
-    INDEX idx_groups_name (name)
+    INDEX idx_groups_name (name),
+    INDEX idx_groups_search_name (search_name)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -137,17 +144,23 @@ CREATE TABLE IF NOT EXISTS `groups`
 -- group_members 테이블 생성
 CREATE TABLE IF NOT EXISTS group_members
 (
-    id         BIGINT       NOT NULL AUTO_INCREMENT,
-    group_id   BIGINT       NOT NULL,
-    name       VARCHAR(100) NOT NULL COMMENT '멤버명',
-    image      VARCHAR(500) NULL COMMENT '이미지 URL',
-    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    group_id    BIGINT       NOT NULL,
+    name        VARCHAR(100) NOT NULL COMMENT '멤버명',
+    image       VARCHAR(500) NULL COMMENT '이미지 URL',
+    -- `groups`.search_name 과 동일 규칙. 멤버명 검색("장원영")이 공백·구두점과 무관하게 걸리도록 한다.
+    search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )) STORED COMMENT '검색용 정규화 멤버명',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
     INDEX idx_group_members_group_id (group_id),
     INDEX idx_group_members_name (name),
+    INDEX idx_group_members_search_name (search_name),
 
     CONSTRAINT fk_group_members_group
         FOREIGN KEY (group_id)
@@ -163,6 +176,11 @@ CREATE TABLE IF NOT EXISTS buncheols
     host_id           BIGINT       NOT NULL COMMENT '개최자',
     group_id          BIGINT       NOT NULL COMMENT '대상 그룹',
     title             VARCHAR(200) NOT NULL COMMENT '분철 제목',
+    -- `groups`.search_name 과 동일 규칙. "아이브앨범" 으로도 "아이브 앨범 분철" 이 검색되게 한다.
+    search_title      VARCHAR(200) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        title, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )) STORED COMMENT '검색용 정규화 제목',
     description       TEXT         NULL COMMENT '분철 설명',
     purchase_site     VARCHAR(200) NOT NULL COMMENT '구매처',
     deadline          DATETIME     NOT NULL COMMENT '분철 마감일',

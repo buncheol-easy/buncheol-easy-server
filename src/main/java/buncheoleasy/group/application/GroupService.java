@@ -1,10 +1,12 @@
 package buncheoleasy.group.application;
 
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.global.query.SearchText;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.group.dto.response.GroupDetailResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
@@ -33,7 +35,35 @@ public class GroupService {
 
   @Transactional(readOnly = true)
   public List<GroupResponse> searchGroups(final String keyword) {
-    return groupDomainService.searchGroups(keyword).stream().map(GroupResponse::from).toList();
+    // "미입력 = 전체" 와 "정규화 후 남는 글자가 없음 = 0건" 을 구분한다. 둘을 묶어 null 로 넘기면
+    // 리포지토리의 `:keyword IS NULL` 게이트가 열려 "---" 같은 입력이 전체 그룹을 반환한다.
+    if (keyword == null || keyword.isBlank()) {
+      return toGroupResponses(groupDomainService.searchGroups(null));
+    }
+
+    final String normalizedKeyword = SearchText.normalizeForLike(keyword);
+
+    if (normalizedKeyword == null) {
+      return List.of();
+    }
+
+    return toGroupResponses(groupDomainService.searchGroups(normalizedKeyword));
+  }
+
+  private static List<GroupResponse> toGroupResponses(final List<Group> groups) {
+    return groups.stream().map(GroupResponse::from).toList();
+  }
+
+  /** 아티스트 페이지(그룹 단위 브라우즈) 헤더용 — 그룹 본문 + 멤버 전체 + 모집중 분철 수. */
+  @Transactional(readOnly = true)
+  public GroupDetailResponse getGroupDetail(final Long groupId) {
+    final Group group = groupDomainService.getGroup(groupId);
+    final List<GroupMemberResponse> members =
+        groupDomainService.getGroupMembers(groupId).stream()
+            .map(GroupMemberResponse::from)
+            .toList();
+    return GroupDetailResponse.of(
+        group, members, buncheolRepository.countRecruitingByGroupId(groupId));
   }
 
   @Transactional(readOnly = true)
@@ -46,7 +76,15 @@ public class GroupService {
 
   @Transactional(readOnly = true)
   public List<GroupWithMembersResponse> searchGroupsByMemberName(final String keyword) {
-    List<GroupMember> matched = groupDomainService.findMembersByName(keyword);
+    final String normalizedKeyword = SearchText.normalizeForLike(keyword);
+
+    // 정규화 후 남는 글자가 없으면 조회할 필요가 없다. null 을 그대로 넘기면 H2 는
+    // CONCAT('%', NULL, '%') 를 '%%' 로 접어 전체 멤버를 반환한다 (MySQL 은 0건).
+    if (normalizedKeyword == null) {
+      return List.of();
+    }
+
+    List<GroupMember> matched = groupDomainService.findMembersByName(normalizedKeyword);
     if (matched.isEmpty()) {
       return List.of();
     }

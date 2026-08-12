@@ -28,6 +28,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
@@ -51,6 +52,7 @@ class BuncheolListQueryServiceTest {
 
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
+  @Mock private GroupMemberRepository groupMemberRepository;
   @Mock private BuncheolBookmarkRepository buncheolBookmarkRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
@@ -323,6 +325,61 @@ class BuncheolListQueryServiceTest {
           ArgumentCaptor.forClass(BuncheolSearchCondition.class);
       verify(buncheolRepository).search(captor.capture(), any(), anyInt());
       assertThat(captor.getValue().keyword()).isNull();
+    }
+
+    @Test
+    void 그룹명_멤버명_매칭_id_가_조건에_실린다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+      given(groupRepository.findIdsByNormalizedKeyword("아이브")).willReturn(List.of(7L));
+      given(groupMemberRepository.findIdsByNormalizedName("아이브")).willReturn(List.of(70L, 71L));
+
+      buncheolListQueryService.search(
+          1L,
+          new BuncheolSearchCondition(null, null, "아이 브"),
+          BuncheolListCursor.firstPage(),
+          20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().normalizedKeyword()).isEqualTo("아이브");
+      assertThat(captor.getValue().keywordGroupIds()).containsExactly(7L);
+      assertThat(captor.getValue().keywordMemberIds()).containsExactly(70L, 71L);
+    }
+
+    @Test
+    void 매칭이_없으면_어떤_행과도_일치하지_않는_id_가_실린다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+      given(groupRepository.findIdsByNormalizedKeyword("없는그룹")).willReturn(List.of());
+      given(groupMemberRepository.findIdsByNormalizedName("없는그룹")).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L,
+          new BuncheolSearchCondition(null, null, "없는그룹"),
+          BuncheolListCursor.firstPage(),
+          20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().keywordGroupIds()).doesNotContain(7L).isNotEmpty();
+      assertThat(captor.getValue().keywordMemberIds()).isNotEmpty();
+    }
+
+    @Test
+    void 구두점만_입력하면_정규화_검색어가_null_이라_제목_매칭이_비활성화된다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, "---"), BuncheolListCursor.firstPage(), 20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().normalizedKeyword()).isNull();
+      // 원문은 남아 설명(description) 원문 검색에는 그대로 쓰인다.
+      assertThat(captor.getValue().keyword()).isEqualTo("---");
+      verifyNoInteractions(groupMemberRepository);
     }
 
     @Test

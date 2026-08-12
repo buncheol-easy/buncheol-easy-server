@@ -89,9 +89,14 @@ CREATE UNIQUE INDEX uq_shipping_addresses_user_method_store ON shipping_addresse
 -- Test H2 Database용 buncheol 관련 테이블 생성
 CREATE TABLE `groups`
 (
-    id         BIGINT       NOT NULL AUTO_INCREMENT,
-    name       VARCHAR(100) NOT NULL,
-    image      VARCHAR(500) NULL,
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    name        VARCHAR(100) NOT NULL,
+    image       VARCHAR(500) NULL,
+    -- MySQL schema.sql 과 동일 규칙. H2 생성 컬럼은 항상 stored 라 STORED 키워드를 받지 않는다.
+    search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -99,13 +104,18 @@ CREATE TABLE `groups`
 );
 
 CREATE INDEX idx_groups_name ON `groups` (name);
+CREATE INDEX idx_groups_search_name ON `groups` (search_name);
 
 CREATE TABLE group_members
 (
-    id         BIGINT       NOT NULL AUTO_INCREMENT,
-    group_id   BIGINT       NOT NULL,
-    name       VARCHAR(100) NOT NULL,
-    image      VARCHAR(500) NULL,
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    group_id    BIGINT       NOT NULL,
+    name        VARCHAR(100) NOT NULL,
+    image       VARCHAR(500) NULL,
+    search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -115,6 +125,7 @@ CREATE TABLE group_members
 
 CREATE INDEX idx_group_members_group_id ON group_members (group_id);
 CREATE INDEX idx_group_members_name ON group_members (name);
+CREATE INDEX idx_group_members_search_name ON group_members (search_name);
 
 CREATE TABLE buncheols
 (
@@ -122,6 +133,10 @@ CREATE TABLE buncheols
     host_id           BIGINT       NOT NULL,
     group_id          BIGINT       NOT NULL,
     title             VARCHAR(200) NOT NULL,
+    search_title      VARCHAR(200) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        title, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
     description       TEXT         NULL,
     purchase_site     VARCHAR(200) NOT NULL,
     deadline          TIMESTAMP    NOT NULL,

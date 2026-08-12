@@ -27,6 +27,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private static final String BEARER_PREFIX = "Bearer ";
   public static final String EXCEPTION_ATTRIBUTE = "exception";
 
+  /**
+   * 관리자 재현용 impersonation 토큰에 부여되는 마커 권한(role 아님). 유저 API 는 그대로 통과시키되, refresh 세션을 지우는 로그아웃처럼
+   * 재현 대상 유저에게 사고를 낼 수 있는 동작을 이 마커로 구분해 막는다.
+   */
+  public static final String IMPERSONATED_AUTHORITY = "IMPERSONATED";
+
   private final JwtTokenProvider jwtTokenProvider;
 
   @Override
@@ -88,10 +94,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   // 겹칠 수 있어 두 권한을 겸하지 않는다 — 관리자 토큰으로 유저 API(hasRole USER)에 접근할 수 없고 그 반대도 같다.
   // 서명 검증을 통과한 토큰만 오므로 claim 값 자체는 신뢰한다.
   private List<GrantedAuthority> toAuthorities(final AccessTokenClaims claims) {
-    if (claims.role() == null) {
-      return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+    final SimpleGrantedAuthority role =
+        new SimpleGrantedAuthority(claims.role() == null ? "ROLE_USER" : "ROLE_" + claims.role());
+    if (claims.impersonated()) {
+      return List.of(role, new SimpleGrantedAuthority(IMPERSONATED_AUTHORITY));
     }
-    return List.of(new SimpleGrantedAuthority("ROLE_" + claims.role()));
+    return List.of(role);
   }
 
   private void handleException(

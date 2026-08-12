@@ -29,6 +29,7 @@ public class JwtTokenProvider {
 
   private static final String ROLE_CLAIM = "role";
   private static final String ADMIN_ROLE = "ADMIN";
+  private static final String IMPERSONATION_CLAIM = "imp";
 
   private final long accessTokenExpirationSeconds;
   private final long refreshTokenExpirationSeconds;
@@ -64,7 +65,9 @@ public class JwtTokenProvider {
   public AccessTokenClaims parseAccessTokenClaims(final String token) {
     final Claims claims = parseClaims(token, accessSecretKey);
     return new AccessTokenClaims(
-        parseUserId(claims.getSubject()), claims.get(ROLE_CLAIM, String.class));
+        parseUserId(claims.getSubject()),
+        claims.get(ROLE_CLAIM, String.class),
+        Boolean.TRUE.equals(claims.get(IMPERSONATION_CLAIM, Boolean.class)));
   }
 
   public Long parseUserIdFromRefreshToken(final String token) {
@@ -78,12 +81,12 @@ public class JwtTokenProvider {
   }
 
   public String createAccessToken(final Long userId) {
-    return buildAccessToken(userId, null, accessTokenExpirationSeconds);
+    return buildAccessToken(userId, null, false, accessTokenExpirationSeconds);
   }
 
   /** 관리자 access token 발급 (ID/PW 로그인). role claim 으로 유저 토큰과 구분되며 refresh 는 없다. */
   public String createAdminAccessToken(final Long adminId) {
-    return buildAccessToken(adminId, ADMIN_ROLE, adminTokenExpirationSeconds);
+    return buildAccessToken(adminId, ADMIN_ROLE, false, adminTokenExpirationSeconds);
   }
 
   /**
@@ -92,7 +95,7 @@ public class JwtTokenProvider {
    * 발급한다 — 유저 본인 세션(refresh 저장소)은 전혀 건드리지 않아 강제 로그아웃되지 않는다.
    */
   public String createImpersonationAccessToken(final Long userId) {
-    return buildAccessToken(userId, null, impersonationTokenExpirationSeconds);
+    return buildAccessToken(userId, null, true, impersonationTokenExpirationSeconds);
   }
 
   public long getImpersonationTokenExpirationSeconds() {
@@ -121,7 +124,11 @@ public class JwtTokenProvider {
     return issueTokens(userId);
   }
 
-  private String buildAccessToken(final Long subjectId, final String role, final long expirationSeconds) {
+  private String buildAccessToken(
+      final Long subjectId,
+      final String role,
+      final boolean impersonated,
+      final long expirationSeconds) {
     final Instant now = Instant.now();
     final Instant expiration = now.plusSeconds(expirationSeconds);
 
@@ -133,6 +140,9 @@ public class JwtTokenProvider {
             .signWith(accessSecretKey);
     if (role != null) {
       builder.claim(ROLE_CLAIM, role);
+    }
+    if (impersonated) {
+      builder.claim(IMPERSONATION_CLAIM, true);
     }
     return builder.compact();
   }

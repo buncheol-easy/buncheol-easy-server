@@ -1,8 +1,9 @@
--- 그룹 별칭(group_aliases) 시드 템플릿.
+-- 그룹 별칭(group_aliases) 시드.
+-- 원본: 루트 idol_group_names.csv (name, name_en, name_ko) 에서 생성했다.
+-- 그룹명과 정규화 결과가 같은 표기는 넣지 않는다 — 검색에 아무것도 더해주지 않는다.
 --
 -- 테이블 자체는 schema.sql 의 CREATE TABLE IF NOT EXISTS 가 기동 시 만들어 준다 (spring.sql.init.mode=always).
 -- 검색 정규화 컬럼 때와 달리 수동 ALTER 는 필요 없다 — 신규 테이블이라 IF NOT EXISTS 가 그대로 동작한다.
--- 이 파일은 "별칭 데이터를 어떤 모양으로 넣어야 하는가"를 고정하기 위한 템플릿이다.
 --
 -- ⚠ 실행 시 클라이언트 접속 charset 을 반드시 utf8mb4 로 지정한다:
 --     mysql --default-character-set=utf8mb4 -u... DB < 이_파일.sql
@@ -10,15 +11,16 @@
 --   생성 컬럼의 LOWER() 가 잘못된 내부 표현에 적용돼 search_alias 만 깨진다. 그러면 검색이 조용히 0건이 된다.
 --
 -- 제약 (위반하면 INSERT 가 실패한다 — 조용히 누락되지 않는다):
---   * 정규화 후 2자 이상.  "i-" 처럼 정규화하면 1자가 되는 별칭은 CHECK 에 걸린다.
---     1자 별칭은 부분일치 검색에서 거의 모든 검색어에 걸려 결과를 오염시킨다.
---   * 한 그룹 안에서 정규화 결과가 겹치면 안 된다. "i-dle" 과 "idle" 은 둘 다 "idle" 로 접히므로 하나만 넣는다.
---     그룹이 다르면 같은 별칭을 써도 된다 (여러 그룹이 정당하게 공유하는 표기가 있다).
+--   * 정규화 후 2자 이상. 1자 별칭은 부분일치에서 거의 모든 검색어에 걸려 결과를 오염시킨다.
+--   * 한 그룹 안에서 정규화 결과가 겹치면 안 된다 ("i-dle" 과 "idle" 은 둘 다 "idle" 로 접힌다).
+--     그룹이 다르면 같은 별칭을 써도 된다.
 --
--- 그룹은 id 가 아니라 이름으로 잡는다 — id 는 환경마다 달라 시드 SQL 을 staging/prod 로 옮길 수 없기 때문이다.
--- 대신 이름이 안 맞으면 그 행만 조용히 사라진다. 실제로 겪은 사례: 나무위키 표기는 "(여자)아이들" 이지만
--- DB 에 저장된 이름은 "아이들" 이라 두 행이 말없이 누락됐다. 그래서 스테이징 테이블에 먼저 넣고
--- **미매칭 목록을 반드시 출력**하게 만들었다. 마지막 SELECT 가 0건이 아니면 그 그룹명은 DB 표기와 다른 것이다.
+-- 그룹은 id 가 아니라 이름으로 조인한다 — id 는 환경마다 달라 staging/prod 로 옮길 수 없기 때문이다.
+-- 대신 이름이 안 맞으면 그 행만 조용히 사라지므로 스테이징 테이블에 먼저 넣고 미매칭을 반드시 출력한다.
+-- (실제로 겪었다: 나무위키 표기는 "(여자)아이들" 이지만 DB 저장명은 "아이들" 이다.)
+--
+-- 커버 범위: 공식 한글/영문 표기 양방향 189건 / 188개 그룹.
+-- 팬덤 축약어(투바투·스키즈·블핑 등)는 별도 축이라 아직 포함하지 않았다.
 
 CREATE TEMPORARY TABLE tmp_group_aliases (
     group_name VARCHAR(100) NOT NULL,
@@ -26,36 +28,206 @@ CREATE TEMPORARY TABLE tmp_group_aliases (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 INSERT INTO tmp_group_aliases (group_name, alias) VALUES
-    ('IVE',             '아이브'),
-    ('프로미스나인',      'fromis_9'),
-    ('프로미스나인',      '프미나'),
-    ('아이들',           'idle'),
-    ('아이들',           '여자애들'),
+    ('동방신기', 'TVXQ!'),
+    ('슈퍼주니어', 'SUPER JUNIOR'),
+    ('BIGBANG', '빅뱅'),
+    ('소녀시대', 'Girls'' Generation'),
+    ('SHINee', '샤이니'),
+    ('EXO', '엑소'),
+    ('Red Velvet', '레드벨벳'),
+    ('NCT 127', '엔시티 127'),
+    ('NCT DREAM', '엔시티 드림'),
+    ('NCT WISH', '엔시티 위시'),
+    ('aespa', '에스파'),
+    ('RIIZE', '라이즈'),
+    ('Hearts2Hearts', '하츠투하츠'),
+    ('2PM', '투피엠'),
+    ('DAY6', '데이식스'),
+    ('TWICE', '트와이스'),
+    ('Stray Kids', '스트레이 키즈'),
+    ('ITZY', '있지'),
+    ('Xdinary Heroes', '엑스디너리 히어로즈'),
+    ('NMIXX', '엔믹스'),
+    ('KickFlip', '킥플립'),
+    ('WINNER', '위너'),
+    ('BLACKPINK', '블랙핑크'),
+    ('TREASURE', '트레저'),
+    ('BABYMONSTER', '베이비몬스터'),
+    ('BTS', '방탄소년단'),
+    ('투모로우바이투게더', 'TOMORROW X TOGETHER'),
+    ('CORTIS', '코르티스'),
+    ('세븐틴', 'SEVENTEEN'),
+    ('TWS', '투어스'),
+    ('여자친구', 'GFRIEND'),
+    ('LE SSERAFIM', '르세라핌'),
+    ('NewJeans', '뉴진스'),
+    ('BOYNEXTDOOR', '보이넥스트도어'),
+    ('엔하이픈', 'ENHYPEN'),
+    ('ILLIT', '아일릿'),
+    ('몬스타엑스', 'MONSTA X'),
+    ('우주소녀', 'WJSN'),
+    ('CRAVITY', '크래비티'),
+    ('IVE', '아이브'),
+    ('KiiiKiii', '키키'),
+    ('IDID', '아이딧'),
+    ('태양', 'TAEYANG'),
+    ('MEOVV', '미야오'),
+    ('ALLDAY PROJECT', '올데이 프로젝트'),
+    ('Kep1er', '케플러'),
+    ('ZEROBASEONE', '제로베이스원'),
+    ('izna', '이즈나'),
     ('ALPHA DRIVE ONE', '알파드라이브원'),
-    ('투모로우바이투게더', 'TXT'),
-    ('투모로우바이투게더', '투바투'),
-    ('Stray Kids',      '스트레이키즈'),
-    ('Stray Kids',      '스키즈');
+    ('아이들', 'i-dle'),
+    ('LIGHTSUM', '라잇썸'),
+    ('NOWZ', '나우즈'),
+    ('FT아일랜드', 'FTISLAND'),
+    ('FT아일랜드', '에프티아일랜드'),
+    ('CNBLUE', '씨엔블루'),
+    ('엔플라잉', 'N.Flying'),
+    ('SF9', '에스에프나인'),
+    ('P1Harmony', '피원하모니'),
+    ('앰퍼샌드원', 'AMPERS&ONE'),
+    ('AxMxP', '에이엠피'),
+    ('최립우', 'CHOI LIPWOO'),
+    ('마마무', 'MAMAMOO'),
+    ('원어스', 'ONEUS'),
+    ('원위', 'ONEWE'),
+    ('KARD', '카드'),
+    ('YOUNG POSSE', '영파씨'),
+    ('오마이걸', 'OH MY GIRL'),
+    ('온앤오프', 'ONF'),
+    ('블락비', 'Block B'),
+    ('ATEEZ', '에이티즈'),
+    ('xikers', '싸이커스'),
+    ('헤이즈', 'Heize'),
+    ('TNX', '티엔엑스'),
+    ('Baby DONT Cry', '베이비돈크라이'),
+    ('tripleS', '트리플에스'),
+    ('ARTMS', '아르테미스'),
+    ('idntt', '아이덴티티'),
+    ('다크비', 'DKB'),
+    ('Candy Shop', '캔디샵'),
+    ('FIFTY FIFTY', '피프티피프티'),
+    ('STAYC', '스테이씨'),
+    ('UNCHILD', '언차일드'),
+    ('Billlie', '빌리'),
+    ('ARrC', '아크'),
+    ('권은비', 'KWON EUNBI'),
+    ('DRIPPIN', '드리핀'),
+    ('틴탑', 'TEEN TOP'),
+    ('MCND', '엠씨엔디'),
+    ('ODD YOUTH', '오드유스'),
+    ('USPEER', '유스피어'),
+    ('ablume', '어블룸'),
+    ('KISS OF LIFE', '키스오브라이프'),
+    ('ifeye', '이프아이'),
+    ('H//PE Princess', '하입 프린세스'),
+    ('QWER', '큐더블유이알'),
+    ('하이라이트', 'Highlight'),
+    ('하성운', 'HA SUNG WOON'),
+    ('이무진', 'LEE MUJIN'),
+    ('VIVIZ', '비비지'),
+    ('BADVILLAIN', '배드빌런'),
+    ('더윈드', 'THE WIND'),
+    ('후이', 'HUI'),
+    ('Apink', '에이핑크'),
+    ('VERIVERY', '베리베리'),
+    ('EVNNE', '이븐'),
+    ('브브걸', 'BBGIRLS'),
+    ('BAE173', '비에이이173'),
+    ('FANTASY BOYS', '판타지보이즈'),
+    ('TEEN TEEN', '틴틴'),
+    ('GHOST9', '고스트나인'),
+    ('AB6IX', '에이비식스'),
+    ('YOUNITE', '유나이트'),
+    ('UNIS', '유니스'),
+    ('AHOF', '아홉'),
+    ('드림캐쳐', 'Dreamcatcher'),
+    ('THE SSYNDROME', '더 신드롬'),
+    ('TUNEXX', '튜넥스'),
+    ('POW', '파우'),
+    ('최예나', 'YENA'),
+    ('TEMPEST', '템페스트'),
+    ('EVERGLOW', '에버글로우'),
+    ('CREZL', '크레즐'),
+    ('8TURN', '에잇턴'),
+    ('ASTRO', '아스트로'),
+    ('LUN8', '루네이트'),
+    ('CrazAngel', '크레이즈엔젤'),
+    ('CIX', '씨아이엑스'),
+    ('EPEX', '이펙스'),
+    ('MAP6', '맵식스'),
+    ('블랙스완', 'BLACKSWAN'),
+    ('몬트', 'M.O.N.T'),
+    ('싸이코드', 'PSYCODE'),
+    ('첫사랑', 'CSR'),
+    ('Queenz Eye', '퀸즈아이'),
+    ('ARTBEAT v', '아트비트'),
+    ('MAVE:', '메이브'),
+    ('ADYA', '아디아'),
+    ('TIOT', '티아이오티'),
+    ('EL7Z UP', '엘즈업'),
+    ('ONE PACT', '원팩트'),
+    ('데이차일드', 'DAYCHILD'),
+    ('NXMERCY', '넥스머시'),
+    ('&TEAM', '앤팀'),
+    ('82MAJOR', '82메이저'),
+    ('A.C.E', '에이스'),
+    ('AND2BLE', '앤더블'),
+    ('B1A4', '비원에이포'),
+    ('BTOB', '비투비'),
+    ('FLARE U', '플레어 유'),
+    ('GOT7', '갓세븐'),
+    ('KATSEYE', '캣츠아이'),
+    ('KO1KEYZ', '코원키즈'),
+    ('LNGSHOT', '롱샷'),
+    ('MADEIN', '메이딘'),
+    ('n.SSign', '엔싸인'),
+    ('NEXZ', '넥스지'),
+    ('NiziU', '니쥬'),
+    ('NouerA', '누아라'),
+    ('OMEGA X', '오메가엑스'),
+    ('SECRET NUMBER', '시크릿넘버'),
+    ('SEVENTOEIGHT', '세븐투에잇'),
+    ('VIXX', '빅스'),
+    ('Weeekly', '위클리'),
+    ('WHIB', '휘브'),
+    ('XLOV', '엑스러브'),
+    ('XODIAC', '소디엑'),
+    ('더보이즈', 'THE BOYZ'),
+    ('라필루스', 'Lapillus'),
+    ('러블리즈', 'Lovelyz'),
+    ('리센느', 'RESCENE'),
+    ('모모랜드', 'MOMOLAND'),
+    ('백호', 'BAEKHO'),
+    ('신화', 'SHINHWA'),
+    ('아이오아이', 'I.O.I'),
+    ('아이유', 'IU'),
+    ('업텐션', 'UP10TION'),
+    ('엑신', 'X:IN'),
+    ('위아이', 'WEi'),
+    ('이세계아이돌', 'ISEGYE IDOL'),
+    ('이채연', 'LEE CHAEYEON'),
+    ('인피니트', 'INFINITE'),
+    ('저스트비', 'JUST B'),
+    ('전소미', 'JEON SOMI'),
+    ('펜타곤', 'PENTAGON'),
+    ('플레이브', 'PLAVE'),
+    ('모디세이', 'MODYSSEY'),
+    ('화사', 'HWASA'),
+    ('에픽하이', 'Epik High'),
+    ('프로미스나인', 'fromis_9');
 
 INSERT INTO group_aliases (group_id, alias)
 SELECT g.id, t.alias
 FROM tmp_group_aliases t
 JOIN `groups` g ON g.name = t.group_name
--- 재실행해도 안전하게. 이미 있는 별칭은 건너뛴다.
 ON DUPLICATE KEY UPDATE alias = group_aliases.alias;
 
--- ⚠ 여기가 0건이어야 한다. 나오는 그룹명은 DB 표기와 달라 별칭이 통째로 누락된 것이다.
-SELECT DISTINCT t.group_name AS 매칭_실패한_그룹명
+-- ⚠ 0건이어야 한다. 나오면 그 그룹명이 DB 표기와 달라 별칭이 통째로 누락된 것이다.
+SELECT DISTINCT CONCAT('MISMATCH: ', t.group_name) AS unmatched
 FROM tmp_group_aliases t
 LEFT JOIN `groups` g ON g.name = t.group_name
 WHERE g.id IS NULL;
 
 DROP TEMPORARY TABLE tmp_group_aliases;
-
--- 검증: 정규화가 제대로 됐는지 (한글이 깨졌으면 search_alias 에서 드러난다).
--- SELECT g.name, a.alias, a.search_alias FROM group_aliases a JOIN `groups` g ON g.id = a.group_id;
-
--- 검증: 실제로 교차 표기 검색이 걸리는지.
--- SELECT g.name FROM `groups` g
---  WHERE g.search_name LIKE '%아이브%'
---     OR EXISTS (SELECT 1 FROM group_aliases a WHERE a.group_id = g.id AND a.search_alias LIKE '%아이브%');

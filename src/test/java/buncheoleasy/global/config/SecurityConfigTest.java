@@ -124,6 +124,14 @@ class SecurityConfigTest {
     void 내_개최_분철_조회는_비로그인이면_401() throws Exception {
       mockMvc.perform(get("/v1/buncheols/me")).andExpect(status().isUnauthorized());
     }
+
+    /** 공개 매처로 새면 hostId 가 null 로 들어가 500 이 난다 — 조용히 깨지는 종류라 잠가 둔다. */
+    @Test
+    void 개최_자격_사전_조회는_비로그인이면_401() throws Exception {
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility"))
+          .andExpect(status().isUnauthorized());
+    }
   }
 
   @Nested

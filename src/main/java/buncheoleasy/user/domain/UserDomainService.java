@@ -102,6 +102,11 @@ public class UserDomainService {
     user.updateBankAccount(bank, account, holder);
   }
 
+  /** 던지지 않는 정산 계좌 등록 여부 — 개최 자격 사전 조회용(docs/53 Q-07). 개최 시점 검사는 {@link #requireBankAccountRegistered}. */
+  public boolean hasBankAccount(final Long id) {
+    return getUser(id).getBankAccount() != null;
+  }
+
   public void requireBankAccountRegistered(final Long id) {
     getUser(id).requireBankAccount();
   }
@@ -115,17 +120,38 @@ public class UserDomainService {
   }
 
   /**
-   * C2C 개최 자격 게이트 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
-   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분해 던진다.
+   * C2C 개최 자격 판정 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
+   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분한다.
+   *
+   * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
+   * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
    */
-  public void requireC2cHostQualification(final Long id) {
+  public C2cHostQualification evaluateC2cHostQualification(final Long id) {
     User user = getUser(id);
-    user.requireProfileCompleted();
+    if (!user.isProfileCompleted()) {
+      return C2cHostQualification.PHONE_REQUIRED;
+    }
     if (user.getAgeRange() == null) {
-      throw new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED);
+      return C2cHostQualification.AGE_UNVERIFIED;
     }
     if (!user.isVerifiedAdult()) {
-      throw new BusinessException(ErrorCode.USER_NOT_ADULT);
+      return C2cHostQualification.NOT_ADULT;
+    }
+    return C2cHostQualification.QUALIFIED;
+  }
+
+  /**
+   * C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. 매핑을 여기 switch 로 두면 사유가 추가될 때 컴파일 에러로 잡히고, 응답 사유 매핑({@code
+   * HostingEligibilityResponse#from})과 대칭이 된다.
+   */
+  public void requireC2cHostQualification(final Long id) {
+    C2cHostQualification qualification = evaluateC2cHostQualification(id);
+    switch (qualification) {
+      case QUALIFIED -> {}
+      case PHONE_REQUIRED ->
+          throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+      case AGE_UNVERIFIED -> throw new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED);
+      case NOT_ADULT -> throw new BusinessException(ErrorCode.USER_NOT_ADULT);
     }
   }
 

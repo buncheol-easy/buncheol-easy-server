@@ -30,9 +30,14 @@ public class BuncheolDomainService {
   private static final int MAX_ACTIVE_HOSTED = 5;
 
   public void validateActiveHostedLimit(final Long hostId) {
-    if (buncheolRepository.countActiveByHostId(hostId) >= MAX_ACTIVE_HOSTED) {
+    if (isActiveHostedLimitExceeded(hostId)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED);
     }
+  }
+
+  /** 던지지 않는 상한 판정 — 개최 폼 진입 전 사전 조회용(docs/53 Q-07). 제출 게이트와 같은 카운트를 공유한다. */
+  public boolean isActiveHostedLimitExceeded(final Long hostId) {
+    return buncheolRepository.countActiveByHostId(hostId) >= MAX_ACTIVE_HOSTED;
   }
 
   public void updateBuncheolContent(

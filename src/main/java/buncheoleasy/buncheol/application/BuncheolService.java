@@ -16,11 +16,13 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
@@ -47,6 +49,10 @@ public class BuncheolService {
 
   /**
    * 분철을 개최한다.
+   *
+   * <p>⚠️ 여기(또는 {@link #resolveHostFlowType})에 <b>유저 상태 검사를 추가하면 {@link #getHostingEligibility} 도 같이
+   * 고쳐야 한다</b> — 두 경로는 판정 조각만 공유하고 조합은 각자 적어, 한쪽만 늘면 컴파일도 테스트도 깨지지 않은 채 조용히 어긋난다. 실제로 정산 계좌 검사가
+   * 그렇게 빠져 있었다(docs/53 Q-07 리뷰).
    *
    * @return 생성된 분철 id ({@link buncheoleasy.buncheol.dto.response.HoldBuncheolResponse} 참고)
    */
@@ -103,6 +109,40 @@ public class BuncheolService {
     // 상한은 자격 게이트 통과자에게만 의미가 있으므로 마지막에 검사한다 (운영진은 미적용 — 이벤트 대량 개최 허용).
     buncheolDomainService.validateActiveHostedLimit(hostId);
     return FlowType.C2C;
+  }
+
+  /**
+   * 개최 자격 사전 조회 (docs/53 Q-07). {@link #holdBuncheol} 이 개최 요청에서 던지는 검사들을 던지지 않는 판정으로 같은 순서대로 재현한다
+   * — 순서가 같아야 FE 가 보여주는 사유와 제출 시 실제로 막히는 사유가 일치한다.
+   *
+   * <p>읽기 전용 조회지만 {@code *QueryService} 로 빼지 않는다 — 재현 대상인 {@link #holdBuncheol}·{@link
+   * #resolveHostFlowType} 과 같은 파일에 두어야 한쪽만 바뀌는 것을 알아채기 쉽다.
+   *
+   * <p>운영진(can_host)은 기본 LEGACY 라 C2C 자격 게이트·상한을 적용하지 않는다. 다만 정산 계좌는 LEGACY·C2C 공통 요구라 모두에게 검사한다.
+   * <b>판정은 LEGACY 기준</b>이라, 운영진이 요청에서 C2C 를 선택하는 경우의 추가 요구(가입 완료 — {@link #resolveHostFlowType})는 이
+   * 응답에 반영되지 않는다.
+   */
+  @Transactional(readOnly = true)
+  public HostingEligibilityResponse getHostingEligibility(final Long hostId) {
+    if (!userDomainService.canHost(hostId)) {
+      C2cHostQualification qualification = userDomainService.evaluateC2cHostQualification(hostId);
+      if (!qualification.isQualified()) {
+        return HostingEligibilityResponse.from(qualification);
+      }
+
+      if (buncheolDomainService.isActiveHostedLimitExceeded(hostId)) {
+        return HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.LIMIT_EXCEEDED);
+      }
+    }
+
+    // 개최 요청은 자격·상한을 통과한 뒤 정산 계좌를 요구한다(USR-025). 이걸 빼면 계좌 미등록 유저가 폼을 다 채운 뒤 막혀
+    // 이 API 가 없애려던 문제가 그대로 남는다.
+    if (!userDomainService.hasBankAccount(hostId)) {
+      return HostingEligibilityResponse.blocked(
+          HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
+    }
+
+    return HostingEligibilityResponse.allowed();
   }
 
   @Transactional

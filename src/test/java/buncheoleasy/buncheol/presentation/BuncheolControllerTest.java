@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.presentation;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,6 +35,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
@@ -675,6 +677,36 @@ class BuncheolControllerTest {
           .perform(get("/v1/buncheols/me").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(content().string("[]"));
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 자격 사전 조회 API 테스트 (docs/53 Q-07)")
+  class GetHostingEligibilityTest {
+
+    @Test
+    void 적격이면_eligible_true_와_null_사유를_반환한다() throws Exception {
+      given(buncheolService.getHostingEligibility(HOST_ID))
+          .willReturn(HostingEligibilityResponse.allowed());
+
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.eligible").value(true))
+          .andExpect(jsonPath("$.reason").value(nullValue()));
+    }
+
+    @Test
+    void 부적격이면_사유를_함께_반환한다() throws Exception {
+      given(buncheolService.getHostingEligibility(HOST_ID))
+          .willReturn(
+              HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.eligible").value(false))
+          .andExpect(jsonPath("$.reason").value("NOT_ADULT"));
     }
   }
 

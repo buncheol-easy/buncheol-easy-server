@@ -31,6 +31,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
@@ -305,6 +306,57 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("[].flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"))
+                        .build())));
+  }
+
+  @Test
+  void 개최_자격_사전_조회() throws Exception {
+    given(buncheolService.getHostingEligibility(HOST_ID))
+        .willReturn(
+            HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+
+    mockMvc
+        .perform(get("/v1/buncheols/hosting-eligibility").with(userAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "buncheols-hosting-eligibility",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("개최 자격 사전 조회")
+                        .description(
+                            """
+                            개최 폼 진입 시점에 개최 자격을 미리 판정한다 (docs/53 Q-07). 폼을 다 채운 뒤 제출에서야
+                            자격 실패가 드러나던 것을 막기 위한 조회용 API 라, 부적격이어도 **200 으로 사유를 담아** 응답한다.
+
+                            판정은 개최 요청(`POST /v1/buncheols`) 이 던지는 검사를 **같은 순서**로 재현한다. 다만 조회 시점
+                            스냅샷이므로 **최종 차단은 개최 요청 시점의 게이트**가 한다(그 사이 상태가 바뀔 수 있다).
+
+                            운영진(`can_host`)은 기본 LEGACY 개최라 C2C 자격 게이트·활성 개최 상한이 적용되지 않는다.
+                            정산 계좌만 LEGACY·C2C 공통 요구로 모두에게 검사한다. **판정은 LEGACY 기준**이라, 운영진이
+                            개최 요청에서 `flowType=C2C` 를 고르는 경우의 추가 요구(가입 완료 — 403 `USR-018`)는 이 응답에 반영되지 않는다.
+
+                            **`reason` 과 개최 요청 시 대응 에러**
+                            | reason | 의미 | 개최 요청 시 |
+                            |--------|------|--------------|
+                            | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
+                            | `AGE_UNVERIFIED` | 연령대 미확인 — 카카오 재로그인 동의로 회복 가능 | 409 `USR-032` |
+                            | `NOT_ADULT` | 미성년 확정 — 개최 불가 | 403 `USR-033` |
+                            | `LIMIT_EXCEEDED` | 활성(모집중·입금 수집중) 개최 수 상한 초과 | 409 `BCH-089` |
+                            | `BANK_ACCOUNT_REQUIRED` | 정산 계좌 미등록 (LEGACY·C2C 공통) | 409 `USR-025` |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .responseSchema(Schema.schema("HostingEligibilityResponse"))
+                        .responseFields(
+                            fieldWithPath("eligible")
+                                .type(JsonFieldType.BOOLEAN)
+                                .description("개최 가능 여부. true 면 폼을 열어도 되고, false 면 사유별 안내로 막는다"),
+                            fieldWithPath("reason")
+                                .type(JsonFieldType.STRING)
+                                .description(
+                                    "부적격 사유 (PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
+                                .optional())
                         .build())));
   }
 

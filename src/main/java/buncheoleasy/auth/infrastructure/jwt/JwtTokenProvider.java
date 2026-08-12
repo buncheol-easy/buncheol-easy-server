@@ -33,6 +33,7 @@ public class JwtTokenProvider {
   private final long accessTokenExpirationSeconds;
   private final long refreshTokenExpirationSeconds;
   private final long adminTokenExpirationSeconds;
+  private final long impersonationTokenExpirationSeconds;
   private final SecretKey accessSecretKey;
   private final SecretKey refreshSecretKey;
   private final RefreshTokenStore refreshTokenStore;
@@ -43,10 +44,13 @@ public class JwtTokenProvider {
       @Value("${jwt.access-token-expiration-seconds}") final long accessTokenExpirationSeconds,
       @Value("${jwt.refresh-token-expiration-seconds}") final long refreshTokenExpirationSeconds,
       @Value("${jwt.admin-token-expiration-seconds:43200}") final long adminTokenExpirationSeconds,
+      @Value("${jwt.impersonation-token-expiration-seconds:900}")
+          final long impersonationTokenExpirationSeconds,
       final RefreshTokenStore refreshTokenStore) {
     this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
     this.refreshTokenExpirationSeconds = refreshTokenExpirationSeconds;
     this.adminTokenExpirationSeconds = adminTokenExpirationSeconds;
+    this.impersonationTokenExpirationSeconds = impersonationTokenExpirationSeconds;
     this.accessSecretKey = Keys.hmacShaKeyFor(accessSecret.getBytes(StandardCharsets.UTF_8));
     this.refreshSecretKey = Keys.hmacShaKeyFor(refreshSecret.getBytes(StandardCharsets.UTF_8));
     this.refreshTokenStore = refreshTokenStore;
@@ -80,6 +84,19 @@ public class JwtTokenProvider {
   /** 관리자 access token 발급 (ID/PW 로그인). role claim 으로 유저 토큰과 구분되며 refresh 는 없다. */
   public String createAdminAccessToken(final Long adminId) {
     return buildAccessToken(adminId, ADMIN_ROLE, adminTokenExpirationSeconds);
+  }
+
+  /**
+   * 관리자가 문의 재현용으로 발급하는 대상 유저의 access token. 일반 유저 토큰과 동일하게 role claim 이 없어({@code
+   * ROLE_USER}) 유저 API 를 그대로 호출할 수 있고, 대신 수명이 매우 짧다(기본 15분). refresh 는 발급하지 않으므로 만료되면 관리자가 다시
+   * 발급한다 — 유저 본인 세션(refresh 저장소)은 전혀 건드리지 않아 강제 로그아웃되지 않는다.
+   */
+  public String createImpersonationAccessToken(final Long userId) {
+    return buildAccessToken(userId, null, impersonationTokenExpirationSeconds);
+  }
+
+  public long getImpersonationTokenExpirationSeconds() {
+    return impersonationTokenExpirationSeconds;
   }
 
   public String createRefreshToken(final Long userId) {

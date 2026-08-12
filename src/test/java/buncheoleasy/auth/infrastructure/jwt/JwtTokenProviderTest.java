@@ -38,7 +38,7 @@ class JwtTokenProviderTest {
 
   private JwtTokenProvider createProvider(long accessExp, long refreshExp, long adminExp) {
     return new JwtTokenProvider(
-        ACCESS_SECRET, REFRESH_SECRET, accessExp, refreshExp, adminExp, refreshTokenStore);
+        ACCESS_SECRET, REFRESH_SECRET, accessExp, refreshExp, adminExp, 900, refreshTokenStore);
   }
 
   @Nested
@@ -85,6 +85,20 @@ class JwtTokenProviderTest {
       // then
       AccessTokenClaims claims = provider.parseAccessTokenClaims(tokenPair.accessToken());
       assertThat(claims.userId()).isEqualTo(1L);
+      assertThat(claims.role()).isNull();
+    }
+
+    @Test
+    void impersonation_토큰은_role_claim이_없는_유저_토큰이다() {
+      // given
+      JwtTokenProvider provider = createProvider(3600, 604800);
+
+      // when
+      String impersonationToken = provider.createImpersonationAccessToken(21L);
+
+      // then
+      AccessTokenClaims claims = provider.parseAccessTokenClaims(impersonationToken);
+      assertThat(claims.userId()).isEqualTo(21L);
       assertThat(claims.role()).isNull();
     }
 

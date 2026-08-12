@@ -106,6 +106,29 @@ class AdminAuthorizationTest {
     }
 
     @Test
+    void 유저_토큰으로는_impersonation_토큰을_발급받을_수_없다() throws Exception {
+      mockMvc
+          .perform(
+              post("/v1/admin/users/1/impersonation-token")
+                  .header(HttpHeaders.AUTHORIZATION, userBearer())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"reason\": \"사유\"}"))
+          .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 관리자는_impersonation_토큰_발급_인가를_통과한다() throws Exception {
+      // 존재하지 않는 유저라 404(USR-016) — 403(인가 거부)이 아니라는 것이 검증 포인트.
+      mockMvc
+          .perform(
+              post("/v1/admin/users/999999/impersonation-token")
+                  .header(HttpHeaders.AUTHORIZATION, adminBearer())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"reason\": \"존재하지 않는 유저 재현 시도\"}"))
+          .andExpect(status().isNotFound());
+    }
+
+    @Test
     void 관리자_토큰으로는_유저_API_에_접근할_수_없다() throws Exception {
       // admins.id 와 users.id 가 겹쳐도 관리자 토큰이 유저로 위장할 수 없어야 한다.
       mockMvc

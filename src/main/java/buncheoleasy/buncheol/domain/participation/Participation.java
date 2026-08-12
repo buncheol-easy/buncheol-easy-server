@@ -111,19 +111,10 @@ public class Participation extends TimestampedEntity {
   // 응답만으로는 구분이 안 돼 참여자에게 재확인 안내를 띄울 수 없었다 — 반려에만 값을 넣어 구분한다.
   // 재마킹("보냈어요") 시 NULL 로 초기화한다. 안 그러면 반려 → 재마킹 → 셀프 철회 후에도 반려 표시가 남는다.
   // 분쟁 증거는 paymentSentAt 이 이미 보존하므로 여기서 이력을 남길 필요는 없다.
+  // ⚠️ 응답에 실을 때는 원시 게터가 아니라 {@link #getVisiblePaymentRejectedAt} 를 쓴다.
   @Column(name = "payment_rejected_at")
   private Instant paymentRejectedAt;
 
-  /**
-   * 응답에 노출할 반려 시각. 입금 대기 구간을 벗어나면 {@code null} 이다.
-   *
-   * <p>초기화는 재마킹 CAS 하나뿐이라, 반려 뒤 개최자가 그냥 수동 입금확인해 주면 {@code CONFIRMED +
-   * paymentRejectedAt≠null} 조합이 그대로 남는다. 그 상태로 내보내면 {@code paymentRejectedAt != null} 만 보는
-   * 클라이언트가 확정된 참여에 "입금 확인 안 됨" 배지를 붙인다. 상태 조건을 FE 규율에 맡기는 대신 서버가 계약을 보증한다 (PR #123 리뷰).
-   */
-  public Instant getVisiblePaymentRejectedAt() {
-    return status == ParticipationStatus.AWAITING_PAYMENT ? paymentRejectedAt : null;
-  }
 
   // --- 오픈 이벤트 배송비 환급(배송비 돌려받기) ---
   // 저장 값은 NONE/REQUESTED/COMPLETED/REJECTED 뿐이다. 신청 가능(ELIGIBLE)·만료(EXPIRED)는 이벤트
@@ -238,6 +229,20 @@ public class Participation extends TimestampedEntity {
   }
 
   /** 실제 입금 총액 = 멤버 금액 + 배송비. */
+  /**
+   * 응답에 노출할 반려 시각. 입금 대기 구간을 벗어나면 {@code null} 이다.
+   *
+   * <p>초기화는 재마킹 CAS 하나뿐이라, 반려 뒤 개최자가 그냥 수동 입금확인해 주면 {@code CONFIRMED +
+   * paymentRejectedAt≠null} 조합이 그대로 남는다. 그 상태로 내보내면 {@code paymentRejectedAt != null} 만 보는
+   * 클라이언트가 확정된 참여에 "입금 확인 안 됨" 배지를 붙인다. 상태 조건을 FE 규율에 맡기는 대신 서버가 계약을 보증한다 (PR #123 리뷰).
+   *
+   * <p>개최자 계좌·입금자명 노출 조건({@code AWAITING_PAYMENT || PAYMENT_SENT} — 쿼리 서비스에 있다)과 **의도적으로
+   * 다르다**. 반려 표시는 입금 대기 구간에서만 의미가 있어 한 상태만 통과시킨다.
+   */
+  public Instant getVisiblePaymentRejectedAt() {
+    return status == ParticipationStatus.AWAITING_PAYMENT ? paymentRejectedAt : null;
+  }
+
   public long getTotalAmount() {
     return amount + shippingFee;
   }

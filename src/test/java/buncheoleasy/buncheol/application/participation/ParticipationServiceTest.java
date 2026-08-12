@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -32,6 +33,7 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import org.junit.jupiter.api.DisplayName;
@@ -597,5 +599,81 @@ class ParticipationServiceTest {
       }
     }
     throw new NoSuchFieldException(fieldName);
+  }
+
+  @Nested
+  @DisplayName("C2C 보냈어요 마킹 해제 위임 테스트 (docs/53 Q-03)")
+  class RevertAndRejectPaymentSentTest {
+
+    private Participation c2cParticipation() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      return participation;
+    }
+
+    private Buncheol c2cBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      return buncheol;
+    }
+
+    // 반려와 셀프 철회는 같은 CAS 를 쓰고 rejectedAt 유무로만 갈린다. 호출부가 두 도메인 메서드를
+    // 바꿔 불러도 리포지토리 테스트는 전부 통과하므로, 위임 대상을 이 계층에서 못 박는다.
+    @Test
+    void 개최자_반려는_반려_시각을_남기는_경로로_위임한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      then(participationDomainService)
+          .should()
+          .rejectPaymentSent(eq(PARTICIPATION_ID), any(), any());
+      then(participationDomainService)
+          .should(never())
+          .revertPaymentSent(anyLong(), any(), any());
+    }
+
+    @Test
+    void 참여자_셀프_철회는_반려_시각을_남기지_않는_경로로_위임한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.revertPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.revertPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService)
+          .should()
+          .revertPaymentSent(eq(PARTICIPATION_ID), any(), any());
+      then(participationDomainService)
+          .should(never())
+          .rejectPaymentSent(anyLong(), any(), any());
+    }
+
+    // 반려는 기한을 max(기존, now+24h) 로 연장한다 (docs/46 §4.5).
+    @Test
+    void 개최자_반려는_입금_기한을_24시간_연장한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      ArgumentCaptor<Instant> dueAtCaptor = ArgumentCaptor.forClass(Instant.class);
+      then(participationDomainService)
+          .should()
+          .rejectPaymentSent(eq(PARTICIPATION_ID), dueAtCaptor.capture(), any());
+      assertThat(dueAtCaptor.getValue()).isEqualTo(NOW.plus(24, ChronoUnit.HOURS));
+    }
   }
 }

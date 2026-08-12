@@ -23,6 +23,10 @@ public record BankAccount(
     validate(bank, account, holder);
   }
 
+  /**
+   * 검증된 계좌 VO 를 만든다. <b>사용자 입력 경로에서는 이 메서드를 직접 쓰지 말고 {@link #validateForRegistration} 를 먼저
+   * 호출할 것</b> — 여기서는 최소 자릿수를 보지 않는다(기존 저장 행 재수화 호환).
+   */
   public static BankAccount of(final String bank, final String account, final String holder) {
     return new BankAccount(bank, account, holder);
   }
@@ -45,6 +49,9 @@ public record BankAccount(
    *
    * <p>기존 저장 행에는 적용하지 않는다 — staging 의 {@code 오 / 111 / 아아아} 같은 값이 이미 있고, 조회 경로에서 터지면 안 된다. 은행명은
    * 자유 입력을 유지한다(선택형 전환은 보류).
+   *
+   * <p><b>규범: 사용자 입력으로 계좌를 새로 만드는 경로는 반드시 이 메서드를 경유할 것.</b> {@link #of} 만 호출하면 최소 자릿수 검증이 조용히
+   * 빠진다. C2C 에서 이 규칙이 "참여자가 실제 송금하는 계좌"를 지키는 유일한 방어선이다.
    */
   public static void validateForRegistration(
       final String bank, final String account, final String holder) {

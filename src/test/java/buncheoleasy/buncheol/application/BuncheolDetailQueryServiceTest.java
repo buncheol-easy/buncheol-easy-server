@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
@@ -29,7 +30,9 @@ import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +41,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,8 +62,13 @@ class BuncheolDetailQueryServiceTest {
   private static final Long ME = 999L;
   private static final Long OTHER_USER = 888L;
   private static final Long HOST_ID = 777L;
+  private static final Instant NOW = Instant.parse("2026-05-20T12:00:00Z");
   private static final Instant DEADLINE = Instant.parse("2026-06-01T12:00:00Z");
   private static final Instant PAYMENT_DUE_AT = Instant.parse("2026-05-20T10:30:00Z");
+
+  // Instant.now(clock) 가 실제 시각을 돌려주도록 고정 Clock 을 @Spy 로 주입한다 (mock Clock 은 NPE).
+  // 기본 DEADLINE 은 NOW 이후라, 따로 지정하지 않으면 모집중 분철은 "마감 전" 으로 판정된다.
+  @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
   @Nested
   @DisplayName("분철 단건 상세 조회")
@@ -267,6 +276,101 @@ class BuncheolDetailQueryServiceTest {
       assertThat(response.confirmedCount()).isZero();
     }
 
+    // docs/53 Q-14 — 신청이 409(BCH-060) 로 막히는 분철의 공석이 AVAILABLE 로 내려가 신청 가능해 보이던 문제.
+    @Test
+    void 진행확정된_분철의_빈_슬롯은_CLOSED_로_내려간다() {
+      stubEmptySlot(BuncheolStatus.CONFIRMED, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+      assertThat(response.members().get(0).paymentDueAt()).isNull();
+      assertThat(response.members().get(0).participatedByMe()).isFalse();
+    }
+
+    @Test
+    void 취소된_분철의_빈_슬롯은_CLOSED_로_내려간다() {
+      stubEmptySlot(BuncheolStatus.CANCELLED, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+    }
+
+    // docs/46 §4.7-E1 — C2C 는 성사 확정 후 입금 수집중 구간에도 빈 슬롯 추가 모집을 받는다.
+    @Test
+    void 입금_수집중인_C2C_분철의_빈_슬롯은_AVAILABLE_을_유지한다() {
+      stubEmptySlot(BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+    }
+
+    // 마감 후에도 개최자 성사 확정 전까지 최대 48시간 RECRUITING 에 머무는데(C2C 확정 유예 — docs/46 §4.7-E3),
+    // 이 구간의 신청은 Buncheol#validateRecruiting 에서 409(BCH-060) 로 막힌다.
+    @Test
+    void 마감_시각이_지난_모집중_분철의_빈_슬롯은_CLOSED_로_내려간다() {
+      stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C, NOW.minusSeconds(1));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+    }
+
+    @Test
+    void 마감_시각_직전의_모집중_분철의_빈_슬롯은_AVAILABLE_이다() {
+      stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C, NOW.plusSeconds(1));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+    }
+
+    // PAYMENT_COLLECTING + LEGACY 는 프로덕션에 생길 수 없는 조합이다(진입 경로가 C2C 성사 확정뿐).
+    // 추가 모집을 flowType 으로 가르는 방어 분기를 고정하는 테스트다.
+    @Test
+    void 입금_수집중이어도_LEGACY_분철의_빈_슬롯은_CLOSED_로_내려간다() {
+      stubEmptySlot(BuncheolStatus.PAYMENT_COLLECTING, FlowType.LEGACY);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+    }
+
+    @Test
+    void 진행확정된_분철이라도_점유된_슬롯의_판매_상태는_그대로다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, ShippingFeePolicy.of(3000, null), FlowType.C2C);
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(
+              List.of(
+                  buncheolMember(101L, BUNCHEOL_ID, 1001L, 40_000L),
+                  buncheolMember(102L, BUNCHEOL_ID, 1002L, 30_000L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "민지", "minji.png"), groupMember(1002L, "해린", null)));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(active(601L, 101L, ME, ParticipationStatus.CONFIRMED)));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members())
+          .extracting(
+              BuncheolMemberDetailResponse::buncheolMemberId,
+              BuncheolMemberDetailResponse::saleStatus,
+              BuncheolMemberDetailResponse::participatedByMe)
+          .containsExactly(
+              tuple(101L, BuncheolMemberSaleStatus.SOLD, true),
+              tuple(102L, BuncheolMemberSaleStatus.CLOSED, false));
+    }
+
     @Test
     void 멤버_슬롯이_없는_분철도_정상_응답한다() {
       stubBasicBuncheol(BuncheolStatus.CONFIRMED, ShippingFeePolicy.of(null, 4000));
@@ -363,10 +467,41 @@ class BuncheolDetailQueryServiceTest {
     }
   }
 
+  // flow_type 은 NOT NULL 컬럼이라 프로덕션에 null 은 없다 — 기본값을 LEGACY 로 둔다.
   private void stubBasicBuncheol(final BuncheolStatus status, final ShippingFeePolicy policy) {
-    Buncheol buncheol = buncheol(BUNCHEOL_ID, GROUP_ID, "뉴진스 1집 분철", status, policy);
+    stubBasicBuncheol(status, policy, FlowType.LEGACY);
+  }
+
+  private void stubBasicBuncheol(
+      final BuncheolStatus status, final ShippingFeePolicy policy, final FlowType flowType) {
+    stubBasicBuncheol(status, policy, flowType, DEADLINE);
+  }
+
+  private void stubBasicBuncheol(
+      final BuncheolStatus status,
+      final ShippingFeePolicy policy,
+      final FlowType flowType,
+      final Instant deadline) {
+    Buncheol buncheol =
+        buncheol(BUNCHEOL_ID, GROUP_ID, "뉴진스 1집 분철", status, policy, flowType, deadline);
     given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(buncheol));
     given(groupRepository.findById(GROUP_ID)).willReturn(Optional.of(group(GROUP_ID, "뉴진스")));
+  }
+
+  /** 활성 참여가 하나도 없는(= 전 슬롯 공석) 분철 스텁 — 공석 판매 상태 판정 전용. */
+  private void stubEmptySlot(final BuncheolStatus status, final FlowType flowType) {
+    stubEmptySlot(status, flowType, DEADLINE);
+  }
+
+  private void stubEmptySlot(
+      final BuncheolStatus status, final FlowType flowType, final Instant deadline) {
+    stubBasicBuncheol(status, ShippingFeePolicy.of(3000, null), flowType, deadline);
+    given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID)).willReturn(List.of());
+    given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+        .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L, 40_000L)));
+    given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+    given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
   }
 
   private Buncheol buncheol(
@@ -375,14 +510,36 @@ class BuncheolDetailQueryServiceTest {
       String title,
       BuncheolStatus status,
       ShippingFeePolicy shippingFeePolicy) {
+    return buncheol(id, groupId, title, status, shippingFeePolicy, FlowType.LEGACY);
+  }
+
+  private Buncheol buncheol(
+      Long id,
+      Long groupId,
+      String title,
+      BuncheolStatus status,
+      ShippingFeePolicy shippingFeePolicy,
+      FlowType flowType) {
+    return buncheol(id, groupId, title, status, shippingFeePolicy, flowType, DEADLINE);
+  }
+
+  private Buncheol buncheol(
+      Long id,
+      Long groupId,
+      String title,
+      BuncheolStatus status,
+      ShippingFeePolicy shippingFeePolicy,
+      FlowType flowType,
+      Instant deadline) {
     Buncheol buncheol = newInstance(Buncheol.class);
+    setField(buncheol, "flowType", flowType);
     setField(buncheol, "id", id);
     setField(buncheol, "hostId", HOST_ID);
     setField(buncheol, "groupId", groupId);
     setField(buncheol, "title", title);
     setField(buncheol, "description", "분철 설명");
     setField(buncheol, "purchaseSite", "https://store.example.com");
-    setField(buncheol, "deadline", DEADLINE);
+    setField(buncheol, "deadline", deadline);
     setField(buncheol, "minHeadcount", 3);
     setField(buncheol, "status", status);
     setField(buncheol, "shippingFeePolicy", shippingFeePolicy);

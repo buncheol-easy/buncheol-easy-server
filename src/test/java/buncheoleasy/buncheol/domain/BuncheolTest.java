@@ -150,7 +150,7 @@ class BuncheolTest {
     @Test
     void 제목이_최대_길이를_초과하면_예외가_발생한다() {
       // given
-      String longTitle = "가".repeat(201);
+      String longTitle = "가".repeat(65);
       BuncheolParams params =
           new BuncheolParams(
               1L, longTitle, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
@@ -382,6 +382,86 @@ class BuncheolTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+  }
+
+  @Nested
+  @DisplayName("신규 참여 수용 여부 테스트")
+  class AcceptsNewParticipationTest {
+
+    private Buncheol buncheol(final BuncheolStatus status, final FlowType flowType) {
+      Buncheol buncheol =
+          Buncheol.create(
+              HOST_ID,
+              new BuncheolParams(
+                  1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null,
+                  flowType, null),
+              Instant.now());
+      setStatus(buncheol, status);
+      return buncheol;
+    }
+
+    @Test
+    void 모집중이고_마감_전이면_받는다() {
+      assertThat(buncheol(BuncheolStatus.RECRUITING, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+          .isTrue();
+    }
+
+    @Test
+    void 모집중이어도_마감이_지났으면_받지_않는다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.RECRUITING, FlowType.C2C);
+      setDeadline(buncheol, Instant.now().minusSeconds(1));
+
+      assertThat(buncheol.acceptsNewParticipation(Instant.now())).isFalse();
+    }
+
+    @Test
+    void 마감_시각_정각은_받지_않는다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.RECRUITING, FlowType.C2C);
+      Instant deadline = Instant.now().plusSeconds(60);
+      setDeadline(buncheol, deadline);
+
+      assertThat(buncheol.acceptsNewParticipation(deadline)).isFalse();
+    }
+
+    // C2C 는 성사 확정 후 입금 수집중 구간에도 빈 슬롯 추가 모집을 받는다 (docs/46 §4.7-E1).
+    @Test
+    void 입금_수집중이면_C2C_만_받는다() {
+      assertThat(
+              buncheol(BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now()))
+          .isTrue();
+      assertThat(
+              buncheol(BuncheolStatus.PAYMENT_COLLECTING, FlowType.LEGACY)
+                  .acceptsNewParticipation(Instant.now()))
+          .isFalse();
+    }
+
+    @Test
+    void 진행확정_취소_개최자취소는_받지_않는다() {
+      assertThat(buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+          .isFalse();
+      assertThat(buncheol(BuncheolStatus.CANCELLED, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+          .isFalse();
+      assertThat(
+              buncheol(BuncheolStatus.HOST_CANCELLED, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now()))
+          .isFalse();
+    }
+
+    // 참여 가드(validateRecruiting)와 같은 술어여야 한다 — 갈리면 "화면엔 신청 가능한데 신청은 409" 가 재발한다.
+    @Test
+    void 모집중_구간에서는_참여_가드와_판정이_일치한다() {
+      Buncheol beforeDeadline = buncheol(BuncheolStatus.RECRUITING, FlowType.LEGACY);
+      Buncheol afterDeadline = buncheol(BuncheolStatus.RECRUITING, FlowType.LEGACY);
+      setDeadline(afterDeadline, Instant.now().minusSeconds(1));
+
+      assertThatCode(() -> beforeDeadline.validateRecruiting(Instant.now())).doesNotThrowAnyException();
+      assertThat(beforeDeadline.acceptsNewParticipation(Instant.now())).isTrue();
+
+      assertThatThrownBy(() -> afterDeadline.validateRecruiting(Instant.now()))
+          .isInstanceOf(BusinessException.class);
+      assertThat(afterDeadline.acceptsNewParticipation(Instant.now())).isFalse();
     }
   }
 

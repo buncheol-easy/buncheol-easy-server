@@ -16,7 +16,8 @@ import java.util.List;
  *     문자열·공백 = 링크 제거, 값 = 형식 검증 후 교체
  */
 public record BuncheolModifyRequest(
-    @NotBlank @Size(max = 200) String title,
+    // 제목 64자 — 개최(HoldBuncheolRequest)와 같은 상한 (docs/56 H-02).
+    @NotBlank @Size(max = 64) String title,
     @Size(max = 700) String description,
     @NotNull List<Long> keepImageIds,
     Long thumbnailImageId,

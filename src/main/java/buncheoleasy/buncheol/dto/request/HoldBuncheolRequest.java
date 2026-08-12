@@ -21,7 +21,8 @@ import java.util.List;
  */
 public record HoldBuncheolRequest(
     @NotNull Long groupId,
-    @NotBlank @Size(max = 200) String title,
+    // 제목 64자 — 어느 화면도 그 이상을 노출하지 않는다 (docs/56 H-02). DB 컬럼 길이는 그대로 두고 검증만 조인다.
+    @NotBlank @Size(max = 64) String title,
     @Size(max = 700) String description,
     @NotBlank @Size(max = 200) String purchaseSite,
     @NotNull @Future Instant deadline,

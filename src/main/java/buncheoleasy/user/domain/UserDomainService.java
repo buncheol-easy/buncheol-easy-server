@@ -102,6 +102,11 @@ public class UserDomainService {
     user.updateBankAccount(bank, account, holder);
   }
 
+  /** 던지지 않는 정산 계좌 등록 여부 — 개최 자격 사전 조회용(docs/53 Q-07). 개최 시점 검사는 {@link #requireBankAccountRegistered}. */
+  public boolean hasBankAccount(final Long id) {
+    return getUser(id).getBankAccount() != null;
+  }
+
   public void requireBankAccountRegistered(final Long id) {
     getUser(id).requireBankAccount();
   }

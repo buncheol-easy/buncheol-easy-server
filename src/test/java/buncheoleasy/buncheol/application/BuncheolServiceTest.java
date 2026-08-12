@@ -509,6 +509,7 @@ class BuncheolServiceTest {
       given(userDomainService.evaluateC2cHostQualification(HOST_ID))
           .willReturn(C2cHostQualification.QUALIFIED);
       given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(false);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(true);
 
       // when
       HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
@@ -550,9 +551,27 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 운영진은_자격_게이트와_상한을_보지_않고_적격이다() {
-      // given — 운영진은 기본 LEGACY 라 C2C 자격 게이트·상한이 적용되지 않는다.
+    void 정산_계좌가_없으면_BANK_ACCOUNT_REQUIRED_사유로_부적격이다() {
+      // given — 개최 요청이 자격·상한 뒤에 요구하는 검사(USR-025)라, 빠지면 폼을 다 채운 뒤에야 막힌다.
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.QUALIFIED);
+      given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(false);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(false);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason())
+          .isEqualTo(HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
+    }
+
+    @Test
+    void 운영진은_자격_게이트와_상한을_보지_않지만_정산_계좌는_본다() {
+      // given — 운영진은 기본 LEGACY 라 C2C 자격 게이트·상한이 적용되지 않는다. 정산 계좌는 LEGACY·C2C 공통 요구다.
       given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(true);
 
       // when
       HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
@@ -561,6 +580,20 @@ class BuncheolServiceTest {
       assertThat(response.eligible()).isTrue();
       then(userDomainService).should(never()).evaluateC2cHostQualification(any());
       then(buncheolDomainService).should(never()).isActiveHostedLimitExceeded(any());
+    }
+
+    @Test
+    void 운영진도_정산_계좌가_없으면_부적격이다() {
+      // given
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(false);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.reason())
+          .isEqualTo(HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
     }
   }
 

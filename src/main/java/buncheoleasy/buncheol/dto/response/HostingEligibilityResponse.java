@@ -18,7 +18,9 @@ public record HostingEligibilityResponse(boolean eligible, Reason reason) {
     /** 미성년 확정 — 개최 불가. */
     NOT_ADULT,
     /** 활성(모집중·입금 수집중) 개최 수 상한 초과. */
-    LIMIT_EXCEEDED
+    LIMIT_EXCEEDED,
+    /** 정산 계좌 미등록 — LEGACY·C2C 공통이라 운영진에게도 적용된다. */
+    BANK_ACCOUNT_REQUIRED
   }
 
   public static HostingEligibilityResponse allowed() {

@@ -22,7 +22,6 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.user.domain.BankAccount;
-import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
@@ -108,24 +107,32 @@ public class BuncheolService {
   }
 
   /**
-   * 개최 자격 사전 조회 (docs/53 Q-07). {@link #resolveHostFlowType} 의 게이트를 던지지 않는 판정으로 그대로 재현한다 — 검사 순서까지
-   * 같아야 FE 가 보여주는 사유와 제출 시 실제로 막히는 사유가 일치한다.
+   * 개최 자격 사전 조회 (docs/53 Q-07). {@link #holdBuncheol} 이 개최 요청에서 던지는 검사들을 던지지 않는 판정으로 같은 순서대로 재현한다
+   * — 순서가 같아야 FE 가 보여주는 사유와 제출 시 실제로 막히는 사유가 일치한다.
    *
-   * <p>운영진(can_host)은 기본 LEGACY 라 자격 게이트·상한이 없어 항상 적격이다.
+   * <p>운영진(can_host)은 기본 LEGACY 라 C2C 자격 게이트·상한을 적용하지 않는다. 다만 정산 계좌는 LEGACY·C2C 공통 요구라 모두에게 검사한다.
+   * <b>판정은 LEGACY 기준</b>이라, 운영진이 요청에서 C2C 를 선택하는 경우의 추가 요구(가입 완료 — {@link #resolveHostFlowType})는 이
+   * 응답에 반영되지 않는다.
    */
   @Transactional(readOnly = true)
   public HostingEligibilityResponse getHostingEligibility(final Long hostId) {
-    if (userDomainService.canHost(hostId)) {
-      return HostingEligibilityResponse.allowed();
+    if (!userDomainService.canHost(hostId)) {
+      HostingEligibilityResponse qualification =
+          HostingEligibilityResponse.from(userDomainService.evaluateC2cHostQualification(hostId));
+      if (!qualification.eligible()) {
+        return qualification;
+      }
+
+      if (buncheolDomainService.isActiveHostedLimitExceeded(hostId)) {
+        return HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.LIMIT_EXCEEDED);
+      }
     }
 
-    C2cHostQualification qualification = userDomainService.evaluateC2cHostQualification(hostId);
-    if (!qualification.isQualified()) {
-      return HostingEligibilityResponse.from(qualification);
-    }
-
-    if (buncheolDomainService.isActiveHostedLimitExceeded(hostId)) {
-      return HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.LIMIT_EXCEEDED);
+    // 개최 요청은 자격·상한을 통과한 뒤 정산 계좌를 요구한다(USR-025). 이걸 빼면 계좌 미등록 유저가 폼을 다 채운 뒤 막혀
+    // 이 API 가 없애려던 문제가 그대로 남는다.
+    if (!userDomainService.hasBankAccount(hostId)) {
+      return HostingEligibilityResponse.blocked(
+          HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
     }
 
     return HostingEligibilityResponse.allowed();

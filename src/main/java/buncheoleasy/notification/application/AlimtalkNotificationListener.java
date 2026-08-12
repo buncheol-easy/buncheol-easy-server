@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -107,8 +108,10 @@ public class AlimtalkNotificationListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolConfirmed(final BuncheolConfirmedEvent event) {
-    groupByParticipant(loadViewsSafely(event.participationIds()))
-        .forEach(this::sendConfirmedNotice);
+    // 전이분 스냅샷을 상태 재확인 없이 그대로 쓴다 — 분철 CONFIRMED 는 종착 상태라(어느 CAS 도 CONFIRMED 에서 출발하지
+    // 않는다) 커밋~실행 사이에 확정 참여가 이탈할 전이가 없다. PAYMENT_COLLECTING 이 열려 있는 성사 안내 쪽과 다른 이유다.
+    sendEachSafely(
+        groupByParticipant(loadViewsSafely(event.participationIds())), this::sendConfirmedNotice);
   }
 
   // 다슬롯 참여자에게는 멤버명 "호시 외 1" 로 1건만 보낸다. 금액이 없는 문안이라 합산 대상은 멤버명뿐이다.
@@ -151,12 +154,12 @@ public class AlimtalkNotificationListener {
   /**
    * 취소 문안 선택. 판정 기준은 입금 이력이 아니라 취소 사유다 — C2C 성사 후(PAYMENT_COLLECTING) 개최자 취소도 입금 전 참여자에겐 이력이 없는데,
    * 이력만 보고 미성사 문안을 보내면 "성사되지 않아 취소" 라는 거짓 안내에 사유까지 누락된다. 미성사({@code NOT_FINALIZED})는 무입금 신청
-   * 단계에서만 나오는 C2C 전용 사유라 환불 안내가 필요 없고, 나머지는 환불 주체가 갈린다 — LEGACY 는 플랫폼, C2C 는 대금이 개최자 계좌로 직접 간
+   * 단계에서만 나오는 C2C 전용 사유라 환불 안내가 필요 없고(불변식이 다른 패키지에 있어 flowType 도 함께 본다), 나머지는 환불 주체가 갈린다 — LEGACY 는 플랫폼, C2C 는 대금이 개최자 계좌로 직접 간
    * 직거래라 개최자다.
    */
   private AlimtalkTemplate cancelTemplate(
       final ParticipationView view, final BuncheolCancelReason reason) {
-    if (reason == BuncheolCancelReason.NOT_FINALIZED) {
+    if (reason == BuncheolCancelReason.NOT_FINALIZED && view.buncheol().isC2c()) {
       return AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED;
     }
     return view.buncheol().isC2c()
@@ -178,7 +181,7 @@ public class AlimtalkNotificationListener {
                     view.participation().getStatus() == ParticipationStatus.AWAITING_PAYMENT
                         || view.participation().getStatus() == ParticipationStatus.PAYMENT_SENT)
             .toList();
-    groupByParticipant(views).forEach(this::sendFinalizedNotice);
+    sendEachSafely(groupByParticipant(views), this::sendFinalizedNotice);
   }
 
   /** (참여자) C2C 추가 모집 즉시입금 진입 — 이미 성사된 분철의 빈 슬롯 참여라 입금 안내를 바로 보낸다 (docs/46 §4.7-E1). */
@@ -300,6 +303,23 @@ public class AlimtalkNotificationListener {
       log.error("알림 대상 조립 실패 {}/{}건", participationIds.size() - views.size(), participationIds.size());
     }
     return views;
+  }
+
+  // 수신자별 발송을 격리한다 — 알리고 통신 오류·실패 응답은 AlimtalkSendException(RuntimeException) 으로 올라오는데,
+  // 다건 이벤트에서 그대로 두면 앞사람 한 명의 발송 실패가 뒷사람 전원의 알림톡과 수신함 기록까지 없앤다.
+  private void sendEachSafely(
+      final Collection<List<ParticipationView>> groups,
+      final Consumer<List<ParticipationView>> sendOne) {
+    for (final List<ParticipationView> group : groups) {
+      try {
+        sendOne.accept(group);
+      } catch (final RuntimeException e) {
+        log.error(
+            "알림 발송 실패로 해당 수신자만 건너뜀 - participantId={}",
+            group.get(0).participant().getId(),
+            e);
+      }
+    }
   }
 
   // 유저 단위 합산 발송용 그룹핑. 같은 이벤트에서 두 유저의 발송 순서가 실행마다 뒤집히지 않도록 입력 순서를 보존한다.

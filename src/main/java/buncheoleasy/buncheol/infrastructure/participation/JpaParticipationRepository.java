@@ -95,7 +95,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   boolean existsByPaybackTweetUrlAndIdNot(String paybackTweetUrl, Long id);
 
-
   /** AWAITING_PAYMENT 이고 입금 기한 내일 때만 CONFIRMED 로 전이 (호스트 수동 입금확인 CAS). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

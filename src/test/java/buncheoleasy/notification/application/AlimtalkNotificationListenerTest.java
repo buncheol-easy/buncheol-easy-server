@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -260,6 +261,46 @@ class AlimtalkNotificationListenerTest {
           .containsEntry("멤버명", "안유진");
     }
 
+    // 알리고 통신 오류·실패 응답은 RuntimeException 으로 올라온다. 이벤트를 분철 단위로 합친 뒤로는 격리하지 않으면
+    // 앞사람 한 명의 발송 실패가 뒷사람 전원의 알림톡과 수신함 기록까지 없앤다.
+    @Test
+    @DisplayName("한 수신자의 발송이 실패해도 나머지 수신자에게는 발송한다")
+    void keepsSendingAfterOneRecipientFails() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("아이브 앨범");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      User otherParticipant = mockUser("다른참여자닉", OTHER_PARTICIPANT_PHONE);
+      given(otherParticipant.getId()).willReturn(12L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class),
+                  buncheol,
+                  "장원영",
+                  participant,
+                  mock(User.class),
+                  32_000L));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class),
+                  buncheol,
+                  "안유진",
+                  otherParticipant,
+                  mock(User.class),
+                  32_000L));
+      willThrow(new IllegalStateException("알림톡 발송 실패"))
+          .given(sender)
+          .send(any(), eq(PARTICIPANT_PHONE), any());
+
+      listener.onBuncheolConfirmed(
+          new BuncheolConfirmedEvent(
+              BUNCHEOL_ID, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
+
+      verify(sender).send(eq(AlimtalkTemplate.BUNCHEOL_CONFIRMED), eq(OTHER_PARTICIPANT_PHONE), any());
+    }
+
     // 뷰 조립은 참여·분철·멤버슬롯·유저 조회가 모두 예외 경로라, 일괄 조회로 묶으면 한 건 결손이 분철 전원의 알림을 없앤다.
     @Test
     @DisplayName("한 참여의 조립이 실패해도 나머지 참여자에게는 발송한다")
@@ -420,6 +461,7 @@ class AlimtalkNotificationListenerTest {
     void notFinalizedUsesNotFinalizedTemplate() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
       User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
       given(participant.getId()).willReturn(11L);
       given(assembler.loadByParticipation(PARTICIPATION_ID))

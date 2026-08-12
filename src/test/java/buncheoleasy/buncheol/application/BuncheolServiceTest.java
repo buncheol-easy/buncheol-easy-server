@@ -160,9 +160,11 @@ class BuncheolServiceTest {
       willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
 
       // when
-      buncheolService.holdBuncheol(HOST_ID, request, images);
+      Long createdId = buncheolService.holdBuncheol(HOST_ID, request, images);
 
       // then
+      // 생성된 분철의 id 를 그대로 돌려줘야 FE 가 목록 재조회·제목 매칭 없이 이동할 수 있다 (docs/53 Q-15).
+      assertThat(createdId).isEqualTo(BUNCHEOL_ID);
       then(groupDomainService).should().validateGroupExists(GROUP_ID);
       then(buncheolDomainService)
           .should()

@@ -183,12 +183,31 @@ class UserControllerDocsTest extends DocsTestSupport {
                     ResourceSnippetParameters.builder()
                         .tag("User")
                         .summary("정산 계좌 등록/수정")
-                        .description("호스트가 정산받을 계좌 정보를 등록 또는 수정한다.")
+                        .description(
+                            """
+                            호스트가 정산받을 계좌 정보를 등록 또는 수정한다. C2C 분철에서는 이 계좌가 **참여자에게 그대로 노출되어 실제 송금 대상**이 되므로
+                            계좌번호는 **하이픈을 제외한 숫자 8자리 이상**이어야 한다.
+
+                            검증이 두 겹이라 오류 코드가 갈린다 — `@Pattern`·`@Size`(DTO) 위반은 `C-001`, 자릿수·형식(도메인) 위반은 `USR-*` 다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | DTO 검증 위반 (필수값 누락, 50자 초과 등) |
+                            | 400 | `USR-023` (`USER_BANK_ACCOUNT_REQUIRED`) | 은행·계좌번호·예금주 중 공백 |
+                            | 400 | `USR-024` (`USER_BANK_ACCOUNT_LENGTH_INVALID`) | 항목 길이가 50자 초과 |
+                            | 400 | `USR-026` (`USER_BANK_ACCOUNT_FORMAT_INVALID`) | 계좌번호가 숫자·하이픈 형식이 아님 |
+                            | 400 | `USR-034` (`USER_BANK_ACCOUNT_TOO_SHORT`) | 계좌번호가 하이픈 제외 8자리 미만 |
+
+                            기존에 등록된 계좌에는 소급 적용하지 않는다 (신규 입력만 — docs/53 Q-02).
+                            """)
                         .requestHeaders(userAuthorizationHeader())
                         .requestSchema(Schema.schema("BankAccountRequest"))
                         .requestFields(
                             fieldWithPath("bank").description("은행명 (1~50자)"),
-                            fieldWithPath("account").description("계좌번호 (숫자·하이픈, 1~50자)"),
+                            fieldWithPath("account")
+                                .description(
+                                    "계좌번호 (숫자·하이픈, 1~50자). **하이픈을 제외한 숫자 8자리 이상** — 미만이면 `400 USR-034`"),
                             fieldWithPath("holder").description("예금주 (1~50자)"))
                         .build())));
   }

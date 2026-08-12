@@ -549,7 +549,7 @@ class UserDomainServiceTest {
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       // when
-      userDomainService.updateBankAccount(1L, "국민은행", "123456", "홍길동");
+      userDomainService.updateBankAccount(1L, "국민은행", "12345678", "홍길동");
 
       // then
       assertThat(user.getBankAccount()).isNotNull();
@@ -560,7 +560,7 @@ class UserDomainServiceTest {
     void 존재하지_않는_유저의_계좌를_갱신하면_예외가_발생한다() {
       given(userRepository.findById(999L)).willReturn(Optional.empty());
 
-      assertThatThrownBy(() -> userDomainService.updateBankAccount(999L, "국민은행", "111", "홍길동"))
+      assertThatThrownBy(() -> userDomainService.updateBankAccount(999L, "국민은행", "11112222", "홍길동"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
@@ -593,7 +593,7 @@ class UserDomainServiceTest {
     @Test
     void 계좌가_등록되어_있으면_통과한다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updateBankAccount("국민은행", "111", "홍길동");
+      user.updateBankAccount("국민은행", "11112222", "홍길동");
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       userDomainService.requireBankAccountRegistered(1L);

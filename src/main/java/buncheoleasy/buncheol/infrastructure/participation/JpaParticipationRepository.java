@@ -158,7 +158,8 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
-          + "SET p.status = :sentStatus, p.paymentSentAt = :now, p.updatedAt = :now "
+          + "SET p.status = :sentStatus, p.paymentSentAt = :now, "
+          + "    p.paymentRejectedAt = NULL, p.updatedAt = :now "
           + "WHERE p.id = :id AND p.status = :awaitingStatus")
   int markPaymentSentIfAwaiting(
       @Param("id") Long id,
@@ -169,17 +170,22 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   /**
    * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT 복귀). 참여자 철회(기한 유지)와 개최자 반려(기한 연장 — docs/46
    * §4.5)가 공용하며, {@code paymentSentAt} 은 분쟁 증거로 보존한다.
+   *
+   * <p>{@code rejectedAt} 으로 두 경로를 구분한다 (docs/53 Q-03) — 개최자 반려는 현재 시각, 참여자 셀프 철회는 {@code null}. 응답에
+   * 그대로 실어 FE 가 "입금 확인 안 됨 · 재확인 필요" 를 띄운다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
-          + "SET p.status = :awaitingStatus, p.dueAt = :dueAt, p.updatedAt = :now "
+          + "SET p.status = :awaitingStatus, p.dueAt = :dueAt, "
+          + "    p.paymentRejectedAt = :rejectedAt, p.updatedAt = :now "
           + "WHERE p.id = :id AND p.status = :sentStatus")
   int revertPaymentSentIfSent(
       @Param("id") Long id,
       @Param("sentStatus") ParticipationStatus sentStatus,
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
       @Param("dueAt") Instant dueAt,
+      @Param("rejectedAt") Instant rejectedAt,
       @Param("now") Instant now);
 
   /** C2C 참여자 자발 취소 CAS — 신청(APPLIED)·입금 대기(AWAITING_PAYMENT)에서만 (docs/46 §5 구간 ①·②). */

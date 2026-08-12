@@ -971,6 +971,59 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("findCancelledByBuncheolId — 취소된 참여만")
+  class CancelledByBuncheolIdTest {
+
+    @Test
+    void 취소된_참여만_조회하고_활성_참여는_제외한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "취소멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long cancelledId =
+          insertParticipation(
+              buncheolId,
+              bmId,
+              participantId,
+              insertShippingAddress(participantId, "취소매장"),
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CANCELLED,
+              ParticipationCancelReason.BUNCHEOL_CANCELLED);
+      insertParticipation(
+          buncheolId,
+          bmId2,
+          secondParticipantId,
+          insertShippingAddress(secondParticipantId, "확정매장"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+
+      assertThat(participationRepository.findCancelledByBuncheolId(buncheolId))
+          .extracting(Participation::getId)
+          .containsExactly(cancelledId);
+    }
+
+    @Test
+    void 다른_분철의_취소분은_섞이지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long otherBuncheolId = createBuncheol();
+      insertParticipation(
+          otherBuncheolId,
+          createBuncheolMember(otherBuncheolId),
+          participantId,
+          insertShippingAddress(participantId, "다른분철매장"),
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      assertThat(participationRepository.findCancelledByBuncheolId(buncheolId)).isEmpty();
+    }
+  }
+
+  @Nested
   @DisplayName("findOverduePaymentTargets — 입금 만료 스케줄러 폴링")
   class FindOverduePaymentTargetsTest {
 

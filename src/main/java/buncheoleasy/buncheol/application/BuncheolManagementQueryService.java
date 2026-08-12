@@ -26,13 +26,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 운영자(개최자) 분철 관리 화면 조회 서비스. 호스트 본인 권한을 검증한 뒤, 분철 정보와 활성 참여자(입금확인 대상·확정 참여) 목록을 환불계좌·배송 스냅샷과 함께 단일
- * 응답으로 조립한다. 입금확인·환불은 운영자가 이 화면을 보고 처리한다.
+ * 응답으로 조립한다. 입금확인·환불은 운영자가 이 화면을 보고 처리한다. 취소된 참여는 슬롯을 점유하지 않아 참여자 목록과 분리해 담는다.
  */
 @Service
 @RequiredArgsConstructor
@@ -65,6 +66,8 @@ public class BuncheolManagementQueryService {
         resolveMemberNames(buncheol.getGroupId(), buncheolMembers);
 
     List<Participation> participations = participationRepository.findActiveByBuncheolId(buncheolId);
+    // 취소되면 활성 조회에서 빠지는데, 개최자가 환불하려면 계좌에 닿아야 한다 (C2C 는 개최자가 환불 주체).
+    List<Participation> cancelled = participationRepository.findCancelledByBuncheolId(buncheolId);
 
     List<Long> confirmedParticipationIds =
         participations.stream()
@@ -77,13 +80,22 @@ public class BuncheolManagementQueryService {
 
     Map<Long, User> userById =
         userRepository
-            .findAllByIds(participations.stream().map(Participation::getParticipantId).toList())
+            .findAllByIds(
+                Stream.concat(participations.stream(), cancelled.stream())
+                    .map(Participation::getParticipantId)
+                    .distinct()
+                    .toList())
             .stream()
             .collect(Collectors.toMap(User::getId, Function.identity()));
 
     List<BuncheolManagementParticipantResponse> participants =
         participations.stream()
             .map(p -> toParticipant(p, memberNameBySlotId, userById, deliveryByParticipationId))
+            .toList();
+    // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
+    List<BuncheolManagementParticipantResponse> cancelledParticipants =
+        cancelled.stream()
+            .map(p -> toParticipant(p, memberNameBySlotId, userById, Map.of()))
             .toList();
 
     return new BuncheolManagementResponse(
@@ -97,6 +109,7 @@ public class BuncheolManagementQueryService {
         buncheolMembers.size(),
         confirmedParticipationIds.size(),
         participants,
+        cancelledParticipants,
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt());
   }

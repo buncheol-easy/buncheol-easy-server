@@ -120,6 +120,8 @@ class BuncheolManagementQueryServiceTest {
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "안유진")));
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
@@ -149,6 +151,8 @@ class BuncheolManagementQueryServiceTest {
           participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.AWAITING_PAYMENT);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(awaiting));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
       // CONFIRMED 가 없으니 Delivery 조회는 빈 id 목록으로 들어간다.
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
@@ -186,6 +190,8 @@ class BuncheolManagementQueryServiceTest {
       setField(confirmed, "confirmedAt", CONFIRMED_AT);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(confirmed));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
       Delivery delivery =
           delivery(5001L, 601L, "GS25 강남역점", "유진팬", "010-1234-5678", "1234567890",
               DeliveryStatus.SHIPPING);
@@ -225,6 +231,8 @@ class BuncheolManagementQueryServiceTest {
           participation(602L, 102L, PARTICIPANT_USER, 43_000L, ParticipationStatus.CONFIRMED);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(awaiting, confirmed));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of(602L))).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(OTHER_USER, PARTICIPANT_USER)))
           .willReturn(List.of(user(OTHER_USER, "타인"), user(PARTICIPANT_USER, "장원영")));
@@ -243,6 +251,8 @@ class BuncheolManagementQueryServiceTest {
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of());
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
       given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
@@ -253,6 +263,69 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants()).isEmpty();
       // 멤버 슬롯이 없으면 GroupMember 조회는 일어나지 않는다.
       verify(groupMemberRepository, never()).findAllByGroupIdAndIds(any(), anyList());
+    }
+
+    // 취소된 참여는 활성 조회에서 빠져 개최자가 환불 계좌에 닿을 길이 없어진다. C2C 는 개최자가 환불 주체라 이 목록이 유일한 경로다.
+    @Test
+    void 취소된_참여는_환불계좌와_함께_별도_목록에_담긴다() {
+      stubBasicBuncheol(BuncheolStatus.CANCELLED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation cancelled =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.cancelledParticipants()).hasSize(1);
+      BuncheolManagementParticipantResponse refundTarget = response.cancelledParticipants().get(0);
+      assertThat(refundTarget.participationId()).isEqualTo(601L);
+      assertThat(refundTarget.participantNickname()).isEqualTo("장원영");
+      assertThat(refundTarget.memberName()).isEqualTo("안유진");
+      assertThat(refundTarget.amount()).isEqualTo(53_000L);
+      assertThat(refundTarget.status()).isEqualTo(ParticipationStatus.CANCELLED);
+      assertThat(refundTarget.confirmedAt()).isEqualTo(CONFIRMED_AT);
+      assertThat(refundTarget.refundAccount().bank()).isEqualTo("국민");
+      assertThat(refundTarget.refundAccount().account()).isEqualTo("12345678");
+      assertThat(refundTarget.refundAccount().holder()).isEqualTo("홍길동");
+      assertThat(refundTarget.delivery()).isNull();
+    }
+
+    @Test
+    void 취소분은_참여자_목록과_확정_인원_집계에_섞이지_않는다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation active =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      Participation cancelled =
+          participation(602L, 101L, OTHER_USER, 53_000L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(active));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of(601L))).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER, OTHER_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영"), user(OTHER_USER, "안유진팬")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants()).hasSize(1);
+      assertThat(response.confirmedCount()).isEqualTo(1);
+      assertThat(response.cancelledParticipants()).hasSize(1);
     }
   }
 

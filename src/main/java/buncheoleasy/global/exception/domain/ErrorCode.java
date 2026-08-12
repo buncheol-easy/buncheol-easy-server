@@ -161,6 +161,17 @@ public enum ErrorCode {
   // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
   BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
       "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
+  // 성사 확정(BCH-085)과 분리한다 — 개최자가 누른 건 "진행 확정"인데 "성사 확정" 실패라고 뜨면
+  // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
+  BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
+      "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등
+  // C2C 전용 액션 6곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서 엉뚱한
+  // 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
+  PARTICIPATION_CANCEL_NOT_SUPPORTED(
+      "BCH-091",
+      "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
+      HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

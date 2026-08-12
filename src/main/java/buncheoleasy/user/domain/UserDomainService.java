@@ -140,11 +140,18 @@ public class UserDomainService {
     return C2cHostQualification.QUALIFIED;
   }
 
-  /** C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. */
+  /**
+   * C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. 매핑을 여기 switch 로 두면 사유가 추가될 때 컴파일 에러로 잡히고, 응답 사유 매핑({@code
+   * HostingEligibilityResponse#from})과 대칭이 된다.
+   */
   public void requireC2cHostQualification(final Long id) {
     C2cHostQualification qualification = evaluateC2cHostQualification(id);
-    if (!qualification.isQualified()) {
-      throw new BusinessException(qualification.errorCode());
+    switch (qualification) {
+      case QUALIFIED -> {}
+      case PHONE_REQUIRED ->
+          throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+      case AGE_UNVERIFIED -> throw new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED);
+      case NOT_ADULT -> throw new BusinessException(ErrorCode.USER_NOT_ADULT);
     }
   }
 

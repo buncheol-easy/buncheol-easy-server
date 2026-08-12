@@ -45,6 +45,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
@@ -517,6 +519,29 @@ class BuncheolServiceTest {
       // then
       assertThat(response.eligible()).isTrue();
       assertThat(response.reason()).isNull();
+    }
+
+    /**
+     * 사유가 서로 뒤바뀌면 FE 안내가 정반대가 된다 — AGE_UNVERIFIED 는 "카카오 재동의로 열림", NOT_ADULT 는 "회복 불가"다. exhaustive
+     * switch 는 누락만 잡고 뒤바뀜은 못 잡아 매핑을 따로 잠근다.
+     */
+    @ParameterizedTest
+    @CsvSource({
+      "PHONE_REQUIRED, PHONE_REQUIRED",
+      "AGE_UNVERIFIED, AGE_UNVERIFIED",
+      "NOT_ADULT, NOT_ADULT"
+    })
+    void 자격_판정이_같은_이름의_사유로_매핑된다(
+        C2cHostQualification qualification, HostingEligibilityResponse.Reason expected) {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID)).willReturn(qualification);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason()).isEqualTo(expected);
     }
 
     @Test

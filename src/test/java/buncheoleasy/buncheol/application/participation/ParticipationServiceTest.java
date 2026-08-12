@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -12,9 +13,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -36,6 +39,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -565,6 +569,157 @@ class ParticipationServiceTest {
       assertThat(result).isEqualTo(SystemPaymentConfirmResult.NOT_CONFIRMABLE);
       then(deliverySnapshotCreator).should(never()).create(any());
       then(eventPublisher).should(never()).publishEvent(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 신청 정원 충족 테스트")
+  class C2cBuncheolFullTest {
+
+    private Buncheol stubC2cRecruitingBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      return buncheol;
+    }
+
+    @Test
+    void 이_신청으로_전_슬롯이_채워지면_신청_인원을_사람_수로_담아_정원_충족_이벤트를_발행한다() {
+      stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(3, buncheolMember()));
+      // 3슬롯을 2명이 채움(한 명이 2슬롯) — 신청 인원은 distinct 참여자 수여야 한다.
+      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(100L, 100L, 200L));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+      then(eventPublisher)
+          .should()
+          .publishEvent(
+              argThat(
+                  (Object event) ->
+                      event instanceof BuncheolFullEvent full && full.applicantCount() == 2));
+    }
+
+
+    @Test
+    void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
+      stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(3, buncheolMember()));
+      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(100L, 200L));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
+    }
+
+    @Test
+    void 추가_모집_참여는_정원_충족_판정을_하지_않는다() {
+      // 정원 충족 판정이 RECRUITING 한정이라는 전제는 락 순서(분철 행 → 참여 행) 규약의 근거이기도 하다.
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfCollecting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
+      then(participationDomainService)
+          .should(never())
+          .findActiveParticipantIdsByBuncheolIdForUpdate(anyLong());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 보냈어요 마킹 테스트")
+  class MarkPaymentSentTest {
+
+    private Participation stubC2cParticipation() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      return participation;
+    }
+
+    @Test
+    void 마킹_CAS_에_성공하면_개최자_알림용_보냈어요_이벤트를_발행한다() {
+      Participation participation = stubC2cParticipation();
+      given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participation).should().validateOwnedBy(PARTICIPANT_ID);
+      then(eventPublisher).should().publishEvent(any(PaymentSentEvent.class));
+    }
+
+    @Test
+    void 이미_마킹된_재요청은_멱등_처리하고_이벤트를_다시_발행하지_않는다() {
+      Participation participation = stubC2cParticipation();
+      given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(false);
+      given(participation.getStatus()).willReturn(ParticipationStatus.PAYMENT_SENT);
+
+      participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      // raw any() 는 ApplicationEvent 오버로드로 바인딩돼 record 이벤트를 못 잡는다 — 반드시 타입 지정 매처를 쓴다.
+      then(eventPublisher).should(never()).publishEvent(any(PaymentSentEvent.class));
+    }
+
+    @Test
+    void 마킹_불가_상태면_예외가_발생하고_이벤트를_발행하지_않는다() {
+      Participation participation = stubC2cParticipation();
+      given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(false);
+      given(participation.getStatus()).willReturn(ParticipationStatus.CANCELLED);
+
+      assertThatThrownBy(
+              () -> participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+
+      then(eventPublisher).should(never()).publishEvent(any(PaymentSentEvent.class));
     }
   }
 

@@ -45,6 +45,11 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId);
   }
 
+  /** 분철의 활성 참여별 참여자 id 잠금 조회(current read) — C2C 정원 충족 판정용, 포트 javadoc 참고. */
+  public List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(final Long buncheolId) {
+    return participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+  }
+
   /** 분철의 입금확인(CONFIRMED) 참여 전체. 진행확정 시 배송 스냅샷·알림 대상. */
   public List<Participation> findConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.findConfirmedByBuncheolId(buncheolId);

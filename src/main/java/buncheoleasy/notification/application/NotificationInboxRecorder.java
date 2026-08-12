@@ -2,9 +2,11 @@ package buncheoleasy.notification.application;
 
 import buncheoleasy.inbox.domain.InboxMessage;
 import buncheoleasy.inbox.domain.InboxMessageRepository;
+import buncheoleasy.notification.domain.AlimtalkPlaceholders;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>카카오 발송 성공 여부와 무관하게 in-app 알림은 남겨야 하므로 호출 측에서 발송 전에 먼저 기록한다. 비동기 리스너(AFTER_COMMIT)에서 호출되므로 이
  * 저장은 독립 트랜잭션이다.
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class NotificationInboxRecorder {
@@ -24,6 +27,7 @@ public class NotificationInboxRecorder {
   private static final String VARIABLE_BUNCHEOL_NAME = "분철명";
 
   private static final String PATH_MY_PARTICIPATIONS = "/profile/bids";
+  private static final String PATH_BUNCHEOL_MANAGE = "/products/#{분철ID}/manage";
 
   private final InboxMessageRepository inboxMessageRepository;
 
@@ -36,8 +40,18 @@ public class NotificationInboxRecorder {
             template.subject(),
             variables.get(VARIABLE_BUNCHEOL_NAME),
             template.render(variables),
-            resolveLinkPath(template));
+            renderLinkPath(template, variables));
     inboxMessageRepository.save(notification);
+  }
+
+  // 발송 측 가드(AlimtalkSender)와 같은 판정 기준이되, 발송을 막지 않고 경로만 비운다 — in-app 기록은 남겨야 하므로.
+  private String renderLinkPath(final AlimtalkTemplate template, final Map<String, String> variables) {
+    String linkPath = AlimtalkPlaceholders.replace(resolveLinkPath(template), variables);
+    if (linkPath != null && linkPath.contains("#{")) {
+      log.error("수신함 경로에 미치환 변수가 남아 경로 없이 기록 - template={}", template);
+      return null;
+    }
+    return linkPath;
   }
 
   // 알림톡 버튼 목적지(BuncheolUrls)와 동일한 화면의 in-app 상대 경로. 배송조회 버튼은 외부 연결이라 in-app 에 동일
@@ -58,6 +72,7 @@ public class NotificationInboxRecorder {
               C2C_BUNCHEOL_NOT_FINALIZED,
               C2C_PAYMENT_RECHECK ->
           PATH_MY_PARTICIPATIONS;
+      case C2C_BUNCHEOL_FULL, C2C_PAYMENT_SENT -> PATH_BUNCHEOL_MANAGE;
       case PICKUP_REMINDER_CU, PICKUP_REMINDER_GS25 -> null;
     };
   }

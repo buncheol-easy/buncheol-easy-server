@@ -864,6 +864,66 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("findActiveParticipantIdsByBuncheolIdForUpdate — 활성 참여자 id 잠금 조회 (C2C 정원 충족 판정)")
+  class FindActiveParticipantIdsForUpdateTest {
+
+    @Test
+    void 활성_상태만_세고_CANCELLED_는_제외한다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "다른멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long otherParticipantId = TestUserFixture.insertUser(jdbcTemplate, "other_cnt_xx");
+      Long addrA = insertShippingAddress(participantId, "주매장A");
+      Long addrB = insertShippingAddress(otherParticipantId, "타매장B");
+      Long addrC = insertShippingAddress(otherParticipantId, "타매장C");
+
+      insertParticipation(
+          buncheolId,
+          bmId,
+          participantId,
+          addrA,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+      insertParticipation(
+          buncheolId,
+          bmId2,
+          otherParticipantId,
+          addrB,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      insertParticipation(
+          buncheolId,
+          bmId,
+          otherParticipantId,
+          addrC,
+          30_000L,
+          Instant.now(),
+          ParticipationStatus.CANCELLED,
+          ParticipationCancelReason.BUNCHEOL_CANCELLED);
+
+      List<Long> participantIds =
+          participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+
+      assertThat(participantIds).containsExactlyInAnyOrder(participantId, otherParticipantId);
+    }
+
+    @Test
+    void 활성_참여가_없으면_빈_리스트를_반환한다() {
+      Long buncheolId = createBuncheol();
+
+      List<Long> participantIds =
+          participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+
+      assertThat(participantIds).isEmpty();
+    }
+  }
+
+  @Nested
   @DisplayName("findConfirmedByBuncheolId / countConfirmedByBuncheolId — 입금확인 참여만")
   class ConfirmedByBuncheolIdTest {
 

@@ -64,6 +64,12 @@ public interface ParticipationRepository {
   /** 단일 분철의 활성 참여 전체 (호스트 관리 화면 + 분철 취소 시 알림 대상). */
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
+  /**
+   * 단일 분철의 활성 참여별 참여자 id 잠금 조회(current read, 행당 1건 — 다슬롯 참여자는 중복 포함) — RR 스냅샷이 아닌 최신 커밋 기준이
+   * 필요한 C2C 정원 충족 판정용. 리스트 크기 = 채워진 슬롯 수, distinct = 신청 인원.
+   */
+  List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(Long buncheolId);
+
   /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */
   List<Participation> findConfirmedByBuncheolId(Long buncheolId);
 

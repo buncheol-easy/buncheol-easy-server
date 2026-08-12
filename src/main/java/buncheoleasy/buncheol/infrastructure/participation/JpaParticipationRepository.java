@@ -6,12 +6,14 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -61,6 +63,15 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses "
           + "ORDER BY p.createdAt ASC, p.id ASC")
   List<Participation> findByBuncheolIdAndStatusIn(
+      @Param("buncheolId") Long buncheolId,
+      @Param("statuses") Collection<ParticipationStatus> statuses);
+
+  /** 활성 참여의 참여자 id 잠금 조회(current read, 행당 1건) — 정원 충족 판정용. 집계 + FOR UPDATE 는 H2 미지원이라 프로젝션으로 세운다. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "SELECT p.participantId FROM Participation p "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses")
+  List<Long> findParticipantIdsByBuncheolIdAndStatusInForUpdate(
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 

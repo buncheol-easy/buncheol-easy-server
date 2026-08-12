@@ -8,5 +8,8 @@ final class BuncheolUrls {
 
   static final String MY_PARTICIPATIONS = "#{baseUrl}/profile/bids";
 
+  // 개최자 분철 관리 화면. 분철별 경로라 #{분철ID} 도 발송 시 변수로 치환된다(알리고 등록본 버튼 링크에 변수 포함 필요).
+  static final String BUNCHEOL_MANAGE = "#{baseUrl}/products/#{분철ID}/manage";
+
   private BuncheolUrls() {}
 }

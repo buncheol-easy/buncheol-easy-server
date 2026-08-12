@@ -3,10 +3,12 @@ package buncheoleasy.notification.application;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
+import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
+import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -16,10 +18,13 @@ import buncheoleasy.delivery.application.TrackingRegisteredEvent;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.notification.domain.AlimtalkTemplate;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.User;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +49,10 @@ public class AlimtalkNotificationListener {
   private final NotificationAssembler assembler;
   private final AlimtalkSender sender;
   private final NotificationInboxRecorder inboxRecorder;
+
+  // 정원 충족 알림을 보낸 분철 id. 취소→재신청 루프의 무제한 재발송(알림톡 건당 과금)을 막는 베스트 에포트 가드로,
+  // 재시작·배포 전환 시 초기화돼 그 후 재충족되면 1건 더 갈 수 있다 — 정확한 1회 보장이 아니라 스팸 차단이 목적.
+  private final Set<Long> fullNotifiedBuncheolIds = ConcurrentHashMap.newKeySet();
 
   /** (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. */
   @Async
@@ -169,6 +178,64 @@ public class AlimtalkNotificationListener {
         view.memberName(),
         view.paymentAmount(),
         view.participation().getDueAt());
+  }
+
+  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 분철당 1회만 발송한다(인메모리 가드). */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBuncheolFull(final BuncheolFullEvent event) {
+    if (!fullNotifiedBuncheolIds.add(event.buncheolId())) {
+      return;
+    }
+    BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "신청인원", String.valueOf(event.applicantCount()),
+            // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
+            "분철ID", String.valueOf(view.buncheol().getId()));
+    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    String hostPhone = hostPhoneOrNull(view.host(), event.buncheolId());
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(AlimtalkTemplate.C2C_BUNCHEOL_FULL, hostPhone, variables);
+  }
+
+  // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).
+  // 발송만 거르고 수신함 기록은 남긴다.
+  private String hostPhoneOrNull(final User host, final Long buncheolId) {
+    if (host.getPhoneNumber() == null) {
+      log.error("개최자 전화번호 미등록으로 알림톡 발송 건너뜀 - buncheolId={}", buncheolId);
+      return null;
+    }
+    return host.getPhoneNumber().value();
+  }
+
+  /**
+   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인(또는 반려)해 달라고 요청한다. 마킹(슬롯) 건당 1건이라 다슬롯 참여자는
+   * 슬롯 수만큼 발송될 수 있고, 금액도 슬롯별 금액이다 — 이체 1건과의 대조는 입금자명(환불 계좌 예금주, docs/46 §4.7-A1)으로 한다.
+   */
+  @Async
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onPaymentSent(final PaymentSentEvent event) {
+    ParticipationView view = assembler.loadByParticipation(event.participationId());
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "멤버명", view.memberName(),
+            "참여자닉네임", view.participant().getNickname().value(),
+            "입금자명", view.participation().getRefundAccount().holder(),
+            "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
+            "분철ID", String.valueOf(view.buncheol().getId()));
+    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
+    String hostPhone = hostPhoneOrNull(view.host(), view.buncheol().getId());
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
   }
 
   /** (참여자) C2C 개최자가 "보냈어요" 를 반려함 — 연장된 새 기한을 담아 입금 재확인을 안내한다 (docs/46 §4.5). */

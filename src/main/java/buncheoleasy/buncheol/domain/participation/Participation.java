@@ -114,6 +114,17 @@ public class Participation extends TimestampedEntity {
   @Column(name = "payment_rejected_at")
   private Instant paymentRejectedAt;
 
+  /**
+   * 응답에 노출할 반려 시각. 입금 대기 구간을 벗어나면 {@code null} 이다.
+   *
+   * <p>초기화는 재마킹 CAS 하나뿐이라, 반려 뒤 개최자가 그냥 수동 입금확인해 주면 {@code CONFIRMED +
+   * paymentRejectedAt≠null} 조합이 그대로 남는다. 그 상태로 내보내면 {@code paymentRejectedAt != null} 만 보는
+   * 클라이언트가 확정된 참여에 "입금 확인 안 됨" 배지를 붙인다. 상태 조건을 FE 규율에 맡기는 대신 서버가 계약을 보증한다 (PR #123 리뷰).
+   */
+  public Instant getVisiblePaymentRejectedAt() {
+    return status == ParticipationStatus.AWAITING_PAYMENT ? paymentRejectedAt : null;
+  }
+
   // --- 오픈 이벤트 배송비 환급(배송비 돌려받기) ---
   // 저장 값은 NONE/REQUESTED/COMPLETED/REJECTED 뿐이다. 신청 가능(ELIGIBLE)·만료(EXPIRED)는 이벤트
   // 설정(환경변수)+배송 상태로 조회 시 파생한다 (PaybackStatus javadoc 참고).

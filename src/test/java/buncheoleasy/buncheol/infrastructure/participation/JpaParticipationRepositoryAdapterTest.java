@@ -1493,4 +1493,125 @@ class JpaParticipationRepositoryAdapterTest {
           .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
     }
   }
+
+  @Nested
+  @DisplayName("C2C 보냈어요 마킹/해제 CAS — paymentRejectedAt (docs/53 Q-03)")
+  class PaymentSentRejectionTest {
+
+    private Instant rejectedAtOf(final Long participationId) {
+      Timestamp value =
+          jdbcTemplate.queryForObject(
+              "SELECT payment_rejected_at FROM participations WHERE id = ?",
+              Timestamp.class,
+              participationId);
+      return value == null ? null : value.toInstant();
+    }
+
+    private Long insertSentParticipation() {
+      Long buncheolId = createBuncheol();
+      Long slotId = createBuncheolMember(buncheolId);
+      Long id =
+          insertParticipation(
+              buncheolId,
+              slotId,
+              participantId,
+              insertShippingAddress(participantId, "GS25 강남점"),
+              30_000L,
+              Instant.now().plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+      participationRepository.markPaymentSentIfAwaiting(id, Instant.now());
+      em.clear();
+      return id;
+    }
+
+    @Test
+    void 개최자_반려는_반려_시각을_기록한다() {
+      Long id = insertSentParticipation();
+      Instant rejectedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+      Instant newDueAt = Instant.now().plus(24, ChronoUnit.HOURS);
+
+      boolean applied =
+          participationRepository.revertPaymentSentIfSent(id, newDueAt, rejectedAt, Instant.now());
+      em.clear();
+
+      assertThat(applied).isTrue();
+      assertThat(statusOf(id)).isEqualTo(ParticipationStatus.AWAITING_PAYMENT.name());
+      assertThat(rejectedAtOf(id)).isEqualTo(rejectedAt);
+    }
+
+    @Test
+    void 참여자_셀프_철회는_반려_시각을_남기지_않는다() {
+      Long id = insertSentParticipation();
+
+      boolean applied =
+          participationRepository.revertPaymentSentIfSent(
+              id, Instant.now().plus(20, ChronoUnit.MINUTES), null, Instant.now());
+      em.clear();
+
+      assertThat(applied).isTrue();
+      assertThat(statusOf(id)).isEqualTo(ParticipationStatus.AWAITING_PAYMENT.name());
+      assertThat(rejectedAtOf(id)).isNull();
+    }
+
+    // 반려 → 재마킹 → 셀프 철회 후에도 반려 표시가 남으면 참여자에게 잘못된 안내가 나간다.
+    @Test
+    void 재마킹하면_반려_시각이_초기화된다() {
+      Long id = insertSentParticipation();
+      participationRepository.revertPaymentSentIfSent(
+          id, Instant.now().plus(24, ChronoUnit.HOURS), Instant.now(), Instant.now());
+      em.clear();
+      assertThat(rejectedAtOf(id)).isNotNull();
+
+      participationRepository.markPaymentSentIfAwaiting(id, Instant.now());
+      em.clear();
+
+      assertThat(statusOf(id)).isEqualTo(ParticipationStatus.PAYMENT_SENT.name());
+      assertThat(rejectedAtOf(id)).isNull();
+    }
+
+    @Test
+    void 보냈어요_상태가_아니면_해제_CAS_가_적용되지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long slotId = createBuncheolMember(buncheolId);
+      Long id =
+          insertParticipation(
+              buncheolId,
+              slotId,
+              participantId,
+              insertShippingAddress(participantId, "GS25 역삼점"),
+              30_000L,
+              Instant.now().plus(20, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+
+      boolean applied =
+          participationRepository.revertPaymentSentIfSent(
+              id, Instant.now().plus(24, ChronoUnit.HOURS), Instant.now(), Instant.now());
+      em.clear();
+
+      assertThat(applied).isFalse();
+      assertThat(rejectedAtOf(id)).isNull();
+    }
+
+    // 입금 대기를 벗어난 참여는 반려 시각을 응답에 노출하지 않는다 — 초기화 CAS 가 재마킹 하나뿐이라
+    // 반려 후 개최자가 그냥 입금확인해 주면 CONFIRMED + 반려시각 조합이 남는다 (PR #123 리뷰 4번).
+    @Test
+    void 입금_대기를_벗어나면_반려_시각을_노출하지_않는다() {
+      Long id = insertSentParticipation();
+      participationRepository.revertPaymentSentIfSent(
+          id, Instant.now().plus(24, ChronoUnit.HOURS), Instant.now(), Instant.now());
+      em.clear();
+
+      Participation awaiting = participationRepository.findById(id).orElseThrow();
+      assertThat(awaiting.getVisiblePaymentRejectedAt()).isNotNull();
+
+      participationRepository.confirmPaymentIfPayable(id, Instant.now());
+      em.clear();
+
+      Participation confirmed = participationRepository.findById(id).orElseThrow();
+      assertThat(confirmed.getPaymentRejectedAt()).isNotNull();
+      assertThat(confirmed.getVisiblePaymentRejectedAt()).isNull();
+    }
+  }
 }

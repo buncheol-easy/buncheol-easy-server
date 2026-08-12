@@ -128,4 +128,54 @@ class BankAccountTest {
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_LENGTH_INVALID);
     }
   }
+
+  @Nested
+  @DisplayName("validateForRegistration — 신규 입력 전용 강화 검증 (docs/53 Q-02)")
+  class ValidateForRegistrationTest {
+
+    @Test
+    void 계좌번호가_8자리_미만이면_예외가_발생한다() {
+      assertThatThrownBy(() -> BankAccount.validateForRegistration("국민은행", "1234567", "홍길동"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_TOO_SHORT);
+    }
+
+    @Test
+    void 계좌번호가_정확히_8자리면_통과한다() {
+      assertThatCode(() -> BankAccount.validateForRegistration("국민은행", "12345678", "홍길동"))
+          .doesNotThrowAnyException();
+    }
+
+    // 하이픈 표기는 은행마다 달라 자릿수 판정에서 제외한다.
+    @ParameterizedTest
+    @ValueSource(strings = {"110-1234-567", "1-2-3-4-5-6-7-8"})
+    void 하이픈을_제외한_숫자로_자릿수를_판정한다(String account) {
+      assertThatCode(() -> BankAccount.validateForRegistration("국민은행", account, "홍길동"))
+          .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 하이픈을_빼면_8자리_미만인_계좌번호는_거부한다() {
+      assertThatThrownBy(() -> BankAccount.validateForRegistration("국민은행", "110-123-4", "홍길동"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_TOO_SHORT);
+    }
+
+    // 이 VO 는 record 라 JPA 가 조회 시에도 생성자를 태운다. 기존에 저장된 짧은 계좌가
+    // 조회만으로 깨지면 안 되므로, 강화 규칙은 validate() 가 아니라 이 메서드에만 있어야 한다.
+    @Test
+    void 기존_저장값_경로인_of_는_8자리_미만도_그대로_통과한다() {
+      assertThatCode(() -> BankAccount.of("오", "111", "아아아")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 형식_검증은_그대로_적용된다() {
+      assertThatThrownBy(() -> BankAccount.validateForRegistration("국민은행", "abcdefgh", "홍길동"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_FORMAT_INVALID);
+    }
+  }
 }

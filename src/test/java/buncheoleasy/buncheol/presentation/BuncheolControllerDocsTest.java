@@ -3,12 +3,14 @@ package buncheoleasy.buncheol.presentation;
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmResult;
@@ -47,6 +49,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.restdocs.payload.JsonFieldType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
@@ -106,6 +109,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
         new MockMultipartFile(
             "images", "album-cover.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {1, 2, 3});
 
+    given(buncheolService.holdBuncheol(any(), any(), any())).willReturn(10L);
+
     mockMvc
         .perform(
             multipart("/v1/buncheols")
@@ -113,6 +118,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 .file(imagePart)
                 .with(userAuth()))
         .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.buncheolId").value(10))
         .andDo(
             document(
                 "buncheols-hold",
@@ -175,8 +181,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .requestHeaders(userAuthorizationHeader())
                         .responseFields(
                             fieldWithPath("buncheolId")
+                                .type(JsonFieldType.NUMBER)
                                 .description(
                                     "생성된 분철 id. 생성 직후 상세·관리 화면으로 바로 이동할 때 쓴다 (docs/53 Q-15 — 목록 재조회 후 제목 매칭 불필요)"))
+                        .responseSchema(Schema.schema("HoldBuncheolResponse"))
                         .build())));
   }
 

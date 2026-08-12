@@ -70,7 +70,10 @@ public class NotificationInboxRecorder {
               C2C_BUNCHEOL_FINALIZED,
               C2C_PAYMENT_EXPIRED,
               C2C_BUNCHEOL_NOT_FINALIZED,
-              C2C_PAYMENT_RECHECK ->
+              C2C_PAYMENT_RECHECK,
+              C2C_PAYMENT_CONFIRMED,
+              C2C_BUNCHEOL_CONFIRMED,
+              C2C_BUNCHEOL_CANCELLED ->
           PATH_MY_PARTICIPATIONS;
       case C2C_BUNCHEOL_FULL, C2C_PAYMENT_SENT -> PATH_BUNCHEOL_MANAGE;
       case PICKUP_REMINDER_CU, PICKUP_REMINDER_GS25 -> null;

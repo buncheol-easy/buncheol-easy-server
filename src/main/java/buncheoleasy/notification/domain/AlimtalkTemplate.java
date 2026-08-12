@@ -238,6 +238,66 @@ public enum AlimtalkTemplate {
           AlimtalkButton.channelAdd(),
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
+  /**
+   * C2C 입금 확인. 기존 PAYMENT_CONFIRMED 는 "진행 인원이 모두 모이면" 이 다음 단계라 C2C 에 오안내 — 인원은 성사 확정 시점에 이미 채워졌고 남은
+   * 조건은 함께 참여한 사람들의 입금이다.
+   */
+  C2C_PAYMENT_CONFIRMED(
+      "입금 확인 안내",
+      """
+      #{닉네임}님, 참여하신 분철의 입금이 확인되었어요!
+
+      참여가 확정되었으니 이제 기다리기만 하시면 돼요.
+      함께 참여한 분들의 입금이 모두 확인되면 다시 알려드릴게요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}
+      ▶ 입금 금액: #{입금금액}원\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  /**
+   * C2C 진행 확정. 기존 BUNCHEOL_CONFIRMED 는 "진행 인원이 모두 모여" 가 전제라 C2C 에 오안내 — 전이 조건은 인원이 아니라 전원 입금확인이다.
+   */
+  C2C_BUNCHEOL_CONFIRMED(
+      "분철 진행 확정 안내",
+      """
+      #{닉네임}님, 참여하신 분철의 진행이 확정되었어요! 🎉
+
+      참여자들의 입금이 모두 완료되어 이제 상품 준비가 시작돼요.
+      상품이 발송되면 운송장과 함께 다시 알려드릴게요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  /**
+   * C2C 입금 이력자 취소. 기존 BUNCHEOL_CANCELLED 는 플랫폼이 환불한다는 전제라 C2C 에 오안내 — 대금이 개최자 계좌로 직접 가는 직거래라 환불 주체가
+   * 개최자다.
+   */
+  C2C_BUNCHEOL_CANCELLED(
+      "분철 취소 안내",
+      """
+      #{닉네임}님, 참여하신 분철이 아래 사유로 취소되었어요.
+
+      취소 사유: #{취소사유}
+
+      이미 입금하셨다면 등록해주신 환불 계좌로 돌려받으실 수 있어요.
+      환불은 개최자가 진행하며, 아직 입금 전이라면 따로 하실 일은 없어요.
+      환불이 지연되면 분철이지로 문의해 주세요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
   // --- C2C 개최자 대상 ---
 
   /** (개최자) C2C 모집 정원 충족 — 진행 확정을 눌러달라는 독촉. 분철당 1회만 발송한다(리스너 인메모리 가드). */
@@ -257,8 +317,8 @@ public enum AlimtalkTemplate {
           AlimtalkButton.webLink("분철 관리 하러가기", BuncheolUrls.BUNCHEOL_MANAGE))),
 
   /**
-   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인(또는 반려)해 달라는 요청. 마킹(슬롯) 건당 1건 발송하며, 다슬롯
-   * 참여자의 이체 1건과 대조할 수 있도록 입금자명(환불 계좌 예금주와 동일 — docs/46 §4.7-A1)을 함께 안내한다.
+   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인(또는 반려)해 달라는 요청. 마킹(슬롯) 건당 1건 발송하며, 다슬롯 참여자의 이체 1건과
+   * 대조할 수 있도록 입금자명(환불 계좌 예금주와 동일 — docs/46 §4.7-A1)을 함께 안내한다.
    */
   C2C_PAYMENT_SENT(
       "입금 확인 요청 안내",

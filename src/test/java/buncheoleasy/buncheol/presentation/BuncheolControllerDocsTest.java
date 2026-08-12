@@ -849,6 +849,20 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             null,
             new RefundAccountResponse("신한은행", "87654321", "레이팬"),
             null, null);
+    BuncheolManagementParticipantResponse cancelled =
+        new BuncheolManagementParticipantResponse(
+            603L,
+            "가을팬",
+            103L,
+            "가을",
+            53_000L,
+            3_000L,
+            ParticipationStatus.CANCELLED,
+            Instant.parse("2026-05-26T00:30:00Z"),
+            Instant.parse("2026-05-26T00:10:00Z"),
+            new RefundAccountResponse("카카오뱅크", "3333012345678", "가을팬"),
+            null,
+            null);
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
@@ -860,7 +874,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             4,
             4,
             1,
-            List.of(confirmed, awaiting), FlowType.LEGACY, null);
+            List.of(confirmed, awaiting),
+            List.of(cancelled),
+            FlowType.LEGACY,
+            null);
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -887,6 +904,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `participants[].refundAccount` = 참여자가 입력한 환불 계좌 (분철 취소 시 운영자가 환불)
                             - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
                             - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
+                            - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
+                              개최자 계좌로 직접 입금되는 직거래라 개최자가 환불 주체). 환불이 실제로 필요한지는 개최자가 판단한다.
+                              필드 구조는 `participants[]` 와 같고 `status` 는 항상 `CANCELLED`, `delivery` 는 취소 시 정리되어 항상 null.
+                              슬롯을 점유하지 않으므로 참여 수·정원 집계에 넣지 않는다
 
                             **응답 예시**
                             ```json
@@ -920,6 +941,19 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "trackingNumber": "1234567890",
                                     "status": "SHIPPING"
                                   }
+                                }
+                              ],
+                              "cancelledParticipants": [
+                                {
+                                  "participationId": 603,
+                                  "participantNickname": "가을팬",
+                                  "buncheolMemberId": 103,
+                                  "memberName": "가을",
+                                  "amount": 53000,
+                                  "status": "CANCELLED",
+                                  "confirmedAt": "2026-05-26T00:10:00Z",
+                                  "refundAccount": {"bank": "카카오뱅크", "account": "3333012345678", "holder": "가을팬"},
+                                  "delivery": null
                                 }
                               ]
                             }
@@ -1007,6 +1041,44 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("participants[].paymentSentAt")
                                 .description(
                                     "C2C '보냈어요' 마킹 시각 — 개최자 통장 대조 우선순위 근거. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants")
+                                .description("취소된 참여 배열 (환불 계좌 확인용). 참여 수·정원 집계에 포함되지 않는다"),
+                            fieldWithPath("cancelledParticipants[].participationId")
+                                .description("참여 ID"),
+                            fieldWithPath("cancelledParticipants[].participantNickname")
+                                .description("참여자 닉네임. 조회 불가 시 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].buncheolMemberId")
+                                .description("분철 멤버 슬롯 ID. 취소분이라 이 슬롯은 다른 참여가 점유했을 수 있다"),
+                            fieldWithPath("cancelledParticipants[].memberName")
+                                .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].amount")
+                                .description("참여 금액 (멤버 가격 + 배송비, 원)"),
+                            fieldWithPath("cancelledParticipants[].shippingFee")
+                                .description("amount 에 포함된 배송비(원)"),
+                            fieldWithPath("cancelledParticipants[].status")
+                                .description("참여 상태. 이 배열은 항상 CANCELLED"),
+                            fieldWithPath("cancelledParticipants[].dueAt")
+                                .description("취소 전 입금 기한 (UTC ISO-8601)")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].confirmedAt")
+                                .description("입금확인 시각. 입금확인 전에 취소됐으면 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].refundAccount")
+                                .description("참여자가 입력한 환불 계좌 — 이 목록의 존재 이유"),
+                            fieldWithPath("cancelledParticipants[].refundAccount.bank")
+                                .description("환불 은행명"),
+                            fieldWithPath("cancelledParticipants[].refundAccount.account")
+                                .description("환불 계좌번호"),
+                            fieldWithPath("cancelledParticipants[].refundAccount.holder")
+                                .description("환불 예금주"),
+                            fieldWithPath("cancelledParticipants[].delivery")
+                                .description("취소 시 배송 스냅샷이 정리되므로 항상 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].paymentSentAt")
+                                .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),

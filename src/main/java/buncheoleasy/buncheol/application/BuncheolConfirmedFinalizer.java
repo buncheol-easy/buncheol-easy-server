@@ -27,10 +27,10 @@ public class BuncheolConfirmedFinalizer {
    * CANCELLED(PAYMENT_TIMEOUT) 전이·알림을 단독으로 처리해 알림 중복을 막는다.
    */
   public void finalizeConfirmed(final Long buncheolId) {
-    List<Participation> confirmed =
-        participationDomainService.findConfirmedByBuncheolId(buncheolId);
-    confirmed.forEach(
-        participation ->
-            eventPublisher.publishEvent(new BuncheolConfirmedEvent(participation.getId())));
+    List<Long> confirmedIds =
+        participationDomainService.findConfirmedByBuncheolId(buncheolId).stream()
+            .map(Participation::getId)
+            .toList();
+    eventPublisher.publishEvent(new BuncheolConfirmedEvent(buncheolId, confirmedIds));
   }
 }

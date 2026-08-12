@@ -70,6 +70,12 @@ public interface ParticipationRepository {
    */
   List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(Long buncheolId);
 
+  /**
+   * 단일 분철의 취소된 참여 전체 — 개최자 관리 화면에서 환불 계좌를 보여주기 위한 목록. 취소되면 활성 참여 조회에서 빠져 환불 계좌에 닿을 길이 없어지는데,
+   * C2C 는 대금이 개최자 계좌로 직접 가는 직거래라 개최자가 환불 주체다. 환불이 실제로 필요한지는 개최자가 판단한다.
+   */
+  List<Participation> findCancelledByBuncheolId(Long buncheolId);
+
   /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */
   List<Participation> findConfirmedByBuncheolId(Long buncheolId);
 

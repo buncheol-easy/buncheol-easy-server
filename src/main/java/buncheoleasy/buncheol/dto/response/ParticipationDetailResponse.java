@@ -24,4 +24,7 @@ public record ParticipationDetailResponse(
     ShippingFeePaybackResponse payback,
     FlowType flowType,
     Instant paymentSentAt,
+    // 개최자 반려 시각. 값이 있고 status=AWAITING_PAYMENT 면 "입금 확인 안 됨 · 재확인 필요" 상태다 (docs/53 Q-03).
+    // 참여자가 다시 "보냈어요" 를 누르면 null 로 초기화된다.
+    Instant paymentRejectedAt,
     String openChatUrl) {}

@@ -86,6 +86,7 @@ public class MyHostedBuncheolQueryService {
         slotCount,
         activeCount,
         buncheol.getCreatedAt(),
-        thumbnailByBuncheolId.get(buncheol.getId()));
+        thumbnailByBuncheolId.get(buncheol.getId()),
+        buncheol.getFlowType());
   }
 }

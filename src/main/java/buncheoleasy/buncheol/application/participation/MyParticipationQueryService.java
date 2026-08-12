@@ -185,6 +185,7 @@ public class MyParticipationQueryService {
             shippingFeePaybackPolicy.submitDeadline(participation, buncheol.getFlowType(), delivery)),
         buncheol.getFlowType(),
         participation.getPaymentSentAt(),
+        participation.getVisiblePaymentRejectedAt(),
         buncheol.getOpenChatUrl());
   }
 }

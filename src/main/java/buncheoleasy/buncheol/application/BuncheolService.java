@@ -45,8 +45,13 @@ public class BuncheolService {
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
+  /**
+   * 분철을 개최한다.
+   *
+   * @return 생성된 분철 id ({@link buncheoleasy.buncheol.dto.response.HoldBuncheolResponse} 참고)
+   */
   @Transactional
-  public void holdBuncheol(
+  public Long holdBuncheol(
       final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
     FlowType flowType = resolveHostFlowType(hostId, request.flowType());
 
@@ -73,6 +78,8 @@ public class BuncheolService {
       eventPublisher.publishEvent(
           new BuncheolImageUploadEvent(buncheol.getId(), images, request.thumbnailIndex()));
     }
+
+    return buncheol.getId();
   }
 
   /**

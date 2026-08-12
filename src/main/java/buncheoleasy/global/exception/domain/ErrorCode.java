@@ -67,6 +67,8 @@ public enum ErrorCode {
   USER_AGE_NOT_VERIFIED(
       "USR-032", "연령대 확인이 필요합니다. 카카오 로그인에서 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
   USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
+  USER_BANK_ACCOUNT_TOO_SHORT(
+      "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),

@@ -125,6 +125,8 @@ public class User extends TimestampedEntity {
   }
 
   public void updateBankAccount(final String bank, final String account, final String holder) {
+    // 신규 입력 경로라 강화 규칙(계좌번호 최소 자릿수)까지 적용한다 — 기존 저장 행은 건드리지 않는다 (docs/53 Q-02).
+    BankAccount.validateForRegistration(bank, account, holder);
     this.bankAccount = BankAccount.of(bank, account, holder);
   }
 

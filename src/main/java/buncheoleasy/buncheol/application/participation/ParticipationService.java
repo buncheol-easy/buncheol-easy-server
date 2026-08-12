@@ -389,7 +389,8 @@ public class ParticipationService {
         participation.getDueAt() != null && participation.getDueAt().isAfter(extended)
             ? participation.getDueAt()
             : extended;
-    if (!participationDomainService.revertPaymentSent(participationId, newDueAt, now)) {
+    // 셀프 철회와 달리 반려 시각을 남긴다 — 참여자 화면의 "입금 확인 안 됨 · 재확인 필요" 판정 근거 (docs/53 Q-03).
+    if (!participationDomainService.rejectPaymentSent(participationId, newDueAt, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
     }
 

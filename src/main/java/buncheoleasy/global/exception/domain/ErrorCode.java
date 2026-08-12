@@ -199,6 +199,9 @@ public enum ErrorCode {
   ADMIN_NOT_FOUND("ADM-001", "관리자 권한이 없습니다.", HttpStatus.FORBIDDEN),
   // 아이디 없음/비밀번호 불일치를 구분하지 않는다 — 계정 존재 여부 열거(enumeration)를 막기 위함.
   ADMIN_LOGIN_FAILED("ADM-002", "아이디 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
+  // 무차별 대입 방어. 남은 시도 수·잠금 해제 시각을 알리지 않는다 — 공격자에게 재개 시점을 알려주는 셈이 된다.
+  ADMIN_LOGIN_RATE_LIMITED(
+      "ADM-003", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
 
   /** FDB - 의견 보내기 관련 에러 */
   // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.

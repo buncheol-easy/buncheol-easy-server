@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -21,6 +22,7 @@ import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
   @Mock private GroupRepository groupRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
+  @Mock private ParticipationRepository participationRepository;
   @Mock private UserFavoriteGroupRepository userFavoriteGroupRepository;
 
   @Nested
@@ -79,9 +82,14 @@ class MyBookmarkedBuncheolQueryServiceTest {
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
           .willReturn(List.of(image(10L, "https://cdn/img-a.jpg")));
 
-      // resolver 가 분철별 멤버 이름 리스트(슬롯 등록순 정렬 완료) 를 한 번에 반환한다고 가정.
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 20L)))
-          .willReturn(Map.of(10L, List.of("하니", "민지"), 20L, List.of("카리나")));
+      // 여러 분철의 활성 점유 슬롯이 평면 리스트로 온다 — 801(분철10 하니)·803(분철20 카리나) 점유.
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 20L)))
+          .willReturn(List.of(801L, 803L));
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of(801L, 803L)))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("하니", "민지"), 20L, List.of("카리나")),
+                  Map.of(10L, List.of("민지"))));
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -95,12 +103,16 @@ class MyBookmarkedBuncheolQueryServiceTest {
       assertThat(result.get(0).thumbnailUrl()).isEqualTo("https://cdn/img-a.jpg");
       // 801(하니) 가 802(민지) 보다 먼저
       assertThat(result.get(0).memberNames()).containsExactly("하니", "민지");
+      // 하니 슬롯은 활성 참여가 점유해 잔여 멤버에서 빠진다
+      assertThat(result.get(0).availableMemberNames()).containsExactly("민지");
 
       assertThat(result.get(1).bookmarkId()).isEqualTo(501L);
       assertThat(result.get(1).buncheolId()).isEqualTo(20L);
       assertThat(result.get(1).status()).isEqualTo(BuncheolStatus.CONFIRMED);
       assertThat(result.get(1).thumbnailUrl()).isNull();
       assertThat(result.get(1).memberNames()).containsExactly("카리나");
+      // 전 슬롯이 활성 참여로 점유되면 빈 배열
+      assertThat(result.get(1).availableMemberNames()).isEmpty();
     }
 
     @Test
@@ -138,8 +150,10 @@ class MyBookmarkedBuncheolQueryServiceTest {
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
           .willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(30L, 20L, 10L, 50L, 40L)))
-          .willReturn(Map.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(30L, 20L, 10L, 50L, 40L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(30L, 20L, 10L, 50L, 40L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -173,7 +187,9 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -202,7 +218,9 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L))).willReturn(Map.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -230,8 +248,10 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L))).willReturn(List.of());
-      given(buncheolMemberNameResolver.findNamesByBuncheolIds(List.of(10L, 20L)))
-          .willReturn(Map.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
 
       List<MyBookmarkedBuncheolResponse> result =
           myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
@@ -241,6 +261,36 @@ class MyBookmarkedBuncheolQueryServiceTest {
       assertThat(result)
           .extracting(MyBookmarkedBuncheolResponse::buncheolId)
           .containsExactly(10L, 20L);
+    }
+
+    @Test
+    void 취소_분철은_활성_참여가_전부_해제돼_available_이_전체_멤버와_같다() {
+      // 미성사 취소 시 활성 참여가 모두 CANCELLED 로 전이돼 점유 슬롯이 비는 현 동작을 고정한다.
+      // available 은 판매 가능 여부가 아니라 "활성 참여 부재" 라서, 카드 해석은 status 가드가 전제다.
+      BuncheolBookmark bm = bookmark(500L, USER_ID, 10L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bm));
+
+      Buncheol cancelled =
+          buncheol(10L, 100L, "인원미달 취소", BuncheolStatus.CANCELLED, Instant.parse("2026-06-01T12:00:00Z"));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(cancelled));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of()))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("하니", "민지")), Map.of(10L, List.of("하니", "민지"))));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, false);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).status()).isEqualTo(BuncheolStatus.CANCELLED);
+      assertThat(result.get(0).memberNames()).containsExactly("하니", "민지");
+      assertThat(result.get(0).availableMemberNames()).containsExactly("하니", "민지");
     }
 
     @Test

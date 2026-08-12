@@ -16,6 +16,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
@@ -84,6 +85,7 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items()).hasSize(2);
       assertThat(result.items().get(0).id()).isEqualTo(10L);
       assertThat(result.items().get(0).status()).isEqualTo(BuncheolStatus.RECRUITING);
+      assertThat(result.items().get(0).flowType()).isEqualTo(FlowType.LEGACY);
       assertThat(result.items().get(0).bookmarked()).isTrue();
       assertThat(result.items().get(0).groupName()).isEqualTo("뉴진스");
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
@@ -434,6 +436,7 @@ class BuncheolListQueryServiceTest {
     setField(buncheol, "deadline", Instant.parse("2026-06-01T12:00:00Z"));
     setField(buncheol, "minHeadcount", 3);
     setField(buncheol, "status", BuncheolStatus.RECRUITING);
+    setField(buncheol, "flowType", FlowType.LEGACY);
     // CreatedAtEntity#createdAt 은 부모 필드. setField 가 super 까지 탐색.
     setField(buncheol, "createdAt", createdAt);
     return buncheol;

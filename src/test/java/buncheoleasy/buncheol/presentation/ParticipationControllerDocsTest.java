@@ -106,6 +106,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
                             | 400 | `BCH-062` (`PARTICIPATION_REQUIRED_FIELD_MISSING`) | 참여 필수 항목 누락 (도메인 방어 검증 — 정상 HTTP 요청에서는 `C-001` 이 먼저 잡는다) |
                             | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 선택한 수령지의 배송방법을 이 분철이 지원하지 않음 |
+                            | 400 | `USR-026` (`USER_BANK_ACCOUNT_FORMAT_INVALID`) | `refundAccount.account` 가 숫자·하이픈 형식이 아님 |
+                            | 400 | `USR-034` (`USER_BANK_ACCOUNT_TOO_SHORT`) | `refundAccount.account` 가 하이픈 제외 8자리 미만 |
                             | 403 | `BCH-066` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
@@ -122,7 +124,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
                             fieldWithPath("refundAccount").description("분철 취소 시 환불받을 본인 계좌"),
                             fieldWithPath("refundAccount.bank").description("은행명"),
-                            fieldWithPath("refundAccount.account").description("계좌번호 (숫자·하이픈)"),
+                            fieldWithPath("refundAccount.account")
+                                .description(
+                                    "계좌번호 (숫자·하이픈). **하이픈을 제외한 숫자 8자리 이상** — 미만이면 `400 USR-034`"),
                             fieldWithPath("refundAccount.holder").description("예금주"))
                         .responseSchema(Schema.schema("ParticipateResponse"))
                         .responseFields(
@@ -175,7 +179,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 null,
-                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -204,7 +208,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -327,6 +331,11 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
+                            fieldWithPath("[].paymentRejectedAt")
+                                .description(
+                                    "C2C 개최자 반려('입금 못 찾음') 시각. status=AWAITING_PAYMENT 와 함께 오면 재확인이 필요한 상태다. "
+                                        + "재마킹 시 null 로 초기화되며, 참여자 셀프 철회는 null")
+                                .optional(),
                             fieldWithPath("[].openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
                                 .optional())
@@ -356,7 +365,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null);
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -438,6 +447,11 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("paymentRejectedAt")
+                                .description(
+                                    "C2C 개최자 반려('입금 못 찾음') 시각. status=AWAITING_PAYMENT 와 함께 오면 재확인이 필요한 상태다. "
+                                        + "재마킹 시 null 로 초기화되며, 참여자 셀프 철회는 null")
                                 .optional(),
                             fieldWithPath("openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
@@ -610,8 +624,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
-                            | 409 | `BCH-086` (`PARTICIPATION_CANCEL_NOT_ALLOWED`) | 취소 불가 구간 ('보냈어요'·입금확인 후 — 문의 경유) |
+                            | 409 | `BCH-086` (`PARTICIPATION_CANCEL_NOT_ALLOWED`) | 취소 불가 구간 ('보냈어요'·입금확인 후 — 문의 경유). **상태 검사를 먼저 하므로 LEGACY 라도 확정된 참여는 이 코드다** |
+                            | 409 | `BCH-091` (`PARTICIPATION_CANCEL_NOT_SUPPORTED`) | LEGACY 분철의 참여 (취소 경로 없음 — 기한 만료 자동 취소 안내) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))

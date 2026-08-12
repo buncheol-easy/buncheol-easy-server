@@ -32,6 +32,7 @@ CREATE TABLE users
     profile_completed   BOOLEAN      NOT NULL DEFAULT FALSE,
     can_host            BOOLEAN      NOT NULL DEFAULT FALSE,
     marketing_agreed_at TIMESTAMP    NULL,
+    age_range           VARCHAR(10)  NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP    NULL,
@@ -215,6 +216,7 @@ CREATE TABLE participations
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- C2C 컬럼 (schema.sql participations 와 동일 구성)
     payment_sent_at     TIMESTAMP    NULL,
+    payment_rejected_at TIMESTAMP    NULL,
     flow_type           VARCHAR(10)  NOT NULL DEFAULT 'LEGACY',
     -- LEGACY 전용 1인 1참여 유니크용 (C2C 다슬롯 허용 — schema.sql 과 동일)
     legacy_active_participant_id BIGINT AS (CASE WHEN flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN participant_id END),

@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.presentation;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,6 +35,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
@@ -648,7 +650,8 @@ class BuncheolControllerTest {
               5,
               7L,
               createdAt,
-              "https://cdn.example.com/buncheol-10-thumb.jpg");
+              "https://cdn.example.com/buncheol-10-thumb.jpg",
+              FlowType.LEGACY);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -674,6 +677,36 @@ class BuncheolControllerTest {
           .perform(get("/v1/buncheols/me").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(content().string("[]"));
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 자격 사전 조회 API 테스트 (docs/53 Q-07)")
+  class GetHostingEligibilityTest {
+
+    @Test
+    void 적격이면_eligible_true_와_null_사유를_반환한다() throws Exception {
+      given(buncheolService.getHostingEligibility(HOST_ID))
+          .willReturn(HostingEligibilityResponse.allowed());
+
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.eligible").value(true))
+          .andExpect(jsonPath("$.reason").value(nullValue()));
+    }
+
+    @Test
+    void 부적격이면_사유를_함께_반환한다() throws Exception {
+      given(buncheolService.getHostingEligibility(HOST_ID))
+          .willReturn(
+              HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.eligible").value(false))
+          .andExpect(jsonPath("$.reason").value("NOT_ADULT"));
     }
   }
 
@@ -704,6 +737,7 @@ class BuncheolControllerTest {
               10L,
               "뉴진스 1집 분철",
               BuncheolStatus.RECRUITING,
+              FlowType.LEGACY,
               deadline,
               3,
               false,
@@ -875,6 +909,7 @@ class BuncheolControllerTest {
               101L,
               "안유진",
               93_000L,
+              3_000L,
               ParticipationStatus.CONFIRMED,
               Instant.parse("2026-05-28T00:00:00Z"),
               Instant.parse("2026-05-27T10:00:00Z"),
@@ -894,6 +929,7 @@ class BuncheolControllerTest {
               102L,
               "레이",
               53_000L,
+              3_000L,
               ParticipationStatus.AWAITING_PAYMENT,
               Instant.parse("2026-05-26T00:30:00Z"),
               null,

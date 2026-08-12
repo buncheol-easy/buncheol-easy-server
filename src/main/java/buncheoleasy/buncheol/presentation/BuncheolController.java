@@ -14,6 +14,8 @@ import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HoldBuncheolResponse;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -80,6 +82,15 @@ public class BuncheolController {
     return ResponseEntity.ok(myHostedBuncheolQueryService.getMyHostedBuncheols(hostId));
   }
 
+  /**
+   * 개최 자격 사전 조회 API (docs/53 Q-07). 개최 폼 진입 시 호출해 부적격 사유를 미리 안내하기 위한 것으로, 최종 차단은 개최 요청 시점의 게이트가 한다.
+   */
+  @GetMapping("/hosting-eligibility")
+  public ResponseEntity<HostingEligibilityResponse> getHostingEligibility(
+      @AuthenticationPrincipal final Long hostId) {
+    return ResponseEntity.ok(buncheolService.getHostingEligibility(hostId));
+  }
+
   /** 분철 단건 상세 조회 (비로그인 허용). 멤버별 가격·참여 가능 여부, 최소 진행 인원·현재 확정 인원, 로그인 유저의 내 참여 현황을 포함한다. */
   @GetMapping("/{id}")
   public ResponseEntity<BuncheolDetailResponse> getBuncheolDetail(
@@ -98,12 +109,12 @@ public class BuncheolController {
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<Void> holdBuncheol(
+  public ResponseEntity<HoldBuncheolResponse> holdBuncheol(
       @AuthenticationPrincipal final Long hostId,
       @Valid @RequestPart("request") final HoldBuncheolRequest request,
       @RequestPart(value = "images") final List<MultipartFile> images) {
-    buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
-    return ResponseEntity.status(HttpStatus.CREATED).build();
+    Long buncheolId = buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
+    return ResponseEntity.status(HttpStatus.CREATED).body(HoldBuncheolResponse.of(buncheolId));
   }
 
   /**

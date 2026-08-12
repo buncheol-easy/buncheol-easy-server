@@ -413,7 +413,8 @@ public class ParticipationService {
         participation.getDueAt() != null && participation.getDueAt().isAfter(extended)
             ? participation.getDueAt()
             : extended;
-    if (!participationDomainService.revertPaymentSent(participationId, newDueAt, now)) {
+    // 셀프 철회와 달리 반려 시각을 남긴다 — 참여자 화면의 "입금 확인 안 됨 · 재확인 필요" 판정 근거 (docs/53 Q-03).
+    if (!participationDomainService.rejectPaymentSent(participationId, newDueAt, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
     }
 
@@ -429,18 +430,38 @@ public class ParticipationService {
     final Instant now = Instant.now(clock);
     Participation participation = participationDomainService.getParticipation(participationId);
     participation.validateOwnedBy(participantId);
-    requireC2c(participation);
+    // 상태 검사를 플로우 가드보다 먼저 한다 — LEGACY 라도 이미 입금확인된 참여는 "기한이 지나면 자동
+    // 취소돼요"가 사실이 아니다(만료 CAS 는 AWAITING_PAYMENT 에만 걸린다). 문의 경유로 보낸다.
+    if (!isCancellableStatus(participation.getStatus())) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+    }
+    requireC2c(participation, ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
 
     if (!participationDomainService.cancelByUser(participationId, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
     }
   }
 
+  // 자발 취소가 열려 있는 구간 (docs/46 §5 구간 ①·②). CAS 가 최종 판정이지만, 안내 문구를 고르려면
+  // 그 전에 상태를 알아야 한다.
+  private static boolean isCancellableStatus(final ParticipationStatus status) {
+    return status == ParticipationStatus.APPLIED
+        || status == ParticipationStatus.AWAITING_PAYMENT;
+  }
+
   /** C2C 전용 액션 가드 — LEGACY 참여에는 새 플로우 API 를 제공하지 않는다 (docs/46 §4.4). */
   private void requireC2c(final Participation participation) {
+    requireC2c(participation, ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+  }
+
+  /**
+   * 액션별 안내 문구가 필요한 경우의 C2C 가드. 기본 코드({@link ErrorCode#BUNCHEOL_FLOW_NOT_SUPPORTED})는 6곳이
+   * 공유하는 범용 문구라, 사용자가 누른 버튼이 특정되는 경로에서만 전용 코드를 넘긴다 (docs/53 Q-12 와 같은 유형의 혼선 방지).
+   */
+  private void requireC2c(final Participation participation, final ErrorCode errorCode) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+      throw new BusinessException(errorCode);
     }
   }
 

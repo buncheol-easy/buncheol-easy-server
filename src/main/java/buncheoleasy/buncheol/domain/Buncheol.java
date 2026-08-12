@@ -28,7 +28,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Buncheol extends TimestampedEntity implements Cursorable {
 
-  private static final int TITLE_MAX_LENGTH = 200;
+  // 제목 64자 — 목록·상세 어느 화면도 그 이상을 노출하지 않는다 (docs/56 H-02). DB 컬럼 길이(200)는 그대로 두고 검증만 조인다.
+  private static final int TITLE_MAX_LENGTH = 64;
   private static final int DESCRIPTION_MAX_LENGTH = 700;
   private static final int PURCHASE_SITE_MAX_LENGTH = 200;
   private static final int OPEN_CHAT_URL_MAX_LENGTH = 200;
@@ -127,10 +128,39 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     this.description = description;
   }
 
+  // 수정 계약 (docs/51 §3-1-2): null = 유지(필드를 안 보내는 구 클라이언트 호환), 빈 문자열·공백 = 제거, 값 = 검증 후 교체.
+  public void updateOpenChatUrl(final String value) {
+    if (value == null) {
+      return;
+    }
+    if (value.isBlank()) {
+      this.openChatUrl = null;
+      return;
+    }
+    validateOpenChatUrl(value);
+    this.openChatUrl = value;
+  }
+
   public void validateOwner(final Long userId) {
     if (!isHost(userId)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION);
     }
+  }
+
+  /**
+   * 지금 이 분철이 빈 슬롯에 신규 참여를 받는가. 참여 가드와 상세 조회의 공석 표시(docs/53 Q-14)가 같은 술어를 보게 하려고 도메인에 둔다 — 두 곳이
+   * 갈리면 "화면엔 신청 가능한데 신청은 409" 가 다시 생긴다.
+   *
+   * <p>LEGACY 는 모집중·마감 전에만 받고({@link #validateRecruiting} 과 같은 조건), C2C 는 성사 확정 후 입금 수집중 구간의 추가
+   * 모집까지 받는다 (docs/46 §4.7-E1).
+   */
+  public boolean acceptsNewParticipation(final Instant now) {
+    return switch (status) {
+      case RECRUITING -> deadline.isAfter(now);
+      case PAYMENT_COLLECTING -> isC2c();
+      // 신청이 409(BCH-060) 로 막히는 상태들. HOST_CANCELLED 는 상세 조회 자체가 404 다.
+      case CONFIRMED, CANCELLED, HOST_CANCELLED -> false;
+    };
   }
 
   public void validateRecruiting(final Instant now) {

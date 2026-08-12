@@ -52,13 +52,64 @@ class UserDomainServiceTest {
       // when
       User result =
           userDomainService.getOrCreateBySocialLogin(
-              socialInfo, "test@example.com", "김카카오", "01099998888");
+              socialInfo, "test@example.com", "김카카오", "01099998888", null, false);
 
       // then
       assertThat(result).isEqualTo(existingUser);
       assertThat(result.getName()).isEqualTo("김기존");
       assertThat(result.getPhoneNumber()).isNull();
       then(userRepository).should(never()).save(any());
+    }
+
+    @Test
+    void 기존_유저도_연령대는_재로그인_때_최신값으로_갱신된다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      existingUser.updateAgeRange("15~19");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      User result =
+          userDomainService.getOrCreateBySocialLogin(
+              socialInfo, "test@example.com", null, null, "20~29", false);
+
+      // then
+      assertThat(result.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 연령대가_null이면_기존_유저의_저장된_연령대를_지우지_않는다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      existingUser.updateAgeRange("20~29");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      User result =
+          userDomainService.getOrCreateBySocialLogin(
+              socialInfo, "test@example.com", null, null, null, false);
+
+      // then
+      assertThat(result.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 연령대_동의_철회가_확인되면_저장된_연령대를_파기한다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      existingUser.updateAgeRange("20~29");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      User result =
+          userDomainService.getOrCreateBySocialLogin(
+              socialInfo, "test@example.com", null, null, null, true);
+
+      // then
+      assertThat(result.getAgeRange()).isNull();
     }
 
     @Test
@@ -71,7 +122,8 @@ class UserDomainServiceTest {
       given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
       // when
-      User result = userDomainService.getOrCreateBySocialLogin(socialInfo, email, null, null);
+      User result =
+          userDomainService.getOrCreateBySocialLogin(socialInfo, email, null, null, null, false);
 
       // then
       assertThat(result.getEmail().value()).isEqualTo(email);
@@ -82,7 +134,7 @@ class UserDomainServiceTest {
     }
 
     @Test
-    void 동의창에서_이름_전화번호를_받으면_완성_회원으로_생성된다() {
+    void 동의창에서_이름_전화번호_연령대를_받으면_완성_회원으로_생성된다() {
       // given
       SocialInfo socialInfo = SocialInfo.of("KAKAO", "sync_user");
       given(nicknameGenerator.generate()).willReturn("포근한수달7");
@@ -92,12 +144,85 @@ class UserDomainServiceTest {
       // when
       User result =
           userDomainService.getOrCreateBySocialLogin(
-              socialInfo, "sync@example.com", "김실명", "01012345678");
+              socialInfo, "sync@example.com", "김실명", "01012345678", "20~29", false);
 
       // then
       assertThat(result.getName()).isEqualTo("김실명");
       assertThat(result.getPhoneNumber().value()).isEqualTo("01012345678");
+      assertThat(result.getAgeRange()).isEqualTo("20~29");
       assertThat(result.isProfileCompleted()).isTrue();
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 개최 자격 게이트 테스트")
+  class RequireC2cHostQualificationTest {
+
+    private User qualifiedUser() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      user.updateAgeRange("20~29");
+      return user;
+    }
+
+    @Test
+    void 전화번호와_성인_연령대가_있으면_통과한다() {
+      User user = qualifiedUser();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      userDomainService.requireC2cHostQualification(1L);
+    }
+
+    @Test
+    void 가입_미완료면_프로필_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+
+    @Test
+    void 연령대가_없으면_재동의_유도용_USER_AGE_NOT_VERIFIED_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_AGE_NOT_VERIFIED);
+    }
+
+    @Test
+    void 연령대_구간이_성인_미만이면_USER_NOT_ADULT_예외가_발생한다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updatePhoneNumber("01012345678");
+      user.updateAgeRange("15~19");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NOT_ADULT);
+    }
+
+    @Test
+    void 사전_조회는_같은_판정을_예외_대신_값으로_돌려준다() {
+      // given — 개최 폼 진입 차단(docs/53 Q-07)이 제출 게이트와 같은 판정을 쓰는지 확인한다.
+      User minor = User.create("KAKAO", "123456", "test@example.com");
+      minor.updatePhoneNumber("01012345678");
+      minor.updateAgeRange("15~19");
+      given(userRepository.findById(1L)).willReturn(Optional.of(minor));
+      given(userRepository.findById(2L)).willReturn(Optional.of(qualifiedUser()));
+
+      // when & then
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.NOT_ADULT);
+      assertThat(userDomainService.evaluateC2cHostQualification(2L))
+          .isEqualTo(C2cHostQualification.QUALIFIED);
     }
   }
 
@@ -440,7 +565,7 @@ class UserDomainServiceTest {
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       // when
-      userDomainService.updateBankAccount(1L, "국민은행", "123456", "홍길동");
+      userDomainService.updateBankAccount(1L, "국민은행", "12345678", "홍길동");
 
       // then
       assertThat(user.getBankAccount()).isNotNull();
@@ -451,7 +576,7 @@ class UserDomainServiceTest {
     void 존재하지_않는_유저의_계좌를_갱신하면_예외가_발생한다() {
       given(userRepository.findById(999L)).willReturn(Optional.empty());
 
-      assertThatThrownBy(() -> userDomainService.updateBankAccount(999L, "국민은행", "111", "홍길동"))
+      assertThatThrownBy(() -> userDomainService.updateBankAccount(999L, "국민은행", "11112222", "홍길동"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_FOUND);
@@ -484,7 +609,7 @@ class UserDomainServiceTest {
     @Test
     void 계좌가_등록되어_있으면_통과한다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updateBankAccount("국민은행", "111", "홍길동");
+      user.updateBankAccount("국민은행", "11112222", "홍길동");
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       userDomainService.requireBankAccountRegistered(1L);
@@ -503,27 +628,24 @@ class UserDomainServiceTest {
   }
 
   @Nested
-  @DisplayName("분철 개최 권한 검증 테스트")
-  class RequireCanHostTest {
+  @DisplayName("분철 개최 권한 조회 테스트")
+  class CanHostTest {
 
     @Test
-    void 개최_권한이_있으면_통과한다() {
+    void 개최_권한이_있으면_true를_반환한다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
       user.allowHosting();
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
-      userDomainService.requireCanHost(1L);
+      assertThat(userDomainService.canHost(1L)).isTrue();
     }
 
     @Test
-    void 개최_권한이_없으면_예외가_발생한다() {
+    void 개최_권한이_없으면_false를_반환한다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
-      assertThatThrownBy(() -> userDomainService.requireCanHost(1L))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+      assertThat(userDomainService.canHost(1L)).isFalse();
     }
   }
 }

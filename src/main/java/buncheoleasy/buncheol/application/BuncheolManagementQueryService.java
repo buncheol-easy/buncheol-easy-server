@@ -133,6 +133,7 @@ public class BuncheolManagementQueryService {
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
         participation.getTotalAmount(),
+        participation.getShippingFee(),
         participation.getStatus(),
         participation.getDueAt(),
         participation.getConfirmedAt(),

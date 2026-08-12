@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -35,6 +36,7 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
@@ -752,5 +754,124 @@ class ParticipationServiceTest {
       }
     }
     throw new NoSuchFieldException(fieldName);
+  }
+
+  @Nested
+  @DisplayName("C2C 보냈어요 마킹 해제 위임 테스트 (docs/53 Q-03)")
+  class RevertAndRejectPaymentSentTest {
+
+    private Participation c2cParticipation() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      return participation;
+    }
+
+    private Buncheol c2cBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      return buncheol;
+    }
+
+    // 반려와 셀프 철회는 같은 CAS 를 쓰고 rejectedAt 유무로만 갈린다. 호출부가 두 도메인 메서드를
+    // 바꿔 불러도 리포지토리 테스트는 전부 통과하므로, 위임 대상을 이 계층에서 못 박는다.
+    @Test
+    void 개최자_반려는_반려_시각을_남기는_경로로_위임한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      then(participationDomainService)
+          .should()
+          .rejectPaymentSent(eq(PARTICIPATION_ID), any(), any());
+      then(participationDomainService)
+          .should(never())
+          .revertPaymentSent(anyLong(), any(), any());
+    }
+
+    @Test
+    void 참여자_셀프_철회는_반려_시각을_남기지_않는_경로로_위임한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.revertPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.revertPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService)
+          .should()
+          .revertPaymentSent(eq(PARTICIPATION_ID), any(), any());
+      then(participationDomainService)
+          .should(never())
+          .rejectPaymentSent(anyLong(), any(), any());
+    }
+
+    // 반려는 기한을 max(기존, now+24h) 로 연장한다 (docs/46 §4.5).
+    @Test
+    void 개최자_반려는_입금_기한을_24시간_연장한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      ArgumentCaptor<Instant> dueAtCaptor = ArgumentCaptor.forClass(Instant.class);
+      then(participationDomainService)
+          .should()
+          .rejectPaymentSent(eq(PARTICIPATION_ID), dueAtCaptor.capture(), any());
+      assertThat(dueAtCaptor.getValue()).isEqualTo(NOW.plus(24, ChronoUnit.HOURS));
+    }
+  }
+
+  @Nested
+  @DisplayName("참여자 자발 취소 — 안내 문구 분기 (docs/54 4-2)")
+  class CancelByParticipantErrorTest {
+
+    private Participation participationWith(final ParticipationStatus status) {
+      Participation participation = mock(Participation.class);
+      given(participation.getStatus()).willReturn(status);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      return participation;
+    }
+
+    // LEGACY 는 취소 경로가 없다 — 범용 가드(BCH-084)가 아니라 "기한 만료로 자동 취소된다"는
+    // 전용 안내를 준다. 다른 C2C 액션들은 계속 BCH-084 를 쓴다.
+    @Test
+    void LEGACY_입금대기_참여는_취소_전용_코드로_막힌다() {
+      Participation participation = participationWith(ParticipationStatus.AWAITING_PAYMENT);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(false);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+    }
+
+    // 확정된 참여는 만료 CAS(AWAITING_PAYMENT 한정)가 걸리지 않아 "기한이 지나면 자동 취소돼요"가
+    // 사실이 아니다. 플로우 가드보다 상태 검사를 먼저 태워 문의 경유로 보낸다.
+    @Test
+    void 확정된_참여는_플로우와_무관하게_문의_경유로_안내한다() {
+      participationWith(ParticipationStatus.CONFIRMED);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+    }
   }
 }

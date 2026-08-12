@@ -107,7 +107,7 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    void 카카오_토큰이_있으면_이름_전화번호_보강과_약관_동의_내역을_함께_전달한다() throws Exception {
+    void 카카오_토큰이_있으면_이름_전화번호_연령대_보강과_약관_동의_내역을_함께_전달한다() throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       given(principal.getName()).willReturn("provider-id");
@@ -133,7 +133,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(authorizedClientService.loadAuthorizedClient("kakao", "provider-id"))
           .willReturn(authorizedClient);
       given(kakaoApiClient.getUserInfo("kakao-access-token"))
-          .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678"));
+          .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678", "20~29", false));
       given(kakaoApiClient.getServiceTerms("kakao-access-token")).willReturn(terms);
       given(socialLoginService.login(any(SocialLoginCommand.class)))
           .willReturn(new TokenPair("access", "refresh"));
@@ -148,6 +148,7 @@ class OAuth2LoginSuccessHandlerTest {
       then(socialLoginService).should().login(captor.capture());
       assertThat(captor.getValue().name()).isEqualTo("김실명");
       assertThat(captor.getValue().phoneNumber()).isEqualTo("01012345678");
+      assertThat(captor.getValue().ageRange()).isEqualTo("20~29");
       assertThat(captor.getValue().serviceTerms()).isEqualTo(terms);
     }
 

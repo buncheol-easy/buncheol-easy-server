@@ -181,10 +181,11 @@ public class MyParticipationQueryService {
         // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(
             participation,
-            shippingFeePaybackPolicy.deriveStatus(participation, delivery, now),
-            shippingFeePaybackPolicy.submitDeadline(participation, delivery)),
+            shippingFeePaybackPolicy.deriveStatus(participation, buncheol.getFlowType(), delivery, now),
+            shippingFeePaybackPolicy.submitDeadline(participation, buncheol.getFlowType(), delivery)),
         buncheol.getFlowType(),
         participation.getPaymentSentAt(),
+        participation.getVisiblePaymentRejectedAt(),
         buncheol.getOpenChatUrl());
   }
 }

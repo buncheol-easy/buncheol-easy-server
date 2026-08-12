@@ -77,9 +77,6 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 profile.ageRange(),
                 profile.ageRangeWithdrawn(),
                 serviceTerms));
-    log.debug(
-        "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
-
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
 

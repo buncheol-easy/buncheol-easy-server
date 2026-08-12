@@ -710,7 +710,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             |------|------|------|
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
-                            | 409 | `BCH-085` (`BUNCHEOL_CONFIRM_NOT_ALLOWED`) | 미입금 활성 참여 잔여·확정 0건·수집중 아님 |
+                            | 409 | `BCH-090` (`BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED`) | 미입금 활성 참여 잔여·확정 0건·수집중 아님 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

@@ -150,9 +150,7 @@ public enum ErrorCode {
 
   // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
   BUNCHEOL_FLOW_NOT_SUPPORTED(
-      "BCH-084",
-      "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
-      HttpStatus.CONFLICT),
+      "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_CANCEL_NOT_ALLOWED(
       "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
@@ -167,6 +165,13 @@ public enum ErrorCode {
   // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
   BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
       "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등
+  // C2C 전용 액션 6곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서 엉뚱한
+  // 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
+  PARTICIPATION_CANCEL_NOT_SUPPORTED(
+      "BCH-091",
+      "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
+      HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

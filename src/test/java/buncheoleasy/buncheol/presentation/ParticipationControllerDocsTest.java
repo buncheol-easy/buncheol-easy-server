@@ -624,8 +624,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
-                            | 409 | `BCH-086` (`PARTICIPATION_CANCEL_NOT_ALLOWED`) | 취소 불가 구간 ('보냈어요'·입금확인 후 — 문의 경유) |
+                            | 409 | `BCH-086` (`PARTICIPATION_CANCEL_NOT_ALLOWED`) | 취소 불가 구간 ('보냈어요'·입금확인 후 — 문의 경유). **상태 검사를 먼저 하므로 LEGACY 라도 확정된 참여는 이 코드다** |
+                            | 409 | `BCH-091` (`PARTICIPATION_CANCEL_NOT_SUPPORTED`) | LEGACY 분철의 참여 (취소 경로 없음 — 기한 만료 자동 취소 안내) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))

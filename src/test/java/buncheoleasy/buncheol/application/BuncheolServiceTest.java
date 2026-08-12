@@ -821,4 +821,38 @@ class BuncheolServiceTest {
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
   }
+
+  @Nested
+  @DisplayName("진행 확정(finalize-collected) 에러 코드 테스트 (docs/54 4-1)")
+  class FinalizeCollectedErrorCodeTest {
+
+    // 성사 확정(BCH-085)과 코드를 공유하면 개최자가 "진행 확정"을 눌렀는데 "성사 확정을 할 수
+    // 없습니다"가 뜬다. 코드가 다시 합쳐지면 이 테스트가 잡는다.
+    @Test
+    void 수집_종료_실패는_성사확정과_다른_전용_코드를_던진다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheolDomainService.confirmIfAllCollected(BUNCHEOL_ID, NOW)).willReturn(false);
+
+      assertThatThrownBy(() -> buncheolService.finalizeCollected(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
+    }
+
+    // BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
+    // 문구(예: 취소 안내)를 여기에 넣으면 다른 액션에서 엉뚱한 안내가 나간다.
+    @Test
+    void LEGACY_분철의_진행_확정은_범용_플로우_가드로_막힌다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(false);
+
+      assertThatThrownBy(() -> buncheolService.finalizeCollected(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+  }
 }

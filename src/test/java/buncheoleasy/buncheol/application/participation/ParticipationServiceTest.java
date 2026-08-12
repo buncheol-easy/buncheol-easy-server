@@ -676,4 +676,47 @@ class ParticipationServiceTest {
       assertThat(dueAtCaptor.getValue()).isEqualTo(NOW.plus(24, ChronoUnit.HOURS));
     }
   }
+
+  @Nested
+  @DisplayName("참여자 자발 취소 — 안내 문구 분기 (docs/54 4-2)")
+  class CancelByParticipantErrorTest {
+
+    private Participation participationWith(final ParticipationStatus status) {
+      Participation participation = mock(Participation.class);
+      given(participation.getStatus()).willReturn(status);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      return participation;
+    }
+
+    // LEGACY 는 취소 경로가 없다 — 범용 가드(BCH-084)가 아니라 "기한 만료로 자동 취소된다"는
+    // 전용 안내를 준다. 다른 C2C 액션들은 계속 BCH-084 를 쓴다.
+    @Test
+    void LEGACY_입금대기_참여는_취소_전용_코드로_막힌다() {
+      Participation participation = participationWith(ParticipationStatus.AWAITING_PAYMENT);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(false);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+    }
+
+    // 확정된 참여는 만료 CAS(AWAITING_PAYMENT 한정)가 걸리지 않아 "기한이 지나면 자동 취소돼요"가
+    // 사실이 아니다. 플로우 가드보다 상태 검사를 먼저 태워 문의 경유로 보낸다.
+    @Test
+    void 확정된_참여는_플로우와_무관하게_문의_경유로_안내한다() {
+      participationWith(ParticipationStatus.CONFIRMED);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+    }
+  }
 }

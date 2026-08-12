@@ -549,7 +549,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료) /
                               `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가)
                             - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
-                              내려가며, 이 시각이 지나면 슬롯이 다시 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용
+                              내려가며, 이 시각이 지나면 슬롯이 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용.
+                              단 그 시점에 분철이 신규 참여를 받지 않는 상태면 슬롯은 `AVAILABLE` 이 아니라 `CLOSED` 가 되므로,
+                              "이 시각에 다시 신청 가능" 으로 단정하지 말고 재조회 결과의 `saleStatus` 를 따를 것
                             - 멤버별 `participatedByMe` 는 그 슬롯을 점유한 활성 참여(선점·구매)가 호출 유저의 것인지 여부.
                               내 선점("내가 입금 대기중")과 타인 선점("입금 대기중") UI 워딩 구분용. 비로그인 호출이면 항상 false
                             - `hostedByMe` 는 호출 유저가 개최자인지 여부 (비로그인 호출이면 항상 false)

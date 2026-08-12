@@ -45,7 +45,6 @@ admin:
     password: ""
 
 app:
-  base-url: http://localhost:8080
   buncheol:
     # 테스트에서는 자동 마감 스케줄러를 비활성화 (의도치 않은 마감/낙찰 트리거 방지)
     auto-close:

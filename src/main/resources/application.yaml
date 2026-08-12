@@ -129,7 +129,6 @@ cloud:
       origin: https://${cloud.aws.s3.bucket}.s3.${cloud.aws.region.static}.amazonaws.com
 
 app:
-  base-url: ${APP_BASE_URL:http://localhost:8080}
   kakao:
     # 카카오 REST API 호스트 (테스트에서 스텁 서버로 교체 가능).
     api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}

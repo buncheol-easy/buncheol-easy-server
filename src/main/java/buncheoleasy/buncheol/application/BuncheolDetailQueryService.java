@@ -22,6 +22,8 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -40,6 +42,7 @@ public class BuncheolDetailQueryService {
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public BuncheolDetailResponse getDetail(final Long buncheolId, final Long userId) {
@@ -88,7 +91,8 @@ public class BuncheolDetailQueryService {
                 .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
                 .count();
 
-    boolean openForNewParticipation = isOpenForNewParticipation(buncheol);
+    // 공석 슬롯을 "신청 가능"으로 내릴지의 기준 — 참여 가드와 같은 도메인 술어를 쓴다 (docs/53 Q-14).
+    boolean openForNewParticipation = buncheol.acceptsNewParticipation(Instant.now(clock));
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
             .map(
@@ -127,22 +131,6 @@ public class BuncheolDetailQueryService {
         buncheol.getOpenChatUrl());
   }
 
-  /**
-   * 분철이 지금 빈 슬롯에 신규 참여를 받는지 — 빈 슬롯의 판매 상태를 AVAILABLE(신청 가능) 로 내릴지 CLOSED(마감) 로 내릴지의 기준이다 (docs/53
-   * Q-14). 참여 생성 가드({@code ParticipationService#participate})와 같은 상태 집합을 본다: LEGACY 는 모집중일 때만, C2C 는
-   * 성사 확정 후 입금 수집중(PAYMENT_COLLECTING) 구간의 추가 모집까지 허용된다 (docs/46 §4.7-E1).
-   *
-   * <p>마감 시각(deadline) 경과로 인한 차단은 여기서 보지 않는다 — 마감 후 모집중 구간은 별도 표시 정합 항목이라 이번 범위 밖이다.
-   */
-  private boolean isOpenForNewParticipation(final Buncheol buncheol) {
-    return switch (buncheol.getStatus()) {
-      case RECRUITING -> true;
-      case PAYMENT_COLLECTING -> buncheol.isC2c();
-      // CONFIRMED·CANCELLED 는 신청이 409(BCH-060) 로 막힌다. HOST_CANCELLED 는 위에서 404 라 여기까지 오지 않는다.
-      case CONFIRMED, CANCELLED, HOST_CANCELLED -> false;
-    };
-  }
-
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
@@ -160,8 +148,16 @@ public class BuncheolDetailQueryService {
         buncheolMember.getPrice(),
         saleStatus,
         saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null,
-        // 점유 참여가 없는 슬롯(AVAILABLE·CLOSED)은 항상 false — active 로 직접 판정해 NPE 여지를 없앤다.
-        active != null && userId != null && userId.equals(active.getParticipantId()));
+        // 슬롯을 점유한 참여가 있을 때만 true. 취소 참여를 제외해 "공석인데 내 참여" 조합이 생기지 않게 한다
+        // (findActiveByBuncheolId 가 활성만 주므로 실제로는 도달하지 않는 방어 조건).
+        isMine(active, userId));
+  }
+
+  private boolean isMine(final Participation active, final Long userId) {
+    return active != null
+        && active.getStatus() != ParticipationStatus.CANCELLED
+        && userId != null
+        && userId.equals(active.getParticipantId());
   }
 
   // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.

@@ -147,6 +147,22 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     }
   }
 
+  /**
+   * 지금 이 분철이 빈 슬롯에 신규 참여를 받는가. 참여 가드와 상세 조회의 공석 표시(docs/53 Q-14)가 같은 술어를 보게 하려고 도메인에 둔다 — 두 곳이
+   * 갈리면 "화면엔 신청 가능한데 신청은 409" 가 다시 생긴다.
+   *
+   * <p>LEGACY 는 모집중·마감 전에만 받고({@link #validateRecruiting} 과 같은 조건), C2C 는 성사 확정 후 입금 수집중 구간의 추가
+   * 모집까지 받는다 (docs/46 §4.7-E1).
+   */
+  public boolean acceptsNewParticipation(final Instant now) {
+    return switch (status) {
+      case RECRUITING -> deadline.isAfter(now);
+      case PAYMENT_COLLECTING -> isC2c();
+      // 신청이 409(BCH-060) 로 막히는 상태들. HOST_CANCELLED 는 상세 조회 자체가 404 다.
+      case CONFIRMED, CANCELLED, HOST_CANCELLED -> false;
+    };
+  }
+
   public void validateRecruiting(final Instant now) {
     if (status != BuncheolStatus.RECRUITING) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);

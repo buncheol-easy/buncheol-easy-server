@@ -88,9 +88,17 @@ public class BuncheolDetailQueryService {
                 .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
                 .count();
 
+    boolean openForNewParticipation = isOpenForNewParticipation(buncheol);
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeByMemberId, userId))
+            .map(
+                bm ->
+                    toMemberDetail(
+                        bm,
+                        groupMemberByGroupMemberId,
+                        activeByMemberId,
+                        openForNewParticipation,
+                        userId))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -119,14 +127,31 @@ public class BuncheolDetailQueryService {
         buncheol.getOpenChatUrl());
   }
 
+  /**
+   * 분철이 지금 빈 슬롯에 신규 참여를 받는지 — 빈 슬롯의 판매 상태를 AVAILABLE(신청 가능) 로 내릴지 CLOSED(마감) 로 내릴지의 기준이다 (docs/53
+   * Q-14). 참여 생성 가드({@code ParticipationService#participate})와 같은 상태 집합을 본다: LEGACY 는 모집중일 때만, C2C 는
+   * 성사 확정 후 입금 수집중(PAYMENT_COLLECTING) 구간의 추가 모집까지 허용된다 (docs/46 §4.7-E1).
+   *
+   * <p>마감 시각(deadline) 경과로 인한 차단은 여기서 보지 않는다 — 마감 후 모집중 구간은 별도 표시 정합 항목이라 이번 범위 밖이다.
+   */
+  private boolean isOpenForNewParticipation(final Buncheol buncheol) {
+    return switch (buncheol.getStatus()) {
+      case RECRUITING -> true;
+      case PAYMENT_COLLECTING -> buncheol.isC2c();
+      // CONFIRMED·CANCELLED 는 신청이 409(BCH-060) 로 막힌다. HOST_CANCELLED 는 위에서 404 라 여기까지 오지 않는다.
+      case CONFIRMED, CANCELLED, HOST_CANCELLED -> false;
+    };
+  }
+
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
       final Map<Long, Participation> activeByMemberId,
+      final boolean openForNewParticipation,
       final Long userId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     Participation active = activeByMemberId.get(buncheolMember.getId());
-    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active);
+    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active, openForNewParticipation);
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
@@ -135,16 +160,15 @@ public class BuncheolDetailQueryService {
         buncheolMember.getPrice(),
         saleStatus,
         saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null,
-        // AVAILABLE(공석) 슬롯은 점유 참여가 없으므로 항상 false — saleStatus 와의 불변식을 코드로 보장한다.
-        saleStatus != BuncheolMemberSaleStatus.AVAILABLE
-            && userId != null
-            && userId.equals(active.getParticipantId()));
+        // 점유 참여가 없는 슬롯(AVAILABLE·CLOSED)은 항상 false — active 로 직접 판정해 NPE 여지를 없앤다.
+        active != null && userId != null && userId.equals(active.getParticipantId()));
   }
 
   // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.
-  private BuncheolMemberSaleStatus toSaleStatus(final Participation active) {
+  private BuncheolMemberSaleStatus toSaleStatus(
+      final Participation active, final boolean openForNewParticipation) {
     if (active == null) {
-      return BuncheolMemberSaleStatus.AVAILABLE;
+      return emptySlotStatus(openForNewParticipation);
     }
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
@@ -153,8 +177,15 @@ public class BuncheolDetailQueryService {
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
-      case CANCELLED -> BuncheolMemberSaleStatus.AVAILABLE;
+      case CANCELLED -> emptySlotStatus(openForNewParticipation);
     };
+  }
+
+  // 공석의 판매 상태 — 신규 참여를 받지 않는 분철에서는 신청 가능한 것처럼 보이면 안 된다 (docs/53 Q-14).
+  private BuncheolMemberSaleStatus emptySlotStatus(final boolean openForNewParticipation) {
+    return openForNewParticipation
+        ? BuncheolMemberSaleStatus.AVAILABLE
+        : BuncheolMemberSaleStatus.CLOSED;
   }
 
   private MyParticipationSummaryResponse toMyParticipation(

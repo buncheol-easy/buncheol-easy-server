@@ -14,7 +14,9 @@ public enum BuncheolMemberSaleStatus {
   // 누군가 선점해 입금 확인을 기다리는 상태. 입금 기한이 지나면 다시 AVAILABLE 로 풀린다.
   AWAITING_PAYMENT("입금 확인 중"),
   // 입금 확인까지 끝나 판매가 완료된 상태.
-  SOLD("판매 완료");
+  SOLD("판매 완료"),
+  // 분철이 더 이상 신규 참여를 받지 않아(진행확정·취소) 닫힌 공석. 점유한 참여는 없지만 신청도 불가능하다 (docs/53 Q-14).
+  CLOSED("마감");
 
   private final String description;
 }

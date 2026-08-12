@@ -28,7 +28,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Buncheol extends TimestampedEntity implements Cursorable {
 
-  private static final int TITLE_MAX_LENGTH = 200;
+  // 제목 64자 — 목록·상세 어느 화면도 그 이상을 노출하지 않는다 (docs/56 H-02). DB 컬럼 길이(200)는 그대로 두고 검증만 조인다.
+  private static final int TITLE_MAX_LENGTH = 64;
   private static final int DESCRIPTION_MAX_LENGTH = 700;
   private static final int PURCHASE_SITE_MAX_LENGTH = 200;
   private static final int OPEN_CHAT_URL_MAX_LENGTH = 200;

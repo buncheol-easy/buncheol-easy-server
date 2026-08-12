@@ -15,7 +15,9 @@ public record BuncheolSearchCondition(
     String keyword,
     String normalizedKeyword,
     List<Long> keywordGroupIds,
-    List<Long> keywordMemberIds) {
+    List<Long> keywordMemberIds,
+    boolean onlyFavoriteGroups,
+    List<Long> favoriteGroupIds) {
 
   // 매칭 0건을 나타내는 값. 현재 Hibernate 는 빈 in-list 를 `1=0` 으로 렌더링하지만, 그 동작에 기대는 대신
   // 어떤 행과도 일치하지 않는 id 를 명시해 JPQL 만 읽고도 의미가 드러나게 한다 (id 는 AUTO_INCREMENT 라 충돌 없음).
@@ -25,10 +27,35 @@ public record BuncheolSearchCondition(
   public BuncheolSearchCondition {
     keywordGroupIds = orNoMatch(keywordGroupIds);
     keywordMemberIds = orNoMatch(keywordMemberIds);
+    favoriteGroupIds = orNoMatch(favoriteGroupIds);
   }
 
   public BuncheolSearchCondition(final Long groupId, final Long memberId, final String keyword) {
-    this(groupId, memberId, keyword, null, NO_MATCH, NO_MATCH);
+    this(groupId, memberId, keyword, false);
+  }
+
+  public BuncheolSearchCondition(
+      final Long groupId,
+      final Long memberId,
+      final String keyword,
+      final boolean onlyFavoriteGroups) {
+    this(groupId, memberId, keyword, null, NO_MATCH, NO_MATCH, onlyFavoriteGroups, null);
+  }
+
+  /**
+   * 최애 그룹 필터를 켠 조건. 적용 여부를 id 목록이 아니라 별도 플래그로 들고 다닌다 — 최애가 0개인 사용자의 빈 목록을
+   * "필터 없음" 과 같은 값으로 접으면 전체 분철이 노출된다. 빈 목록 자체는 호출 측이 조회 전에 걸러낸다.
+   */
+  public BuncheolSearchCondition withFavoriteGroups(final List<Long> ids) {
+    return new BuncheolSearchCondition(
+        groupId,
+        memberId,
+        keyword,
+        normalizedKeyword,
+        keywordGroupIds,
+        keywordMemberIds,
+        true,
+        ids);
   }
 
   public BuncheolSearchCondition withKeywordMatches(
@@ -42,7 +69,9 @@ public record BuncheolSearchCondition(
         escapedKeyword,
         normalizedKeyword,
         orNoMatch(matchedGroupIds),
-        orNoMatch(matchedMemberIds));
+        orNoMatch(matchedMemberIds),
+        onlyFavoriteGroups,
+        favoriteGroupIds);
   }
 
   private static List<Long> orNoMatch(final List<Long> ids) {

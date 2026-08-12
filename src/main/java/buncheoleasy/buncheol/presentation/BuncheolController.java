@@ -58,6 +58,8 @@ public class BuncheolController {
    *
    * <p>비로그인 호출 시 익명 principal(문자열) 은 {@code Long} 캐스팅에 실패해 {@code userId} 가 null 로 들어온다 ({@link
    * AuthenticationPrincipal#errorOnInvalidType()} 기본값 false).
+   *
+   * <p>{@code onlyFavoriteGroups=true} 는 로그인 사용자의 최애 그룹 분철만 남긴다. 비로그인이거나 최애가 0개면 빈 목록이다.
    */
   @GetMapping
   public ResponseEntity<CursorResponse<BuncheolSummaryResponse>> searchBuncheols(
@@ -65,12 +67,13 @@ public class BuncheolController {
       @RequestParam(required = false) final Long groupId,
       @RequestParam(required = false) final Long memberId,
       @RequestParam(required = false) @Size(max = 100) final String keyword,
+      @RequestParam(defaultValue = "false") final boolean onlyFavoriteGroups,
       @RequestParam(required = false) final String cursor,
       @RequestParam(defaultValue = "20") final int size) {
     return ResponseEntity.ok(
         buncheolListQueryService.search(
             userId,
-            new BuncheolSearchCondition(groupId, memberId, keyword),
+            new BuncheolSearchCondition(groupId, memberId, keyword, onlyFavoriteGroups),
             BuncheolListCursor.parse(cursor),
             size));
   }

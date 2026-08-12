@@ -95,6 +95,8 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
     return jpaBuncheolRepository.searchRecruiting(
         BuncheolStatus.RECRUITING,
         condition.groupId(),
+        condition.onlyFavoriteGroups(),
+        condition.favoriteGroupIds(),
         condition.memberId(),
         condition.keyword(),
         condition.normalizedKeyword(),
@@ -115,6 +117,8 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
     return jpaBuncheolRepository.searchByDeadline(
         status,
         condition.groupId(),
+        condition.onlyFavoriteGroups(),
+        condition.favoriteGroupIds(),
         condition.memberId(),
         condition.keyword(),
         condition.normalizedKeyword(),

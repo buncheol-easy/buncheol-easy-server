@@ -46,6 +46,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       "SELECT b FROM Buncheol b "
           + "WHERE b.status = :status "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
+          + "  AND (:onlyFavoriteGroups = FALSE OR b.groupId IN :favoriteGroupIds) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
           + "  AND (:keyword IS NULL "
@@ -63,6 +64,8 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Buncheol> searchRecruiting(
       @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
+      @Param("onlyFavoriteGroups") boolean onlyFavoriteGroups,
+      @Param("favoriteGroupIds") List<Long> favoriteGroupIds,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,
       @Param("normalizedKeyword") String normalizedKeyword,
@@ -85,6 +88,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       "SELECT b FROM Buncheol b "
           + "WHERE b.status = :status "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
+          + "  AND (:onlyFavoriteGroups = FALSE OR b.groupId IN :favoriteGroupIds) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
           + "  AND (:keyword IS NULL "
@@ -102,6 +106,8 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Buncheol> searchByDeadline(
       @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
+      @Param("onlyFavoriteGroups") boolean onlyFavoriteGroups,
+      @Param("favoriteGroupIds") List<Long> favoriteGroupIds,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,
       @Param("normalizedKeyword") String normalizedKeyword,

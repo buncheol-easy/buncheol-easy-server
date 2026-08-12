@@ -150,7 +150,9 @@ public enum ErrorCode {
 
   // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
   BUNCHEOL_FLOW_NOT_SUPPORTED(
-      "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
+      "BCH-084",
+      "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
+      HttpStatus.CONFLICT),
   BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_CANCEL_NOT_ALLOWED(
       "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
@@ -161,6 +163,10 @@ public enum ErrorCode {
   // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
   BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
       "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
+  // 성사 확정(BCH-085)과 분리한다 — 개최자가 누른 건 "진행 확정"인데 "성사 확정" 실패라고 뜨면
+  // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
+  BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
+      "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

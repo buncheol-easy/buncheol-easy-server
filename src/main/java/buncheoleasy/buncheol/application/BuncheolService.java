@@ -202,7 +202,8 @@ public class BuncheolService {
     }
 
     if (!buncheolDomainService.confirmIfAllCollected(buncheolId, Instant.now(clock))) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
+      // 성사 확정(confirmRecruitment)과 다른 단계라 전용 코드를 쓴다 (docs/53 Q-12).
+      throw new BusinessException(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
     }
     buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
   }

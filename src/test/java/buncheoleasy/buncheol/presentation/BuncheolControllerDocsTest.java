@@ -760,6 +760,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             101L,
             "안유진",
             93_000L,
+            3_000L,
             ParticipationStatus.CONFIRMED,
             Instant.parse("2026-05-28T00:00:00Z"),
             Instant.parse("2026-05-27T10:00:00Z"),
@@ -779,6 +780,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             102L,
             "레이",
             53_000L,
+            3_000L,
             ParticipationStatus.AWAITING_PAYMENT,
             Instant.parse("2026-05-26T00:30:00Z"),
             null,
@@ -895,6 +897,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("participants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
+                            fieldWithPath("participants[].shippingFee")
+                                .description(
+                                    "amount 에 포함된 배송비(원). 다슬롯은 묶음 첫 슬롯에만 부과되므로 같은 분철의 두 번째 슬롯은 0 이다"),
                             fieldWithPath("participants[].status")
                                 .description("참여 상태 (AWAITING_PAYMENT / CONFIRMED)"),
                             fieldWithPath("participants[].dueAt")

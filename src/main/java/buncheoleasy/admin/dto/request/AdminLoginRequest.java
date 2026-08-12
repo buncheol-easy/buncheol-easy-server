@@ -22,5 +22,9 @@ import jakarta.validation.constraints.Size;
  * {@code AdminAccountInitializer} 가 기동 시 검증한다.
  */
 public record AdminLoginRequest(
-    @NotBlank @Size(max = 50) @Pattern(regexp = "^[A-Za-z0-9._-]+$") String loginId,
-    @NotBlank @Size(max = 72) String password) {}
+    @NotBlank @Size(max = 50) @Pattern(regexp = LOGIN_ID_REGEX) String loginId,
+    @NotBlank @Size(max = 72) String password) {
+
+  /** 부트스트랩 계정 검증({@code AdminAccountInitializer})이 같은 값을 참조한다 — 한쪽만 바뀌는 드리프트 방지. */
+  public static final String LOGIN_ID_REGEX = "^[A-Za-z0-9._-]+$";
+}

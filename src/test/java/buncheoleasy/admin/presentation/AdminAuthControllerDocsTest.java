@@ -53,7 +53,7 @@ class AdminAuthControllerDocsTest extends DocsTestSupport {
                             한도를 넘기면 자격증명 검증 없이 429(ADM-003)로 응답하며, 로그인에 성공하면 누적이 초기화된다.""")
                         .requestSchema(Schema.schema("AdminLoginRequest"))
                         .requestFields(
-                            fieldWithPath("loginId").description("관리자 로그인 ID (최대 50자)"),
+                            fieldWithPath("loginId").description("관리자 로그인 ID (ASCII 영숫자와 . _ - 만, 최대 50자)"),
                             fieldWithPath("password").description("비밀번호 (최대 72자)"))
                         .responseSchema(Schema.schema("AdminLoginResponse"))
                         .responseFields(

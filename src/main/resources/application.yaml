@@ -147,6 +147,13 @@ app:
     # 운영자 어드민 웹 base URL. 슬랙 알림의 '어드민에서 처리' 링크로 사용한다.
     # local/staging 은 프론트 origin + /admin 경로, prod 는 별도 어드민 도메인을 env 로 주입한다.
     base-url: ${ADMIN_BASE_URL:http://localhost:3000/admin}
+    login:
+      rate-limit: # 관리자 로그인 무차별 대입 방지 (permitAll 엔드포인트 + 12시간 토큰이라 필수)
+        # ⚠️ 계정 잠금이라 제3자가 운영자 ID 로 도배하면 잠금 자체가 DoS 가 된다. 그때 재배포 없이
+        # 풀 수 있는 유일한 스위치가 이 두 값이므로, 코드의 @Value 기본값에만 두지 말 것.
+        max-attempts: ${ADMIN_LOGIN_RATE_LIMIT_PER_ID:5}
+        # 단위를 붙이지 않으면 '분'으로 읽는다(@DurationUnit) — 10m 처럼 명시하는 것을 권장
+        window: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW:10m}
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
   cookie:

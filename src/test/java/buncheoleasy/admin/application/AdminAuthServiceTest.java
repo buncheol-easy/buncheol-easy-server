@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.admin.domain.Admin;
@@ -24,8 +26,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -143,19 +147,28 @@ class AdminAuthServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void 대소문자와_앞뒤_공백이_달라도_같은_제한_키를_쓴다() {
       // admins 는 utf8mb4_unicode_ci(대소문자 무시 + PAD SPACE)라 아래 변형이 모두 같은 계정을
       // 찾는다. 정규화하지 않으면 Redis 키만 달라져 한도를 변형 개수만큼 우회할 수 있다.
       // given
       givenCount(6L);
 
-      // when & then
+      // when
       for (String variant : List.of("Buncheol-Admin", "BUNCHEOL-ADMIN", "  buncheol-admin  ")) {
         assertThatThrownBy(() -> adminAuthService.login(variant, "raw-password"))
             .isInstanceOf(BusinessException.class)
             .extracting("errorCode")
             .isEqualTo(ErrorCode.ADMIN_LOGIN_RATE_LIMITED);
       }
+
+      // then — 스텁이 아니라 실제로 넘어간 키를 단언한다. anyList() 로만 두면 normalizeLoginId 를
+      // 통째로 지워도 이 테스트가 통과해 회귀를 못 잡는다.
+      ArgumentCaptor<List<String>> keys = ArgumentCaptor.forClass(List.class);
+      then(redisTemplate)
+          .should(times(3))
+          .execute(any(RedisScript.class), keys.capture(), anyString());
+      assertThat(keys.getAllValues()).allSatisfy(key -> assertThat(key).containsExactly(LOGIN_ID_KEY));
     }
 
     @Test
@@ -170,6 +183,45 @@ class AdminAuthServiceTest {
 
       // then
       then(redisTemplate).should().delete(LOGIN_ID_KEY);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 윈도우_길이를_밀리초로_스크립트에_넘긴다() {
+      // toMillis 가 toSeconds 로 바뀌면 윈도우가 1000배 짧아져 제한이 사실상 사라진다.
+      given(adminRepository.findByLoginId("buncheol-admin")).willReturn(Optional.of(admin(1L)));
+      given(passwordEncoder.matches("raw-password", "encoded-hash")).willReturn(true);
+      given(jwtTokenProvider.createAdminAccessToken(1L)).willReturn("admin-access-token");
+
+      adminAuthService.login("buncheol-admin", "raw-password");
+
+      then(redisTemplate).should().execute(any(RedisScript.class), anyList(), eq("600000"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void Redis_장애면_제한_없이_통과시킨다() {
+      // fail-closed 로 두면 Redis 한 대 장애가 곧 관리자 로그인 전면 차단(입금확인·환급 중단)이 된다.
+      given(redisTemplate.execute(any(RedisScript.class), anyList(), anyString()))
+          .willThrow(new RedisConnectionFailureException("redis down"));
+      given(adminRepository.findByLoginId("buncheol-admin")).willReturn(Optional.of(admin(1L)));
+      given(passwordEncoder.matches("raw-password", "encoded-hash")).willReturn(true);
+      given(jwtTokenProvider.createAdminAccessToken(1L)).willReturn("admin-access-token");
+
+      assertThat(adminAuthService.login("buncheol-admin", "raw-password").accessToken())
+          .isEqualTo("admin-access-token");
+    }
+
+    @Test
+    void 카운터_초기화가_Redis_장애로_실패해도_로그인은_성공한다() {
+      given(adminRepository.findByLoginId("buncheol-admin")).willReturn(Optional.of(admin(1L)));
+      given(passwordEncoder.matches("raw-password", "encoded-hash")).willReturn(true);
+      given(jwtTokenProvider.createAdminAccessToken(1L)).willReturn("admin-access-token");
+      given(redisTemplate.delete(anyString()))
+          .willThrow(new RedisConnectionFailureException("redis down"));
+
+      assertThat(adminAuthService.login("buncheol-admin", "raw-password").accessToken())
+          .isEqualTo("admin-access-token");
     }
 
     @Test

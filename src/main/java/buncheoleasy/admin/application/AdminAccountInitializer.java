@@ -1,8 +1,11 @@
 package buncheoleasy.admin.application;
 
+import static buncheoleasy.admin.dto.request.AdminLoginRequest.LOGIN_ID_REGEX;
+
 import buncheoleasy.admin.domain.Admin;
 import buncheoleasy.admin.domain.AdminRepository;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -29,8 +32,8 @@ public class AdminAccountInitializer implements ApplicationRunner {
    * 로그인 API 의 {@code AdminLoginRequest} 제약과 동일해야 한다 — 여기서 만든 계정이 그 API 로 로그인할 수 없거나, ASCII
    * 밖 문자로 호출 제한 키가 갈라지는 것을 막는다.
    */
-  private static final java.util.regex.Pattern LOGIN_ID_PATTERN =
-      java.util.regex.Pattern.compile("^[A-Za-z0-9._-]{1,50}$");
+  private static final Pattern LOGIN_ID_PATTERN = Pattern.compile(LOGIN_ID_REGEX);
+  private static final int LOGIN_ID_MAX_LENGTH = 50;
 
   private final AdminRepository adminRepository;
   private final PasswordEncoder passwordEncoder;
@@ -53,7 +56,8 @@ public class AdminAccountInitializer implements ApplicationRunner {
     if (!StringUtils.hasText(bootstrapLoginId) || !StringUtils.hasText(bootstrapPassword)) {
       return;
     }
-    if (!LOGIN_ID_PATTERN.matcher(bootstrapLoginId).matches()) {
+    if (!LOGIN_ID_PATTERN.matcher(bootstrapLoginId).matches()
+        || bootstrapLoginId.length() > LOGIN_ID_MAX_LENGTH) {
       log.error(
           "부트스트랩 관리자 로그인 ID 가 허용 형식(ASCII 영숫자와 ._- , 최대 50자)을 벗어나 계정을 생성하지 않습니다."
               + " 이 형식을 벗어나면 로그인 API 검증에 막히거나 호출 제한 키가 갈라집니다. ADMIN_LOGIN_ID 를 수정해주세요.");

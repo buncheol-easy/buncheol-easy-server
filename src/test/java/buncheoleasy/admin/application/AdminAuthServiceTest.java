@@ -3,9 +3,8 @@ package buncheoleasy.admin.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.lenient;
@@ -14,11 +13,9 @@ import static org.mockito.Mockito.never;
 import buncheoleasy.admin.domain.Admin;
 import buncheoleasy.admin.domain.AdminRepository;
 import buncheoleasy.admin.dto.response.AdminLoginResponse;
-import buncheoleasy.admin.infrastructure.AdminLoginRateLimitProperties;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import buncheoleasy.global.ratelimit.FixedWindowRateLimiter;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -41,21 +40,29 @@ class AdminAuthServiceTest {
   @Mock private AdminRepository adminRepository;
   @Mock private PasswordEncoder passwordEncoder;
   @Mock private JwtTokenProvider jwtTokenProvider;
-  @Mock private FixedWindowRateLimiter rateLimiter;
+  @Mock private StringRedisTemplate redisTemplate;
 
   private AdminAuthService adminAuthService;
 
   @BeforeEach
   void setUp() {
     // 한도 안이 기본. 초과 케이스만 개별 테스트에서 덮어쓴다.
-    lenient().when(rateLimiter.tryAcquire(anyString(), anyInt(), any())).thenReturn(true);
+    lenient()
+        .when(redisTemplate.execute(any(RedisScript.class), anyList(), anyString()))
+        .thenReturn(1L);
     adminAuthService =
         new AdminAuthService(
             adminRepository,
             passwordEncoder,
             jwtTokenProvider,
-            rateLimiter,
-            new AdminLoginRateLimitProperties(5, Duration.ofMinutes(10)));
+            redisTemplate,
+            5,
+            Duration.ofMinutes(10));
+  }
+
+  @SuppressWarnings("unchecked")
+  private void givenCount(final Long count) {
+    given(redisTemplate.execute(any(RedisScript.class), anyList(), anyString())).willReturn(count);
   }
 
   private Admin admin(final Long id) {
@@ -121,7 +128,7 @@ class AdminAuthServiceTest {
     @Test
     void 한도를_넘으면_조회와_비밀번호_비교_전에_거부한다() {
       // given
-      given(rateLimiter.tryAcquire(eq(LOGIN_ID_KEY), anyInt(), any())).willReturn(false);
+      givenCount(6L);
 
       // when & then
       assertThatThrownBy(() -> adminAuthService.login("buncheol-admin", "raw-password"))
@@ -140,7 +147,7 @@ class AdminAuthServiceTest {
       // admins 는 utf8mb4_unicode_ci(대소문자 무시 + PAD SPACE)라 아래 변형이 모두 같은 계정을
       // 찾는다. 정규화하지 않으면 Redis 키만 달라져 한도를 변형 개수만큼 우회할 수 있다.
       // given
-      given(rateLimiter.tryAcquire(eq(LOGIN_ID_KEY), anyInt(), any())).willReturn(false);
+      givenCount(6L);
 
       // when & then
       for (String variant : List.of("Buncheol-Admin", "BUNCHEOL-ADMIN", "  buncheol-admin  ")) {
@@ -162,7 +169,7 @@ class AdminAuthServiceTest {
       adminAuthService.login("buncheol-admin", "raw-password");
 
       // then
-      then(rateLimiter).should().reset(LOGIN_ID_KEY);
+      then(redisTemplate).should().delete(LOGIN_ID_KEY);
     }
 
     @Test
@@ -176,7 +183,7 @@ class AdminAuthServiceTest {
           .isInstanceOf(BusinessException.class);
 
       // then
-      then(rateLimiter).should(never()).reset(anyString());
+      then(redisTemplate).should(never()).delete(anyString());
     }
   }
 }

@@ -1,6 +1,7 @@
 package buncheoleasy.group.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.query.SearchText;
 import buncheoleasy.group.domain.Group;
@@ -17,6 +18,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,9 +53,23 @@ class JpaGroupRepositoryAdapterTest {
         name);
   }
 
+  private void insertAlias(final Long groupId, final String alias) {
+    jdbcTemplate.update(
+        "INSERT INTO group_aliases (group_id, alias) VALUES (?, ?)", groupId, alias);
+    em.clear();
+  }
+
   private String storedGroupSearchName(final Long groupId) {
     return jdbcTemplate.queryForObject(
         "SELECT search_name FROM `groups` WHERE id = ?", String.class, groupId);
+  }
+
+  private String storedAliasSearchAlias(final Long groupId, final String alias) {
+    return jdbcTemplate.queryForObject(
+        "SELECT search_alias FROM group_aliases WHERE group_id = ? AND alias = ?",
+        String.class,
+        groupId,
+        alias);
   }
 
   @Nested
@@ -80,6 +96,15 @@ class JpaGroupRepositoryAdapterTest {
       final Long groupId = insertGroup(name);
 
       assertThat(storedGroupSearchName(groupId)).isEqualTo(SearchText.normalize(name));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"i-dle", "fromis_9", "알파 드라이브 원", "NCT · DREAM"})
+    void 별칭_생성컬럼_정규화가_SearchText_와_일치한다(final String alias) {
+      final Long groupId = insertGroup("별칭 파리티 그룹 " + alias);
+      insertAlias(groupId, alias);
+
+      assertThat(storedAliasSearchAlias(groupId, alias)).isEqualTo(SearchText.normalize(alias));
     }
   }
 
@@ -122,6 +147,77 @@ class JpaGroupRepositoryAdapterTest {
 
       // MySQL 은 CONCAT('%', NULL, '%') 를 NULL 로, H2 는 '%%' 로 접는다. 가드가 빠지면 H2 에서만 전건이 된다.
       assertThat(groupRepository.findIdsByNormalizedKeyword(null)).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("별칭 검색")
+  class SearchByAliasTest {
+
+    @Test
+    void 그룹명과_문자체계가_달라도_별칭으로_검색된다() {
+      final Long groupId = insertGroup("IVE");
+      insertAlias(groupId, "아이브");
+
+      assertThat(groupRepository.findByNormalizedKeyword(SearchText.normalizeForLike("아이브")))
+          .extracting(Group::getName)
+          .contains("IVE");
+    }
+
+    @Test
+    void 별칭도_공백_구두점을_무시하고_검색된다() {
+      final Long groupId = insertGroup("(여자)아이들");
+      insertAlias(groupId, "i-dle");
+
+      assertThat(groupRepository.findByNormalizedKeyword(SearchText.normalizeForLike("IDLE")))
+          .extracting(Group::getName)
+          .contains("(여자)아이들");
+    }
+
+    @Test
+    void 별칭_매칭도_분철_검색용_id_해석에_포함된다() {
+      final Long groupId = insertGroup("프로미스나인");
+      insertAlias(groupId, "fromis_9");
+
+      assertThat(groupRepository.findIdsByNormalizedKeyword(SearchText.normalizeForLike("fromis9")))
+          .contains(groupId);
+    }
+
+    @Test
+    void 별칭이_없는_그룹은_별칭_조건_때문에_사라지지_않는다() {
+      insertGroup("별칭없는 그룹");
+
+      assertThat(groupRepository.findByNormalizedKeyword(SearchText.normalizeForLike("별칭없는")))
+          .extracting(Group::getName)
+          .contains("별칭없는 그룹");
+    }
+
+    @Test
+    void 같은_그룹이_이름과_별칭에_모두_걸려도_한_번만_반환된다() {
+      final Long groupId = insertGroup("중복매칭");
+      insertAlias(groupId, "중복매칭별칭");
+
+      assertThat(groupRepository.findByNormalizedKeyword(SearchText.normalizeForLike("중복매칭")))
+          .filteredOn(group -> group.getId().equals(groupId))
+          .hasSize(1);
+    }
+
+    @Test
+    void 정규화_후_1자인_별칭은_등록할_수_없다() {
+      final Long groupId = insertGroup("최소길이 확인 그룹");
+
+      // 1자 별칭은 부분일치에서 거의 모든 검색어에 걸린다. DB CHECK 로 등록 자체를 막는다.
+      assertThatThrownBy(() -> insertAlias(groupId, "i-"))
+          .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void 정규화_결과가_같은_별칭은_한_그룹에_중복_등록할_수_없다() {
+      final Long groupId = insertGroup("중복별칭 확인 그룹");
+      insertAlias(groupId, "i-dle");
+
+      assertThatThrownBy(() -> insertAlias(groupId, "idle"))
+          .isInstanceOf(DataIntegrityViolationException.class);
     }
   }
 

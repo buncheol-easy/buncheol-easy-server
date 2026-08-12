@@ -7,13 +7,14 @@ package buncheoleasy.global.query;
  *
  * <ol>
  *   <li>이 클래스 — 사용자가 입력한 <b>검색어</b>를 정규화한다.
- *   <li>{@code schema.sql} / {@code schema-test.sql} 의 {@code search_name}·{@code search_title} 생성 컬럼 — 저장된
- *       <b>대상 문자열</b>을 정규화한다 ({@link #STRIPPED_CHARACTERS} 와 같은 문자를 {@code REPLACE} 체인으로 제거).
+ *   <li>{@code schema.sql} / {@code schema-test.sql} 의 {@code search_name}·{@code search_title}·{@code
+ *       search_alias} 생성 컬럼 — 저장된 <b>대상 문자열</b>을 정규화한다 ({@link #STRIPPED_CHARACTERS} 와 같은 문자를 {@code
+ *       REPLACE} 체인으로 제거).
  *   <li>프론트엔드 {@code lib/group-presenters.ts} 의 {@code normalizeGroupSearchText} — 클라이언트 랭킹용.
  * </ol>
  *
- * <p>정규화를 생성 컬럼으로 둔 이유: {@code groups}/{@code group_members} 는 애플리케이션 쓰기 경로가 없고 SQL 로 직접 시드된다.
- * 값을 애플리케이션이 채우면 {@code search_name} 을 빠뜨린 INSERT 가 조용히 검색에서 누락되므로, DB 가 항상 계산하도록 맡긴다.
+ * <p>정규화를 생성 컬럼으로 둔 이유: {@code groups}/{@code group_members}/{@code group_aliases} 는 애플리케이션 쓰기 경로가 없고
+ * SQL 로 직접 시드된다. 값을 애플리케이션이 채우면 {@code search_name} 을 빠뜨린 INSERT 가 조용히 검색에서 누락되므로, DB 가 항상 계산하도록 맡긴다.
  */
 public final class SearchText {
 

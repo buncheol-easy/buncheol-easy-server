@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS buncheol_bookmarks;
 DROP TABLE IF EXISTS buncheols;
 DROP TABLE IF EXISTS user_recent_searches;
 DROP TABLE IF EXISTS user_favorite_groups;
+DROP TABLE IF EXISTS group_aliases;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS `groups`;
 DROP TABLE IF EXISTS shipping_addresses;
@@ -126,6 +127,27 @@ CREATE TABLE group_members
 CREATE INDEX idx_group_members_group_id ON group_members (group_id);
 CREATE INDEX idx_group_members_name ON group_members (name);
 CREATE INDEX idx_group_members_search_name ON group_members (search_name);
+
+CREATE TABLE group_aliases
+(
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    group_id     BIGINT       NOT NULL,
+    alias        VARCHAR(100) NOT NULL,
+    -- MySQL schema.sql 과 동일 규칙. H2 생성 컬럼은 항상 stored 라 STORED 키워드를 받지 않는다.
+    search_alias VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        alias, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
+    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT ck_group_aliases_min_length CHECK (CHAR_LENGTH(search_alias) >= 2),
+    CONSTRAINT uk_group_aliases_group_search UNIQUE (group_id, search_alias),
+    CONSTRAINT fk_group_aliases_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_group_aliases_search_alias ON group_aliases (search_alias);
 
 CREATE TABLE buncheols
 (

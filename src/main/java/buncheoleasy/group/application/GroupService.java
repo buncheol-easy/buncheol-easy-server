@@ -5,6 +5,8 @@ import buncheoleasy.global.query.SearchText;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.group.domain.alias.GroupAlias;
+import buncheoleasy.group.domain.alias.GroupAliasRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.dto.response.GroupDetailResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
@@ -31,6 +33,7 @@ public class GroupService {
   // 인기 아티스트 집계는 buncheol 모듈이 source. application 레이어에서 두 도메인을 조합한다.
   private final BuncheolRepository buncheolRepository;
   private final GroupRepository groupRepository;
+  private final GroupAliasRepository groupAliasRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -50,8 +53,27 @@ public class GroupService {
     return toGroupResponses(groupDomainService.searchGroups(normalizedKeyword));
   }
 
-  private static List<GroupResponse> toGroupResponses(final List<Group> groups) {
-    return groups.stream().map(GroupResponse::from).toList();
+  private List<GroupResponse> toGroupResponses(final List<Group> groups) {
+    final Map<Long, List<String>> aliasesByGroupId = findAliasesByGroupId(groups);
+    return groups.stream()
+        .map(
+            group ->
+                GroupResponse.of(
+                    group, aliasesByGroupId.getOrDefault(group.getId(), List.of())))
+        .toList();
+  }
+
+  /** 그룹당 별칭 조회를 돌면 목록 크기만큼 쿼리가 나간다(전체 조회는 수백 건). 한 번에 읽어 id 로 묶는다. */
+  private Map<Long, List<String>> findAliasesByGroupId(final List<Group> groups) {
+    if (groups.isEmpty()) {
+      return Map.of();
+    }
+    final List<Long> groupIds = groups.stream().map(Group::getId).toList();
+    return groupAliasRepository.findAllByGroupIds(groupIds).stream()
+        .collect(
+            Collectors.groupingBy(
+                GroupAlias::getGroupId,
+                Collectors.mapping(GroupAlias::getAlias, Collectors.toList())));
   }
 
   /** 아티스트 페이지(그룹 단위 브라우즈) 헤더용 — 그룹 본문 + 멤버 전체 + 모집중 분철 수. */
@@ -98,15 +120,18 @@ public class GroupService {
                     GroupMember::getGroupId,
                     Collectors.mapping(GroupMemberResponse::from, Collectors.toList())));
 
-    return groupDomainService.findGroupsByIds(groupIds).stream()
-        .map(group -> toGroupWithMembers(group, membersByGroupId))
-        .toList();
-  }
+    final List<Group> groups = groupDomainService.findGroupsByIds(groupIds);
+    // 프론트는 멤버 검색 결과 그룹도 그룹 검색 결과와 합쳐 한 번에 랭킹한다. 별칭이 빠지면 이쪽 그룹만 불리해진다.
+    final Map<Long, List<String>> aliasesByGroupId = findAliasesByGroupId(groups);
 
-  private GroupWithMembersResponse toGroupWithMembers(
-      final Group group, final Map<Long, List<GroupMemberResponse>> membersByGroupId) {
-    return GroupWithMembersResponse.of(
-        group, membersByGroupId.getOrDefault(group.getId(), List.of()));
+    return groups.stream()
+        .map(
+            group ->
+                GroupWithMembersResponse.of(
+                    group,
+                    aliasesByGroupId.getOrDefault(group.getId(), List.of()),
+                    membersByGroupId.getOrDefault(group.getId(), List.of())))
+        .toList();
   }
 
   /** 최근 30일간 분철 등록 수 기준 인기 그룹 상위 5개를 인기도 내림차순으로 반환한다. CANCELLED 분철은 제외. */
@@ -121,6 +146,6 @@ public class GroupService {
     final Map<Long, Group> groupById =
         groupRepository.findAllByIds(orderedGroupIds).stream()
             .collect(Collectors.toMap(Group::getId, g -> g));
-    return orderedGroupIds.stream().map(groupById::get).map(GroupResponse::from).toList();
+    return toGroupResponses(orderedGroupIds.stream().map(groupById::get).toList());
   }
 }

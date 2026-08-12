@@ -9,6 +9,8 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.group.domain.alias.GroupAlias;
+import buncheoleasy.group.domain.alias.GroupAliasRepository;
 import buncheoleasy.group.dto.response.GroupResponse;
 import java.time.Clock;
 import java.util.List;
@@ -29,6 +31,7 @@ class GroupServiceTest {
   @Mock private GroupDomainService groupDomainService;
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
+  @Mock private GroupAliasRepository groupAliasRepository;
   @Mock private Clock clock;
 
   @Nested
@@ -43,6 +46,21 @@ class GroupServiceTest {
       List<GroupResponse> result = groupService.searchGroups("스트레이 키즈");
 
       assertThat(result).extracting(GroupResponse::name).containsExactly("스트레이 키즈");
+    }
+
+    @Test
+    void 응답에_그룹별_별칭이_실린다() {
+      // 별칭을 안 실으면 서버가 별칭으로 매칭해 내려준 그룹을 프론트 랭킹이 이름만 보고 탈락시킨다.
+      given(groupDomainService.searchGroups("아이브"))
+          .willReturn(List.of(new Group(1L, "IVE", null), new Group(2L, "아이브 트리뷰트", null)));
+      given(groupAliasRepository.findAllByGroupIds(List.of(1L, 2L)))
+          .willReturn(List.of(new GroupAlias(10L, 1L, "아이브"), new GroupAlias(11L, 1L, "아이비")));
+
+      List<GroupResponse> result = groupService.searchGroups("아이브");
+
+      assertThat(result)
+          .extracting(GroupResponse::aliases)
+          .containsExactly(List.of("아이브", "아이비"), List.of());
     }
 
     @Test

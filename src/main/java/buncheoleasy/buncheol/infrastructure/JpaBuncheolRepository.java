@@ -22,12 +22,21 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
   long countByHostIdAndStatusIn(Long hostId, Set<BuncheolStatus> statuses);
 
+  long countByGroupIdAndStatus(Long groupId, BuncheolStatus status);
+
   List<Buncheol> findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
       Long hostId, BuncheolStatus excludedStatus);
 
   /**
    * 공개 목록의 <b>모집중(RECRUITING) 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
    * BuncheolStatus#RECRUITING} 을 전달한다.
+   *
+   * <p>검색어는 정규화된 {@code searchTitle}(공백·구두점 무시) 과 애플리케이션이 해석해 넘긴 그룹·멤버 id, 그리고 설명 원문
+   * 부분일치에 걸린다. 설명은 정규화 컬럼이 없어 원문 비교라 공백을 무시하지 않는다.
+   *
+   * <p>{@code normalizedKeyword} 의 {@code IS NOT NULL} 가드는 생략할 수 없다 — MySQL 은 {@code CONCAT('%',
+   * NULL, '%')} 를 NULL 로 접어 매칭 0건이 되지만 H2 는 {@code '%%'} 로 접어 전 행이 매칭된다. 가드가 없으면
+   * 구두점만 입력한 검색이 테스트(H2)에서는 전건, 운영(MySQL)에서는 0건으로 갈린다.
    *
    * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다. {@code
    * idx_buncheols_status_created (status, created_at DESC, id DESC)}(groupId 동반 시 {@code
@@ -37,10 +46,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       "SELECT b FROM Buncheol b "
           + "WHERE b.status = :status "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
+          + "  AND (:onlyFavoriteGroups = FALSE OR b.groupId IN :favoriteGroupIds) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
           + "  AND (:keyword IS NULL "
-          + "        OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\' "
+          + "        OR (:normalizedKeyword IS NOT NULL "
+          + "            AND b.searchTitle LIKE CONCAT('%', :normalizedKeyword, '%') ESCAPE '\\') "
+          + "        OR b.groupId IN :keywordGroupIds "
+          + "        OR EXISTS (SELECT bm2 FROM BuncheolMember bm2 "
+          + "                   WHERE bm2.buncheolId = b.id "
+          + "                   AND bm2.memberId IN :keywordMemberIds) "
           + "        OR LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\') "
           + "  AND (:cursorCreatedAt IS NULL "
           + "        OR b.createdAt < :cursorCreatedAt "
@@ -49,8 +64,13 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Buncheol> searchRecruiting(
       @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
+      @Param("onlyFavoriteGroups") boolean onlyFavoriteGroups,
+      @Param("favoriteGroupIds") List<Long> favoriteGroupIds,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,
+      @Param("normalizedKeyword") String normalizedKeyword,
+      @Param("keywordGroupIds") List<Long> keywordGroupIds,
+      @Param("keywordMemberIds") List<Long> keywordMemberIds,
       @Param("cursorCreatedAt") Instant cursorCreatedAt,
       @Param("cursorId") Long cursorId,
       Pageable pageable);
@@ -68,10 +88,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       "SELECT b FROM Buncheol b "
           + "WHERE b.status = :status "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
+          + "  AND (:onlyFavoriteGroups = FALSE OR b.groupId IN :favoriteGroupIds) "
           + "  AND (:memberId IS NULL OR b.id IN "
           + "        (SELECT bm.buncheolId FROM BuncheolMember bm WHERE bm.memberId = :memberId)) "
           + "  AND (:keyword IS NULL "
-          + "        OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\' "
+          + "        OR (:normalizedKeyword IS NOT NULL "
+          + "            AND b.searchTitle LIKE CONCAT('%', :normalizedKeyword, '%') ESCAPE '\\') "
+          + "        OR b.groupId IN :keywordGroupIds "
+          + "        OR EXISTS (SELECT bm2 FROM BuncheolMember bm2 "
+          + "                   WHERE bm2.buncheolId = b.id "
+          + "                   AND bm2.memberId IN :keywordMemberIds) "
           + "        OR LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '\\') "
           + "  AND (:cursorDeadline IS NULL "
           + "        OR b.deadline < :cursorDeadline "
@@ -80,8 +106,13 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   List<Buncheol> searchByDeadline(
       @Param("status") BuncheolStatus status,
       @Param("groupId") Long groupId,
+      @Param("onlyFavoriteGroups") boolean onlyFavoriteGroups,
+      @Param("favoriteGroupIds") List<Long> favoriteGroupIds,
       @Param("memberId") Long memberId,
       @Param("keyword") String keyword,
+      @Param("normalizedKeyword") String normalizedKeyword,
+      @Param("keywordGroupIds") List<Long> keywordGroupIds,
+      @Param("keywordMemberIds") List<Long> keywordMemberIds,
       @Param("cursorDeadline") Instant cursorDeadline,
       @Param("cursorId") Long cursorId,
       Pageable pageable);

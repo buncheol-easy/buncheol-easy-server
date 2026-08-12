@@ -30,16 +30,22 @@ public class GroupDomainService {
     return members;
   }
 
-  public List<Group> searchGroups(final String keyword) {
-    return groupRepository.findByKeyword(keyword);
+  public List<Group> searchGroups(final String normalizedKeyword) {
+    return groupRepository.findByNormalizedKeyword(normalizedKeyword);
+  }
+
+  public Group getGroup(final Long groupId) {
+    return groupRepository
+        .findById(groupId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
   }
 
   public List<GroupMember> getGroupMembers(final Long id) {
     return groupMemberRepository.findAllByGroupId(id);
   }
 
-  public List<GroupMember> findMembersByName(final String name) {
-    return groupMemberRepository.findAllByName(name);
+  public List<GroupMember> findMembersByName(final String normalizedName) {
+    return groupMemberRepository.findAllByNormalizedName(normalizedName);
   }
 
   public List<GroupMember> findMembersInGroups(final List<Long> groupIds) {

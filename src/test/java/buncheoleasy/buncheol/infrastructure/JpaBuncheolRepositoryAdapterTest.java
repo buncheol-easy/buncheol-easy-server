@@ -9,6 +9,8 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.global.query.LikeEscaper;
+import buncheoleasy.global.query.SearchText;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
@@ -440,6 +442,29 @@ class JpaBuncheolRepositoryAdapterTest {
       em.clear();
     }
 
+    // 검색어 정규화는 BuncheolListQueryService 의 책임이라, 어댑터 테스트는 서비스가 만들어 넘기는 형태를 그대로 재현한다.
+    private BuncheolSearchCondition keywordCondition(String keyword) {
+      return keywordCondition(keyword, List.of(), List.of());
+    }
+
+    private BuncheolSearchCondition keywordCondition(
+        String keyword, List<Long> keywordGroupIds, List<Long> keywordMemberIds) {
+      return new BuncheolSearchCondition(null, null, keyword)
+          .withKeywordMatches(
+              LikeEscaper.escape(keyword),
+              SearchText.normalizeForLike(keyword),
+              keywordGroupIds,
+              keywordMemberIds);
+    }
+
+    private Long persistWithMembers(
+        Long hostId, Long gId, String title, List<Long> memberIds, Instant createdAt) {
+      Long buncheolId =
+          persistWithCreatedAt(hostId, paramsWithTitleAndDescription(gId, title, "설명"), createdAt);
+      memberIds.forEach(memberId -> linkMember(buncheolId, memberId));
+      return buncheolId;
+    }
+
     @Test
     void HOST_CANCELLED_는_검색에서_제외되고_인원미달_CANCELLED_는_맨_뒤에_포함된다() {
       Long recruiting =
@@ -511,9 +536,65 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, null, "newjeans"), BuncheolListCursor.firstPage(), 10);
+              keywordCondition("newjeans"), BuncheolListCursor.firstPage(), 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(titleMatch, descMatch);
+    }
+
+    @Test
+    void title_검색은_공백과_구두점을_무시한다() {
+      Long spaced =
+          persistWithCreatedAt(
+              hostId,
+              paramsWithTitleAndDescription(groupId, "아이브 앨범 분철", "설명"),
+              Instant.parse("2026-05-15T08:00:00Z"));
+      persistWithCreatedAt(
+          hostId,
+          paramsWithTitleAndDescription(groupId, "에스파 분철", "다른 설명"),
+          Instant.parse("2026-05-13T08:00:00Z"));
+
+      assertThat(
+              buncheolRepository.search(
+                  keywordCondition("아이브앨범"), BuncheolListCursor.firstPage(), 10))
+          .extracting(Buncheol::getId)
+          .containsExactly(spaced);
+    }
+
+    @Test
+    void keyword_가_그룹명과_일치하면_제목에_없어도_검색된다() {
+      Long target =
+          persistWithCreatedAt(
+              hostId,
+              paramsWithTitleAndDescription(groupId, "제목에는 그룹명이 없다", "설명"),
+              Instant.parse("2026-05-15T08:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              keywordCondition("무관한검색어", List.of(groupId), List.of()),
+              BuncheolListCursor.firstPage(),
+              10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(target);
+    }
+
+    @Test
+    void keyword_가_멤버명과_일치하면_해당_멤버_슬롯이_있는_분철만_검색된다() {
+      Long memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "장원영");
+      Long withMember =
+          persistWithMembers(
+              hostId, groupId, "슬롯 있는 분철", List.of(memberId), Instant.parse("2026-05-15T08:00:00Z"));
+      persistWithCreatedAt(
+          hostId,
+          paramsWithTitleAndDescription(groupId, "슬롯 없는 분철", "설명"),
+          Instant.parse("2026-05-14T08:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              keywordCondition("무관한검색어", List.of(), List.of(memberId)),
+              BuncheolListCursor.firstPage(),
+              10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(withMember);
     }
 
     @Test

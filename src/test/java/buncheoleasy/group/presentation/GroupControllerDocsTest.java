@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.group.application.GroupService;
+import buncheoleasy.group.dto.response.GroupDetailResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
@@ -31,8 +32,12 @@ class GroupControllerDocsTest extends DocsTestSupport {
     given(groupService.searchGroups("뉴진"))
         .willReturn(
             List.of(
-                new GroupResponse(1L, "NewJeans", "https://example.com/newjeans.jpg"),
-                new GroupResponse(2L, "뉴진스", "https://example.com/newjeans.jpg")));
+                new GroupResponse(
+                    1L,
+                    "NewJeans",
+                    "https://example.com/newjeans.jpg",
+                    List.of("뉴진스", "엔제이", "newjeans")),
+                new GroupResponse(2L, "뉴진스", "https://example.com/newjeans.jpg", List.of())));
 
     // when & then
     mockMvc
@@ -45,16 +50,18 @@ class GroupControllerDocsTest extends DocsTestSupport {
                     ResourceSnippetParameters.builder()
                         .tag("Group")
                         .summary("그룹 검색")
-                        .description("keyword 로 그룹 이름을 부분 검색한다. 미입력 시 전체 그룹 반환.")
+                        .description("keyword 로 그룹 이름과 별칭을 부분 검색한다. 공백·구두점(. _ - ( ) [ ] ·)과 대소문자는 무시하므로 \"스트레이 키즈\"와 \"스트레이키즈\"가 같은 결과를 낸다. 별칭이 등록된 그룹은 다른 표기로도 잡힌다 (\"아이브\" → IVE, \"fromis_9\" → 프로미스나인). 미입력 시 전체 그룹 반환.")
                         .queryParameters(
                             parameterWithName("keyword")
-                                .description("그룹 이름 검색 키워드 (선택)")
+                                .description("그룹 이름·별칭 검색 키워드 (선택)")
                                 .optional())
                         .responseSchema(Schema.schema("GroupListResponse"))
                         .responseFields(
                             fieldWithPath("[].id").description("그룹 ID"),
                             fieldWithPath("[].name").description("그룹 이름"),
-                            fieldWithPath("[].image").description("그룹 이미지 URL").optional())
+                            fieldWithPath("[].image").description("그룹 이미지 URL").optional(),
+                            fieldWithPath("[].aliases")
+                                .description("그룹의 대체 표기(한글/영문 표기·팬덤 축약어). 등록된 별칭이 없으면 빈 배열"))
                         .build())));
   }
 
@@ -68,6 +75,7 @@ class GroupControllerDocsTest extends DocsTestSupport {
                     1L,
                     "NewJeans",
                     "https://example.com/newjeans.jpg",
+                    List.of("뉴진스", "엔제이"),
                     List.of(
                         new GroupMemberResponse(10L, "민지", "https://example.com/minji.jpg"),
                         new GroupMemberResponse(11L, "하니", "https://example.com/hani.jpg")))));
@@ -83,14 +91,16 @@ class GroupControllerDocsTest extends DocsTestSupport {
                     ResourceSnippetParameters.builder()
                         .tag("Group")
                         .summary("멤버 이름으로 그룹 검색")
-                        .description("멤버 이름과 keyword 가 정확히 일치하는 멤버가 속한 그룹과 그 그룹의 전 멤버를 함께 반환한다.")
+                        .description("keyword 와 멤버 이름이 부분 일치하는 멤버가 속한 그룹과 그 그룹의 전 멤버를 함께 반환한다. 공백·구두점과 대소문자는 무시한다.")
                         .queryParameters(
-                            parameterWithName("keyword").description("정확히 일치시킬 멤버 이름 (최대 100자)"))
+                            parameterWithName("keyword").description("멤버 이름 검색 키워드 (최대 100자)"))
                         .responseSchema(Schema.schema("GroupWithMembersListResponse"))
                         .responseFields(
                             fieldWithPath("[].id").description("그룹 ID"),
                             fieldWithPath("[].name").description("그룹 이름"),
                             fieldWithPath("[].image").description("그룹 이미지 URL").optional(),
+                            fieldWithPath("[].aliases")
+                                .description("그룹의 대체 표기. 등록된 별칭이 없으면 빈 배열"),
                             fieldWithPath("[].members[].id").description("멤버 ID"),
                             fieldWithPath("[].members[].name").description("멤버 이름"),
                             fieldWithPath("[].members[].image")
@@ -105,9 +115,10 @@ class GroupControllerDocsTest extends DocsTestSupport {
     given(groupService.getPopularGroups())
         .willReturn(
             List.of(
-                new GroupResponse(1L, "NewJeans", "https://example.com/newjeans.jpg"),
-                new GroupResponse(2L, "aespa", "https://example.com/aespa.jpg"),
-                new GroupResponse(3L, "IVE", "https://example.com/ive.jpg")));
+                new GroupResponse(
+                    1L, "NewJeans", "https://example.com/newjeans.jpg", List.of("뉴진스")),
+                new GroupResponse(2L, "aespa", "https://example.com/aespa.jpg", List.of("에스파")),
+                new GroupResponse(3L, "IVE", "https://example.com/ive.jpg", List.of("아이브"))));
 
     // when & then
     mockMvc
@@ -127,7 +138,51 @@ class GroupControllerDocsTest extends DocsTestSupport {
                         .responseFields(
                             fieldWithPath("[].id").description("그룹 ID"),
                             fieldWithPath("[].name").description("그룹 이름"),
-                            fieldWithPath("[].image").description("그룹 이미지 URL").optional())
+                            fieldWithPath("[].image").description("그룹 이미지 URL").optional(),
+                            fieldWithPath("[].aliases")
+                                .description("그룹의 대체 표기. 등록된 별칭이 없으면 빈 배열"))
+                        .build())));
+  }
+
+  @Test
+  void 그룹_상세_조회() throws Exception {
+    // given
+    given(groupService.getGroupDetail(1L))
+        .willReturn(
+            new GroupDetailResponse(
+                1L,
+                "NewJeans",
+                "https://example.com/newjeans.jpg",
+                List.of(
+                    new GroupMemberResponse(10L, "민지", "https://example.com/minji.jpg"),
+                    new GroupMemberResponse(11L, "하니", "https://example.com/hani.jpg")),
+                12L));
+
+    // when & then
+    mockMvc
+        .perform(get("/v1/groups/{groupId}", 1L))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "groups-detail",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Group")
+                        .summary("그룹 상세 조회")
+                        .description(
+                            "그룹 단위 브라우즈(아티스트) 화면 헤더용. 그룹 본문과 전체 멤버, 모집중 분철 수를 함께 반환한다."
+                                + " 존재하지 않는 그룹이면 GRP-001(404).")
+                        .pathParameters(parameterWithName("groupId").description("그룹 ID"))
+                        .responseSchema(Schema.schema("GroupDetailResponse"))
+                        .responseFields(
+                            fieldWithPath("id").description("그룹 ID"),
+                            fieldWithPath("name").description("그룹 이름"),
+                            fieldWithPath("image").description("그룹 이미지 URL").optional(),
+                            fieldWithPath("members[].id").description("멤버 ID"),
+                            fieldWithPath("members[].name").description("멤버 이름"),
+                            fieldWithPath("members[].image").description("멤버 이미지 URL").optional(),
+                            fieldWithPath("recruitingBuncheolCount")
+                                .description("해당 그룹의 모집중(RECRUITING) 분철 수"))
                         .build())));
   }
 

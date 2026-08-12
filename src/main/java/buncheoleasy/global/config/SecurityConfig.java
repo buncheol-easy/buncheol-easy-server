@@ -41,6 +41,10 @@ public class SecurityConfig {
     "/v1/groups",
     "/v1/groups/popular",
     "/v1/groups/members",
+    // 그룹 상세(/v1/groups/{groupId}). 단일 세그먼트 매처라 인증이 필요한 /v1/groups/favorites/me
+    // (두 세그먼트)는 걸리지 않는다. 이 아래에 한 세그먼트짜리 인증 경로를 추가하면
+    // AUTH_REQUIRED_GET_PATHS 에도 함께 넣어야 한다.
+    "/v1/groups/*",
     "/v1/groups/*/members",
     "/v1/buncheols",
     "/v1/buncheols/*",

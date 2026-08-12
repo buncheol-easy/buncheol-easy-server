@@ -48,6 +48,14 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   @Column(nullable = false, length = 200)
   private String title;
 
+  /**
+   * {@code title} 의 검색용 정규화본. DB 생성 컬럼이라 애플리케이션은 읽기만 한다 ({@code insertable=false,
+   * updatable=false}) — {@link #updateContent} 로 제목이 바뀌면 DB 가 다시 계산한다. 정규화 규칙은 {@code schema.sql} 과
+   * {@link buncheoleasy.global.query.SearchText} 참고.
+   */
+  @Column(name = "search_title", insertable = false, updatable = false, length = 200)
+  private String searchTitle;
+
   @Column(columnDefinition = "TEXT")
   private String description;
 

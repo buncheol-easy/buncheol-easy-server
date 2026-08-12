@@ -95,8 +95,13 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
     return jpaBuncheolRepository.searchRecruiting(
         BuncheolStatus.RECRUITING,
         condition.groupId(),
+        condition.onlyFavoriteGroups(),
+        condition.favoriteGroupIds(),
         condition.memberId(),
         condition.keyword(),
+        condition.normalizedKeyword(),
+        condition.keywordGroupIds(),
+        condition.keywordMemberIds(),
         cursorCreatedAt,
         cursorId,
         PageRequest.of(0, limit));
@@ -112,8 +117,13 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
     return jpaBuncheolRepository.searchByDeadline(
         status,
         condition.groupId(),
+        condition.onlyFavoriteGroups(),
+        condition.favoriteGroupIds(),
         condition.memberId(),
         condition.keyword(),
+        condition.normalizedKeyword(),
+        condition.keywordGroupIds(),
+        condition.keywordMemberIds(),
         fromCursor ? cursor.sortAt() : null,
         fromCursor ? cursor.id() : null,
         PageRequest.of(0, limit));
@@ -123,6 +133,11 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   public long countActiveByHostId(Long hostId) {
     return jpaBuncheolRepository.countByHostIdAndStatusIn(
         hostId, Set.of(BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING));
+  }
+
+  @Override
+  public long countRecruitingByGroupId(Long groupId) {
+    return jpaBuncheolRepository.countByGroupIdAndStatus(groupId, BuncheolStatus.RECRUITING);
   }
 
   @Override

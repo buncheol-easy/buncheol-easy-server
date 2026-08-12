@@ -435,7 +435,14 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             parameterWithName("groupId").description("그룹 ID 필터").optional(),
                             parameterWithName("memberId").description("단일 멤버 ID 필터").optional(),
                             parameterWithName("keyword")
-                                .description("title/description 부분 일치 키워드")
+                                .description(
+                                    "검색 키워드. 분철 제목·그룹명·멤버명은 공백과 구두점(. _ - ( ) [ ] ·)을 무시하고"
+                                        + " 부분 일치하며(\"스트레이 키즈\" == \"스트레이키즈\"), 분철 설명은 원문 부분 일치다.")
+                                .optional(),
+                            parameterWithName("onlyFavoriteGroups")
+                                .description(
+                                    "true 면 로그인 사용자가 최애로 등록한 그룹의 분철만 반환한다."
+                                        + " 비로그인이거나 최애가 0개면 빈 목록 (기본 false)")
                                 .optional(),
                             parameterWithName("cursor")
                                 .description("직전 응답의 `nextCursor` 를 그대로 전달하는 불투명 토큰. 첫 페이지는 생략")

@@ -28,11 +28,13 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
@@ -494,6 +496,71 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 자격 사전 조회 테스트 (docs/53 Q-07)")
+  class GetHostingEligibilityTest {
+
+    @Test
+    void 자격을_모두_갖추면_적격이다() {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.QUALIFIED);
+      given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(false);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isTrue();
+      assertThat(response.reason()).isNull();
+    }
+
+    @Test
+    void 미성년이면_NOT_ADULT_사유로_부적격이다() {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.NOT_ADULT);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason()).isEqualTo(HostingEligibilityResponse.Reason.NOT_ADULT);
+      // 자격 미달이면 상한은 볼 필요가 없다 — 제출 게이트의 검사 순서와 같다.
+      then(buncheolDomainService).should(never()).isActiveHostedLimitExceeded(any());
+    }
+
+    @Test
+    void 자격은_되지만_활성_개최_상한을_넘으면_LIMIT_EXCEEDED_사유로_부적격이다() {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.QUALIFIED);
+      given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(true);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason()).isEqualTo(HostingEligibilityResponse.Reason.LIMIT_EXCEEDED);
+    }
+
+    @Test
+    void 운영진은_자격_게이트와_상한을_보지_않고_적격이다() {
+      // given — 운영진은 기본 LEGACY 라 C2C 자격 게이트·상한이 적용되지 않는다.
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isTrue();
+      then(userDomainService).should(never()).evaluateC2cHostQualification(any());
+      then(buncheolDomainService).should(never()).isActiveHostedLimitExceeded(any());
     }
   }
 

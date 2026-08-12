@@ -115,17 +115,31 @@ public class UserDomainService {
   }
 
   /**
-   * C2C 개최 자격 게이트 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
-   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분해 던진다.
+   * C2C 개최 자격 판정 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
+   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분한다.
+   *
+   * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
+   * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
    */
-  public void requireC2cHostQualification(final Long id) {
+  public C2cHostQualification evaluateC2cHostQualification(final Long id) {
     User user = getUser(id);
-    user.requireProfileCompleted();
+    if (!user.isProfileCompleted()) {
+      return C2cHostQualification.PHONE_REQUIRED;
+    }
     if (user.getAgeRange() == null) {
-      throw new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED);
+      return C2cHostQualification.AGE_UNVERIFIED;
     }
     if (!user.isVerifiedAdult()) {
-      throw new BusinessException(ErrorCode.USER_NOT_ADULT);
+      return C2cHostQualification.NOT_ADULT;
+    }
+    return C2cHostQualification.QUALIFIED;
+  }
+
+  /** C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. */
+  public void requireC2cHostQualification(final Long id) {
+    C2cHostQualification qualification = evaluateC2cHostQualification(id);
+    if (!qualification.isQualified()) {
+      throw new BusinessException(qualification.errorCode());
     }
   }
 

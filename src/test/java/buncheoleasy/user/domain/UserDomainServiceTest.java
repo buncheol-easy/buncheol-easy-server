@@ -208,6 +208,22 @@ class UserDomainServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_NOT_ADULT);
     }
+
+    @Test
+    void 사전_조회는_같은_판정을_예외_대신_값으로_돌려준다() {
+      // given — 개최 폼 진입 차단(docs/53 Q-07)이 제출 게이트와 같은 판정을 쓰는지 확인한다.
+      User minor = User.create("KAKAO", "123456", "test@example.com");
+      minor.updatePhoneNumber("01012345678");
+      minor.updateAgeRange("15~19");
+      given(userRepository.findById(1L)).willReturn(Optional.of(minor));
+      given(userRepository.findById(2L)).willReturn(Optional.of(qualifiedUser()));
+
+      // when & then
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.NOT_ADULT);
+      assertThat(userDomainService.evaluateC2cHostQualification(2L))
+          .isEqualTo(C2cHostQualification.QUALIFIED);
+    }
   }
 
   @Nested

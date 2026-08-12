@@ -16,11 +16,13 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
@@ -103,6 +105,30 @@ public class BuncheolService {
     // 상한은 자격 게이트 통과자에게만 의미가 있으므로 마지막에 검사한다 (운영진은 미적용 — 이벤트 대량 개최 허용).
     buncheolDomainService.validateActiveHostedLimit(hostId);
     return FlowType.C2C;
+  }
+
+  /**
+   * 개최 자격 사전 조회 (docs/53 Q-07). {@link #resolveHostFlowType} 의 게이트를 던지지 않는 판정으로 그대로 재현한다 — 검사 순서까지
+   * 같아야 FE 가 보여주는 사유와 제출 시 실제로 막히는 사유가 일치한다.
+   *
+   * <p>운영진(can_host)은 기본 LEGACY 라 자격 게이트·상한이 없어 항상 적격이다.
+   */
+  @Transactional(readOnly = true)
+  public HostingEligibilityResponse getHostingEligibility(final Long hostId) {
+    if (userDomainService.canHost(hostId)) {
+      return HostingEligibilityResponse.allowed();
+    }
+
+    C2cHostQualification qualification = userDomainService.evaluateC2cHostQualification(hostId);
+    if (!qualification.isQualified()) {
+      return HostingEligibilityResponse.from(qualification);
+    }
+
+    if (buncheolDomainService.isActiveHostedLimitExceeded(hostId)) {
+      return HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.LIMIT_EXCEEDED);
+    }
+
+    return HostingEligibilityResponse.allowed();
   }
 
   @Transactional

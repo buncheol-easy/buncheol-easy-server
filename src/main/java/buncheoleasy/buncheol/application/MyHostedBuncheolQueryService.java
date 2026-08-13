@@ -1,12 +1,14 @@
 package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -49,6 +51,14 @@ public class MyHostedBuncheolQueryService {
                     BuncheolActiveParticipationCount::buncheolId,
                     BuncheolActiveParticipationCount::count));
 
+    // 취소 가능 여부 판정용 입금확인 건수. 목록 전체를 한 번에 세어 카드마다 조회하지 않는다 (docs/56 S-2).
+    Map<Long, Long> confirmedCountByBuncheolId =
+        participationRepository.countConfirmedByBuncheolIds(buncheolIds).stream()
+            .collect(
+                Collectors.toMap(
+                    BuncheolConfirmedParticipationCount::buncheolId,
+                    BuncheolConfirmedParticipationCount::count));
+
     Map<Long, String> groupNameById =
         groupRepository.findAllByIds(groupIds).stream()
             .collect(Collectors.toMap(Group::getId, Group::getName));
@@ -64,6 +74,7 @@ public class MyHostedBuncheolQueryService {
                     b,
                     slotCountByBuncheolId,
                     activeCountByBuncheolId,
+                    confirmedCountByBuncheolId,
                     groupNameById,
                     thumbnailByBuncheolId))
         .toList();
@@ -73,6 +84,7 @@ public class MyHostedBuncheolQueryService {
       final Buncheol buncheol,
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, Long> activeCountByBuncheolId,
+      final Map<Long, Long> confirmedCountByBuncheolId,
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId) {
     int slotCount = slotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue();
@@ -87,6 +99,9 @@ public class MyHostedBuncheolQueryService {
         activeCount,
         buncheol.getCreatedAt(),
         thumbnailByBuncheolId.get(buncheol.getId()),
-        buncheol.getFlowType());
+        buncheol.getFlowType(),
+        // 취소 API 게이트와 같은 판정을 그대로 내린다 — 카드가 상태로 재판정하면 서버와 갈린다 (docs/56 S-2).
+        BuncheolHostCancellability.of(
+            buncheol.getStatus(), confirmedCountByBuncheolId.getOrDefault(buncheol.getId(), 0L)));
   }
 }

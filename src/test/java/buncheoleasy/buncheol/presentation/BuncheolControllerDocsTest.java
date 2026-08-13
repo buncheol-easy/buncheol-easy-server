@@ -20,6 +20,7 @@ import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
+import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -274,7 +275,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             7L,
             createdAt,
             "https://cdn.example.com/buncheol-10-thumb.jpg",
-            FlowType.LEGACY);
+            FlowType.LEGACY,
+            BuncheolHostCancellability.CANCELLABLE);
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -305,7 +307,15 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("분철 대표 이미지 URL. 이미지가 없으면 null")
                                 .optional(),
                             fieldWithPath("[].flowType")
-                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"))
+                                .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
+                            fieldWithPath("[].cancellability")
+                                .description(
+                                    """
+                                    개최자 취소 가능 여부와 사유 (docs/56 S-2). 취소 API 게이트와 같은 판정이라 \
+                                    화면은 이 값만 보고 삭제 버튼을 노출하면 된다.
+                                    CANCELLABLE: 취소 가능 |
+                                    BLOCKED_BY_STATUS: 진행확정 이후·이미 취소됨 (BCH-050) |
+                                    BLOCKED_BY_CONFIRMED_PAYMENT: 입금확인 참여 1건 이상 (BCH-093)"""))
                         .build())));
   }
 

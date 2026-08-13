@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
 import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
@@ -11,6 +12,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -166,6 +168,62 @@ class MyHostedBuncheolQueryServiceTest {
       assertThat(result.get(1).activeParticipationCount()).isEqualTo(1L);
       assertThat(result.get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/20-thumb.jpg");
       assertThat(result.get(1).thumbnailUrl()).isEqualTo("https://cdn.example.com/10-thumb.jpg");
+    }
+  }
+
+  @Nested
+  @DisplayName("취소 가능 여부 노출 테스트 (docs/56 S-2)")
+  class CancellabilityTest {
+
+    @Test
+    void 입금확인_참여가_있는_입금_수집중_분철은_취소_불가로_내려간다() {
+      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.PAYMENT_COLLECTING, 2L);
+
+      assertThat(result.get(0).cancellability())
+          .isEqualTo(BuncheolHostCancellability.BLOCKED_BY_CONFIRMED_PAYMENT);
+    }
+
+    // "보냈어요" 만 누른 건은 입금확인이 아니라 집계에 안 잡힌다 — 허위 마킹 1건으로 개최자가 분철을
+    // 영영 못 접는 것을 피하려는 의도된 범위다 (docs/56 §21-2). 서버 CAS 와 같은 범위.
+    @Test
+    void 입금확인이_0건인_입금_수집중_분철은_취소_가능으로_내려간다() {
+      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.PAYMENT_COLLECTING, 0L);
+
+      assertThat(result.get(0).cancellability())
+          .isEqualTo(BuncheolHostCancellability.CANCELLABLE);
+    }
+
+    @Test
+    void 진행확정된_분철은_상태_사유로_취소_불가로_내려간다() {
+      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.CONFIRMED, 0L);
+
+      assertThat(result.get(0).cancellability())
+          .isEqualTo(BuncheolHostCancellability.BLOCKED_BY_STATUS);
+    }
+
+    private List<MyHostedBuncheolResponse> 응답(
+        final BuncheolStatus status, final long confirmedCount) {
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
+      Buncheol buncheol = buncheol(10L, 100L, "분철", status, deadline, createdAt);
+
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(participationRepository.countActiveByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(participationRepository.countConfirmedByBuncheolIds(List.of(10L)))
+          .willReturn(
+              confirmedCount == 0L
+                  ? List.of()
+                  : List.of(new BuncheolConfirmedParticipationCount(10L, confirmedCount)));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+
+      List<MyHostedBuncheolResponse> result =
+          myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+      assertThat(result).hasSize(1);
+      return result;
     }
   }
 

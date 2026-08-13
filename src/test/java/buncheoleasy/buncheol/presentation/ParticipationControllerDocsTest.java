@@ -19,6 +19,7 @@ import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
@@ -179,7 +180,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 null,
-                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null,
+            ParticipationCancellability.BLOCKED_BY_STATUS);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -208,7 +210,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null,
+            ParticipationCancellability.FLOW_NOT_SUPPORTED);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -338,7 +341,16 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("[].openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].cancellability")
+                                .description(
+                                    """
+                                    자발 취소 가능 여부와 사유 (docs/56 S-1). 취소 API 게이트와 같은 판정이라 \
+                                    화면은 이 값만 보고 취소 버튼을 노출하면 된다.
+                                    CANCELLABLE: 취소 가능 |
+                                    BLOCKED_BY_STATUS: 보냈어요·입금확인 이후 — 고객센터 문의 (BCH-086) |
+                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091) |
+                                    BLOCKED_BY_HOST_CONFIRM: 개최자 성사 확정 후 — 개최자 연락 (BCH-092)"""))
                         .build())));
   }
 
@@ -365,7 +377,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null);
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null,
+            ParticipationCancellability.FLOW_NOT_SUPPORTED);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -455,7 +468,16 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("cancellability")
+                                .description(
+                                    """
+                                    자발 취소 가능 여부와 사유 (docs/56 S-1). 취소 API 게이트와 같은 판정이라 \
+                                    화면은 이 값만 보고 취소 버튼을 노출하면 된다.
+                                    CANCELLABLE: 취소 가능 |
+                                    BLOCKED_BY_STATUS: 보냈어요·입금확인 이후 — 고객센터 문의 (BCH-086) |
+                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091) |
+                                    BLOCKED_BY_HOST_CONFIRM: 개최자 성사 확정 후 — 개최자 연락 (BCH-092)"""))
                         .build())));
   }
 

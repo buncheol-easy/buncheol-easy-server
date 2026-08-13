@@ -9,6 +9,7 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -431,46 +432,38 @@ public class ParticipationService {
    * 막는다. 다만 "확정 후 입금 대기" 상태에는 성사 확정을 거치지 않고 도달하는 경로가 하나 더 있다: 입금 수집중 분철의 추가 모집(docs/46
    * §4.7-E1)은 신청 즉시 AWAITING_PAYMENT 로 생성된다. 상태만 보고 막으면 이 경로로 들어온 참여자는 신청하는 순간 24시간 잠겨 오신청조차
    * 되돌릴 수 없으므로, {@link Buncheol#isCreatedBeforeFinalize} 로 <b>성사 확정을 거친 참여만</b> 막는다.
+   *
+   * <p>판정 자체는 {@link ParticipationCancellability#of} 가 하고 여기서는 사유를 에러코드로 바꾸기만 한다 — 참여 조회 응답이 같은
+   * 판정을 그대로 내려주므로(docs/56 S-1) 화면의 취소 버튼과 이 게이트가 갈리지 않는다.
    */
   @Transactional
   public void cancelByParticipant(final Long participantId, final Long participationId) {
     final Instant now = Instant.now(clock);
     Participation participation = participationDomainService.getParticipation(participationId);
     participation.validateOwnedBy(participantId);
-    // 상태 검사를 플로우 가드보다 먼저 한다 — LEGACY 라도 이미 입금확인된 참여는 "기한이 지나면 자동
-    // 취소돼요"가 사실이 아니다(만료 CAS 는 AWAITING_PAYMENT 에만 걸린다). 문의 경유로 보낸다.
-    if (!isCancellableStatus(participation.getStatus())) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
-    }
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
-    if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
-    }
-    if (isLockedByHostConfirmation(participation, buncheol)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
-    }
+    requireCancellable(ParticipationCancellability.of(participation, buncheol));
 
     if (!participationDomainService.cancelByUser(participationId, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
     }
   }
 
-  // 자발 취소가 열려 있는 구간 (docs/46 §5 구간 ①·②). CAS 가 최종 판정이지만, 안내 문구를 고르려면
-  // 그 전에 상태를 알아야 한다.
-  private static boolean isCancellableStatus(final ParticipationStatus status) {
-    return status == ParticipationStatus.APPLIED
-        || status == ParticipationStatus.AWAITING_PAYMENT;
-  }
-
   /**
-   * 개최자 성사 확정으로 잠긴 참여인지 (docs/56 H-09). 신청(APPLIED)은 확정 전 구간이라 항상 열려 있고, 입금 대기는 성사 확정 일괄
-   * 전이로 들어온 참여만 잠근다 — 추가 모집(docs/46 §4.7-E1)으로 직접 AWAITING_PAYMENT 에 생성된 참여는 확정을 거치지 않았으므로
-   * 계속 취소할 수 있다.
+   * 취소 불가 사유를 에러코드로 바꾼다. 매핑을 switch 로 두면 사유가 추가될 때 컴파일 에러로 잡히고, 응답 노출({@code
+   * MyParticipationResponse#cancellability})과 대칭이 된다 — {@code
+   * UserDomainService#requireC2cHostQualification} 과 같은 형태다.
    */
-  private static boolean isLockedByHostConfirmation(
-      final Participation participation, final Buncheol buncheol) {
-    return participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
-        && buncheol.isCreatedBeforeFinalize(participation.getCreatedAt());
+  private static void requireCancellable(final ParticipationCancellability cancellability) {
+    switch (cancellability) {
+      case CANCELLABLE -> {}
+      case BLOCKED_BY_STATUS ->
+          throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+      case FLOW_NOT_SUPPORTED ->
+          throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+      case BLOCKED_BY_HOST_CONFIRM ->
+          throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
+    }
   }
 
   /**

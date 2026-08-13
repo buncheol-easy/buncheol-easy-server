@@ -60,19 +60,15 @@ class BuncheolDomainServiceTest {
               anyLong(), eq(BuncheolStatus.CANCELLED), any(BuncheolStatus.class), any(Instant.class));
     }
 
+    // 입금 수집중 취소는 범용 finalizeIfStatus 가 아니라 확정 참여 유무를 함께 보는 전용 CAS 로 간다 (docs/56 H-13).
     @Test
-    void C2C_입금_수집중_분철은_두번째_CAS_로_취소되고_직전_상태_PAYMENT_COLLECTING_을_반환한다() {
+    void C2C_입금_수집중_분철은_확정_참여_가드_CAS_로_취소되고_직전_상태_PAYMENT_COLLECTING_을_반환한다() {
       // given
       given(
               buncheolRepository.finalizeIfStatus(
                   BUNCHEOL_ID, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, NOW))
           .willReturn(0);
-      given(
-              buncheolRepository.finalizeIfStatus(
-                  BUNCHEOL_ID,
-                  BuncheolStatus.PAYMENT_COLLECTING,
-                  BuncheolStatus.HOST_CANCELLED,
-                  NOW))
+      given(buncheolRepository.hostCancelIfCollectingAndNoConfirmed(BUNCHEOL_ID, NOW))
           .willReturn(1);
 
       // when
@@ -80,6 +76,14 @@ class BuncheolDomainServiceTest {
 
       // then
       assertThat(priorStatus).isEqualTo(BuncheolStatus.PAYMENT_COLLECTING);
+      // 범용 CAS 로 입금 수집중을 전이하면 확정 참여 가드를 우회하게 된다 — 그 경로를 쓰지 않는지 못 박는다.
+      then(buncheolRepository)
+          .should(never())
+          .finalizeIfStatus(
+              anyLong(),
+              eq(BuncheolStatus.PAYMENT_COLLECTING),
+              any(BuncheolStatus.class),
+              any(Instant.class));
     }
 
     @Test
@@ -89,12 +93,7 @@ class BuncheolDomainServiceTest {
               buncheolRepository.finalizeIfStatus(
                   BUNCHEOL_ID, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, NOW))
           .willReturn(0);
-      given(
-              buncheolRepository.finalizeIfStatus(
-                  BUNCHEOL_ID,
-                  BuncheolStatus.PAYMENT_COLLECTING,
-                  BuncheolStatus.HOST_CANCELLED,
-                  NOW))
+      given(buncheolRepository.hostCancelIfCollectingAndNoConfirmed(BUNCHEOL_ID, NOW))
           .willReturn(0);
       given(
               buncheolRepository.finalizeIfStatus(
@@ -115,12 +114,7 @@ class BuncheolDomainServiceTest {
               buncheolRepository.finalizeIfStatus(
                   BUNCHEOL_ID, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, NOW))
           .willReturn(0);
-      given(
-              buncheolRepository.finalizeIfStatus(
-                  BUNCHEOL_ID,
-                  BuncheolStatus.PAYMENT_COLLECTING,
-                  BuncheolStatus.HOST_CANCELLED,
-                  NOW))
+      given(buncheolRepository.hostCancelIfCollectingAndNoConfirmed(BUNCHEOL_ID, NOW))
           .willReturn(0);
       given(
               buncheolRepository.finalizeIfStatus(

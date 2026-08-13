@@ -232,6 +232,106 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("입금 수집중 개최자 취소 CAS 테스트 (docs/56 H-13)")
+  class HostCancelIfCollectingAndNoConfirmedTest {
+
+    private int seq = 0;
+
+    private Long persistCollectingBuncheol() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(buncheol.getId(), BuncheolStatus.PAYMENT_COLLECTING);
+      return buncheol.getId();
+    }
+
+    private void insertParticipation(final Long buncheolId, final String participationStatus) {
+      seq++;
+      Long participantId = TestUserFixture.insertUser(jdbcTemplate, "h13_p" + seq);
+      Long groupMemberId =
+          TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "H13멤버" + seq);
+      jdbcTemplate.update(
+          "INSERT INTO buncheol_members (buncheol_id, member_id, price) VALUES (?, ?, ?)",
+          buncheolId,
+          groupMemberId,
+          30_000L);
+      Long buncheolMemberId =
+          jdbcTemplate.queryForObject(
+              "SELECT MAX(id) FROM buncheol_members WHERE buncheol_id = ? AND member_id = ?",
+              Long.class,
+              buncheolId,
+              groupMemberId);
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+              + " amount, refund_bank, refund_account, refund_holder, due_at, status)"
+              + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          30_000L,
+          "국민",
+          "12345678",
+          "홍길동",
+          Timestamp.from(Instant.now()),
+          participationStatus);
+      em.clear();
+    }
+
+    private String statusOf(final Long buncheolId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+    }
+
+    @Test
+    void 입금확인된_참여가_없으면_HOST_CANCELLED_로_전이한다() {
+      Long buncheolId = persistCollectingBuncheol();
+      insertParticipation(buncheolId, "AWAITING_PAYMENT");
+      insertParticipation(buncheolId, "PAYMENT_SENT");
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, Instant.now());
+
+      assertThat(affected).isOne();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.HOST_CANCELLED.name());
+    }
+
+    // 이 테스트가 H-13 가드 본체다 — CAS 의 NOT EXISTS 절을 지우면 전이가 성공해 빨개진다.
+    @Test
+    void 입금확인된_참여가_한_건이라도_있으면_전이하지_않는다() {
+      Long buncheolId = persistCollectingBuncheol();
+      insertParticipation(buncheolId, "AWAITING_PAYMENT");
+      insertParticipation(buncheolId, "CONFIRMED");
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.PAYMENT_COLLECTING.name());
+    }
+
+    // 취소·만료된 참여는 확정 참여가 아니다 — 상태 전건이 아니라 CONFIRMED 만 봐야 한다.
+    @Test
+    void 취소된_참여만_있으면_확정_참여로_보지_않고_전이한다() {
+      Long buncheolId = persistCollectingBuncheol();
+      insertParticipation(buncheolId, "CANCELLED");
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, Instant.now());
+
+      assertThat(affected).isOne();
+    }
+
+    @Test
+    void 입금_수집중이_아니면_전이하지_않는다() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheol.getId(), Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(statusOf(buncheol.getId())).isEqualTo(BuncheolStatus.RECRUITING.name());
+    }
+  }
+
+  @Nested
   @DisplayName("호스트의 분철 목록 조회 테스트")
   class FindVisibleByHostIdOrderByCreatedAtDescTest {
 

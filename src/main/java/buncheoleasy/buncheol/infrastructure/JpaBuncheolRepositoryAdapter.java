@@ -190,6 +190,16 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
+  public int hostCancelIfCollectingAndNoConfirmed(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.hostCancelIfCollectingAndNoConfirmed(
+        buncheolId,
+        BuncheolStatus.PAYMENT_COLLECTING,
+        ParticipationStatus.CONFIRMED,
+        BuncheolStatus.HOST_CANCELLED,
+        now);
+  }
+
+  @Override
   public Optional<Buncheol> findByIdForUpdate(final Long id) {
     return jpaBuncheolRepository.findByIdForUpdate(id);
   }

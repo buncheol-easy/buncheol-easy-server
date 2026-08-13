@@ -129,6 +129,26 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     return flowType == FlowType.C2C;
   }
 
+  /**
+   * {@code createdAt} 에 만들어진 것이 <b>성사 확정보다 먼저</b>인지. C2C 참여가 입금 대기(AWAITING_PAYMENT)에 도달하는
+   * 경로가 둘이라 이걸로 가른다 (docs/56 H-09):
+   *
+   * <ul>
+   *   <li>모집중 신청(APPLIED) → 개최자 성사 확정 일괄 전이 → 확정보다 <b>먼저</b> 생성된 참여 (true)
+   *   <li>입금 수집중 분철에 추가 모집으로 즉시 진입 (docs/46 §4.7-E1) → 확정 <b>이후</b> 생성된 참여 (false)
+   * </ul>
+   *
+   * <p>둘을 구분할 전용 컬럼은 없지만, 성사 확정 CAS 가 {@code finalizedAt} 에 확정 시각을 남기므로 참여 생성 시각과의 선후로
+   * 판정할 수 있다. 두 컬럼 모두 DATETIME(초 정밀도)이라 같은 초에 걸치면 {@code false}(추가 모집으로 간주)가 되는데, 이
+   * 판정을 쓰는 취소 가드는 false 일 때 취소를 <b>허용</b>하므로 경계는 항상 열리는 쪽으로 실패한다 — 실수로 참여자를 잠그지 않는다.
+   *
+   * <p>{@code finalizedAt} 은 이후 마감 판정(진행확정·개최자 취소)에서 덮어써진다. 그때는 값이 더 커져 이 판정이 {@code true} 로
+   * 기울지만, 그 구간은 이미 취소를 막아야 하는 구간이라 결과가 어긋나지 않는다.
+   */
+  public boolean isCreatedBeforeFinalize(final Instant createdAt) {
+    return finalizedAt != null && createdAt != null && createdAt.isBefore(finalizedAt);
+  }
+
   public void updateContent(final String title, final String description) {
     validateTitle(title);
     validateDescription(description);

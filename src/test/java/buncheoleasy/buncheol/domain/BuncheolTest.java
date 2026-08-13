@@ -506,6 +506,60 @@ class BuncheolTest {
     }
   }
 
+  @Nested
+  @DisplayName("성사 확정 선후 판정 테스트 (docs/56 H-09)")
+  class IsCreatedBeforeFinalizeTest {
+
+    private static final Instant FINALIZED_AT = Instant.parse("2026-05-14T12:00:00Z");
+
+    private Buncheol finalizedBuncheol() {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      setFinalizedAt(buncheol, FINALIZED_AT);
+      return buncheol;
+    }
+
+    // 모집중에 신청(APPLIED)했다가 성사 확정 일괄 전이로 입금 대기가 된 참여.
+    @Test
+    void 성사_확정보다_먼저_만들어졌으면_true() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT.minusSeconds(1))).isTrue();
+    }
+
+    // 입금 수집중 분철에 추가 모집으로 들어와 바로 입금 대기가 된 참여 (docs/46 §4.7-E1).
+    @Test
+    void 성사_확정_이후에_만들어졌으면_false() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT.plusSeconds(1))).isFalse();
+    }
+
+    // created_at·finalized_at 은 둘 다 DATETIME(초 정밀도)이라 같은 초에 걸릴 수 있다.
+    // 경계는 항상 "확정을 거치지 않았다"(= 취소 허용) 쪽으로 열려야 한다 — 참여자를 잘못 잠그지 않기 위해서다.
+    @Test
+    void 같은_시각이면_false_로_열어_둔다() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT)).isFalse();
+    }
+
+    @Test
+    void 아직_확정되지_않은_분철은_false() {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+
+      assertThat(buncheol.isCreatedBeforeFinalize(FINALIZED_AT.minusSeconds(1))).isFalse();
+    }
+
+    @Test
+    void 생성_시각을_모르면_false() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(null)).isFalse();
+    }
+  }
+
+  private void setFinalizedAt(final Buncheol buncheol, final Instant finalizedAt) {
+    try {
+      Field field = Buncheol.class.getDeclaredField("finalizedAt");
+      field.setAccessible(true);
+      field.set(buncheol, finalizedAt);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   private void setStatus(final Buncheol buncheol, final BuncheolStatus status) {
     try {
       Field statusField = Buncheol.class.getDeclaredField("status");

@@ -422,8 +422,13 @@ public class ParticipationService {
   }
 
   /**
-   * C2C 참여자 자발 취소 (docs/46 §5). 신청(APPLIED)·입금 대기(AWAITING_PAYMENT)에서만 허용하고, 보냈어요·입금확인 이후는 돈이
-   * 개최자에게 간 구간이라 문의 경유로 안내한다(§5 구간 ②′·③).
+   * C2C 참여자 자발 취소 (docs/46 §5 + docs/56 H-09). 신청(APPLIED)과 <b>성사 확정을 거치지 않은</b> 입금
+   * 대기(AWAITING_PAYMENT)에서만 허용한다. 보냈어요·입금확인 이후는 돈이 개최자에게 간 구간이라 문의 경유로 안내한다(§5 구간 ②′·③).
+   *
+   * <p>docs/56 H-09 로 §5 구간 ②(확정 후 입금 대기)의 자발 취소를 닫았다 — 개최자가 성사 확정으로 인원을 계산한 뒤 참여자가 빠져나가는 것을
+   * 막는다. 다만 "확정 후 입금 대기" 상태에는 성사 확정을 거치지 않고 도달하는 경로가 하나 더 있다: 입금 수집중 분철의 추가 모집(docs/46
+   * §4.7-E1)은 신청 즉시 AWAITING_PAYMENT 로 생성된다. 상태만 보고 막으면 이 경로로 들어온 참여자는 신청하는 순간 24시간 잠겨 오신청조차
+   * 되돌릴 수 없으므로, {@link Buncheol#isCreatedBeforeFinalize} 로 <b>성사 확정을 거친 참여만</b> 막는다.
    */
   @Transactional
   public void cancelByParticipant(final Long participantId, final Long participationId) {
@@ -435,7 +440,13 @@ public class ParticipationService {
     if (!isCancellableStatus(participation.getStatus())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
     }
-    requireC2c(participation, ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+    }
+    if (isLockedByHostConfirmation(participation, buncheol)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
+    }
 
     if (!participationDomainService.cancelByUser(participationId, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
@@ -449,19 +460,27 @@ public class ParticipationService {
         || status == ParticipationStatus.AWAITING_PAYMENT;
   }
 
-  /** C2C 전용 액션 가드 — LEGACY 참여에는 새 플로우 API 를 제공하지 않는다 (docs/46 §4.4). */
-  private void requireC2c(final Participation participation) {
-    requireC2c(participation, ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+  /**
+   * 개최자 성사 확정으로 잠긴 참여인지 (docs/56 H-09). 신청(APPLIED)은 확정 전 구간이라 항상 열려 있고, 입금 대기는 성사 확정 일괄
+   * 전이로 들어온 참여만 잠근다 — 추가 모집(docs/46 §4.7-E1)으로 직접 AWAITING_PAYMENT 에 생성된 참여는 확정을 거치지 않았으므로
+   * 계속 취소할 수 있다.
+   */
+  private static boolean isLockedByHostConfirmation(
+      final Participation participation, final Buncheol buncheol) {
+    return participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
+        && buncheol.isCreatedBeforeFinalize(participation.getCreatedAt());
   }
 
   /**
-   * 액션별 안내 문구가 필요한 경우의 C2C 가드. 기본 코드({@link ErrorCode#BUNCHEOL_FLOW_NOT_SUPPORTED})는 6곳이
-   * 공유하는 범용 문구라, 사용자가 누른 버튼이 특정되는 경로에서만 전용 코드를 넘긴다 (docs/53 Q-12 와 같은 유형의 혼선 방지).
+   * C2C 전용 액션 가드 — LEGACY 참여에는 새 플로우 API 를 제공하지 않는다 (docs/46 §4.4).
+   *
+   * <p>{@link ErrorCode#BUNCHEOL_FLOW_NOT_SUPPORTED} 는 C2C 전용 액션 여러 곳이 공유하는 범용 문구다. 사용자가 누른
+   * 버튼이 특정되는 경로(자발 취소)는 이 헬퍼를 쓰지 않고 전용 코드로 직접 던진다 (docs/53 Q-12 와 같은 유형의 혼선 방지).
    */
-  private void requireC2c(final Participation participation, final ErrorCode errorCode) {
+  private void requireC2c(final Participation participation) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     if (!buncheol.isC2c()) {
-      throw new BusinessException(errorCode);
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
   }
 

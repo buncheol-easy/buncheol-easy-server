@@ -450,19 +450,20 @@ public class ParticipationService {
   }
 
   /**
-   * 취소 불가 사유를 에러코드로 바꾼다. 매핑을 switch 로 두면 사유가 추가될 때 컴파일 에러로 잡히고, 응답 노출({@code
-   * MyParticipationResponse#cancellability})과 대칭이 된다 — {@code
-   * UserDomainService#requireC2cHostQualification} 과 같은 형태다.
+   * 취소 불가 사유를 에러코드로 바꾼다. 매핑을 <b>switch 식</b>으로 두어야 사유가 추가될 때 컴파일 에러로 잡힌다 — enum 을 켜는 switch
+   * <b>문</b>은 exhaustiveness 검사를 받지 않아(JLS §14.11.2), 새 사유가 아무 분기도 타지 않고 통과해 <b>취소가 조용히 허용</b>된다
+   * (자발 취소 CAS 는 상태만 보므로 그대로 성공한다). fail-open 이라 문 형태를 쓰면 안 된다.
    */
   private static void requireCancellable(final ParticipationCancellability cancellability) {
-    switch (cancellability) {
-      case CANCELLABLE -> {}
-      case BLOCKED_BY_STATUS ->
-          throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
-      case FLOW_NOT_SUPPORTED ->
-          throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
-      case BLOCKED_BY_HOST_CONFIRM ->
-          throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
+    ErrorCode errorCode =
+        switch (cancellability) {
+          case CANCELLABLE -> null;
+          case BLOCKED_BY_STATUS -> ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED;
+          case FLOW_NOT_SUPPORTED -> ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED;
+          case BLOCKED_BY_HOST_CONFIRM -> ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM;
+        };
+    if (errorCode != null) {
+      throw new BusinessException(errorCode);
     }
   }
 

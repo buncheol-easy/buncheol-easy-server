@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -95,11 +97,14 @@ class BuncheolHostCancellabilityTest {
         .isEqualTo(casSucceeds(domainService));
   }
 
+  // catch 를 BusinessException + 에러코드까지 좁힌다 — RuntimeException 을 통째로 삼키면 스텁 실수나 NPE 도
+  // "CAS 실패" 로 흡수돼, 취소 불가 상태(기대값 false)에서는 테스트가 깨져도 초록으로 남는다.
   private boolean casSucceeds(final BuncheolDomainService domainService) {
     try {
       domainService.cancelBuncheol(BUNCHEOL_ID, NOW);
       return true;
-    } catch (RuntimeException e) {
+    } catch (BusinessException e) {
+      assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
       return false;
     }
   }

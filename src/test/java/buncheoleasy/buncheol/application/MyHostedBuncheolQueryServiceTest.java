@@ -212,9 +212,12 @@ class MyHostedBuncheolQueryServiceTest {
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
           .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
       given(participationRepository.countActiveByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(participationRepository.countConfirmedByBuncheolIds(List.of(10L)))
+      // 입금확인 건수는 판정에 필요한 상태(입금 수집중)만 집계 대상이 된다 — 그 외 상태는 빈 목록으로 넘어간다.
+      List<Long> confirmedTargetIds =
+          BuncheolHostCancellability.requiresConfirmedCount(status) ? List.of(10L) : List.of();
+      given(participationRepository.countConfirmedByBuncheolIds(confirmedTargetIds))
           .willReturn(
-              confirmedCount == 0L
+              confirmedCount == 0L || confirmedTargetIds.isEmpty()
                   ? List.of()
                   : List.of(new BuncheolConfirmedParticipationCount(10L, confirmedCount)));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));

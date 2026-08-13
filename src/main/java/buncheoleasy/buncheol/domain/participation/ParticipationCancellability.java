@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.domain.participation;
 
 import buncheoleasy.buncheol.domain.Buncheol;
+import java.util.Set;
 
 /**
  * 참여자 자발 취소 가능 여부 판정 결과 (docs/46 §5 · docs/56 H-09 · S-1).
@@ -59,9 +60,19 @@ public enum ParticipationCancellability {
     return this == CANCELLABLE;
   }
 
-  // 자발 취소가 열려 있는 구간 (docs/46 §5 구간 ①·②). CAS 가 최종 판정이지만, 사유를 고르려면 그 전에 상태를 알아야 한다.
+  /**
+   * 자발 취소가 열려 있는 상태 (docs/46 §5 구간 ①·②). 자발 취소 CAS({@code
+   * ParticipationRepository#cancelByUserIfCancellable})가 <b>이 집합을 그대로 써야 한다</b> — 판정과 CAS 가 각자 상태
+   * 목록을 들면 한쪽만 바뀌었을 때 "버튼은 보이는데 눌러도 실패"(또는 그 반대)가 생긴다. 이 PR 이 없애려는 어긋남이 바로 그것이다.
+   */
+  public static Set<ParticipationStatus> cancellableStatuses() {
+    return CANCELLABLE_STATUSES;
+  }
+
+  private static final Set<ParticipationStatus> CANCELLABLE_STATUSES =
+      Set.of(ParticipationStatus.APPLIED, ParticipationStatus.AWAITING_PAYMENT);
+
   private static boolean isCancellableStatus(final ParticipationStatus status) {
-    return status == ParticipationStatus.APPLIED
-        || status == ParticipationStatus.AWAITING_PAYMENT;
+    return status != null && CANCELLABLE_STATUSES.contains(status);
   }
 }

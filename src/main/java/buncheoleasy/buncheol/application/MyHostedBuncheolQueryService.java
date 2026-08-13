@@ -51,9 +51,16 @@ public class MyHostedBuncheolQueryService {
                     BuncheolActiveParticipationCount::buncheolId,
                     BuncheolActiveParticipationCount::count));
 
-    // 취소 가능 여부 판정용 입금확인 건수. 목록 전체를 한 번에 세어 카드마다 조회하지 않는다 (docs/56 S-2).
+    // 취소 가능 여부 판정용 입금확인 건수. 카드마다 조회하지 않고 한 번에 센다 (docs/56 S-2).
+    // 건수가 판정에 쓰이는 상태만 골라 넘긴다 — 개최 목록은 페이징이 없어 오래된 호스트일수록 IN 목록이 계속
+    // 길어지고, 입금 수집중 분철이 없으면(LEGACY 전용 호스트는 항상) 어댑터가 쿼리 자체를 건너뛴다.
+    List<Long> confirmedCountTargetIds =
+        buncheols.stream()
+            .filter(b -> BuncheolHostCancellability.requiresConfirmedCount(b.getStatus()))
+            .map(Buncheol::getId)
+            .toList();
     Map<Long, Long> confirmedCountByBuncheolId =
-        participationRepository.countConfirmedByBuncheolIds(buncheolIds).stream()
+        participationRepository.countConfirmedByBuncheolIds(confirmedCountTargetIds).stream()
             .collect(
                 Collectors.toMap(
                     BuncheolConfirmedParticipationCount::buncheolId,

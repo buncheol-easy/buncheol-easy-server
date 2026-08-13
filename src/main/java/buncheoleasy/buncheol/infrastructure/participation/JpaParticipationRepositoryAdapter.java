@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCou
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -325,7 +326,9 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public boolean cancelByUserIfCancellable(final Long participationId, final Instant now) {
     return jpaParticipationRepository.cancelIfStatusIn(
             participationId,
-            Set.of(ParticipationStatus.APPLIED, ParticipationStatus.AWAITING_PAYMENT),
+            // 상태 목록을 여기 다시 적지 않는다 — 판정(ParticipationCancellability)과 CAS 가 각자 들면
+            // 한쪽만 바뀌었을 때 응답과 실제 동작이 갈린다 (docs/56 S-1).
+            ParticipationCancellability.cancellableStatuses(),
             ParticipationStatus.CANCELLED,
             ParticipationCancelReason.USER_CANCELLED,
             now)

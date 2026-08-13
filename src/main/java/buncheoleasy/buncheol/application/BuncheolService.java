@@ -248,13 +248,31 @@ public class BuncheolService {
     buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
   }
 
+  /**
+   * 개최자의 분철 취소. 모집중·입금 수집중·인원미달 자동취소 상태에서만 가능하고, 활성 참여는 같은 트랜잭션에서 cascade 취소된다.
+   *
+   * <p>개최자가 <b>입금확인(CONFIRMED)한</b> 참여가 1건이라도 있으면 취소를 막는다 (docs/56 H-13). 직거래 구조라 개최자가 수령을
+   * 인정한 돈은 이미 그의 계좌에 있는데 분철을 접으면 플랫폼이 환불을 강제할 수단이 없다. 인원 미달인데 일부만 입금한 경우 개최자가 스스로 접을 수
+   * 없게 되는 것은 인지된 트레이드오프이고, 문의 경유 환불로 처리한다 — 그래서 에러 문구가 "환불한 뒤 고객센터로 문의" 를 안내한다.
+   *
+   * <p>⚠️ 판정 범위는 <b>CONFIRMED 뿐</b>이다. 참여자가 "보냈어요"(PAYMENT_SENT)만 누른 건은 실제로 돈이 갔더라도 개최자가
+   * 입금확인을 누르지 않은 채 취소하면 그대로 통과한다. 마킹은 참여자의 자기 신고라 그것만으로 취소를 막으면 허위 마킹 하나로 개최자가 분철을
+   * 영영 접지 못하게 되므로, 판정 기준을 개최자가 수령을 인정한 시점으로 뒀다(docs/56 §14-3 결정 그대로). 남는 리스크는 문의 경유로 처리한다.
+   */
   @Transactional
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     buncheol.validateOwner(hostId);
     final Instant now = Instant.now(clock);
 
-    // 모집중·인원미달 자동취소 상태에서만 취소 (RECRUITING/CANCELLED → HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
+    // H-13 안내용 사전 검사. 실제 차단은 아래 CAS 서브쿼리가 원자적으로 하고, 여기서는 "왜 못 접는지 + 무엇을 해야 하는지" 를
+    // 알려 주기 위해 먼저 읽는다 — CAS 만 두면 상태 위반과 구분되지 않아 BCH-050(범용 문구)으로 떨어진다.
+    if (buncheol.getStatus() == BuncheolStatus.PAYMENT_COLLECTING
+        && participationDomainService.countConfirmedByBuncheolId(buncheolId) > 0) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS);
+    }
+
+    // 모집중·입금 수집중·인원미달 자동취소 상태에서만 취소 (→ HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
     BuncheolStatus priorStatus = buncheolDomainService.cancelBuncheol(buncheolId, now);
 
     // 자동취소(CANCELLED)된 분철은 마감 스케줄러가 같은 트랜잭션에서 참여 취소·배송 스냅샷 정리·취소 알림까지 이미 끝냈다.

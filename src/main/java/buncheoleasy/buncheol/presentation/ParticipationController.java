@@ -84,8 +84,9 @@ public class ParticipationController {
   }
 
   /**
-   * C2C 참여자 자발 취소 API (docs/46 §5). 신청·입금 대기 단계에서만 가능하고, 보냈어요·입금확인 이후는 문의 경유로 안내된다
-   * (BCH-086).
+   * C2C 참여자 자발 취소 API (docs/46 §5 + docs/56 H-09). 신청(APPLIED)과 <b>성사 확정을 거치지 않은</b> 입금
+   * 대기에서만 가능하다. 보냈어요·입금확인 이후는 문의 경유로 안내되고(BCH-086), 성사 확정을 거친 입금 대기는 개최자 연락으로
+   * 안내된다(BCH-092). 추가 모집(docs/46 §4.7-E1)으로 바로 입금 대기가 된 참여는 확정을 거치지 않았으므로 계속 취소할 수 있다.
    */
   @DeleteMapping("/{participationId}")
   public ResponseEntity<Void> cancelParticipation(

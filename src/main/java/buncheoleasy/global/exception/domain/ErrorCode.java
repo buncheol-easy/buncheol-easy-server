@@ -172,6 +172,18 @@ public enum ErrorCode {
       "BCH-091",
       "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
       HttpStatus.CONFLICT),
+  // 성사 확정을 거친 참여의 자발 취소 차단 (docs/56 H-09). 취소 불가 구간을 공유하는 BCH-086("고객센터로 문의")과
+  // 분리한다 — 여기서 막힌 사람이 연락할 상대는 고객센터가 아니라 돈을 받을 개최자다(직거래).
+  PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM(
+      "BCH-092",
+      "개최자가 성사 확정한 뒤에는 참여를 직접 취소할 수 없어요. 사정이 생겼다면 개최자에게 먼저 알려 주세요.",
+      HttpStatus.CONFLICT),
+  // 입금 확인된 참여가 있는 분철의 개최자 취소 차단 (docs/56 H-13). 상태 위반(BCH-050)과 분리한다 — 상태는 취소 가능
+  // 구간인데 "현재 상태에서는 취소할 수 없습니다" 만 뜨면 개최자가 무엇을 해야 하는지 알 수 없다.
+  BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS(
+      "BCH-093",
+      "입금이 확인된 참여자가 있어 분철을 취소할 수 없어요. 받은 금액을 환불한 뒤 고객센터로 문의해 주세요.",
+      HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

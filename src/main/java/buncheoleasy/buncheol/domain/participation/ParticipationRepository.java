@@ -79,7 +79,7 @@ public interface ParticipationRepository {
   /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */
   List<Participation> findConfirmedByBuncheolId(Long buncheolId);
 
-  /** 단일 분철의 입금확인(CONFIRMED) 참여 수 (마감 시 최소 인원 판정용). */
+  /** 단일 분철의 입금확인(CONFIRMED) 참여 수 (개최자 취소 차단 사전 검사용 — docs/56 H-13). */
   int countConfirmedByBuncheolId(Long buncheolId);
 
   /** 입금 만료가 임박/도과한 참여 폴링 (입금 만료 스케줄러용). status=AWAITING_PAYMENT, due_at <= now. */

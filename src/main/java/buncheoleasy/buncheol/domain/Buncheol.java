@@ -129,6 +129,33 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     return flowType == FlowType.C2C;
   }
 
+  /**
+   * {@code createdAt} 에 만들어진 것이 <b>성사 확정보다 먼저</b>인지. C2C 참여가 입금 대기(AWAITING_PAYMENT)에 도달하는
+   * 경로가 둘이라 이걸로 가른다 (docs/56 H-09):
+   *
+   * <ul>
+   *   <li>모집중 신청(APPLIED) → 개최자 성사 확정 일괄 전이 → 확정보다 <b>먼저</b> 생성된 참여 (true)
+   *   <li>입금 수집중 분철에 추가 모집으로 즉시 진입 (docs/46 §4.7-E1) → 확정 <b>이후</b> 생성된 참여 (false)
+   * </ul>
+   *
+   * <p>둘을 구분할 전용 컬럼은 없지만, 성사 확정 CAS 가 {@code finalizedAt} 에 확정 시각을 남기므로 참여 생성 시각과의 선후로
+   * 판정할 수 있다.
+   *
+   * <p>⚠️ <b>정밀도 전제</b>: 비교하는 두 값은 출처가 다르다. {@code participations.created_at} 은 조건부 INSERT 가
+   * SQL 에서 채우는 <b>DB 시계</b>({@code UTC_TIMESTAMP()}, raw JDBC 라 {@code @PrePersist} 미경유)이고,
+   * {@code buncheols.finalized_at} 은 <b>애플리케이션 시계</b>({@code Instant.now(clock)}) 다. 게다가 두 컬럼 모두
+   * {@code DATETIME}(초 정밀도)이라 MySQL 이 소수부를 <b>반올림</b>해 저장한다. 따라서 성사 확정 직후 <b>1초 남짓</b> 구간에서는
+   * 판정이 양쪽 어느 방향으로도 어긋날 수 있다 — 그 안에 추가 모집 신청이 들어오려면 개최자가 확정 버튼을 누른 바로 그 초에 다른 참여자가
+   * 신청까지 마쳐야 하므로 실무상 도달하기 어렵고, 어긋나 잠기더라도 안내 문구가 개최자 연락을 유도한다. 간격이 분·시간 단위인 정상 구간에서는
+   * DB–앱 클럭 스큐(NTP 동기, ms 수준)로 뒤집히지 않는다.
+   *
+   * <p>{@code finalizedAt} 은 이후 마감 판정(진행확정·개최자 취소)에서 덮어써진다. 그때는 값이 더 커져 이 판정이 {@code true} 로
+   * 기울지만, 그 구간은 이미 취소를 막아야 하는 구간이라 결과가 어긋나지 않는다.
+   */
+  public boolean isCreatedBeforeFinalize(final Instant createdAt) {
+    return finalizedAt != null && createdAt != null && createdAt.isBefore(finalizedAt);
+  }
+
   public void updateContent(final String title, final String description) {
     validateTitle(title);
     validateDescription(description);

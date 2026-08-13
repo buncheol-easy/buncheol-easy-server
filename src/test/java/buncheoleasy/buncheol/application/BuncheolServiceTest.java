@@ -945,6 +945,65 @@ class BuncheolServiceTest {
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
+
+    // docs/56 H-13 — 돈이 이미 개최자 계좌에 있는 분철은 접을 수 없다. 이 가드를 지우면 취소가 통과해 빨개진다.
+    @Test
+    void 입금_수집중_분철에_입금확인된_참여가_있으면_취소를_막고_전용_코드로_안내한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(1);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS);
+
+      then(buncheolDomainService).should(never()).cancelBuncheol(anyLong(), any());
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+    }
+
+    @Test
+    void 입금_수집중이어도_입금확인된_참여가_없으면_취소된다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(0);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
+    }
+
+    // 모집중 구간은 그대로 열어 둔다 — C2C 는 이 구간에 입금확인이 있을 수 없고, LEGACY 는 회사 계좌 수납이라
+    // 운영진 환불 경로가 따로 있다. 여기까지 조이면 기존 LEGACY 취소가 막힌다.
+    @Test
+    void 모집중_분철은_입금확인된_참여가_있어도_취소된다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.RECRUITING);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
+      then(participationDomainService).should(never()).countConfirmedByBuncheolId(anyLong());
+    }
   }
 
   @Nested

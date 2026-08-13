@@ -874,4 +874,65 @@ class ParticipationServiceTest {
           .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
     }
   }
+
+  @Nested
+  @DisplayName("참여자 자발 취소 — 성사 확정 가드 (docs/56 H-09)")
+  class CancelAfterHostConfirmTest {
+
+    private static final Instant CREATED_AT = NOW.minus(2, ChronoUnit.HOURS);
+
+    // 참여 상태·생성 시각을 지정하고, 그 분철이 성사 확정을 거친 참여로 판정하는지(createdBeforeFinalize)를 세팅한다.
+    private void participation(
+        final ParticipationStatus status, final boolean createdBeforeFinalize) {
+      Participation participation = mock(Participation.class);
+      given(participation.getStatus()).willReturn(status);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      if (status == ParticipationStatus.AWAITING_PAYMENT) {
+        given(participation.getCreatedAt()).willReturn(CREATED_AT);
+        given(buncheol.isCreatedBeforeFinalize(CREATED_AT)).willReturn(createdBeforeFinalize);
+      }
+    }
+
+    // H-09 본체 — 이 가드를 지우면 취소가 통과해 빨개진다.
+    @Test
+    void 성사_확정을_거친_입금_대기_참여는_자발_취소를_막는다() {
+      participation(ParticipationStatus.AWAITING_PAYMENT, true);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
+
+      then(participationDomainService).should(never()).cancelByUser(anyLong(), any());
+    }
+
+    // 입금 수집중 분철의 추가 모집(docs/46 §4.7-E1)은 APPLIED 를 거치지 않고 바로 AWAITING_PAYMENT 로 생성된다.
+    // 상태만 보고 막으면 이 경로의 참여자는 신청 즉시 24시간 잠겨 오신청도 되돌릴 수 없다.
+    @Test
+    void 추가_모집으로_바로_입금_대기가_된_참여는_계속_취소할_수_있다() {
+      participation(ParticipationStatus.AWAITING_PAYMENT, false);
+      given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+    }
+
+    @Test
+    void 확정_전_신청_참여는_그대로_취소된다() {
+      participation(ParticipationStatus.APPLIED, true);
+      given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+    }
+  }
 }

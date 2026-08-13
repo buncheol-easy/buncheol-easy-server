@@ -617,15 +617,21 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 참여자 자발 취소")
                         .description(
                             """
-                            참여자가 스스로 참여를 취소한다 (docs/46 §5 취소 3구간). 신청(`APPLIED`)·입금 대기
-                            (`AWAITING_PAYMENT`) 단계에서만 가능하고, '보냈어요' 이후는 돈이 개최자에게 간 구간이라
-                            문의 경유로 안내된다. C2C 분철 전용이다(LEGACY 는 현행대로 취소 경로 없음).
+                            참여자가 스스로 참여를 취소한다 (docs/46 §5 취소 3구간 + docs/56 H-09). 신청(`APPLIED`)과
+                            **성사 확정을 거치지 않은** 입금 대기(`AWAITING_PAYMENT`)에서만 가능하고, '보냈어요' 이후는
+                            돈이 개최자에게 간 구간이라 문의 경유로 안내된다. C2C 분철 전용이다(LEGACY 는 현행대로 취소 경로 없음).
+
+                            개최자가 성사 확정을 누른 뒤에는 참여자가 스스로 빠질 수 없다(docs/56 H-09). 다만 입금
+                            수집중 분철에 추가 모집(docs/46 §4.7-E1)으로 들어와 신청 즉시 `AWAITING_PAYMENT` 가 된
+                            참여는 성사 확정을 거치지 않았으므로 계속 취소할 수 있다 — 그렇지 않으면 이 경로의 참여자는
+                            신청하는 순간 입금 기한까지 잠긴다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 409 | `BCH-086` (`PARTICIPATION_CANCEL_NOT_ALLOWED`) | 취소 불가 구간 ('보냈어요'·입금확인 후 — 문의 경유). **상태 검사를 먼저 하므로 LEGACY 라도 확정된 참여는 이 코드다** |
                             | 409 | `BCH-091` (`PARTICIPATION_CANCEL_NOT_SUPPORTED`) | LEGACY 분철의 참여 (취소 경로 없음 — 기한 만료 자동 취소 안내) |
+                            | 409 | `BCH-092` (`PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM`) | 개최자 성사 확정을 거쳐 입금 대기가 된 참여 (개최자에게 연락 안내) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))

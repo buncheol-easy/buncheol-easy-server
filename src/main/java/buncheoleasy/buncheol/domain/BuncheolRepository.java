@@ -123,6 +123,20 @@ public interface BuncheolRepository {
   int cancelIfCollectingAndEmpty(Long buncheolId, Instant now);
 
   /**
+   * C2C 입금 수집중 분철의 개최자 취소 CAS (PAYMENT_COLLECTING → HOST_CANCELLED). 입금이 확인된(CONFIRMED) 참여가 한 건도
+   * 없을 때만 전이한다 (docs/56 H-13) — 직거래라 참여자 돈은 이미 개최자 계좌에 있고 플랫폼이 환불을 강제할 수단이 없다.
+   *
+   * <p>{@link #finalizeIfStatus} 와 분리한 이유: 그쪽은 모집중 취소·미성사 취소 등이 함께 쓰는 범용 CAS 라 여기에 확정 참여 조건을
+   * 넣으면 무관한 경로까지 조여진다. 확인 여부를 별도 SELECT 로 먼저 읽고 전이하면 그 사이 입금확인이 커밋되는 read-then-act 갭이 생기므로,
+   * 판정을 UPDATE WHERE 서브쿼리(current read)로 묶는다.
+   *
+   * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 입금 수집중이 아니거나 입금확인된 참여가 있음)
+   */
+  int hostCancelIfCollectingAndNoConfirmed(Long buncheolId, Instant now);
+
+  /**
    * C2C 참여 생성 직렬화용 잠금 조회 (SELECT ... FOR UPDATE). 다슬롯 첫 참여 판정(배송비 1회·배송지/입금자명 스냅샷 일치)의
    * check-then-insert 레이스를 분철 행 락으로 막는다 (docs/46 §4.7-A1·A2). 호출 측 트랜잭션이 필수다.
    */

@@ -71,8 +71,13 @@ public class BuncheolDomainService {
   }
 
   /**
-   * 호스트의 분철 취소 (RECRUITING/CANCELLED → HOST_CANCELLED CAS). 진행확정(CONFIRMED)·이미 개최자 취소된 분철은 상태 위반으로
-   * 막는다. 목록·상세에서 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측이 반환된 직전 상태로 판단해 처리한다.
+   * 호스트의 분철 취소 (RECRUITING/PAYMENT_COLLECTING/CANCELLED → HOST_CANCELLED CAS). 진행확정(CONFIRMED)·이미 개최자
+   * 취소된 분철은 상태 위반으로 막는다. 목록·상세에서 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측이 반환된 직전
+   * 상태로 판단해 처리한다.
+   *
+   * <p>입금 수집중(C2C) 취소는 <b>입금확인된 참여가 0건일 때만</b> 통과한다 (docs/56 H-13) — 직거래라 확인된 돈은 이미 개최자 계좌에
+   * 있고 플랫폼이 환불을 강제할 수 없다. 모집중·인원미달 자동취소 구간은 그대로 열어 둔다(그 구간엔 C2C 입금확인이 있을 수 없고, LEGACY 는
+   * 회사 계좌 수납이라 운영진 환불 경로가 있다).
    *
    * <p>상태별 CAS 를 순차 시도해 마감 스케줄러와 경합해도 성공한 시도로 직전 상태가 확정된다 — 허용 상태 IN 단일 CAS 로는 어느 상태에서 전이됐는지 알 수 없어,
    * 자동취소 직후 케스케이드를 중복 실행(취소 알림 재발송)할 수 있다.
@@ -86,9 +91,8 @@ public class BuncheolDomainService {
       return BuncheolStatus.RECRUITING;
     }
     // C2C 입금 수집중 취소 (docs/46 §7.1-6 — 기한 경과 후 개최자 선택지). LEGACY 는 이 상태가 없어 영향 없다.
-    if (buncheolRepository.finalizeIfStatus(
-            buncheolId, BuncheolStatus.PAYMENT_COLLECTING, BuncheolStatus.HOST_CANCELLED, now)
-        > 0) {
+    // 입금확인 참여 존재 여부를 CAS 서브쿼리로 함께 판정한다 (docs/56 H-13).
+    if (buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, now) > 0) {
       return BuncheolStatus.PAYMENT_COLLECTING;
     }
     if (buncheolRepository.finalizeIfStatus(

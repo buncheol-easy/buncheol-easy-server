@@ -253,7 +253,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
     if (buncheolIds.isEmpty()) {
       return List.of();
     }
-    return jpaParticipationRepository.countByBuncheolIdsAndStatus(
+    return jpaParticipationRepository.countConfirmedByBuncheolIds(
         buncheolIds, ParticipationStatus.CONFIRMED);
   }
 

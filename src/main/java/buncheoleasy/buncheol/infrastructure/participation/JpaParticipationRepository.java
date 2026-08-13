@@ -65,7 +65,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "FROM Participation p "
           + "WHERE p.buncheolId IN :buncheolIds AND p.status = :status "
           + "GROUP BY p.buncheolId")
-  List<BuncheolConfirmedParticipationCount> countByBuncheolIdsAndStatus(
+  List<BuncheolConfirmedParticipationCount> countConfirmedByBuncheolIds(
       @Param("buncheolIds") List<Long> buncheolIds, @Param("status") ParticipationStatus status);
 
   @Query(

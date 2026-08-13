@@ -348,7 +348,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                     자발 취소 가능 여부와 사유 (docs/56 S-1). 취소 API 게이트와 같은 판정이라 \
                                     화면은 이 값만 보고 취소 버튼을 노출하면 된다.
                                     CANCELLABLE: 취소 가능 |
-                                    BLOCKED_BY_STATUS: 보냈어요·입금확인 이후 — 고객센터 문의 (BCH-086) |
+                                    BLOCKED_BY_STATUS: 보냈어요·입금확인 이후 — 고객센터 문의 (BCH-086). \
+                                    이미 취소된 참여(CANCELLED)도 이 값이며 안내 대상이 아니다 |
                                     FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091) |
                                     BLOCKED_BY_HOST_CONFIRM: 개최자 성사 확정 후 — 개최자 연락 (BCH-092)"""))
                         .build())));

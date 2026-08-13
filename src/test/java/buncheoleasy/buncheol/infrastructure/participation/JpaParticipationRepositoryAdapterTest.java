@@ -10,8 +10,10 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -33,6 +35,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -145,6 +149,38 @@ class JpaParticipationRepositoryAdapterTest {
         "SELECT id FROM participations WHERE shipping_address_id = ? ORDER BY id DESC LIMIT 1",
         Long.class,
         shippingAddressId);
+  }
+
+  /**
+   * 자발 취소 CAS 가 실제로 통과시키는 상태가 {@link ParticipationCancellability} 의 판정과 일치하는지 (docs/56 S-1). 판정은
+   * 참여 조회 응답이 그대로 내려가므로, 여기서 갈리면 "버튼은 보이는데 눌러도 실패"(또는 그 반대)가 그대로 사용자에게 드러난다. 어댑터가 공유 집합
+   * 대신 자기 상태 목록을 다시 들면 이 테스트가 빨개진다.
+   *
+   * <p>⚠️ 고정하는 것은 <b>상태 축뿐</b>이다 — CAS 는 성사 확정 선후·플로우를 보지 않으므로(그쪽은 애플리케이션 게이트 단독) 이 테스트가
+   * "판정 ≡ CAS" 를 뜻하지는 않는다.
+   */
+  @ParameterizedTest
+  @EnumSource(ParticipationStatus.class)
+  @DisplayName("자발 취소 CAS 가 통과시키는 상태가 취소 판정과 일치한다")
+  void 자발_취소_CAS_가_판정과_같은_상태_집합을_쓴다(final ParticipationStatus status) {
+    Long buncheolId = createBuncheol();
+    Long memberId = createBuncheolMember(buncheolId);
+    Long addressId = insertShippingAddress(participantId, "GS25 취소판정점");
+    Long participationId =
+        insertParticipation(
+            buncheolId,
+            memberId,
+            participantId,
+            addressId,
+            30_000L,
+            Instant.now().plus(1, ChronoUnit.DAYS),
+            status,
+            null);
+
+    boolean cancelled = participationRepository.cancelByUserIfCancellable(participationId, Instant.now());
+
+    assertThat(cancelled)
+        .isEqualTo(ParticipationCancellability.cancellableStatuses().contains(status));
   }
 
   private String statusOf(final Long participationId) {
@@ -711,6 +747,87 @@ class JpaParticipationRepositoryAdapterTest {
           participationRepository.countActiveByBuncheolIds(List.of(buncheolId));
 
       assertThat(result).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("countConfirmedByBuncheolIds — JPQL constructor expression 검증 (docs/56 S-2)")
+  class CountConfirmedByBuncheolIdsTest {
+
+    @Test
+    void 입금확인_참여만_분철_단위로_집계한다() {
+      Long buncheolA = createBuncheol();
+      Long buncheolB = createBuncheol();
+      Long bmA = createBuncheolMember(buncheolA);
+      Long bmB = createBuncheolMember(buncheolB);
+      // 활성 참여는 슬롯당 1건(uq_participations_active_member)이라 B 에는 슬롯을 하나 더 판다.
+      Long otherMember = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "확정집계멤버");
+      Long bmB2 = createBuncheolMember(buncheolB, otherMember);
+      Long addrA = insertShippingAddress(participantId, "확정A_매장");
+      Long addrB = insertShippingAddress(participantId, "확정B_매장");
+      Long addrB2 = insertShippingAddress(secondParticipantId, "확정B_매장2");
+
+      insertParticipation(
+          buncheolA,
+          bmA,
+          participantId,
+          addrA,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+      // B: 보냈어요는 개최자 확인 전이라 세면 안 된다 (docs/56 §21-2 — 허위 마킹으로 개최를 잠그지 않는다).
+      insertParticipation(
+          buncheolB,
+          bmB,
+          participantId,
+          addrB,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.PAYMENT_SENT,
+          null);
+      insertParticipation(
+          buncheolB,
+          bmB2,
+          secondParticipantId,
+          addrB2,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.CONFIRMED,
+          null);
+
+      Map<Long, Long> byId =
+          participationRepository.countConfirmedByBuncheolIds(List.of(buncheolA, buncheolB)).stream()
+              .collect(
+                  Collectors.toMap(
+                      BuncheolConfirmedParticipationCount::buncheolId,
+                      BuncheolConfirmedParticipationCount::count));
+
+      assertThat(byId.get(buncheolA)).isEqualTo(1L);
+      assertThat(byId.get(buncheolB)).isEqualTo(1L);
+    }
+
+    @Test
+    void 빈_입력에는_쿼리_없이_빈_리스트를_반환한다() {
+      assertThat(participationRepository.countConfirmedByBuncheolIds(List.of())).isEmpty();
+    }
+
+    @Test
+    void 입금확인_참여가_없는_분철은_결과에_포함되지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "확정없음매장");
+      insertParticipation(
+          buncheolId,
+          bmId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThat(participationRepository.countConfirmedByBuncheolIds(List.of(buncheolId))).isEmpty();
     }
   }
 

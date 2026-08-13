@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
@@ -267,9 +268,21 @@ public class BuncheolService {
 
     // H-13 안내용 사전 검사. 실제 차단은 아래 CAS 서브쿼리가 원자적으로 하고, 여기서는 "왜 못 접는지 + 무엇을 해야 하는지" 를
     // 알려 주기 위해 먼저 읽는다 — CAS 만 두면 상태 위반과 구분되지 않아 BCH-050(범용 문구)으로 떨어진다.
-    if (buncheol.getStatus() == BuncheolStatus.PAYMENT_COLLECTING
-        && participationDomainService.countConfirmedByBuncheolId(buncheolId) > 0) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS);
+    // 판정은 개최 목록 응답이 그대로 내려주는 것과 같은 값이다 (docs/56 S-2).
+    long confirmedCount =
+        BuncheolHostCancellability.requiresConfirmedCount(buncheol.getStatus())
+            ? participationDomainService.countConfirmedByBuncheolId(buncheolId)
+            : 0L;
+    // 매핑을 switch 식으로 둬야 사유가 추가될 때 컴파일 에러로 잡힌다 — == 비교나 switch 문으로 두면 새 차단 사유가
+    // 사전 검사를 통과해 목록은 "취소 불가"라 말하는데 API 는 취소를 허용하는 fail-open 이 된다.
+    // BLOCKED_BY_STATUS 만 여기서 던지지 않고 CAS 에 맡긴다 — 경합에서 어느 상태로부터 전이됐는지는 CAS 만 알 수 있다.
+    ErrorCode blockedCode =
+        switch (BuncheolHostCancellability.of(buncheol.getStatus(), confirmedCount)) {
+          case CANCELLABLE, BLOCKED_BY_STATUS -> null;
+          case BLOCKED_BY_CONFIRMED_PAYMENT -> ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS;
+        };
+    if (blockedCode != null) {
+      throw new BusinessException(blockedCode);
     }
 
     // 모집중·입금 수집중·인원미달 자동취소 상태에서만 취소 (→ HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.

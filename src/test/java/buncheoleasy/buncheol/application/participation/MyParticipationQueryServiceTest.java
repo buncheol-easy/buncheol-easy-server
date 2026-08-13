@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
@@ -13,6 +14,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -283,6 +285,79 @@ class MyParticipationQueryServiceTest {
       assertThat(second.hostAccount())
           .isEqualTo(new HostAccountResponse("국민", "98765432", "개최자"));
       assertThat(second.delivery()).isNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("취소 가능 여부 노출 테스트 (docs/56 S-1)")
+  class CancellabilityTest {
+
+    private static final Instant FINALIZED_AT = Instant.parse("2026-05-14T10:00:00Z");
+
+    /**
+     * docs/46 §4.7-E1 — 입금 수집중 분철의 추가 모집 참여는 APPLIED 를 거치지 않고 곧바로 AWAITING_PAYMENT 로 생성된다.
+     * 상태만 보고 판정하면 이 참여자는 신청 즉시 24시간 잠기고 화면의 취소 버튼도 사라진다. 반드시 CANCELLABLE 이어야 한다.
+     */
+    @Test
+    void 추가_모집으로_입금_대기가_된_참여는_취소_가능으로_내려간다() {
+      List<MyParticipationResponse> result =
+          응답(
+              ParticipationStatus.AWAITING_PAYMENT,
+              FINALIZED_AT.plus(1, ChronoUnit.HOURS),
+              FINALIZED_AT);
+
+      assertThat(result.get(0).cancellability())
+          .isEqualTo(ParticipationCancellability.CANCELLABLE);
+    }
+
+    @Test
+    void 성사_확정을_거친_입금_대기_참여는_확정_사유와_함께_취소_불가로_내려간다() {
+      List<MyParticipationResponse> result =
+          응답(
+              ParticipationStatus.AWAITING_PAYMENT,
+              FINALIZED_AT.minus(1, ChronoUnit.HOURS),
+              FINALIZED_AT);
+
+      assertThat(result.get(0).cancellability())
+          .isEqualTo(ParticipationCancellability.BLOCKED_BY_HOST_CONFIRM);
+    }
+
+    @Test
+    void 보냈어요_참여는_상태_사유와_함께_취소_불가로_내려간다() {
+      List<MyParticipationResponse> result =
+          응답(
+              ParticipationStatus.PAYMENT_SENT,
+              FINALIZED_AT.minus(1, ChronoUnit.HOURS),
+              FINALIZED_AT);
+
+      assertThat(result.get(0).cancellability())
+          .isEqualTo(ParticipationCancellability.BLOCKED_BY_STATUS);
+    }
+
+    private List<MyParticipationResponse> 응답(
+        final ParticipationStatus status, final Instant createdAt, final Instant finalizedAt) {
+      Buncheol c2c =
+          buncheol(10L, "C2C 분철", Instant.now().plus(7, ChronoUnit.DAYS), BuncheolStatus.PAYMENT_COLLECTING);
+      setField(c2c, "flowType", FlowType.C2C);
+      setField(c2c, "finalizedAt", finalizedAt);
+      Participation participation =
+          participation(500L, 10L, 101L, 50_000L, status, DUE_AT, null, null);
+      setField(participation, "createdAt", createdAt);
+
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(participation));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(c2c));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(groupMemberRepository.findAllByIds(List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
+
+      List<MyParticipationResponse> result =
+          myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+      assertThat(result).hasSize(1);
+      return result;
     }
   }
 

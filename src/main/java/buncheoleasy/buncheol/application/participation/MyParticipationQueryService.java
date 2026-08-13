@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
@@ -186,6 +187,8 @@ public class MyParticipationQueryService {
         buncheol.getFlowType(),
         participation.getPaymentSentAt(),
         participation.getVisiblePaymentRejectedAt(),
-        buncheol.getOpenChatUrl());
+        buncheol.getOpenChatUrl(),
+        // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).
+        ParticipationCancellability.of(participation, buncheol));
   }
 }

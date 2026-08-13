@@ -23,6 +23,7 @@ import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -651,7 +652,8 @@ class BuncheolControllerTest {
               7L,
               createdAt,
               "https://cdn.example.com/buncheol-10-thumb.jpg",
-              FlowType.LEGACY);
+              FlowType.LEGACY,
+              BuncheolHostCancellability.CANCELLABLE);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 

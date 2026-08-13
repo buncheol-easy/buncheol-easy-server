@@ -530,8 +530,8 @@ class BuncheolTest {
       assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT.plusSeconds(1))).isFalse();
     }
 
-    // created_at·finalized_at 은 둘 다 DATETIME(초 정밀도)이라 같은 초에 걸릴 수 있다.
-    // 경계는 항상 "확정을 거치지 않았다"(= 취소 허용) 쪽으로 열려야 한다 — 참여자를 잘못 잠그지 않기 위해서다.
+    // created_at·finalized_at 은 둘 다 DATETIME(초 정밀도)이라 같은 초에 걸릴 수 있다. 동시각은
+    // "확정을 거치지 않았다"(= 취소 허용)로 읽어, 성사 확정과 같은 초의 신청을 잠그지 않는다.
     @Test
     void 같은_시각이면_false_로_열어_둔다() {
       assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT)).isFalse();

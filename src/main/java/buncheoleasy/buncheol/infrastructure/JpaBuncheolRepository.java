@@ -203,6 +203,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * C2C 입금 수집중 분철의 개최자 취소 CAS: 입금확인(CONFIRMED)된 참여가 하나도 없을 때만 HOST_CANCELLED 로 전이한다 (docs/56
    * H-13). 확정 참여가 이미 있으면 그 돈은 개최자 계좌에 있고 플랫폼이 환불을 강제할 수 없으므로 취소 자체를 막는다 — 문의 경유 환불 후 처리한다.
    * 존재 판정을 UPDATE WHERE 서브쿼리(current read)로 묶어, 개최자가 입금확인과 분철취소를 동시에 실행해도 취소가 새어 나가지 않는다.
+   *
+   * <p>⚠️ 락 순서는 분철 행 → 참여 행이다. C2C 입금확인(참여 행 → {@link #confirmIfAllCollected} 의 분철 행)과 역순이라,
+   * 위 동시 실행이 실제로 겹치면 정합성은 지켜지지만 실패 모드가 409 가 아니라 InnoDB 데드락 롤백이 될 수 있다(레포에 재시도 핸들러 없음).
+   * 같은 형태가 {@link #cancelIfCollectingAndEmpty} 에 이미 있어 새로 생긴 리스크 클래스는 아니다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

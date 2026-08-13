@@ -1727,4 +1727,84 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(confirmed.getVisiblePaymentRejectedAt()).isNull();
     }
   }
+
+  /**
+   * 자발 취소 가드(docs/56 H-09)가 기대는 판정 — {@code participations.created_at}(DB 시계)과 {@code
+   * buncheols.finalized_at}(성사 확정 CAS 가 앱 시계로 기록)의 선후 — 을 <b>두 값이 실제로 DB 에 쓰이고 다시 읽히는 경로로</b>
+   * 검증한다. 도메인 술어 테스트({@code BuncheolTest})와 서비스 테스트는 각각 판정식과 배선만 보므로, 두 컬럼이 만나는 조합은 여기서만
+   * 실행된다.
+   *
+   * <p>참여 생성은 프로덕션 경로({@code saveIfRecruiting}/{@code saveIfCollecting})가 아니라 이 클래스의 raw INSERT
+   * 헬퍼를 쓴다 — 조건부 INSERT 는 {@code UTC_TIMESTAMP()} 를 쓰는데 H2 에 없는 함수라 테스트 DB 에서 실행되지 않는다. 헬퍼도
+   * {@code created_at} 을 명시하지 않아 스키마 기본값({@code CURRENT_TIMESTAMP})으로 채워지므로 <b>DB 시계</b>라는 전제는
+   * 같다. 시각 차는 분 단위로 벌려 DATETIME 초 반올림에 흔들리지 않게 한다.
+   */
+  @Nested
+  @DisplayName("성사 확정 시각과 참여 생성 시각의 선후 (docs/56 H-09)")
+  class FinalizeOrderTest {
+
+    private Long createC2cBuncheol() {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      Buncheol buncheol =
+          Buncheol.create(
+              hostId,
+              new BuncheolParams(
+                  groupId, "C2C 제목", null, "스토어명", deadline, 1, 3000, null, FlowType.C2C, null),
+              Instant.now());
+      buncheolRepository.save(buncheol);
+      em.flush();
+      em.clear();
+      return buncheol.getId();
+    }
+
+    private void startCollecting(final Long buncheolId, final Instant at) {
+      int affected =
+          buncheolRepository.startCollectingIfRecruiting(
+              buncheolId, at.plus(24, ChronoUnit.HOURS), "국민", "12345678", "개최자", at);
+      assertThat(affected).isOne();
+      em.clear();
+    }
+
+    private Long insertAwaitingParticipation(final Long buncheolId, final Long memberId) {
+      return insertParticipation(
+          buncheolId,
+          memberId,
+          participantId,
+          insertShippingAddress(participantId, "GS25 확정순서점"),
+          30_000L,
+          Instant.now().plus(24, ChronoUnit.HOURS),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+    }
+
+    // 추가 모집(docs/46 §4.7-E1) — 성사 확정이 이미 끝난 뒤 생성되므로 "확정을 거친 참여" 로 판정되면 안 된다.
+    // 여기서 true 가 나오면 이 경로의 참여자가 신청 즉시 취소 불가로 잠긴다.
+    @Test
+    void 성사_확정_이후에_생성된_참여는_확정_이전_참여가_아니다() {
+      Long buncheolId = createC2cBuncheol();
+      Long memberId = createBuncheolMember(buncheolId);
+      startCollecting(buncheolId, Instant.now().minus(5, ChronoUnit.MINUTES));
+
+      Long participationId = insertAwaitingParticipation(buncheolId, memberId);
+      em.clear();
+
+      Buncheol buncheol = buncheolRepository.findById(buncheolId).orElseThrow();
+      Participation saved = participationRepository.findById(participationId).orElseThrow();
+      assertThat(buncheol.isCreatedBeforeFinalize(saved.getCreatedAt())).isFalse();
+    }
+
+    // 모집중 신청(APPLIED) → 성사 확정 일괄 전이 경로. 확정보다 먼저 만들어졌으므로 취소가 막혀야 한다.
+    @Test
+    void 성사_확정_이전에_생성된_참여는_확정_이전_참여로_판정된다() {
+      Long buncheolId = createC2cBuncheol();
+      Long memberId = createBuncheolMember(buncheolId);
+
+      Long participationId = insertAwaitingParticipation(buncheolId, memberId);
+      startCollecting(buncheolId, Instant.now().plus(5, ChronoUnit.MINUTES));
+
+      Buncheol buncheol = buncheolRepository.findById(buncheolId).orElseThrow();
+      Participation saved = participationRepository.findById(participationId).orElseThrow();
+      assertThat(buncheol.isCreatedBeforeFinalize(saved.getCreatedAt())).isTrue();
+    }
+  }
 }

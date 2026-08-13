@@ -210,9 +210,11 @@ public class ParticipationService {
    * 취소→재신청 루프의 중복 발송 차단은 리스너의 인메모리 가드가 담당한다. 카운트는 반드시 잠금 조회(current read)여야 한다 —
    * participate 진입부 일반 조회가 RR 스냅샷을 행 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다.
    *
-   * <p>락 순서 규약: 분철 행(X) → 참여 행(X) 순서 고정. 현재 역순(참여 행 → 분철 행) 경로는 LEGACY 입금확인뿐인데 이 판정은 C2C
-   * 분철만 타므로 같은 분철 행을 함께 잡을 일이 없다 — 안전의 근거는 상태 구간이 아니라 플로우 타입 분리다. C2C 플로우 안에서 참여 행을 먼저
-   * 잠그는 경로가 생기면 데드락 사이클이 된다.
+   * <p>락 순서 규약: 이 경로는 분철 행(X) → 참여 행(X) 순서다. 개최자 취소 CAS
+   * ({@code hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
+   * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 뿐 아니라 C2C 도 {@code confirmPaymentPayable}
+   * 뒤에 {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은
+   * CAS 가 지키되 실패 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();

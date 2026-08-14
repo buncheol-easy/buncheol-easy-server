@@ -527,6 +527,7 @@ class BuncheolServiceTest {
      */
     @ParameterizedTest
     @CsvSource({
+      "NOT_OPEN_YET, NOT_OPEN_YET",
       "PHONE_REQUIRED, PHONE_REQUIRED",
       "AGE_UNVERIFIED, AGE_UNVERIFIED",
       "NOT_ADULT, NOT_ADULT"

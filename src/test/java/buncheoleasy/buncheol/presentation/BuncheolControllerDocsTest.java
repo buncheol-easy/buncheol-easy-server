@@ -350,6 +350,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
+                            | `NOT_OPEN_YET` | 회원 개최 오픈 전(서비스 스위치 off) — 사용자가 고칠 것이 없다 | 409 `USR-035` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
                             | `AGE_UNVERIFIED` | 연령대 미확인 — 카카오 재로그인 동의로 회복 가능 | 409 `USR-032` |
                             | `NOT_ADULT` | 미성년 확정 — 개최 불가 | 403 `USR-033` |
@@ -365,7 +366,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("reason")
                                 .type(JsonFieldType.STRING)
                                 .description(
-                                    "부적격 사유 (PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
+                                    "부적격 사유 (NOT_OPEN_YET | PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
                                 .optional())
                         .build())));
   }
@@ -488,7 +489,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("items[].memberNames")
                                 .description("분철에 포함된 전체 멤버 이름 (호스트 등록 슬롯 순)"),
                             fieldWithPath("items[].availableMemberNames")
-                                .description("아직 안 팔린(참여 가능한) 멤버 이름 (호스트 등록 슬롯 순)"),
+                                .description(
+                                    "지금 신청할 수 있는 멤버 이름 (호스트 등록 슬롯 순). 신규 참여를 받지 않는 분철(취소·진행확정·마감 경과)은 슬롯이 비어 있어도 빈 배열이라 status 로 다시 거를 필요가 없다"),
                             fieldWithPath("items[].shippingFeePaybackTarget")
                                 .description(
                                     "오픈 이벤트 배송비 환급 대상 분철 여부 (전 슬롯 0원 + 이벤트 활성)."

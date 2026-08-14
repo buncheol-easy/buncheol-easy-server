@@ -11,6 +11,8 @@ import buncheoleasy.user.domain.C2cHostQualification;
 public record HostingEligibilityResponse(boolean eligible, Reason reason) {
 
   public enum Reason {
+    /** 회원 개최 오픈 전 — 사용자가 무엇을 해도 해소되지 않는 유일한 사유다(서비스 스위치). */
+    NOT_OPEN_YET,
     /** 가입 미완료 — 전화번호 등록 필요. */
     PHONE_REQUIRED,
     /** 연령대 미보유 — 카카오 재로그인·재동의로 회복 가능. */
@@ -34,6 +36,7 @@ public record HostingEligibilityResponse(boolean eligible, Reason reason) {
   public static HostingEligibilityResponse from(final C2cHostQualification qualification) {
     return switch (qualification) {
       case QUALIFIED -> allowed();
+      case NOT_OPEN_YET -> blocked(Reason.NOT_OPEN_YET);
       case PHONE_REQUIRED -> blocked(Reason.PHONE_REQUIRED);
       case AGE_UNVERIFIED -> blocked(Reason.AGE_UNVERIFIED);
       case NOT_ADULT -> blocked(Reason.NOT_ADULT);

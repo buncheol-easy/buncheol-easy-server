@@ -9,6 +9,9 @@ package buncheoleasy.user.domain;
  */
 public enum C2cHostQualification {
   QUALIFIED,
+  // 일반 회원 C2C 개최 미오픈 — 사용자 상태와 무관한 서비스 전역 스위치라 다른 사유보다 먼저 판정한다
+  // (C2cHostingProperties). 운영진 개최는 이 게이트를 타지 않는다.
+  NOT_OPEN_YET,
   // 가입 미완료(전화번호 미보유) — C2C 직거래는 개최자 연락처가 분쟁 처리의 근거다.
   PHONE_REQUIRED,
   // 연령대 미보유 — 카카오 재동의로 회복 가능.

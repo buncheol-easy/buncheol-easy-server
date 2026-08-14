@@ -262,6 +262,12 @@ aligo:
       C2C_BUNCHEOL_FULL: ${ALIGO_TPL_C2C_BUNCHEOL_FULL:}
       C2C_PAYMENT_SENT: ${ALIGO_TPL_C2C_PAYMENT_SENT:}
 
+# 일반 회원의 C2C 개최 오픈 스위치. 코드를 prod 에 먼저 올려두고 홍보 시점에 true 로 전환한다.
+# 기본값 false — 주입을 빠뜨렸을 때 "안 열림"(즉시 드러남)이 "몰래 열림"(되돌릴 수 없음)보다 안전하다.
+# 운영진(can_host) 개최는 이 스위치와 무관하게 계속 가능하다 (prod 최종 점검용).
+c2c-hosting:
+  enabled: ${C2C_HOSTING_ENABLED:false}
+
 # 오픈 이벤트 배송비 환급(배송비 돌려받기). 이벤트 종료 시 enabled=false 로 내린다.
 shipping-fee-payback:
   enabled: ${SHIPPING_FEE_PAYBACK_ENABLED:false}

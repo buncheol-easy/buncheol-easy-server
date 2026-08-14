@@ -15,6 +15,8 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,7 @@ public class MyBookmarkedBuncheolQueryService {
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
   private final ParticipationRepository participationRepository;
   private final UserFavoriteGroupRepository userFavoriteGroupRepository;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public List<MyBookmarkedBuncheolResponse> getMyBookmarkedBuncheols(
@@ -97,8 +100,15 @@ public class MyBookmarkedBuncheolQueryService {
     BuncheolMemberNameResolver.MemberNames memberNames =
         buncheolMemberNameResolver.resolveNames(visibleBuncheolIds, takenBuncheolMemberIds);
 
+    // 기준 시각은 응답당 한 번만 뽑는다 — 카드마다 now 를 새로 읽으면 마감 경계에 걸친 분철이
+    // 같은 목록 안에서 서로 다른 기준으로 판정된다 (공개 목록 조회와 같은 방식).
+    Instant now = Instant.now(clock);
+
     return filtered.stream()
-        .map(bm -> toResponse(bm, buncheolById, groupNameById, thumbnailByBuncheolId, memberNames))
+        .map(
+            bm ->
+                toResponse(
+                    bm, buncheolById, groupNameById, thumbnailByBuncheolId, memberNames, now))
         .toList();
   }
 
@@ -154,7 +164,8 @@ public class MyBookmarkedBuncheolQueryService {
       final Map<Long, Buncheol> buncheolById,
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId,
-      final BuncheolMemberNameResolver.MemberNames memberNames) {
+      final BuncheolMemberNameResolver.MemberNames memberNames,
+      final Instant now) {
     Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
     return new MyBookmarkedBuncheolResponse(
         bookmark.getId(),
@@ -165,6 +176,20 @@ public class MyBookmarkedBuncheolQueryService {
         groupNameById.get(buncheol.getGroupId()),
         thumbnailByBuncheolId.get(buncheol.getId()),
         memberNames.all().getOrDefault(buncheol.getId(), List.of()),
-        memberNames.available().getOrDefault(buncheol.getId(), List.of()));
+        availableMemberNames(buncheol, memberNames, now));
+  }
+
+  /**
+   * 목록 카드와 같은 규칙 — 신규 참여를 받지 않는 분철은 남은 멤버를 비운다 (docs/56 F-2). 찜 목록은 취소·마감된 분철도 남겨 보여주므로
+   * {@code BuncheolListQueryService} 보다 이 괴리가 자주 드러난다.
+   */
+  private List<String> availableMemberNames(
+      final Buncheol buncheol,
+      final BuncheolMemberNameResolver.MemberNames memberNames,
+      final Instant now) {
+    if (!buncheol.acceptsNewParticipation(now)) {
+      return List.of();
+    }
+    return memberNames.available().getOrDefault(buncheol.getId(), List.of());
   }
 }

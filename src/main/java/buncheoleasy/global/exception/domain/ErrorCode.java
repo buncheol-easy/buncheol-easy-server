@@ -69,6 +69,10 @@ public enum ErrorCode {
   USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
+  // 회원 개최 오픈 전. 사용자 상태가 아니라 서비스 스위치라 "자격 미달"(403)이 아닌 503 으로 답한다 —
+  // 지금은 안 되지만 나중에는 된다는 뜻이고, 재시도가 의미 있는 유일한 개최 차단 사유다.
+  C2C_HOSTING_NOT_OPEN(
+      "USR-035", "회원 개최는 아직 오픈 전이에요. 준비되면 공지로 알려드릴게요.", HttpStatus.SERVICE_UNAVAILABLE),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),

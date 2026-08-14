@@ -37,6 +37,9 @@ class UserDomainServiceTest {
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
+  // 기존 테스트의 관심사는 사용자 자격이므로 오픈 스위치는 켠 상태를 기본으로 둔다.
+  @Spy private C2cHostingProperties c2cHostingProperties = new C2cHostingProperties(true);
+
   @Nested
   @DisplayName("소셜 로그인 테스트")
   class GetOrCreateBySocialLoginTest {
@@ -171,6 +174,45 @@ class UserDomainServiceTest {
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       userDomainService.requireC2cHostQualification(1L);
+    }
+
+    @Test
+    void 오픈_스위치가_꺼져_있으면_자격을_다_갖춰도_C2C_HOSTING_NOT_OPEN_예외가_발생한다() {
+      UserDomainService closed = closedHostingService();
+
+      assertThatThrownBy(() -> closed.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.C2C_HOSTING_NOT_OPEN);
+    }
+
+    @Test
+    void 오픈_스위치가_꺼져_있으면_사용자를_조회하지도_않는다() {
+      UserDomainService closed = closedHostingService();
+
+      closed.evaluateC2cHostQualification(1L);
+
+      // 스위치는 사용자 상태와 무관하다 — 조회까지 갔다면 판정 순서가 뒤집힌 것이고,
+      // 탈퇴·미존재 사용자에게 "없는 사용자" 예외가 미오픈 안내보다 먼저 뜬다.
+      then(userRepository).should(never()).findById(any());
+    }
+
+    @Test
+    void 오픈_스위치가_꺼져_있으면_사전_조회도_NOT_OPEN_YET_을_반환한다() {
+      UserDomainService closed = closedHostingService();
+
+      assertThat(closed.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.NOT_OPEN_YET);
+    }
+
+    // 스위치를 끈 인스턴스는 따로 만든다 — @InjectMocks 필드는 테스트마다 바꿀 수 없다.
+    private UserDomainService closedHostingService() {
+      return new UserDomainService(
+          userRepository,
+          userServiceTermRepository,
+          nicknameGenerator,
+          clock,
+          new C2cHostingProperties(false));
     }
 
     @Test

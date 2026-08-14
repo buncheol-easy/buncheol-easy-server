@@ -11,9 +11,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
-import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.notification.domain.SlackChannel;
@@ -54,6 +54,19 @@ class SlackNotificationListenerTest {
   @Nested
   @DisplayName("신규 참여 접수(onParticipationCreated)")
   class ParticipationCreated {
+
+    @Test
+    @DisplayName("회원 개최(C2C) 참여는 발송하지 않고 조립 조회도 하지 않는다")
+    void skipsC2cParticipation() {
+      given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(true);
+
+      listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.C2C));
+
+      // 운영진은 C2C 거래 당사자가 아니라 알림 자체가 대상이 아니다. 조립까지 갔다면
+      // 모집중 참여(dueAt=null)에서 본문 포맷이 NPE 로 죽는 경로가 그대로 남아 있는 것이다.
+      then(assembler).shouldHaveNoInteractions();
+      then(slackWebhookClient).should(never()).send(any(), any(), any());
+    }
 
     @Test
     @DisplayName("참여 1건을 blocks 메시지 한 건으로 발송 - 분철·환불계좌·멤버·입금액·입금 기한(KST)·링크 포함")

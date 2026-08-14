@@ -15,6 +15,8 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,7 @@ public class MyBookmarkedBuncheolQueryService {
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
   private final ParticipationRepository participationRepository;
   private final UserFavoriteGroupRepository userFavoriteGroupRepository;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public List<MyBookmarkedBuncheolResponse> getMyBookmarkedBuncheols(
@@ -165,6 +168,18 @@ public class MyBookmarkedBuncheolQueryService {
         groupNameById.get(buncheol.getGroupId()),
         thumbnailByBuncheolId.get(buncheol.getId()),
         memberNames.all().getOrDefault(buncheol.getId(), List.of()),
-        memberNames.available().getOrDefault(buncheol.getId(), List.of()));
+        availableMemberNames(buncheol, memberNames));
+  }
+
+  /**
+   * 목록 카드와 같은 규칙 — 신규 참여를 받지 않는 분철은 남은 멤버를 비운다 (docs/56 F-2). 찜 목록은 취소·마감된 분철도 남겨 보여주므로
+   * {@code BuncheolListQueryService} 보다 이 괴리가 자주 드러난다.
+   */
+  private List<String> availableMemberNames(
+      final Buncheol buncheol, final BuncheolMemberNameResolver.MemberNames memberNames) {
+    if (!buncheol.acceptsNewParticipation(Instant.now(clock))) {
+      return List.of();
+    }
+    return memberNames.available().getOrDefault(buncheol.getId(), List.of());
   }
 }

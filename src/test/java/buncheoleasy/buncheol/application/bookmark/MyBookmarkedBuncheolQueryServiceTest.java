@@ -19,7 +19,9 @@ import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,6 +49,9 @@ class MyBookmarkedBuncheolQueryServiceTest {
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
   @Mock private ParticipationRepository participationRepository;
   @Mock private UserFavoriteGroupRepository userFavoriteGroupRepository;
+
+  // 픽스처 마감(2026-06-01)보다 앞선 고정 시각 — RECRUITING 분철은 신규 참여를 받는 상태로 읽힌다.
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-20T00:00:00Z"), ZoneOffset.UTC);
 
   @Nested
   @DisplayName("내 찜한 분철 목록 조회 테스트")
@@ -264,9 +270,13 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
-    void 취소_분철은_활성_참여가_전부_해제돼_available_이_전체_멤버와_같다() {
-      // 미성사 취소 시 활성 참여가 모두 CANCELLED 로 전이돼 점유 슬롯이 비는 현 동작을 고정한다.
-      // available 은 판매 가능 여부가 아니라 "활성 참여 부재" 라서, 카드 해석은 status 가드가 전제다.
+    void 취소_분철은_활성_참여가_전부_해제되지만_available_은_비어_있다() {
+      // 미성사 취소 시 활성 참여가 모두 CANCELLED 로 전이돼 점유 슬롯이 비지만, 취소 분철은 신규 참여를
+      // 받지 않으므로 available 은 빈 목록이다 (docs/56 F-2).
+      //
+      // ⚠️ 이전에는 "활성 참여 부재" 를 그대로 내려 전체 멤버가 잔여로 보였고, 카드가 status 로 다시
+      // 걸러 준다는 전제에 기대고 있었다. 상세는 같은 슬롯을 CLOSED 로 내리므로 두 화면이 반대 신호를
+      // 줬다 — 판정을 서버로 모아 전제를 없앤다.
       BuncheolBookmark bm = bookmark(500L, USER_ID, 10L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
           .willReturn(List.of(bm));
@@ -290,7 +300,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
       assertThat(result).hasSize(1);
       assertThat(result.get(0).status()).isEqualTo(BuncheolStatus.CANCELLED);
       assertThat(result.get(0).memberNames()).containsExactly("하니", "민지");
-      assertThat(result.get(0).availableMemberNames()).containsExactly("하니", "민지");
+      assertThat(result.get(0).availableMemberNames()).isEmpty();
     }
 
     @Test

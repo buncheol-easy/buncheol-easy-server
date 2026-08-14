@@ -2,6 +2,7 @@ package buncheoleasy.notification.application;
 
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEvent;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.feedback.application.FeedbackSubmittedEvent;
 import buncheoleasy.notification.domain.SlackChannel;
@@ -57,6 +58,13 @@ public class SlackNotificationListener {
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
     // 웹훅 미설정 환경(로컬/CI)은 발송하지 않으므로 조립 조회부터 건너뛴다.
     if (!slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)) {
+      return;
+    }
+    // 회원 개최(C2C)는 운영진이 거래 당사자가 아니다 — 입금 확인도 개최자가 하므로 이 알림이 안내하는
+    // "입금 기한 내 확인"과 "어드민에서 처리"가 둘 다 운영진의 일이 아니다. 게다가 C2C 참여는 성사 확정
+    // 전까지 입금 기한이 없어(dueAt=null) 본문 조립이 NPE 로 죽는다 — 모집중 신청마다 ERROR 가 쌓여
+    // 진짜 장애를 가린다. 조립 조회 전에 끊는다(웹훅 미설정 분기와 같은 이유).
+    if (event.flowType() == FlowType.C2C) {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());

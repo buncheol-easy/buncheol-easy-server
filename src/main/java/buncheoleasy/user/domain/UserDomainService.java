@@ -20,6 +20,7 @@ public class UserDomainService {
   private final UserServiceTermRepository userServiceTermRepository;
   private final RandomNicknameGenerator nicknameGenerator;
   private final Clock clock;
+  private final C2cHostingProperties c2cHostingProperties;
 
   /**
    * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
@@ -125,8 +126,14 @@ public class UserDomainService {
    *
    * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
    * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
+   *
+   * <p>오픈 스위치({@link C2cHostingProperties})를 <b>가장 먼저</b> 본다. 미오픈은 사용자가 무엇을 채워도 해소되지 않으므로, 뒤에 두면
+   * "전화번호를 등록하세요" 처럼 <b>고쳐도 열리지 않는 안내</b>를 먼저 보여주게 된다.
    */
   public C2cHostQualification evaluateC2cHostQualification(final Long id) {
+    if (!c2cHostingProperties.enabled()) {
+      return C2cHostQualification.NOT_OPEN_YET;
+    }
     User user = getUser(id);
     if (!user.isProfileCompleted()) {
       return C2cHostQualification.PHONE_REQUIRED;
@@ -141,17 +148,24 @@ public class UserDomainService {
   }
 
   /**
-   * C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. 매핑을 여기 switch 로 두면 사유가 추가될 때 컴파일 에러로 잡히고, 응답 사유 매핑({@code
-   * HostingEligibilityResponse#from})과 대칭이 된다.
+   * C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. 응답 사유 매핑({@code HostingEligibilityResponse#from})과 대칭이다.
+   *
+   * <p>⚠️ 매핑은 반드시 <b>switch 식</b>으로 둔다. switch <b>문</b>은 enum exhaustiveness 검사를 받지 않아(JLS
+   * §14.11.2) 사유가 추가돼도 컴파일이 통과하고, 새 사유가 <b>아무 분기도 타지 않은 채 개최를 허용</b>한다 — 미성년 차단이 걸린 자리라 조용히
+   * 뚫리면 곧바로 사고다. 식으로 두면 값을 추가하는 순간 컴파일이 깨진다.
    */
   public void requireC2cHostQualification(final Long id) {
     C2cHostQualification qualification = evaluateC2cHostQualification(id);
-    switch (qualification) {
-      case QUALIFIED -> {}
-      case PHONE_REQUIRED ->
-          throw new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
-      case AGE_UNVERIFIED -> throw new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED);
-      case NOT_ADULT -> throw new BusinessException(ErrorCode.USER_NOT_ADULT);
+    ErrorCode errorCode =
+        switch (qualification) {
+          case QUALIFIED -> null;
+          case NOT_OPEN_YET -> ErrorCode.C2C_HOSTING_NOT_OPEN;
+          case PHONE_REQUIRED -> ErrorCode.USER_PROFILE_IS_NOT_COMPLETE;
+          case AGE_UNVERIFIED -> ErrorCode.USER_AGE_NOT_VERIFIED;
+          case NOT_ADULT -> ErrorCode.USER_NOT_ADULT;
+        };
+    if (errorCode != null) {
+      throw new BusinessException(errorCode);
     }
   }
 

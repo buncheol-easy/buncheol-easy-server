@@ -19,6 +19,8 @@ import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
 import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +58,7 @@ public class BuncheolListQueryService {
   private final ParticipationRepository participationRepository;
   private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   private final ApplicationEventPublisher eventPublisher;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public CursorResponse<BuncheolSummaryResponse> search(
@@ -110,6 +113,7 @@ public class BuncheolListQueryService {
             ? Set.copyOf(buncheolMemberRepository.findAllFreeSlotBuncheolIds(buncheolIds))
             : Set.of();
 
+    final Instant now = Instant.now(clock);
     final List<BuncheolSummaryResponse> items =
         visible.stream()
             .map(
@@ -125,7 +129,7 @@ public class BuncheolListQueryService {
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),
                         memberNames.all().getOrDefault(b.getId(), List.of()),
-                        memberNames.available().getOrDefault(b.getId(), List.of()),
+                        availableMemberNames(b, memberNames, now),
                         shippingFeePaybackPolicy.isEventTargetBuncheol(
                             b.getFlowType(), freeSlotBuncheolIds.contains(b.getId()))))
             .toList();
@@ -172,6 +176,23 @@ public class BuncheolListQueryService {
         normalizedKeyword,
         groupRepository.findIdsByNormalizedKeyword(normalizedKeyword),
         groupMemberRepository.findIdsByNormalizedName(normalizedKeyword));
+  }
+
+  /**
+   * 카드에 실을 "남은 멤버". 신규 참여를 받지 않는 분철(취소·진행확정·마감 경과)은 <b>빈 목록</b>으로 내린다 — 상세가 같은 슬롯을 {@code
+   * CLOSED}(신청 불가)로 내리는데 목록만 "남은 멤버"로 부르면 카드와 상세가 반대 신호를 준다 (docs/56 F-2 · docs/53 Q-14 의
+   * {@code BuncheolDetailQueryService#emptySlotStatus} 와 같은 판정).
+   *
+   * <p>FE 는 빈 목록을 이미 "남은 멤버 없음" 으로 그리므로 앱 변경이 필요 없다.
+   */
+  private List<String> availableMemberNames(
+      final Buncheol buncheol,
+      final BuncheolMemberNameResolver.MemberNames memberNames,
+      final Instant now) {
+    if (!buncheol.acceptsNewParticipation(now)) {
+      return List.of();
+    }
+    return memberNames.available().getOrDefault(buncheol.getId(), List.of());
   }
 
   private int clampSize(final int requested) {

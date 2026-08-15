@@ -7,9 +7,6 @@ PR title 컨벤션: 대괄호 태그 + 한국어 본문
 Base branch 는 `dev`. 본문은 한국어. 해당 없는 섹션은 통째로 삭제.
 -->
 
-## 관련 티켓
-- [KAN-XXX](https://easy00.atlassian.net/browse/KAN-XXX)
-
 ## 주요 변경
 <!-- 이 PR 이 무엇을, 왜 하는지 1–2 문단. PR title 보다 한 단계 구체적으로. -->
 

@@ -36,9 +36,14 @@ out/
 ### VS Code ###
 .vscode/
 
-### Claude Code ###
-.claude/
+### AI agent config ###
+# 에이전트·스킬은 공유하고, 개인 설정과 잡파일만 제외한다.
+# CLAUDE.md 는 각자 다르게 쓰고 있어 공유하지 않는다 (pull 충돌 방지).
 CLAUDE.md
+.claude/settings.local.json
+.claude/agent-memory/
+.claude/.claude/
+.claude/**/.DS_Store
 
 ### secrets ###
 .env

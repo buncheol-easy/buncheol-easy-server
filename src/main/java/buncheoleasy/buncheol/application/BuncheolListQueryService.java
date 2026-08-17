@@ -131,7 +131,8 @@ public class BuncheolListQueryService {
                         memberNames.all().getOrDefault(b.getId(), List.of()),
                         availableMemberNames(b, memberNames, now),
                         shippingFeePaybackPolicy.isEventTargetBuncheol(
-                            b.getFlowType(), freeSlotBuncheolIds.contains(b.getId()))))
+                            b.getFlowType(), freeSlotBuncheolIds.contains(b.getId())),
+                        b.isFreeShippingEventTarget()))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;

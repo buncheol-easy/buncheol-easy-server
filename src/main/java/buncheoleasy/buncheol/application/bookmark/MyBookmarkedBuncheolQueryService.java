@@ -176,7 +176,8 @@ public class MyBookmarkedBuncheolQueryService {
         groupNameById.get(buncheol.getGroupId()),
         thumbnailByBuncheolId.get(buncheol.getId()),
         memberNames.all().getOrDefault(buncheol.getId(), List.of()),
-        availableMemberNames(buncheol, memberNames, now));
+        availableMemberNames(buncheol, memberNames, now),
+        buncheol.isFreeShippingEventTarget());
   }
 
   /**

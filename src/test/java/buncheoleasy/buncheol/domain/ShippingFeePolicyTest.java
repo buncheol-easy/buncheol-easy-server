@@ -99,6 +99,33 @@ class ShippingFeePolicyTest {
   }
 
   @Nested
+  @DisplayName("무료배송 판정 테스트")
+  class IsFreeTest {
+
+    @Test
+    void 양쪽_배송비가_모두_0원이면_무료배송이다() {
+      assertThat(ShippingFeePolicy.of(0, 0).isFree()).isTrue();
+    }
+
+    @Test
+    void 등록한_배송수단의_배송비가_0원이면_미등록_배송수단이_있어도_무료배송이다() {
+      assertThat(ShippingFeePolicy.of(0, null).isFree()).isTrue();
+      assertThat(ShippingFeePolicy.of(null, 0).isFree()).isTrue();
+    }
+
+    @Test
+    void 한쪽만_0원이면_무료배송이_아니다() {
+      assertThat(ShippingFeePolicy.of(0, 3000).isFree()).isFalse();
+      assertThat(ShippingFeePolicy.of(3000, 0).isFree()).isFalse();
+    }
+
+    @Test
+    void 양쪽_배송비가_모두_유료면_무료배송이_아니다() {
+      assertThat(ShippingFeePolicy.of(3000, 2500).isFree()).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("배송수단별 배송비 조회 테스트")
   class FeeForTest {
 

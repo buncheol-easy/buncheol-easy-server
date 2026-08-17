@@ -507,6 +507,46 @@ class BuncheolTest {
   }
 
   @Nested
+  @DisplayName("배송비 0원 이벤트 판정 테스트")
+  class IsFreeShippingEventTargetTest {
+
+    private Buncheol buncheol(
+        final FlowType flowType, final Integer gs25ShippingFee, final Integer cuShippingFee) {
+      return Buncheol.create(
+          HOST_ID,
+          new BuncheolParams(
+              1L,
+              "테스트 분철 제목",
+              "분철 설명입니다.",
+              "공식 스토어",
+              FUTURE_DEADLINE,
+              MIN_HEADCOUNT,
+              gs25ShippingFee,
+              cuShippingFee,
+              flowType,
+              null),
+          Instant.now());
+    }
+
+    @Test
+    void 운영진_분철의_배송비가_모두_0원이면_이벤트_대상이다() {
+      assertThat(buncheol(FlowType.LEGACY, 0, 0).isFreeShippingEventTarget()).isTrue();
+      assertThat(buncheol(FlowType.LEGACY, 0, null).isFreeShippingEventTarget()).isTrue();
+    }
+
+    @Test
+    void 운영진_분철이어도_유료_배송수단이_하나라도_있으면_대상이_아니다() {
+      assertThat(buncheol(FlowType.LEGACY, 0, 3000).isFreeShippingEventTarget()).isFalse();
+      assertThat(buncheol(FlowType.LEGACY, 3000, null).isFreeShippingEventTarget()).isFalse();
+    }
+
+    @Test
+    void 사용자가_개최한_C2C_분철은_배송비가_0원이어도_대상이_아니다() {
+      assertThat(buncheol(FlowType.C2C, 0, 0).isFreeShippingEventTarget()).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("성사 확정 선후 판정 테스트 (docs/56 H-09)")
   class IsCreatedBeforeFinalizeTest {
 

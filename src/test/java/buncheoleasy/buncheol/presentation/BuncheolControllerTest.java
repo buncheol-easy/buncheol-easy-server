@@ -747,6 +747,7 @@ class BuncheolControllerTest {
               null,
               List.of("민지"),
               List.of("민지"),
+              false,
               false);
       CursorResponse<BuncheolSummaryResponse> response =
           new CursorResponse<>(List.of(item), null, false);

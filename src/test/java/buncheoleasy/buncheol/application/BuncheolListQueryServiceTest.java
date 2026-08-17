@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -18,6 +19,7 @@ import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
@@ -181,6 +183,61 @@ class BuncheolListQueryServiceTest {
 
       assertThat(result.items().get(0).memberNames()).containsExactly("민지", "하니");
       assertThat(result.items().get(0).availableMemberNames()).isEmpty();
+    }
+
+    @Test
+    void 운영진_분철의_배송비가_모두_0원일_때만_freeShippingEventTarget_true_다() {
+      Buncheol free =
+          buncheol(
+              10L,
+              100L,
+              "배송비 0원 이벤트 분철",
+              Instant.parse("2026-05-15T08:00:00Z"),
+              ShippingFeePolicy.of(0, 0));
+      Buncheol gs25Only =
+          buncheol(
+              11L,
+              100L,
+              "GS25 만 0원",
+              Instant.parse("2026-05-14T08:00:00Z"),
+              ShippingFeePolicy.of(0, 3000));
+      Buncheol paid =
+          buncheol(
+              12L,
+              100L,
+              "유료배송 분철",
+              Instant.parse("2026-05-13T08:00:00Z"),
+              ShippingFeePolicy.of(3000, 3000));
+      // 일반 유저가 배송비를 0원으로 잡은 C2C 분철은 운영 이벤트가 아니다.
+      Buncheol c2cFree =
+          c2cBuncheol(
+              13L,
+              100L,
+              "사용자 개최 0원 배송",
+              Instant.parse("2026-05-12T08:00:00Z"),
+              ShippingFeePolicy.of(0, 0));
+      given(buncheolRepository.search(any(), any(), anyInt()))
+          .willReturn(List.of(free, gs25Only, paid, c2cFree));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 11L, 12L, 13L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L, 12L, 13L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              null,
+              new BuncheolSearchCondition(null, null, null),
+              BuncheolListCursor.firstPage(),
+              20);
+
+      assertThat(result.items())
+          .extracting(BuncheolSummaryResponse::id, BuncheolSummaryResponse::freeShippingEventTarget)
+          .containsExactly(
+              tuple(10L, true),
+              tuple(11L, false),
+              tuple(12L, false),
+              tuple(13L, false));
     }
 
     @Test
@@ -588,6 +645,34 @@ class BuncheolListQueryServiceTest {
   // 공개 목록 정렬에서 RECRUITING 그룹은 createdAt 기준이므로, 픽스처는 RECRUITING 으로 둔다.
   // (BuncheolListCursor.from 이 status 로 그룹 순위·정렬 시각을 정한다 → nextCursor 형식 검증과 직결)
   private Buncheol buncheol(Long id, Long groupId, String title, Instant createdAt) {
+    return buncheol(id, groupId, title, createdAt, ShippingFeePolicy.of(3000, 3000));
+  }
+
+  private Buncheol buncheol(
+      Long id,
+      Long groupId,
+      String title,
+      Instant createdAt,
+      ShippingFeePolicy shippingFeePolicy) {
+    return buncheol(id, groupId, title, createdAt, shippingFeePolicy, FlowType.LEGACY);
+  }
+
+  private Buncheol c2cBuncheol(
+      Long id,
+      Long groupId,
+      String title,
+      Instant createdAt,
+      ShippingFeePolicy shippingFeePolicy) {
+    return buncheol(id, groupId, title, createdAt, shippingFeePolicy, FlowType.C2C);
+  }
+
+  private Buncheol buncheol(
+      Long id,
+      Long groupId,
+      String title,
+      Instant createdAt,
+      ShippingFeePolicy shippingFeePolicy,
+      FlowType flowType) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
     setField(buncheol, "groupId", groupId);
@@ -595,7 +680,8 @@ class BuncheolListQueryServiceTest {
     setField(buncheol, "deadline", Instant.parse("2026-06-01T12:00:00Z"));
     setField(buncheol, "minHeadcount", 3);
     setField(buncheol, "status", BuncheolStatus.RECRUITING);
-    setField(buncheol, "flowType", FlowType.LEGACY);
+    setField(buncheol, "flowType", flowType);
+    setField(buncheol, "shippingFeePolicy", shippingFeePolicy);
     // CreatedAtEntity#createdAt 은 부모 필드. setField 가 super 까지 탐색.
     setField(buncheol, "createdAt", createdAt);
     return buncheol;
@@ -609,6 +695,7 @@ class BuncheolListQueryServiceTest {
     setField(buncheol, "title", title);
     setField(buncheol, "deadline", deadline);
     setField(buncheol, "status", BuncheolStatus.CONFIRMED);
+    setField(buncheol, "shippingFeePolicy", ShippingFeePolicy.of(3000, 3000));
     setField(buncheol, "createdAt", Instant.parse("2026-05-01T00:00:00Z"));
     return buncheol;
   }

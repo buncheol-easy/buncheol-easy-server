@@ -7,6 +7,8 @@ import buncheoleasy.buncheol.application.BuncheolMemberNameResolver;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
@@ -345,6 +347,8 @@ class MyBookmarkedBuncheolQueryServiceTest {
     setField(buncheol, "title", title);
     setField(buncheol, "status", status);
     setField(buncheol, "deadline", deadline);
+    setField(buncheol, "flowType", FlowType.LEGACY);
+    setField(buncheol, "shippingFeePolicy", ShippingFeePolicy.of(3000, null));
     return buncheol;
   }
 

@@ -18,6 +18,10 @@ import java.util.List;
  * <p>{@code shippingFeePaybackTarget} 은 오픈 이벤트 배송비 환급 대상 분철(전 슬롯 0원 + 이벤트 활성) 여부로, 목록 카드의
  * "배송비 돌려받는 무료 분철" 배지 판정에 쓴다.
  *
+ * <p>{@code freeShippingEventTarget} 은 운영진(LEGACY) 분철이면서 이용 가능한 배송수단의 배송비가 모두 0원인지로, 목록 카드의
+ * "배송비 0원 이벤트" 배지 판정에 쓴다 — 배송비는 상세에만 있어 카드에서는 알 수 없었다. 일반 유저가 배송비를 0원으로 잡은 C2C 분철은
+ * 운영 이벤트가 아니므로 제외한다.
+ *
  * <p>{@code flowType} 은 카드의 상태 배지·dim 판정을 상세 화면과 같은 기준으로 통일하기 위한 필드다 (docs/51 §3-1-2 — 이전에는 카드가
  * 상태값으로 플로우를 추정했다).
  */
@@ -33,4 +37,5 @@ public record BuncheolSummaryResponse(
     String thumbnailUrl,
     List<String> memberNames,
     List<String> availableMemberNames,
-    boolean shippingFeePaybackTarget) {}
+    boolean shippingFeePaybackTarget,
+    boolean freeShippingEventTarget) {}

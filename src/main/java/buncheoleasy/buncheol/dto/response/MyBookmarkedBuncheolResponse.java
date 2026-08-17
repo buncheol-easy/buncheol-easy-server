@@ -13,6 +13,9 @@ import java.util.List;
  * <p>{@code availableMemberNames} 는 <b>{@code status} 와 함께 해석할 필요가 없다</b> — 신규 참여를 받지 않는 분철(취소·진행확정·마감
  * 경과)은 슬롯이 비어 있어도 <b>빈 배열</b>로 내려간다. 상세 조회가 같은 슬롯을 {@code CLOSED} 로 내리는 것과 같은 판정이다
  * (docs/56 F-2). 슬롯이 없거나 전 슬롯에 활성 참여가 있을 때도 빈 배열이다.
+ *
+ * <p>{@code freeShippingEventTarget} 은 운영진(LEGACY) 분철이면서 이용 가능한 배송수단의 배송비가 모두 0원인지로, 공개
+ * 목록({@link BuncheolSummaryResponse})과 같은 "배송비 0원 이벤트" 배지를 찜 목록 카드에도 띄우기 위한 필드다.
  */
 public record MyBookmarkedBuncheolResponse(
     Long bookmarkId,
@@ -23,4 +26,5 @@ public record MyBookmarkedBuncheolResponse(
     String groupName,
     String thumbnailUrl,
     List<String> memberNames,
-    List<String> availableMemberNames) {}
+    List<String> availableMemberNames,
+    boolean freeShippingEventTarget) {}

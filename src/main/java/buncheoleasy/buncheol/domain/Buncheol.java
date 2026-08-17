@@ -223,6 +223,14 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     return shippingFeePolicy.feeFor(shippingMethod);
   }
 
+  /**
+   * 운영진이 배송비를 부담하는 분철인가 — 목록 카드의 "배송비 0원 이벤트" 배지 판정. 일반 유저가 배송비를 0원으로 잡은 C2C 분철은
+   * 운영 이벤트가 아니므로 제외한다 (배송비 환급 이벤트와 같은 flowType 가드).
+   */
+  public boolean isFreeShippingEvent() {
+    return flowType == FlowType.LEGACY && shippingFeePolicy.isFree();
+  }
+
   public boolean isHost(final Long userId) {
     return hostId.equals(userId);
   }

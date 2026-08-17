@@ -387,7 +387,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             List.of("민지", "혜인"),
             List.of("혜인"),
-            false);
+            false,
+            true);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -495,6 +496,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "오픈 이벤트 배송비 환급 대상 분철 여부 (전 슬롯 0원 + 이벤트 활성)."
                                         + " 무료 분철 배지 판정용"),
+                            fieldWithPath("items[].freeShippingEventTarget")
+                                .description(
+                                    "배송비 0원 이벤트 대상 분철 여부 — 운영진(`LEGACY`) 분철이면서 이용 가능한"
+                                        + " 배송수단의 배송비가 모두 0원(등록하지 않은 배송수단은 판정에서 제외)."
+                                        + " 카드의 \"배송비 0원 이벤트\" 배지 판정용. 일반 유저가 배송비를 0원으로"
+                                        + " 잡은 C2C 분철은 제외"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")

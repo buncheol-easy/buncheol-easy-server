@@ -333,12 +333,12 @@ class UserTest {
     @Test
     void 계좌를_갱신하면_새_값으로_덮어쓴다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updateBankAccount("국민은행", "111", "홍길동");
+      user.updateBankAccount("국민은행", "11112222", "홍길동");
 
-      user.updateBankAccount("신한은행", "222", "김철수");
+      user.updateBankAccount("신한은행", "22223333", "김철수");
 
       assertThat(user.getBankAccount().bank()).isEqualTo("신한은행");
-      assertThat(user.getBankAccount().account()).isEqualTo("222");
+      assertThat(user.getBankAccount().account()).isEqualTo("22223333");
       assertThat(user.getBankAccount().holder()).isEqualTo("김철수");
     }
 
@@ -355,7 +355,7 @@ class UserTest {
     @Test
     void 계좌_등록_상태에서_requireBankAccount는_통과한다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updateBankAccount("국민은행", "111", "홍길동");
+      user.updateBankAccount("국민은행", "11112222", "홍길동");
 
       assertThatCode(user::requireBankAccount).doesNotThrowAnyException();
     }
@@ -373,23 +373,12 @@ class UserTest {
     }
 
     @Test
-    void 개최_권한이_없으면_requireCanHost_호출_시_예외가_발생한다() {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-
-      assertThatThrownBy(user::requireCanHost)
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
-    }
-
-    @Test
-    void 개최_권한을_부여하면_requireCanHost는_통과한다() {
+    void 개최_권한을_부여하면_isCanHost가_true가_된다() {
       User user = User.create("KAKAO", "123456", "test@example.com");
 
       user.allowHosting();
 
       assertThat(user.isCanHost()).isTrue();
-      assertThatCode(user::requireCanHost).doesNotThrowAnyException();
     }
   }
 
@@ -444,6 +433,82 @@ class UserTest {
       user.updateMarketingAgreement(true, AGREED_AT.plusSeconds(7200));
 
       assertThat(user.getMarketingAgreedAt()).isEqualTo(AGREED_AT.plusSeconds(7200));
+    }
+  }
+
+  @Nested
+  @DisplayName("연령대(ageRange) 테스트")
+  class AgeRangeTest {
+
+    @Test
+    void 연령대를_설정하고_새_값으로_갱신할_수_있다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      user.updateAgeRange("15~19");
+      user.updateAgeRange("20~29");
+
+      assertThat(user.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" "})
+    void null이나_빈_값은_저장된_연령대를_지우지_않는다(String blankValue) {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateAgeRange("20~29");
+
+      user.updateAgeRange(blankValue);
+
+      assertThat(user.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 컬럼_길이를_넘는_값은_무시된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateAgeRange("20~29");
+
+      user.updateAgeRange("예상밖의아주긴연령대값문자열");
+
+      assertThat(user.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 동의_철회_시_연령대가_파기된다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      user.updateAgeRange("20~29");
+
+      user.clearAgeRange();
+
+      assertThat(user.getAgeRange()).isNull();
+      assertThat(user.isVerifiedAdult()).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"20~29", "30~39", "40~49", "90~"})
+    void 구간_하한이_20_이상이면_성인으로_확인된다(String ageRange) {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      user.updateAgeRange(ageRange);
+
+      assertThat(user.isVerifiedAdult()).isTrue();
+    }
+
+    // "15~19" 는 만 19세 성인이 섞여 있어도 구분 불가라 보수적으로 미성년 취급한다 (docs/50).
+    @ParameterizedTest
+    @ValueSource(strings = {"1~9", "10~14", "15~19", "이상한값", "~29"})
+    void 구간_하한이_20_미만이거나_형식이_다르면_성인으로_확인되지_않는다(String ageRange) {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      user.updateAgeRange(ageRange);
+
+      assertThat(user.isVerifiedAdult()).isFalse();
+    }
+
+    @Test
+    void 연령대가_없으면_성인으로_확인되지_않는다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+
+      assertThat(user.isVerifiedAdult()).isFalse();
     }
   }
 }

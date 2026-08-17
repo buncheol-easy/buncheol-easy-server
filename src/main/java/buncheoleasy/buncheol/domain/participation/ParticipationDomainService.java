@@ -4,6 +4,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,22 @@ public class ParticipationDomainService {
     return participationRepository.saveIfRecruiting(participation);
   }
 
+  /** C2C 추가 모집 INSERT — 분철이 입금 수집중(PAYMENT_COLLECTING)인지 원자 확인 (docs/46 §4.7-E1). */
+  public boolean createParticipationIfCollecting(final Participation participation) {
+    return participationRepository.saveIfCollecting(participation);
+  }
+
+  /**
+   * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 활성 참여 수는 슬롯 수 이하라 분철 단위 조회 후
+   * 필터링으로 충분하다.
+   */
+  public Optional<Participation> findFirstActiveInBuncheol(
+      final Long buncheolId, final Long participantId) {
+    return participationRepository.findActiveByBuncheolId(buncheolId).stream()
+        .filter(participation -> participation.getParticipantId().equals(participantId))
+        .findFirst();
+  }
+
   public Participation getParticipation(final Long id) {
     return participationRepository
         .findById(id)
@@ -28,13 +45,19 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId);
   }
 
+  /** 분철의 활성 참여별 참여자 id 잠금 조회(current read) — C2C 정원 충족 판정용, 포트 javadoc 참고. */
+  public List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(final Long buncheolId) {
+    return participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+  }
+
   /** 분철의 입금확인(CONFIRMED) 참여 전체. 진행확정 시 배송 스냅샷·알림 대상. */
   public List<Participation> findConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.findConfirmedByBuncheolId(buncheolId);
   }
 
-  // 분철의 입금확인된 참여자 수. 마감 판정은 finalizeExpiredByConfirmedHeadcount CAS 가 서브쿼리로 직접 세도록 바뀌어
-  // 현재 production 호출처는 없지만, 관리 화면의 확정 인원 표시 등 재사용 여지가 있어 보존한다.
+  // 분철의 입금확인된 참여자 수. 마감 판정은 finalizeExpiredByConfirmedHeadcount CAS 가 서브쿼리로 직접 센다.
+  // 현재 호출처는 개최자 취소 사전 검사(BuncheolService#cancelBuncheol — docs/56 H-13) 하나이며, 안내 문구를
+  // 고르기 위한 읽기다. 실제 차단은 hostCancelIfCollectingAndNoConfirmed CAS 가 원자적으로 한다.
   public int countConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.countConfirmedByBuncheolId(buncheolId);
   }
@@ -89,6 +112,60 @@ public class ParticipationDomainService {
   /** 입금 만료 처리 (입금 만료 스케줄러용). 멱등하며 실패 시(이미 확정/취소) 예외 없이 false 를 돌려준다. */
   public boolean expirePayment(final Long participationId, final Instant now) {
     return participationRepository.expirePaymentIfOverdue(participationId, now);
+  }
+
+  // --- C2C 플로우 전이 (docs/46 §4) ---
+
+  /** C2C "보냈어요" 마킹 CAS. 멱등 분기(이미 PAYMENT_SENT)는 호출 측이 재조회로 판단한다. */
+  public boolean markPaymentSent(final Long participationId, final Instant now) {
+    return participationRepository.markPaymentSentIfAwaiting(participationId, now);
+  }
+
+  /**
+   * C2C 참여자 셀프 철회 — 오마킹 자가 수정(기한 유지). 반려가 아니므로 반려 시각을 남기지 않는다.
+   *
+   * <p>paymentSentAt 은 분쟁 증거로 보존된다.
+   */
+  public boolean revertPaymentSent(
+      final Long participationId, final Instant dueAt, final Instant now) {
+    return participationRepository.revertPaymentSentIfSent(participationId, dueAt, null, now);
+  }
+
+  /**
+   * C2C 개최자 반려("입금 못 찾음") — 기한 연장 + 반려 시각 기록 (docs/53 Q-03).
+   *
+   * <p>셀프 철회와 같은 CAS 를 쓰지만 {@code paymentRejectedAt} 유무로 갈린다. 두 경로가 응답상 구분되지 않아 참여자에게 재확인 안내를
+   * 띄우지 못하던 문제를 해소한다. 메서드를 나눈 건 호출 측이 플래그를 잘못 넘기는 사고를 막기 위해서다.
+   */
+  public boolean rejectPaymentSent(
+      final Long participationId, final Instant dueAt, final Instant now) {
+    return participationRepository.revertPaymentSentIfSent(participationId, dueAt, now, now);
+  }
+
+  /** C2C 참여자 자발 취소 CAS — 신청·입금 대기 상태에서만 (docs/46 §5 구간 ①·②). */
+  public boolean cancelByUser(final Long participationId, final Instant now) {
+    return participationRepository.cancelByUserIfCancellable(participationId, now);
+  }
+
+  /**
+   * C2C 개최자 수동 입금확인 (AWAITING_PAYMENT·PAYMENT_SENT → CONFIRMED, 기한 경과 무관 — docs/46 §3-6). 실패 시
+   * 상태 위반 예외.
+   */
+  public void confirmPaymentPayable(final Long participationId, final Instant now) {
+    if (participationRepository.confirmPaymentIfPayable(participationId, now)) {
+      return;
+    }
+    throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+  }
+
+  /**
+   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). 호출 측
+   * {@code @Transactional} 필수.
+   *
+   * @return 전이된 참여 수
+   */
+  public int startPaymentCollecting(final Long buncheolId, final Instant dueAt, final Instant now) {
+    return participationRepository.startPaymentCollecting(buncheolId, dueAt, now);
   }
 
   /** 분철 취소 시 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이. 호출 측 @Transactional 필수. */

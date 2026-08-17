@@ -41,6 +41,10 @@ public class SecurityConfig {
     "/v1/groups",
     "/v1/groups/popular",
     "/v1/groups/members",
+    // 그룹 상세(/v1/groups/{groupId}). 단일 세그먼트 매처라 인증이 필요한 /v1/groups/favorites/me
+    // (두 세그먼트)는 걸리지 않는다. 이 아래에 한 세그먼트짜리 인증 경로를 추가하면
+    // AUTH_REQUIRED_GET_PATHS 에도 함께 넣어야 한다.
+    "/v1/groups/*",
     "/v1/groups/*/members",
     "/v1/buncheols",
     "/v1/buncheols/*",
@@ -55,7 +59,9 @@ public class SecurityConfig {
    * {@link #PUBLIC_GET_PATHS} 의 단일 세그먼트 매처 (예: {@code /v1/buncheols/{id}}) 는 {@code /me} 같은 인증 필요
    * 경로까지 함께 매칭한다. 매칭 우선순위가 더 높은 위치에서 별도로 authenticated 를 강제해 공개로 새지 않도록 한다.
    */
-  private static final String[] AUTH_REQUIRED_GET_PATHS = {"/v1/buncheols/me"};
+  private static final String[] AUTH_REQUIRED_GET_PATHS = {
+    "/v1/buncheols/me", "/v1/buncheols/hosting-eligibility"
+  };
 
   /**
    * 관리자(ROLE_ADMIN) 전용 경로. role 은 JWT access token 의 role claim 에서 온다({@code

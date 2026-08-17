@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -11,9 +13,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -32,8 +36,10 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -566,6 +572,157 @@ class ParticipationServiceTest {
     }
   }
 
+  @Nested
+  @DisplayName("C2C 신청 정원 충족 테스트")
+  class C2cBuncheolFullTest {
+
+    private Buncheol stubC2cRecruitingBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      return buncheol;
+    }
+
+    @Test
+    void 이_신청으로_전_슬롯이_채워지면_신청_인원을_사람_수로_담아_정원_충족_이벤트를_발행한다() {
+      stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(3, buncheolMember()));
+      // 3슬롯을 2명이 채움(한 명이 2슬롯) — 신청 인원은 distinct 참여자 수여야 한다.
+      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(100L, 100L, 200L));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+      then(eventPublisher)
+          .should()
+          .publishEvent(
+              argThat(
+                  (Object event) ->
+                      event instanceof BuncheolFullEvent full && full.applicantCount() == 2));
+    }
+
+
+    @Test
+    void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
+      stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(3, buncheolMember()));
+      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(100L, 200L));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
+    }
+
+    @Test
+    void 추가_모집_참여는_정원_충족_판정을_하지_않는다() {
+      // 정원 충족 판정이 RECRUITING 한정이라는 전제는 락 순서(분철 행 → 참여 행) 규약의 근거이기도 하다.
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfCollecting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
+      then(participationDomainService)
+          .should(never())
+          .findActiveParticipantIdsByBuncheolIdForUpdate(anyLong());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 보냈어요 마킹 테스트")
+  class MarkPaymentSentTest {
+
+    private Participation stubC2cParticipation() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      return participation;
+    }
+
+    @Test
+    void 마킹_CAS_에_성공하면_개최자_알림용_보냈어요_이벤트를_발행한다() {
+      Participation participation = stubC2cParticipation();
+      given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participation).should().validateOwnedBy(PARTICIPANT_ID);
+      then(eventPublisher).should().publishEvent(any(PaymentSentEvent.class));
+    }
+
+    @Test
+    void 이미_마킹된_재요청은_멱등_처리하고_이벤트를_다시_발행하지_않는다() {
+      Participation participation = stubC2cParticipation();
+      given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(false);
+      given(participation.getStatus()).willReturn(ParticipationStatus.PAYMENT_SENT);
+
+      participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      // raw any() 는 ApplicationEvent 오버로드로 바인딩돼 record 이벤트를 못 잡는다 — 반드시 타입 지정 매처를 쓴다.
+      then(eventPublisher).should(never()).publishEvent(any(PaymentSentEvent.class));
+    }
+
+    @Test
+    void 마킹_불가_상태면_예외가_발생하고_이벤트를_발행하지_않는다() {
+      Participation participation = stubC2cParticipation();
+      given(participationDomainService.markPaymentSent(PARTICIPATION_ID, NOW)).willReturn(false);
+      given(participation.getStatus()).willReturn(ParticipationStatus.CANCELLED);
+
+      assertThatThrownBy(
+              () -> participationService.markPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+
+      then(eventPublisher).should(never()).publishEvent(any(PaymentSentEvent.class));
+    }
+  }
+
   private static <T> T newInstance(final Class<T> type) {
     try {
       var constructor = type.getDeclaredConstructor();
@@ -597,5 +754,185 @@ class ParticipationServiceTest {
       }
     }
     throw new NoSuchFieldException(fieldName);
+  }
+
+  @Nested
+  @DisplayName("C2C 보냈어요 마킹 해제 위임 테스트 (docs/53 Q-03)")
+  class RevertAndRejectPaymentSentTest {
+
+    private Participation c2cParticipation() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      return participation;
+    }
+
+    private Buncheol c2cBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      return buncheol;
+    }
+
+    // 반려와 셀프 철회는 같은 CAS 를 쓰고 rejectedAt 유무로만 갈린다. 호출부가 두 도메인 메서드를
+    // 바꿔 불러도 리포지토리 테스트는 전부 통과하므로, 위임 대상을 이 계층에서 못 박는다.
+    @Test
+    void 개최자_반려는_반려_시각을_남기는_경로로_위임한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      then(participationDomainService)
+          .should()
+          .rejectPaymentSent(eq(PARTICIPATION_ID), any(), any());
+      then(participationDomainService)
+          .should(never())
+          .revertPaymentSent(anyLong(), any(), any());
+    }
+
+    @Test
+    void 참여자_셀프_철회는_반려_시각을_남기지_않는_경로로_위임한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.revertPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.revertPaymentSent(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService)
+          .should()
+          .revertPaymentSent(eq(PARTICIPATION_ID), any(), any());
+      then(participationDomainService)
+          .should(never())
+          .rejectPaymentSent(anyLong(), any(), any());
+    }
+
+    // 반려는 기한을 max(기존, now+24h) 로 연장한다 (docs/46 §4.5).
+    @Test
+    void 개최자_반려는_입금_기한을_24시간_연장한다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      ArgumentCaptor<Instant> dueAtCaptor = ArgumentCaptor.forClass(Instant.class);
+      then(participationDomainService)
+          .should()
+          .rejectPaymentSent(eq(PARTICIPATION_ID), dueAtCaptor.capture(), any());
+      assertThat(dueAtCaptor.getValue()).isEqualTo(NOW.plus(24, ChronoUnit.HOURS));
+    }
+  }
+
+  @Nested
+  @DisplayName("참여자 자발 취소 — 안내 문구 분기 (docs/54 4-2)")
+  class CancelByParticipantErrorTest {
+
+    private Participation participationWith(final ParticipationStatus status) {
+      Participation participation = mock(Participation.class);
+      given(participation.getStatus()).willReturn(status);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      return participation;
+    }
+
+    // LEGACY 는 취소 경로가 없다 — 범용 가드(BCH-084)가 아니라 "기한 만료로 자동 취소된다"는
+    // 전용 안내를 준다. 다른 C2C 액션들은 계속 BCH-084 를 쓴다.
+    @Test
+    void LEGACY_입금대기_참여는_취소_전용_코드로_막힌다() {
+      Participation participation = participationWith(ParticipationStatus.AWAITING_PAYMENT);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(false);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+    }
+
+    // 확정된 참여는 만료 CAS(AWAITING_PAYMENT 한정)가 걸리지 않아 "기한이 지나면 자동 취소돼요"가
+    // 사실이 아니다. 플로우 가드보다 상태 검사를 먼저 태워 문의 경유로 보낸다.
+    @Test
+    void 확정된_참여는_플로우와_무관하게_문의_경유로_안내한다() {
+      participationWith(ParticipationStatus.CONFIRMED);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("참여자 자발 취소 — 성사 확정 가드 (docs/56 H-09)")
+  class CancelAfterHostConfirmTest {
+
+    private static final Instant CREATED_AT = NOW.minus(2, ChronoUnit.HOURS);
+
+    // 참여 상태·생성 시각을 지정하고, 그 분철이 성사 확정을 거친 참여로 판정하는지(createdBeforeFinalize)를 세팅한다.
+    private void participation(
+        final ParticipationStatus status, final boolean createdBeforeFinalize) {
+      Participation participation = mock(Participation.class);
+      given(participation.getStatus()).willReturn(status);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      if (status == ParticipationStatus.AWAITING_PAYMENT) {
+        given(participation.getCreatedAt()).willReturn(CREATED_AT);
+        given(buncheol.isCreatedBeforeFinalize(CREATED_AT)).willReturn(createdBeforeFinalize);
+      }
+    }
+
+    // H-09 본체 — 이 가드를 지우면 취소가 통과해 빨개진다.
+    @Test
+    void 성사_확정을_거친_입금_대기_참여는_자발_취소를_막는다() {
+      participation(ParticipationStatus.AWAITING_PAYMENT, true);
+
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
+
+      then(participationDomainService).should(never()).cancelByUser(anyLong(), any());
+    }
+
+    // 입금 수집중 분철의 추가 모집(docs/46 §4.7-E1)은 APPLIED 를 거치지 않고 바로 AWAITING_PAYMENT 로 생성된다.
+    // 상태만 보고 막으면 이 경로의 참여자는 신청 즉시 24시간 잠겨 오신청도 되돌릴 수 없다.
+    @Test
+    void 추가_모집으로_바로_입금_대기가_된_참여는_계속_취소할_수_있다() {
+      participation(ParticipationStatus.AWAITING_PAYMENT, false);
+      given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+    }
+
+    @Test
+    void 확정_전_신청_참여는_그대로_취소된다() {
+      participation(ParticipationStatus.APPLIED, true);
+      given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
+
+      then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+    }
   }
 }

@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.application.payback;
 
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
@@ -30,20 +31,22 @@ public class ShippingFeePaybackPolicy {
   }
 
   /**
-   * 참여 단위 환급 대상 여부 = 이벤트 활성 + 0원 슬롯 참여 + 배송비 있음 + 입금확인(CONFIRMED)된 참여. 0원 슬롯 분철은 운영진만 발행하므로
-   * 별도의 이벤트 기간 판정은 두지 않는다. {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다. 배송비 0원 참여는 환급할
-   * 금액이 없으므로 비대상 — 무료 슬롯 분철은 배송비를 보증금으로 받는 운영 전제이나, 배송비 0원 개최가 허용된 뒤로는 코드로도 가드한다.
+   * 참여 단위 환급 대상 여부 = 이벤트 활성 + 운영진(LEGACY) 분철 + 0원 슬롯 참여 + 배송비 있음 + 입금확인(CONFIRMED)된 참여.
+   * "0원 슬롯 분철은 운영진만 발행한다"는 전제가 C2C 개최 오픈으로 사라졌으므로, 일반 유저가 0원 C2C 분철로 배송비 환급을 셀프
+   * 신청하는 경로를 flowType 가드로 막는다. {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다. 배송비 0원
+   * 참여는 환급할 금액이 없으므로 비대상.
    */
-  public boolean isEventTarget(final Participation participation) {
+  public boolean isEventTarget(final Participation participation, final FlowType flowType) {
     return properties.enabled()
+        && flowType == FlowType.LEGACY
         && participation.getAmount() == 0
         && participation.getShippingFee() > 0
         && participation.getStatus() == ParticipationStatus.CONFIRMED;
   }
 
-  /** 분철 단위(참여 전) 이벤트 대상 여부 — 목록 카드 배지용. 전 슬롯 0원 여부는 호출 측이 조회해 넘긴다. */
-  public boolean isEventTargetBuncheol(final boolean allSlotsFree) {
-    return properties.enabled() && allSlotsFree;
+  /** 분철 단위(참여 전) 이벤트 대상 여부 — 목록 카드 배지용. 운영진(LEGACY) 분철 전용, 전 슬롯 0원 여부는 호출 측이 조회해 넘긴다. */
+  public boolean isEventTargetBuncheol(final FlowType flowType, final boolean allSlotsFree) {
+    return properties.enabled() && flowType == FlowType.LEGACY && allSlotsFree;
   }
 
   /**
@@ -56,7 +59,10 @@ public class ShippingFeePaybackPolicy {
    * </ul>
    */
   public PaybackStatus deriveStatus(
-      final Participation participation, final Delivery delivery, final Instant now) {
+      final Participation participation,
+      final FlowType flowType,
+      final Delivery delivery,
+      final Instant now) {
     PaybackStatus stored = participation.getPaybackStatus();
     if (stored == PaybackStatus.REJECTED && isSubmitClosed(delivery, now)) {
       return PaybackStatus.EXPIRED;
@@ -64,7 +70,7 @@ public class ShippingFeePaybackPolicy {
     if (stored != PaybackStatus.NONE) {
       return stored;
     }
-    if (!isEventTarget(participation)) {
+    if (!isEventTarget(participation, flowType)) {
       return PaybackStatus.NONE;
     }
     if (!isDeliveryCompleted(delivery)) {
@@ -82,8 +88,9 @@ public class ShippingFeePaybackPolicy {
    * 마감 미적용(배송 미완료·기준 시각 없음)이면 null. 대상이면 저장된 신청 상태(REQUESTED/COMPLETED 등)와 무관하게 내려가므로, 표시
    * 여부는 프론트가 파생 status 와 조합해 판단한다. 마감 판정({@link #deriveStatus})과 같은 계산을 공유한다.
    */
-  public Instant submitDeadline(final Participation participation, final Delivery delivery) {
-    return isEventTarget(participation) ? submitDeadline(delivery) : null;
+  public Instant submitDeadline(
+      final Participation participation, final FlowType flowType, final Delivery delivery) {
+    return isEventTarget(participation, flowType) ? submitDeadline(delivery) : null;
   }
 
   // 신청 마감 시각 = 마감 기준 시점 + submitWindowDays. 기준 시점은 임시로 배송 완료 시각(delivered_at, 없으면 received_at)

@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.presentation;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -22,8 +23,10 @@ import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
@@ -33,6 +36,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
@@ -647,7 +651,9 @@ class BuncheolControllerTest {
               5,
               7L,
               createdAt,
-              "https://cdn.example.com/buncheol-10-thumb.jpg");
+              "https://cdn.example.com/buncheol-10-thumb.jpg",
+              FlowType.LEGACY,
+              BuncheolHostCancellability.CANCELLABLE);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -673,6 +679,36 @@ class BuncheolControllerTest {
           .perform(get("/v1/buncheols/me").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(content().string("[]"));
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 자격 사전 조회 API 테스트 (docs/53 Q-07)")
+  class GetHostingEligibilityTest {
+
+    @Test
+    void 적격이면_eligible_true_와_null_사유를_반환한다() throws Exception {
+      given(buncheolService.getHostingEligibility(HOST_ID))
+          .willReturn(HostingEligibilityResponse.allowed());
+
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.eligible").value(true))
+          .andExpect(jsonPath("$.reason").value(nullValue()));
+    }
+
+    @Test
+    void 부적격이면_사유를_함께_반환한다() throws Exception {
+      given(buncheolService.getHostingEligibility(HOST_ID))
+          .willReturn(
+              HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+
+      mockMvc
+          .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.eligible").value(false))
+          .andExpect(jsonPath("$.reason").value("NOT_ADULT"));
     }
   }
 
@@ -703,6 +739,7 @@ class BuncheolControllerTest {
               10L,
               "뉴진스 1집 분철",
               BuncheolStatus.RECRUITING,
+              FlowType.LEGACY,
               deadline,
               3,
               false,
@@ -763,7 +800,7 @@ class BuncheolControllerTest {
                   1,
                   List.of(
                       new MyParticipationItemResponse(
-                          601L, 101L, ParticipationStatus.AWAITING_PAYMENT))));
+                          601L, 101L, ParticipationStatus.AWAITING_PAYMENT))), FlowType.LEGACY, null, null);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -809,7 +846,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null);
+              null, FlowType.LEGACY, null, null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -839,7 +876,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null);
+              null, FlowType.LEGACY, null, null);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -874,6 +911,7 @@ class BuncheolControllerTest {
               101L,
               "안유진",
               93_000L,
+              3_000L,
               ParticipationStatus.CONFIRMED,
               Instant.parse("2026-05-28T00:00:00Z"),
               Instant.parse("2026-05-27T10:00:00Z"),
@@ -885,7 +923,7 @@ class BuncheolControllerTest {
                   "유진팬",
                   "010-1234-5678",
                   "1234567890",
-                  DeliveryStatus.SHIPPING));
+                  DeliveryStatus.SHIPPING), null);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
@@ -893,11 +931,12 @@ class BuncheolControllerTest {
               102L,
               "레이",
               53_000L,
+              3_000L,
               ParticipationStatus.AWAITING_PAYMENT,
               Instant.parse("2026-05-26T00:30:00Z"),
               null,
               new RefundAccountResponse("신한은행", "87654321", "레이팬"),
-              null);
+              null, null);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,
@@ -909,7 +948,7 @@ class BuncheolControllerTest {
               4,
               4,
               1,
-              List.of(confirmed, awaiting));
+              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null);
       given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
       mockMvc

@@ -60,8 +60,21 @@ public enum ErrorCode {
 
   SHIPPING_ADDRESS_ALIAS_TOO_LONG("USR-027", "배송지 별칭은 10자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
 
-  // 개최 오픈 전 — 운영이 지정한 계정(can_host)만 분철을 개최할 수 있다.
+  // LEGACY(운영진 방식) 개최는 운영이 지정한 계정(can_host)만 가능하다.
   USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
+  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(재동의로 해결 가능 — 409)와
+  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "카카오 재동의 유도" 안내를 분기할 수 있다.
+  USER_AGE_NOT_VERIFIED(
+      "USR-032", "연령대 확인이 필요합니다. 카카오 로그인에서 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
+  USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
+  USER_BANK_ACCOUNT_TOO_SHORT(
+      "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
+  // 회원 개최 오픈 전(서비스 스위치 off). 같은 성격의 선례인 배송비 환급 이벤트 off 가 409
+  // (PAYBACK_NOT_ELIGIBLE) 라 계열을 맞춘다. 503 은 이 서비스에서 "진짜 장애" 와 1:1 로 쓰여 왔고
+  // (5xx 는 S3 업로드 실패·내부 오류 둘뿐), 정상 사용자 동작인 개최 버튼 클릭이 5xx 를 만들면
+  // 오픈 직전 트래픽이 몰리는 시점에 5xx 지표가 통째로 올라간다.
+  C2C_HOSTING_NOT_OPEN(
+      "USR-035", "회원 개최는 아직 오픈 전이에요. 준비되면 공지로 알려드릴게요.", HttpStatus.CONFLICT),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
@@ -141,6 +154,43 @@ public enum ErrorCode {
   BUNCHEOL_BOOKMARK_ALREADY_EXISTS("BCH-071", "이미 찜한 분철입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),
 
+  // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
+  BUNCHEOL_FLOW_NOT_SUPPORTED(
+      "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CANCEL_NOT_ALLOWED(
+      "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
+  PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED(
+      "BCH-087", "현재 상태에서는 '보냈어요' 처리를 할 수 없습니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_OPEN_CHAT_URL_INVALID(
+      "BCH-088", "카카오 오픈채팅 링크 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+  // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
+  BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
+      "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
+  // 성사 확정(BCH-085)과 분리한다 — 개최자가 누른 건 "진행 확정"인데 "성사 확정" 실패라고 뜨면
+  // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
+  BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
+      "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등
+  // C2C 전용 액션 6곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서 엉뚱한
+  // 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
+  PARTICIPATION_CANCEL_NOT_SUPPORTED(
+      "BCH-091",
+      "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
+      HttpStatus.CONFLICT),
+  // 성사 확정을 거친 참여의 자발 취소 차단 (docs/56 H-09). 취소 불가 구간을 공유하는 BCH-086("고객센터로 문의")과
+  // 분리한다 — 여기서 막힌 사람이 연락할 상대는 고객센터가 아니라 돈을 받을 개최자다(직거래).
+  PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM(
+      "BCH-092",
+      "개최자가 성사 확정한 뒤에는 참여를 직접 취소할 수 없어요. 사정이 생겼다면 개최자에게 먼저 알려 주세요.",
+      HttpStatus.CONFLICT),
+  // 입금 확인된 참여가 있는 분철의 개최자 취소 차단 (docs/56 H-13). 상태 위반(BCH-050)과 분리한다 — 상태는 취소 가능
+  // 구간인데 "현재 상태에서는 취소할 수 없습니다" 만 뜨면 개최자가 무엇을 해야 하는지 알 수 없다.
+  BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS(
+      "BCH-093",
+      "입금이 확인된 참여자가 있어 분철을 취소할 수 없어요. 받은 금액을 환불한 뒤 고객센터로 문의해 주세요.",
+      HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),
@@ -178,6 +228,9 @@ public enum ErrorCode {
   ADMIN_NOT_FOUND("ADM-001", "관리자 권한이 없습니다.", HttpStatus.FORBIDDEN),
   // 아이디 없음/비밀번호 불일치를 구분하지 않는다 — 계정 존재 여부 열거(enumeration)를 막기 위함.
   ADMIN_LOGIN_FAILED("ADM-002", "아이디 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
+  // 무차별 대입 방어. 남은 시도 수·잠금 해제 시각을 알리지 않는다 — 공격자에게 재개 시점을 알려주는 셈이 된다.
+  ADMIN_LOGIN_RATE_LIMITED(
+      "ADM-003", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
 
   /** FDB - 의견 보내기 관련 에러 */
   // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.

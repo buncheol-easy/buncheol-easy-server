@@ -3,6 +3,7 @@ package buncheoleasy.auth.presentation;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -11,11 +12,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.application.SocialLoginService;
+import buncheoleasy.auth.infrastructure.jwt.JwtAuthenticationFilter;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.servlet.http.Cookie;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -55,6 +59,20 @@ class AuthControllerTest {
       SecurityContextHolder.getContext()
           .setAuthentication(
               new UsernamePasswordAuthenticationToken(USER_ID, null, Collections.emptyList()));
+      return request;
+    };
+  }
+
+  private RequestPostProcessor mockImpersonatedAuth() {
+    return (MockHttpServletRequest request) -> {
+      SecurityContextHolder.getContext()
+          .setAuthentication(
+              new UsernamePasswordAuthenticationToken(
+                  USER_ID,
+                  null,
+                  List.of(
+                      new SimpleGrantedAuthority("ROLE_USER"),
+                      new SimpleGrantedAuthority(JwtAuthenticationFilter.IMPERSONATED_AUTHORITY))));
       return request;
     };
   }
@@ -102,5 +120,16 @@ class AuthControllerTest {
         .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
 
     then(socialLoginService).should().logout(USER_ID);
+  }
+
+  @Test
+  void impersonation_토큰_로그아웃은_refresh_세션을_지우지_않고_204를_반환한다() throws Exception {
+    // 재현 토큰으로 로그아웃해도 대상 유저의 refresh 세션은 그대로 둔다 — 유저 강제 로그아웃 방지.
+    mockMvc
+        .perform(post("/v1/auth/logout").with(mockImpersonatedAuth()))
+        .andExpect(status().isNoContent())
+        .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+
+    then(socialLoginService).should(never()).logout(USER_ID);
   }
 }

@@ -8,7 +8,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -16,7 +15,6 @@ import lombok.NoArgsConstructor;
 @Table(name = "group_members")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor
 public class GroupMember extends TimestampedEntity {
 
   @Id
@@ -31,4 +29,19 @@ public class GroupMember extends TimestampedEntity {
 
   @Column(length = 500)
   private String image;
+
+  /**
+   * {@code name} 의 검색용 정규화본. DB 생성 컬럼이라 애플리케이션은 읽기만 한다. {@link
+   * buncheoleasy.group.domain.Group#getSearchName()} 참고.
+   */
+  @Column(name = "search_name", insertable = false, updatable = false, length = 100)
+  private String searchName;
+
+  // searchName 은 DB 가 계산하므로 생성자에서 받지 않는다.
+  public GroupMember(final Long id, final Long groupId, final String name, final String image) {
+    this.id = id;
+    this.groupId = groupId;
+    this.name = name;
+    this.image = image;
+  }
 }

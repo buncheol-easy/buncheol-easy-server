@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
@@ -147,11 +148,18 @@ public class MyParticipationQueryService {
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
-    boolean awaitingPayment = participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT;
+    // 입금 대기(입금확인중·보냈어요)일 때만 계좌를 노출한다. C2C 는 확정 시점 스냅샷 계좌 (docs/46 §3-5·§4.7-B1).
+    boolean paymentPending =
+        participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
+            || participation.getStatus() == ParticipationStatus.PAYMENT_SENT;
     HostAccountResponse hostAccount =
-        awaitingPayment ? hostAccountByHostId.get(buncheol.getHostId()) : null;
+        !paymentPending
+            ? null
+            : buncheol.isC2c()
+                ? HostAccountResponse.from(buncheol.getPaymentAccount())
+                : hostAccountByHostId.get(buncheol.getHostId());
     // 입금자명 안내용. 참여 시점 예금주명이라 프로필의 현재 계좌와 다를 수 있고, 자동 입금확인은 이 값으로 매칭한다.
-    String refundHolder = awaitingPayment ? participation.getRefundAccount().holder() : null;
+    String refundHolder = paymentPending ? participation.getRefundAccount().holder() : null;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
@@ -174,7 +182,13 @@ public class MyParticipationQueryService {
         // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(
             participation,
-            shippingFeePaybackPolicy.deriveStatus(participation, delivery, now),
-            shippingFeePaybackPolicy.submitDeadline(participation, delivery)));
+            shippingFeePaybackPolicy.deriveStatus(participation, buncheol.getFlowType(), delivery, now),
+            shippingFeePaybackPolicy.submitDeadline(participation, buncheol.getFlowType(), delivery)),
+        buncheol.getFlowType(),
+        participation.getPaymentSentAt(),
+        participation.getVisiblePaymentRejectedAt(),
+        buncheol.getOpenChatUrl(),
+        // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).
+        ParticipationCancellability.of(participation, buncheol));
   }
 }

@@ -10,4 +10,6 @@ public record BuncheolParams(
     Instant deadline,
     int minHeadcount,
     Integer gs25ShippingFee,
-    Integer cuShippingFee) {}
+    Integer cuShippingFee,
+    FlowType flowType,
+    String openChatUrl) {}

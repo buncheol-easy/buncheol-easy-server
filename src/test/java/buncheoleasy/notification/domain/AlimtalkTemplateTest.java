@@ -145,6 +145,122 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
+  @DisplayName("C2C 입금 확인(C2C_PAYMENT_CONFIRMED)")
+  class C2cPaymentConfirmed {
+
+    @Test
+    @DisplayName("다음 관문을 인원이 아닌 전원 입금으로 안내하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "참여자닉",
+              "분철명", "세븐틴 미니 12집 분철",
+              "멤버명", "호시",
+              "입금금액", "25,000");
+
+      String rendered = AlimtalkTemplate.C2C_PAYMENT_CONFIRMED.render(variables);
+
+      assertThat(rendered)
+          .startsWith("참여자닉님, 참여하신 분철의 입금이 확인되었어요!")
+          .contains("함께 참여한 분들의 입금이 모두 확인되면")
+          .doesNotContain("진행 인원이 모두 모이면")
+          .contains("▶ 참여 멤버: 호시")
+          .contains("▶ 입금 금액: 25,000원")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 진행 확정(C2C_BUNCHEOL_CONFIRMED)")
+  class C2cBuncheolConfirmed {
+
+    @Test
+    @DisplayName("확정 사유를 인원이 아닌 전원 입금확인으로 안내하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of("닉네임", "참여자닉", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시 외 1");
+
+      String rendered = AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED.render(variables);
+
+      assertThat(rendered)
+          .startsWith("참여자닉님, 참여하신 분철의 진행이 확정되었어요!")
+          .contains("참여자들의 입금이 모두 완료되어")
+          .doesNotContain("진행 인원이 모두 모여")
+          .contains("▶ 참여 멤버: 호시 외 1")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 분철 취소(C2C_BUNCHEOL_CANCELLED)")
+  class C2cBuncheolCancelled {
+
+    // 대금이 개최자 계좌로 직접 가는 직거래라, 플랫폼이 환불한다고 읽히는 LEGACY 문안을 쓰면 안 된다.
+    @Test
+    @DisplayName("환불 주체를 개최자로 안내하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "참여자닉", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "취소사유", "개최자 취소");
+
+      String rendered = AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED.render(variables);
+
+      assertThat(rendered)
+          .startsWith("참여자닉님, 참여하신 분철이 아래 사유로 취소되었어요.")
+          .contains("취소 사유: 개최자 취소")
+          .contains("환불은 개최자가 진행하며")
+          .contains("▶ 참여 멤버: 호시")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 정원 충족(C2C_BUNCHEOL_FULL)")
+  class C2cBuncheolFull {
+
+    @Test
+    @DisplayName("개최자 닉네임·분철명·신청 인원을 치환하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of("닉네임", "개최자닉", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5");
+
+      String rendered = AlimtalkTemplate.C2C_BUNCHEOL_FULL.render(variables);
+
+      assertThat(rendered)
+          .startsWith("개최자닉님, 개최하신 분철의 정원이 모두 찼어요!")
+          .contains("진행 확정을 눌러주시면")
+          .contains("세븐틴 미니 12집 분철")
+          .contains("▶ 신청 인원: 5명")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 입금 확인 요청(C2C_PAYMENT_SENT)")
+  class C2cPaymentSent {
+
+    @Test
+    @DisplayName("개최자 닉네임·참여자·입금자명·입금 금액을 치환하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "개최자닉", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "참여자닉네임", "참여자닉", "입금자명",
+              "홍길동", "입금금액", "25,000");
+
+      String rendered = AlimtalkTemplate.C2C_PAYMENT_SENT.render(variables);
+
+      assertThat(rendered)
+          .startsWith("개최자닉님, 참여자가 입금 완료를 알렸어요.")
+          .contains("'입금 확인'을 눌러주세요")
+          .contains("▶ 참여 멤버: 호시")
+          .contains("▶ 참여자: 참여자닉")
+          .contains("▶ 입금자명: 홍길동")
+          .contains("▶ 입금 금액: 25,000원")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
   @DisplayName("버튼 구성")
   class Buttons {
 

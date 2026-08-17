@@ -18,6 +18,7 @@ import buncheoleasy.admin.dto.response.AdminPaymentRecordResponse;
 import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.global.page.Cursor;
@@ -64,7 +65,7 @@ class AdminPaymentQueryServiceTest {
     Buncheol buncheol =
         Buncheol.create(
             9L,
-            new BuncheolParams(1L, "분철 제목", null, "스토어", deadline, 2, 3000, null),
+            new BuncheolParams(1L, "분철 제목", null, "스토어", deadline, 2, 3000, null, FlowType.LEGACY, null),
             Instant.now());
     ReflectionTestUtils.setField(buncheol, "id", buncheolId);
 

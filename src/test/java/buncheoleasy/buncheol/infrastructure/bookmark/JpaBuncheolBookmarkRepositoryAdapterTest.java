@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
@@ -59,7 +60,7 @@ class JpaBuncheolBookmarkRepositoryAdapterTest {
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, title, null, "스토어명", deadline, 1, 3000, null),
+            new BuncheolParams(groupId, title, null, "스토어명", deadline, 1, 3000, null, FlowType.LEGACY, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();

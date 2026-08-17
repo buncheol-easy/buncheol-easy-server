@@ -12,13 +12,14 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
-import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
@@ -27,8 +28,13 @@ import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +45,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -50,6 +57,8 @@ class BuncheolListQueryServiceTest {
 
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
+  @Mock private GroupMemberRepository groupMemberRepository;
+  @Mock private UserFavoriteGroupRepository userFavoriteGroupRepository;
   @Mock private BuncheolBookmarkRepository buncheolBookmarkRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
@@ -57,6 +66,9 @@ class BuncheolListQueryServiceTest {
   @Mock private ParticipationRepository participationRepository;
   @Mock private ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   @Mock private ApplicationEventPublisher eventPublisher;
+
+  // 픽스처 마감(2026-06-01)보다 앞선 고정 시각 — RECRUITING 분철이 신규 참여를 받는 상태로 읽힌다.
+  @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-20T00:00:00Z"), ZoneOffset.UTC);
 
   @Nested
   @DisplayName("검색 결과 반환")
@@ -84,6 +96,7 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items()).hasSize(2);
       assertThat(result.items().get(0).id()).isEqualTo(10L);
       assertThat(result.items().get(0).status()).isEqualTo(BuncheolStatus.RECRUITING);
+      assertThat(result.items().get(0).flowType()).isEqualTo(FlowType.LEGACY);
       assertThat(result.items().get(0).bookmarked()).isTrue();
       assertThat(result.items().get(0).groupName()).isEqualTo("뉴진스");
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
@@ -132,6 +145,33 @@ class BuncheolListQueryServiceTest {
           .willReturn(
               new BuncheolMemberNameResolver.MemberNames(
                   Map.of(10L, List.of("민지", "하니")), Map.of()));
+      given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L)))
+          .willReturn(Set.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).memberNames()).containsExactly("민지", "하니");
+      assertThat(result.items().get(0).availableMemberNames()).isEmpty();
+    }
+
+    @Test
+    void 신규_참여를_받지_않는_분철은_availableMemberNames_를_비운다() {
+      // 진행 확정된 분철의 공석은 상세에서 CLOSED(신청 불가)로 내려간다. 목록만 "남은 멤버"로 부르면
+      // 카드와 상세가 반대 신호를 준다 (docs/56 F-2).
+      Buncheol confirmed =
+          confirmedBuncheol(10L, 100L, "확정 분철", Instant.parse("2026-05-15T08:00:00Z"));
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(confirmed));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L)))
+          .willReturn(List.of(501L));
+      // 리졸버는 여전히 빈 슬롯을 잔여로 계산해 내려준다 — 걸러내는 책임이 조회 서비스에 있음을 고정한다.
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of(501L)))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("민지", "하니")), Map.of(10L, List.of("하니"))));
       given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L)))
           .willReturn(Set.of());
 
@@ -324,6 +364,61 @@ class BuncheolListQueryServiceTest {
     }
 
     @Test
+    void 그룹명_멤버명_매칭_id_가_조건에_실린다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+      given(groupRepository.findIdsByNormalizedKeyword("아이브")).willReturn(List.of(7L));
+      given(groupMemberRepository.findIdsByNormalizedName("아이브")).willReturn(List.of(70L, 71L));
+
+      buncheolListQueryService.search(
+          1L,
+          new BuncheolSearchCondition(null, null, "아이 브"),
+          BuncheolListCursor.firstPage(),
+          20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().normalizedKeyword()).isEqualTo("아이브");
+      assertThat(captor.getValue().keywordGroupIds()).containsExactly(7L);
+      assertThat(captor.getValue().keywordMemberIds()).containsExactly(70L, 71L);
+    }
+
+    @Test
+    void 매칭이_없으면_어떤_행과도_일치하지_않는_id_가_실린다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+      given(groupRepository.findIdsByNormalizedKeyword("없는그룹")).willReturn(List.of());
+      given(groupMemberRepository.findIdsByNormalizedName("없는그룹")).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L,
+          new BuncheolSearchCondition(null, null, "없는그룹"),
+          BuncheolListCursor.firstPage(),
+          20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().keywordGroupIds()).doesNotContain(7L).isNotEmpty();
+      assertThat(captor.getValue().keywordMemberIds()).isNotEmpty();
+    }
+
+    @Test
+    void 구두점만_입력하면_정규화_검색어가_null_이라_제목_매칭이_비활성화된다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, "---"), BuncheolListCursor.firstPage(), 20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().normalizedKeyword()).isNull();
+      // 원문은 남아 설명(description) 원문 검색에는 그대로 쓰인다.
+      assertThat(captor.getValue().keyword()).isEqualTo("---");
+      verifyNoInteractions(groupMemberRepository);
+    }
+
+    @Test
     void keyword_는_trim_되어_repo_에_전달된다() {
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
 
@@ -334,6 +429,72 @@ class BuncheolListQueryServiceTest {
           ArgumentCaptor.forClass(BuncheolSearchCondition.class);
       verify(buncheolRepository).search(captor.capture(), any(), anyInt());
       assertThat(captor.getValue().keyword()).isEqualTo("뉴진스");
+    }
+  }
+
+  @Nested
+  @DisplayName("최애 그룹 필터")
+  class FavoriteGroupFilterTest {
+
+    @Test
+    void 최애_그룹_id_가_조건에_실린다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+      given(userFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(1L))
+          .willReturn(
+              List.of(
+                  UserFavoriteGroup.create(1L, 100L), UserFavoriteGroup.create(1L, 200L)));
+
+      buncheolListQueryService.search(
+          1L,
+          new BuncheolSearchCondition(null, null, null, true),
+          BuncheolListCursor.firstPage(),
+          20);
+
+      ArgumentCaptor<BuncheolSearchCondition> captor =
+          ArgumentCaptor.forClass(BuncheolSearchCondition.class);
+      verify(buncheolRepository).search(captor.capture(), any(), anyInt());
+      assertThat(captor.getValue().onlyFavoriteGroups()).isTrue();
+      assertThat(captor.getValue().favoriteGroupIds()).containsExactly(100L, 200L);
+    }
+
+    @Test
+    void 최애가_없으면_조회하지_않고_빈_결과다() {
+      given(userFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(1L))
+          .willReturn(List.of());
+
+      CursorResponse<BuncheolSummaryResponse> response =
+          buncheolListQueryService.search(
+              1L,
+              new BuncheolSearchCondition(null, null, null, true),
+              BuncheolListCursor.firstPage(),
+              20);
+
+      // 빈 최애 목록을 "필터 없음" 으로 접으면 전체 분철이 노출된다. 조회 자체가 나가면 안 된다.
+      assertThat(response.items()).isEmpty();
+      verifyNoInteractions(buncheolRepository);
+    }
+
+    @Test
+    void 비로그인이_최애_필터를_켜면_빈_결과다() {
+      CursorResponse<BuncheolSummaryResponse> response =
+          buncheolListQueryService.search(
+              null,
+              new BuncheolSearchCondition(null, null, null, true),
+              BuncheolListCursor.firstPage(),
+              20);
+
+      assertThat(response.items()).isEmpty();
+      verifyNoInteractions(buncheolRepository, userFavoriteGroupRepository);
+    }
+
+    @Test
+    void 필터를_끄면_최애를_조회하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      verifyNoInteractions(userFavoriteGroupRepository);
     }
   }
 
@@ -434,6 +595,7 @@ class BuncheolListQueryServiceTest {
     setField(buncheol, "deadline", Instant.parse("2026-06-01T12:00:00Z"));
     setField(buncheol, "minHeadcount", 3);
     setField(buncheol, "status", BuncheolStatus.RECRUITING);
+    setField(buncheol, "flowType", FlowType.LEGACY);
     // CreatedAtEntity#createdAt 은 부모 필드. setField 가 super 까지 탐색.
     setField(buncheol, "createdAt", createdAt);
     return buncheol;

@@ -10,9 +10,12 @@ import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
+import buncheoleasy.buncheol.dto.response.HoldBuncheolResponse;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -55,6 +58,8 @@ public class BuncheolController {
    *
    * <p>비로그인 호출 시 익명 principal(문자열) 은 {@code Long} 캐스팅에 실패해 {@code userId} 가 null 로 들어온다 ({@link
    * AuthenticationPrincipal#errorOnInvalidType()} 기본값 false).
+   *
+   * <p>{@code onlyFavoriteGroups=true} 는 로그인 사용자의 최애 그룹 분철만 남긴다. 비로그인이거나 최애가 0개면 빈 목록이다.
    */
   @GetMapping
   public ResponseEntity<CursorResponse<BuncheolSummaryResponse>> searchBuncheols(
@@ -62,12 +67,13 @@ public class BuncheolController {
       @RequestParam(required = false) final Long groupId,
       @RequestParam(required = false) final Long memberId,
       @RequestParam(required = false) @Size(max = 100) final String keyword,
+      @RequestParam(defaultValue = "false") final boolean onlyFavoriteGroups,
       @RequestParam(required = false) final String cursor,
       @RequestParam(defaultValue = "20") final int size) {
     return ResponseEntity.ok(
         buncheolListQueryService.search(
             userId,
-            new BuncheolSearchCondition(groupId, memberId, keyword),
+            new BuncheolSearchCondition(groupId, memberId, keyword, onlyFavoriteGroups),
             BuncheolListCursor.parse(cursor),
             size));
   }
@@ -77,6 +83,15 @@ public class BuncheolController {
   public ResponseEntity<List<MyHostedBuncheolResponse>> getMyHostedBuncheols(
       @AuthenticationPrincipal final Long hostId) {
     return ResponseEntity.ok(myHostedBuncheolQueryService.getMyHostedBuncheols(hostId));
+  }
+
+  /**
+   * 개최 자격 사전 조회 API (docs/53 Q-07). 개최 폼 진입 시 호출해 부적격 사유를 미리 안내하기 위한 것으로, 최종 차단은 개최 요청 시점의 게이트가 한다.
+   */
+  @GetMapping("/hosting-eligibility")
+  public ResponseEntity<HostingEligibilityResponse> getHostingEligibility(
+      @AuthenticationPrincipal final Long hostId) {
+    return ResponseEntity.ok(buncheolService.getHostingEligibility(hostId));
   }
 
   /** 분철 단건 상세 조회 (비로그인 허용). 멤버별 가격·참여 가능 여부, 최소 진행 인원·현재 확정 인원, 로그인 유저의 내 참여 현황을 포함한다. */
@@ -97,12 +112,34 @@ public class BuncheolController {
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<Void> holdBuncheol(
+  public ResponseEntity<HoldBuncheolResponse> holdBuncheol(
       @AuthenticationPrincipal final Long hostId,
       @Valid @RequestPart("request") final HoldBuncheolRequest request,
       @RequestPart(value = "images") final List<MultipartFile> images) {
-    buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
-    return ResponseEntity.status(HttpStatus.CREATED).build();
+    Long buncheolId = buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
+    return ResponseEntity.status(HttpStatus.CREATED).body(HoldBuncheolResponse.of(buncheolId));
+  }
+
+  /**
+   * C2C 개최자 성사 확정 API (docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금 대기로 전이하고, 입금 안내가 발송된다. 정원
+   * 미달 재량 확정·마감 전 조기 확정 허용.
+   */
+  @PostMapping("/{id}/confirm")
+  public ResponseEntity<BuncheolConfirmResponse> confirmRecruitment(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
+    return ResponseEntity.ok(
+        BuncheolConfirmResponse.from(buncheolService.confirmRecruitment(hostId, id)));
+  }
+
+  /**
+   * C2C 입금 수집 종료(부분 확정) API (docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행을 확정한다.
+   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 확인/반려로 먼저 정리).
+   */
+  @PostMapping("/{id}/finalize-collected")
+  public ResponseEntity<Void> finalizeCollected(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
+    buncheolService.finalizeCollected(hostId, id);
+    return ResponseEntity.noContent().build();
   }
 
   @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -45,7 +45,6 @@ admin:
     password: ""
 
 app:
-  base-url: http://localhost:8080
   buncheol:
     # 테스트에서는 자동 마감 스케줄러를 비활성화 (의도치 않은 마감/낙찰 트리거 방지)
     auto-close:
@@ -74,6 +73,11 @@ delivery:
     webhook-ttl: 48h
     connect-timeout: 3s
     read-timeout: 5s
+
+# 오픈 스위치는 켠 상태를 기본으로 둔다 — 자격 게이트·개최 플로우 테스트의 관심사가 아니다.
+# 미오픈 동작은 @TestPropertySource 로 끄는 전용 테스트에서만 확인한다.
+c2c-hosting:
+  enabled: true
 
 payaction:
   # 웹훅 인증 경로를 테스트할 수 있게 더미 키를 채운다. base-url 은 비워 아웃바운드 호출은 꺼둔 상태로 남긴다.

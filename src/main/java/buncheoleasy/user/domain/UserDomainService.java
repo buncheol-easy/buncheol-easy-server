@@ -20,19 +20,39 @@ public class UserDomainService {
   private final UserServiceTermRepository userServiceTermRepository;
   private final RandomNicknameGenerator nicknameGenerator;
   private final Clock clock;
+  private final C2cHostingProperties c2cHostingProperties;
 
   /**
-   * 소셜 로그인 회원 조회/생성. name·phoneNumber 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지 않는다 —
-   * 마이페이지에서 수정한 값을 보호한다.
+   * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
+   * 않는다 — 마이페이지에서 수정한 값을 보호한다. 단 연령대는 예외: 마이페이지 수정 대상이 아니고 시간이 지나면 구간이 바뀌므로 재로그인 때마다 카카오 최신값으로
+   * 갱신한다(기존 가입자의 추가 동의 수집 경로 — docs/50).
    */
+  @Transactional
   public User getOrCreateBySocialLogin(
       final SocialInfo socialInfo,
       final String email,
       final String name,
-      final String phoneNumber) {
+      final String phoneNumber,
+      final String ageRange,
+      final boolean ageRangeWithdrawn) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber));
+        .map(user -> refreshAgeRange(user, ageRange, ageRangeWithdrawn))
+        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
+  }
+
+  /**
+   * 재로그인 시 연령대를 카카오 최신 상태로 맞춘다 — 철회 확정 신호가 오면 지체 없이 파기(PIPA), 새 값이 오면 갱신, 신호가 없으면(미동의였던 그대로·조회
+   * 실패) 기존 값을 유지한다.
+   */
+  private User refreshAgeRange(
+      final User user, final String ageRange, final boolean ageRangeWithdrawn) {
+    if (ageRangeWithdrawn) {
+      user.clearAgeRange();
+    } else if (ageRange != null) {
+      user.updateAgeRange(ageRange);
+    }
+    return user;
   }
 
   public boolean isValidUser(final Long id) {
@@ -83,6 +103,11 @@ public class UserDomainService {
     user.updateBankAccount(bank, account, holder);
   }
 
+  /** 던지지 않는 정산 계좌 등록 여부 — 개최 자격 사전 조회용(docs/53 Q-07). 개최 시점 검사는 {@link #requireBankAccountRegistered}. */
+  public boolean hasBankAccount(final Long id) {
+    return getUser(id).getBankAccount() != null;
+  }
+
   public void requireBankAccountRegistered(final Long id) {
     getUser(id).requireBankAccount();
   }
@@ -91,8 +116,57 @@ public class UserDomainService {
     getUser(id).requireProfileCompleted();
   }
 
-  public void requireCanHost(final Long id) {
-    getUser(id).requireCanHost();
+  public boolean canHost(final Long id) {
+    return getUser(id).isCanHost();
+  }
+
+  /**
+   * C2C 개최 자격 판정 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
+   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분한다.
+   *
+   * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
+   * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
+   *
+   * <p>오픈 스위치({@link C2cHostingProperties})를 <b>가장 먼저</b> 본다. 미오픈은 사용자가 무엇을 채워도 해소되지 않으므로, 뒤에 두면
+   * "전화번호를 등록하세요" 처럼 <b>고쳐도 열리지 않는 안내</b>를 먼저 보여주게 된다.
+   */
+  public C2cHostQualification evaluateC2cHostQualification(final Long id) {
+    if (!c2cHostingProperties.enabled()) {
+      return C2cHostQualification.NOT_OPEN_YET;
+    }
+    User user = getUser(id);
+    if (!user.isProfileCompleted()) {
+      return C2cHostQualification.PHONE_REQUIRED;
+    }
+    if (user.getAgeRange() == null) {
+      return C2cHostQualification.AGE_UNVERIFIED;
+    }
+    if (!user.isVerifiedAdult()) {
+      return C2cHostQualification.NOT_ADULT;
+    }
+    return C2cHostQualification.QUALIFIED;
+  }
+
+  /**
+   * C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. 응답 사유 매핑({@code HostingEligibilityResponse#from})과 대칭이다.
+   *
+   * <p>⚠️ 매핑은 반드시 <b>switch 식</b>으로 둔다. switch <b>문</b>은 enum exhaustiveness 검사를 받지 않아(JLS
+   * §14.11.2) 사유가 추가돼도 컴파일이 통과하고, 새 사유가 <b>아무 분기도 타지 않은 채 개최를 허용</b>한다 — 미성년 차단이 걸린 자리라 조용히
+   * 뚫리면 곧바로 사고다. 식으로 두면 값을 추가하는 순간 컴파일이 깨진다.
+   */
+  public void requireC2cHostQualification(final Long id) {
+    C2cHostQualification qualification = evaluateC2cHostQualification(id);
+    ErrorCode errorCode =
+        switch (qualification) {
+          case QUALIFIED -> null;
+          case NOT_OPEN_YET -> ErrorCode.C2C_HOSTING_NOT_OPEN;
+          case PHONE_REQUIRED -> ErrorCode.USER_PROFILE_IS_NOT_COMPLETE;
+          case AGE_UNVERIFIED -> ErrorCode.USER_AGE_NOT_VERIFIED;
+          case NOT_ADULT -> ErrorCode.USER_NOT_ADULT;
+        };
+    if (errorCode != null) {
+      throw new BusinessException(errorCode);
+    }
   }
 
   public boolean isNicknameDuplicate(final String nickname, final Long excludeId) {
@@ -133,7 +207,8 @@ public class UserDomainService {
       final SocialInfo socialInfo,
       final String email,
       final String name,
-      final String phoneNumber) {
+      final String phoneNumber,
+      final String ageRange) {
     User newUser =
         User.create(
             socialInfo.provider().name(),
@@ -146,6 +221,9 @@ public class UserDomainService {
     // 동의창에서 전화번호까지 받은 경우 profileCompleted 로 전이되어 추가정보 화면 없이 가입이 완결된다.
     if (phoneNumber != null) {
       newUser.updatePhoneNumber(phoneNumber);
+    }
+    if (ageRange != null) {
+      newUser.updateAgeRange(ageRange);
     }
     return userRepository.save(newUser);
   }

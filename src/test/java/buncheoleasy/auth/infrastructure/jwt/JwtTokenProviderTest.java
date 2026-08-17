@@ -38,7 +38,7 @@ class JwtTokenProviderTest {
 
   private JwtTokenProvider createProvider(long accessExp, long refreshExp, long adminExp) {
     return new JwtTokenProvider(
-        ACCESS_SECRET, REFRESH_SECRET, accessExp, refreshExp, adminExp, refreshTokenStore);
+        ACCESS_SECRET, REFRESH_SECRET, accessExp, refreshExp, adminExp, 900, refreshTokenStore);
   }
 
   @Nested
@@ -86,6 +86,33 @@ class JwtTokenProviderTest {
       AccessTokenClaims claims = provider.parseAccessTokenClaims(tokenPair.accessToken());
       assertThat(claims.userId()).isEqualTo(1L);
       assertThat(claims.role()).isNull();
+    }
+
+    @Test
+    void impersonation_토큰은_role은_null이고_imp_claim이_설정된다() {
+      // given
+      JwtTokenProvider provider = createProvider(3600, 604800);
+
+      // when
+      String impersonationToken = provider.createImpersonationAccessToken(21L);
+
+      // then — 유저 API 를 그대로 호출해야 하므로 role 은 null(ROLE_USER), 대신 imp 로 재현 토큰임을 표시한다.
+      AccessTokenClaims claims = provider.parseAccessTokenClaims(impersonationToken);
+      assertThat(claims.userId()).isEqualTo(21L);
+      assertThat(claims.role()).isNull();
+      assertThat(claims.impersonated()).isTrue();
+    }
+
+    @Test
+    void 일반_유저_토큰은_imp_claim이_없다() {
+      // given
+      JwtTokenProvider provider = createProvider(3600, 604800);
+
+      // when
+      TokenPair tokenPair = provider.issueTokens(1L);
+
+      // then
+      assertThat(provider.parseAccessTokenClaims(tokenPair.accessToken()).impersonated()).isFalse();
     }
 
     @Test

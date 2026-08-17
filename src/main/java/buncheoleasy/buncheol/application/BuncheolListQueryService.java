@@ -13,8 +13,14 @@ import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.global.query.LikeEscaper;
+import buncheoleasy.global.query.SearchText;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import buncheoleasy.group.domain.member.GroupMemberRepository;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroup;
+import buncheoleasy.user.domain.favorite.UserFavoriteGroupRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +49,8 @@ public class BuncheolListQueryService {
 
   private final BuncheolRepository buncheolRepository;
   private final GroupRepository groupRepository;
+  private final GroupMemberRepository groupMemberRepository;
+  private final UserFavoriteGroupRepository userFavoriteGroupRepository;
   private final BuncheolBookmarkRepository buncheolBookmarkRepository;
   private final BuncheolImageRepository buncheolImageRepository;
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
@@ -50,6 +58,7 @@ public class BuncheolListQueryService {
   private final ParticipationRepository participationRepository;
   private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   private final ApplicationEventPublisher eventPublisher;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public CursorResponse<BuncheolSummaryResponse> search(
@@ -59,11 +68,17 @@ public class BuncheolListQueryService {
       final int requestedSize) {
     final int safeSize = clampSize(requestedSize);
     final String trimmedKeyword = trimKeyword(condition.keyword());
-    final BuncheolSearchCondition normalized =
-        new BuncheolSearchCondition(
-            condition.groupId(), condition.memberId(), LikeEscaper.escape(trimmedKeyword));
+    final BuncheolSearchCondition withFavorites = resolveFavoriteGroups(userId, condition);
 
-    final List<Buncheol> fetched = buncheolRepository.search(normalized, cursor, safeSize + 1);
+    // 최애 필터를 켰는데 등록된 최애가 없으면 매칭될 분철이 없다. 조회를 건너뛴다.
+    if (condition.onlyFavoriteGroups() && withFavorites == null) {
+      return CursorResponse.empty();
+    }
+
+    final BuncheolSearchCondition resolved =
+        resolveKeywordMatches(withFavorites, trimmedKeyword);
+
+    final List<Buncheol> fetched = buncheolRepository.search(resolved, cursor, safeSize + 1);
     final boolean hasNext = fetched.size() > safeSize;
     final List<Buncheol> visible = hasNext ? fetched.subList(0, safeSize) : fetched;
 
@@ -98,6 +113,7 @@ public class BuncheolListQueryService {
             ? Set.copyOf(buncheolMemberRepository.findAllFreeSlotBuncheolIds(buncheolIds))
             : Set.of();
 
+    final Instant now = Instant.now(clock);
     final List<BuncheolSummaryResponse> items =
         visible.stream()
             .map(
@@ -106,19 +122,77 @@ public class BuncheolListQueryService {
                         b.getId(),
                         b.getTitle(),
                         b.getStatus(),
+                        b.getFlowType(),
                         b.getDeadline(),
                         b.getMinHeadcount(),
                         bookmarkedBuncheolIds.contains(b.getId()),
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),
                         memberNames.all().getOrDefault(b.getId(), List.of()),
-                        memberNames.available().getOrDefault(b.getId(), List.of()),
+                        availableMemberNames(b, memberNames, now),
                         shippingFeePaybackPolicy.isEventTargetBuncheol(
-                            freeSlotBuncheolIds.contains(b.getId()))))
+                            b.getFlowType(), freeSlotBuncheolIds.contains(b.getId()))))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;
     return new CursorResponse<>(items, nextCursor, hasNext);
+  }
+
+  /**
+   * 최애 필터가 켜져 있으면 사용자의 최애 그룹 id 를 해석해 조건에 싣는다. 비로그인이거나 최애가 0개면 {@code null} 을
+   * 반환해 호출 측이 빈 결과로 단축하게 한다 — 빈 목록을 그대로 넘기면 "필터 없음" 과 구분되지 않아 전체가 노출된다.
+   */
+  private BuncheolSearchCondition resolveFavoriteGroups(
+      final Long userId, final BuncheolSearchCondition condition) {
+    if (!condition.onlyFavoriteGroups()) {
+      return condition;
+    }
+    if (userId == null) {
+      return null;
+    }
+
+    final List<Long> favoriteGroupIds =
+        userFavoriteGroupRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId).stream()
+            .map(UserFavoriteGroup::getGroupId)
+            .toList();
+
+    return favoriteGroupIds.isEmpty() ? null : condition.withFavoriteGroups(favoriteGroupIds);
+  }
+
+  /**
+   * 검색어와 이름이 일치하는 그룹·멤버를 미리 해석해 조건에 싣는다. 분철 리포지토리가 {@code group} 모듈 엔티티를 조인하지 않도록 조합을 이 레이어에서
+   * 한다 — 그룹·멤버 테이블이 작아 조회 2회는 무시할 만하다 (부분일치 LIKE 라 인덱스 시크는 못 하고 스캔이다).
+   */
+  private BuncheolSearchCondition resolveKeywordMatches(
+      final BuncheolSearchCondition condition, final String trimmedKeyword) {
+    final String normalizedKeyword = SearchText.normalizeForLike(trimmedKeyword);
+    if (normalizedKeyword == null) {
+      // 조건을 새로 만들면 앞서 해석한 최애 필터가 사라진다. 키워드 관련 필드만 갈아끼운다.
+      return condition.withKeywordMatches(
+          LikeEscaper.escape(trimmedKeyword), null, List.of(), List.of());
+    }
+    return condition.withKeywordMatches(
+        LikeEscaper.escape(trimmedKeyword),
+        normalizedKeyword,
+        groupRepository.findIdsByNormalizedKeyword(normalizedKeyword),
+        groupMemberRepository.findIdsByNormalizedName(normalizedKeyword));
+  }
+
+  /**
+   * 카드에 실을 "남은 멤버". 신규 참여를 받지 않는 분철(취소·진행확정·마감 경과)은 <b>빈 목록</b>으로 내린다 — 상세가 같은 슬롯을 {@code
+   * CLOSED}(신청 불가)로 내리는데 목록만 "남은 멤버"로 부르면 카드와 상세가 반대 신호를 준다 (docs/56 F-2 · docs/53 Q-14 의
+   * {@code BuncheolDetailQueryService#emptySlotStatus} 와 같은 판정).
+   *
+   * <p>FE 는 빈 목록을 이미 "남은 멤버 없음" 으로 그리므로 앱 변경이 필요 없다.
+   */
+  private List<String> availableMemberNames(
+      final Buncheol buncheol,
+      final BuncheolMemberNameResolver.MemberNames memberNames,
+      final Instant now) {
+    if (!buncheol.acceptsNewParticipation(now)) {
+      return List.of();
+    }
+    return memberNames.available().getOrDefault(buncheol.getId(), List.of());
   }
 
   private int clampSize(final int requested) {

@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolParams;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.global.query.LikeEscaper;
+import buncheoleasy.global.query.SearchText;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
@@ -47,7 +50,7 @@ class JpaBuncheolRepositoryAdapterTest {
 
   private BuncheolParams validParams() {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null);
+    return new BuncheolParams(groupId, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", deadline, 1, 3000, null, FlowType.LEGACY, null);
   }
 
   private Buncheol persistAndDetach(Buncheol buncheol) {
@@ -120,7 +123,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void gs25_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, 2500, null, FlowType.LEGACY, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -132,7 +135,7 @@ class JpaBuncheolRepositoryAdapterTest {
     @Test
     void cu_배송비만_설정하여_저장할_수_있다() {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000);
+      BuncheolParams params = new BuncheolParams(groupId, "제목", null, "스토어명", deadline, 1, null, 2000, FlowType.LEGACY, null);
       Buncheol buncheol = Buncheol.create(hostId, params, Instant.now());
 
       buncheolRepository.save(buncheol);
@@ -225,6 +228,106 @@ class JpaBuncheolRepositoryAdapterTest {
 
       assertThat(affectedFromRecruiting).isZero();
       assertThat(affectedFromCancelled).isZero();
+    }
+  }
+
+  @Nested
+  @DisplayName("입금 수집중 개최자 취소 CAS 테스트 (docs/56 H-13)")
+  class HostCancelIfCollectingAndNoConfirmedTest {
+
+    private int seq = 0;
+
+    private Long persistCollectingBuncheol() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(buncheol.getId(), BuncheolStatus.PAYMENT_COLLECTING);
+      return buncheol.getId();
+    }
+
+    private void insertParticipation(final Long buncheolId, final String participationStatus) {
+      seq++;
+      Long participantId = TestUserFixture.insertUser(jdbcTemplate, "h13_p" + seq);
+      Long groupMemberId =
+          TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "H13멤버" + seq);
+      jdbcTemplate.update(
+          "INSERT INTO buncheol_members (buncheol_id, member_id, price) VALUES (?, ?, ?)",
+          buncheolId,
+          groupMemberId,
+          30_000L);
+      Long buncheolMemberId =
+          jdbcTemplate.queryForObject(
+              "SELECT MAX(id) FROM buncheol_members WHERE buncheol_id = ? AND member_id = ?",
+              Long.class,
+              buncheolId,
+              groupMemberId);
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+              + " amount, refund_bank, refund_account, refund_holder, due_at, status)"
+              + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          30_000L,
+          "국민",
+          "12345678",
+          "홍길동",
+          Timestamp.from(Instant.now()),
+          participationStatus);
+      em.clear();
+    }
+
+    private String statusOf(final Long buncheolId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+    }
+
+    @Test
+    void 입금확인된_참여가_없으면_HOST_CANCELLED_로_전이한다() {
+      Long buncheolId = persistCollectingBuncheol();
+      insertParticipation(buncheolId, "AWAITING_PAYMENT");
+      insertParticipation(buncheolId, "PAYMENT_SENT");
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, Instant.now());
+
+      assertThat(affected).isOne();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.HOST_CANCELLED.name());
+    }
+
+    // 이 테스트가 H-13 가드 본체다 — CAS 의 NOT EXISTS 절을 지우면 전이가 성공해 빨개진다.
+    @Test
+    void 입금확인된_참여가_한_건이라도_있으면_전이하지_않는다() {
+      Long buncheolId = persistCollectingBuncheol();
+      insertParticipation(buncheolId, "AWAITING_PAYMENT");
+      insertParticipation(buncheolId, "CONFIRMED");
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.PAYMENT_COLLECTING.name());
+    }
+
+    // 취소·만료된 참여는 확정 참여가 아니다 — 상태 전건이 아니라 CONFIRMED 만 봐야 한다.
+    @Test
+    void 취소된_참여만_있으면_확정_참여로_보지_않고_전이한다() {
+      Long buncheolId = persistCollectingBuncheol();
+      insertParticipation(buncheolId, "CANCELLED");
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, Instant.now());
+
+      assertThat(affected).isOne();
+    }
+
+    @Test
+    void 입금_수집중이_아니면_전이하지_않는다() {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+
+      int affected =
+          buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheol.getId(), Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(statusOf(buncheol.getId())).isEqualTo(BuncheolStatus.RECRUITING.name());
     }
   }
 
@@ -427,7 +530,7 @@ class JpaBuncheolRepositoryAdapterTest {
     private BuncheolParams paramsWithTitleAndDescription(
         Long gId, String title, String description) {
       Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null);
+      return new BuncheolParams(gId, title, description, "공식 스토어", deadline, 1, 3000, null, FlowType.LEGACY, null);
     }
 
     private void linkMember(Long buncheolId, Long memberId) {
@@ -437,6 +540,29 @@ class JpaBuncheolRepositoryAdapterTest {
           memberId,
           10000L);
       em.clear();
+    }
+
+    // 검색어 정규화는 BuncheolListQueryService 의 책임이라, 어댑터 테스트는 서비스가 만들어 넘기는 형태를 그대로 재현한다.
+    private BuncheolSearchCondition keywordCondition(String keyword) {
+      return keywordCondition(keyword, List.of(), List.of());
+    }
+
+    private BuncheolSearchCondition keywordCondition(
+        String keyword, List<Long> keywordGroupIds, List<Long> keywordMemberIds) {
+      return new BuncheolSearchCondition(null, null, keyword)
+          .withKeywordMatches(
+              LikeEscaper.escape(keyword),
+              SearchText.normalizeForLike(keyword),
+              keywordGroupIds,
+              keywordMemberIds);
+    }
+
+    private Long persistWithMembers(
+        Long hostId, Long gId, String title, List<Long> memberIds, Instant createdAt) {
+      Long buncheolId =
+          persistWithCreatedAt(hostId, paramsWithTitleAndDescription(gId, title, "설명"), createdAt);
+      memberIds.forEach(memberId -> linkMember(buncheolId, memberId));
+      return buncheolId;
     }
 
     @Test
@@ -510,9 +636,65 @@ class JpaBuncheolRepositoryAdapterTest {
 
       List<Buncheol> result =
           buncheolRepository.search(
-              new BuncheolSearchCondition(null, null, "newjeans"), BuncheolListCursor.firstPage(), 10);
+              keywordCondition("newjeans"), BuncheolListCursor.firstPage(), 10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(titleMatch, descMatch);
+    }
+
+    @Test
+    void title_검색은_공백과_구두점을_무시한다() {
+      Long spaced =
+          persistWithCreatedAt(
+              hostId,
+              paramsWithTitleAndDescription(groupId, "아이브 앨범 분철", "설명"),
+              Instant.parse("2026-05-15T08:00:00Z"));
+      persistWithCreatedAt(
+          hostId,
+          paramsWithTitleAndDescription(groupId, "에스파 분철", "다른 설명"),
+          Instant.parse("2026-05-13T08:00:00Z"));
+
+      assertThat(
+              buncheolRepository.search(
+                  keywordCondition("아이브앨범"), BuncheolListCursor.firstPage(), 10))
+          .extracting(Buncheol::getId)
+          .containsExactly(spaced);
+    }
+
+    @Test
+    void keyword_가_그룹명과_일치하면_제목에_없어도_검색된다() {
+      Long target =
+          persistWithCreatedAt(
+              hostId,
+              paramsWithTitleAndDescription(groupId, "제목에는 그룹명이 없다", "설명"),
+              Instant.parse("2026-05-15T08:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              keywordCondition("무관한검색어", List.of(groupId), List.of()),
+              BuncheolListCursor.firstPage(),
+              10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(target);
+    }
+
+    @Test
+    void keyword_가_멤버명과_일치하면_해당_멤버_슬롯이_있는_분철만_검색된다() {
+      Long memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "장원영");
+      Long withMember =
+          persistWithMembers(
+              hostId, groupId, "슬롯 있는 분철", List.of(memberId), Instant.parse("2026-05-15T08:00:00Z"));
+      persistWithCreatedAt(
+          hostId,
+          paramsWithTitleAndDescription(groupId, "슬롯 없는 분철", "설명"),
+          Instant.parse("2026-05-14T08:00:00Z"));
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              keywordCondition("무관한검색어", List.of(), List.of(memberId)),
+              BuncheolListCursor.firstPage(),
+              10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactly(withMember);
     }
 
     @Test

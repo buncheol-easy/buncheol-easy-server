@@ -12,6 +12,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,11 +45,53 @@ public class ParticipationController {
         participationDetailQueryService.getDetail(participantId, participationId));
   }
 
-  /** 개최자 수동 입금확인 API. 입금확인중(AWAITING_PAYMENT) 참여를 입금 기한 내에 CONFIRMED 로 전환한다. */
+  /**
+   * 개최자 수동 입금확인 API. LEGACY 는 입금확인중(AWAITING_PAYMENT) 참여를 입금 기한 내에, C2C 는 보냈어요(PAYMENT_SENT) 포함
+   * 기한 경과와 무관하게 CONFIRMED 로 전환한다 (docs/46 §4.3).
+   */
   @PostMapping("/{participationId}/confirm")
   public ResponseEntity<Void> confirmPayment(
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
     participationService.confirmPayment(hostId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** C2C 참여자 "보냈어요" 마킹 API (docs/46 §4.2). 입금 후 마킹하면 만료 대상에서 제외되고 개최자 확인을 기다린다. 멱등. */
+  @PostMapping("/{participationId}/payment-sent")
+  public ResponseEntity<Void> markPaymentSent(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    participationService.markPaymentSent(participantId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** C2C 참여자 마킹 철회 API — 오마킹 셀프 수정 (PAYMENT_SENT → AWAITING_PAYMENT 복귀, 기한 유지). 멱등. */
+  @DeleteMapping("/{participationId}/payment-sent")
+  public ResponseEntity<Void> revertPaymentSent(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    participationService.revertPaymentSent(participantId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * C2C 개최자 미입금 반려 API (docs/46 §4.5). 입금 내역을 찾지 못한 "보냈어요" 를 입금 대기로 되돌리고 기한을 연장(+24h)하며, 참여자에게
+   * 입금 재확인 안내가 발송된다.
+   */
+  @PostMapping("/{participationId}/reject-payment")
+  public ResponseEntity<Void> rejectPaymentSent(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
+    participationService.rejectPaymentSent(hostId, participationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * C2C 참여자 자발 취소 API (docs/46 §5 + docs/56 H-09). 신청(APPLIED)과 <b>성사 확정을 거치지 않은</b> 입금
+   * 대기에서만 가능하다. 보냈어요·입금확인 이후는 문의 경유로 안내되고(BCH-086), 성사 확정을 거친 입금 대기는 개최자 연락으로
+   * 안내된다(BCH-092). 추가 모집(docs/46 §4.7-E1)으로 바로 입금 대기가 된 참여는 확정을 거치지 않았으므로 계속 취소할 수 있다.
+   */
+  @DeleteMapping("/{participationId}")
+  public ResponseEntity<Void> cancelParticipation(
+      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
+    participationService.cancelByParticipant(participantId, participationId);
     return ResponseEntity.noContent().build();
   }
 

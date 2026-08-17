@@ -2,12 +2,12 @@ package buncheoleasy.notification.domain;
 
 import java.util.Map;
 
-/** {@code #{변수}} 치환 공용 로직. 본문과 버튼 링크에서 함께 쓴다. */
-final class AlimtalkPlaceholders {
+/** {@code #{변수}} 치환 공용 로직. 본문·버튼 링크·수신함 경로에서 함께 쓴다. */
+public final class AlimtalkPlaceholders {
 
   private AlimtalkPlaceholders() {}
 
-  static String replace(final String template, final Map<String, String> variables) {
+  public static String replace(final String template, final Map<String, String> variables) {
     if (template == null) {
       return null;
     }

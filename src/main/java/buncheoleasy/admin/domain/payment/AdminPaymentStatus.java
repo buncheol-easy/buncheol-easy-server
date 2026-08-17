@@ -10,6 +10,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
  * 환불 대상이다. 이름 문자열은 목록 조회 JPQL 의 CASE 분기와 일치해야 한다.
  */
 public enum AdminPaymentStatus {
+  // C2C 무입금 신청 — 입금확인 업무 대상이 아니라 별도 상태로 구분한다 (프론트 미매핑 시 "확인 제외" 폴백).
+  APPLIED,
   AWAITING_CONFIRMATION,
   CONFIRMED,
   REFUND_REQUIRED,
@@ -17,7 +19,9 @@ public enum AdminPaymentStatus {
 
   public static AdminPaymentStatus from(final Participation participation) {
     return switch (participation.getStatus()) {
-      case AWAITING_PAYMENT -> AWAITING_CONFIRMATION;
+      case APPLIED -> APPLIED;
+      // C2C "보냈어요" 는 입금 주장 상태 — 관리자 관점에선 확인 필요 계열로 접는다.
+      case AWAITING_PAYMENT, PAYMENT_SENT -> AWAITING_CONFIRMATION;
       case CONFIRMED -> CONFIRMED;
       // ParticipationStatus 에 값이 추가되면 여기와 목록 JPQL CASE·summarize 집계를 함께 수정해야 한다
       // (exhaustive switch 라 컴파일 단계에서 드러난다).

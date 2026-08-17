@@ -19,6 +19,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
@@ -27,11 +28,13 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
@@ -42,6 +45,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
@@ -110,13 +115,32 @@ class BuncheolServiceTest {
         3,
         3000,
         null,
+        null,
+        null,
         thumbnailIndex,
+        members);
+  }
+
+  private HoldBuncheolRequest holdRequestWithFlow(
+      List<BuncheolMemberRequest> members, FlowType flowType) {
+    return new HoldBuncheolRequest(
+        GROUP_ID,
+        "테스트 분철 제목",
+        "분철 설명입니다.",
+        "공식 스토어",
+        Instant.now().plus(7, ChronoUnit.DAYS),
+        3,
+        3000,
+        null,
+        null,
+        flowType,
+        0,
         members);
   }
 
   // 대표사진 지정은 필수라 기본 픽스처는 신규 이미지 0번을 지정한다.
   private BuncheolModifyRequest modifyRequest() {
-    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, 0);
+    return new BuncheolModifyRequest("수정 분철 제목", "수정 설명", List.of(), null, 0, null);
   }
 
   @Nested
@@ -140,9 +164,11 @@ class BuncheolServiceTest {
       willDoNothing().given(buncheolImageDomainService).validateImageCount(1);
 
       // when
-      buncheolService.holdBuncheol(HOST_ID, request, images);
+      Long createdId = buncheolService.holdBuncheol(HOST_ID, request, images);
 
       // then
+      // 생성된 분철의 id 를 그대로 돌려줘야 FE 가 목록 재조회·제목 매칭 없이 이동할 수 있다 (docs/53 Q-15).
+      assertThat(createdId).isEqualTo(BUNCHEOL_ID);
       then(groupDomainService).should().validateGroupExists(GROUP_ID);
       then(buncheolDomainService)
           .should()
@@ -314,12 +340,100 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 개최_권한이_없는_유저면_예외가_발생한다() {
-      // given
-      willThrow(new BusinessException(ErrorCode.USER_CANNOT_HOST))
-          .given(userDomainService)
-          .requireCanHost(HOST_ID);
+    void 일반_유저는_자격_게이트를_거쳐_C2C로_강제된다() {
+      // given — canHost=false(기본 목 동작)인 일반 유저
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
 
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(userDomainService).should().requireC2cHostQualification(HOST_ID);
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.C2C);
+    }
+
+    @Test
+    void 일반_유저가_LEGACY를_요청하면_USER_CANNOT_HOST_예외가_발생한다() {
+      // given — LEGACY 는 페이액션·운영 절차가 붙는 운영진 전용 방식이라 일반 유저 요청은 거부한다.
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.LEGACY);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+
+      then(userDomainService).should(never()).requireC2cHostQualification(any());
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+    }
+
+    @Test
+    void 운영진은_기본_LEGACY로_개최되고_자격_게이트를_타지_않는다() {
+      // given
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(userDomainService).should(never()).requireC2cHostQualification(any());
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.LEGACY);
+    }
+
+    @Test
+    void 운영진은_C2C_개최를_선택할_수_있다() {
+      // given
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.C2C);
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      // when
+      buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      // then
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.C2C);
+    }
+
+    @Test
+    void 일반_유저는_활성_개최_상한을_넘으면_예외가_발생한다() {
+      // given — 자격 게이트(목 no-op) 통과 후 상한 검증에서 차단되는 경우
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED))
+          .given(buncheolDomainService)
+          .validateActiveHostedLimit(HOST_ID);
       HoldBuncheolRequest request =
           holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
 
@@ -327,7 +441,44 @@ class BuncheolServiceTest {
       assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+          .isEqualTo(ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+    }
+
+    @Test
+    void 운영진의_C2C_선택도_가입_완료는_요구한다() {
+      // given — 성인 확인은 건너뛰지만 연락처(분쟁 처리 근거)는 운영진에게도 요구한다.
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      willThrow(new BusinessException(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE))
+          .given(userDomainService)
+          .requireProfileCompleted(HOST_ID);
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)), FlowType.C2C);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+
+    @Test
+    void 자격_게이트에_걸리면_분철이_저장되지_않는다() {
+      // given — 연령대 미확인(USR-032)이 게이트에서 던져지는 경우
+      willThrow(new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED))
+          .given(userDomainService)
+          .requireC2cHostQualification(HOST_ID);
+      HoldBuncheolRequest request =
+          holdRequest(List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_AGE_NOT_VERIFIED);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
     }
 
     @Test
@@ -351,6 +502,128 @@ class BuncheolServiceTest {
   }
 
   @Nested
+  @DisplayName("개최 자격 사전 조회 테스트 (docs/53 Q-07)")
+  class GetHostingEligibilityTest {
+
+    @Test
+    void 자격을_모두_갖추면_적격이다() {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.QUALIFIED);
+      given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(false);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(true);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isTrue();
+      assertThat(response.reason()).isNull();
+    }
+
+    /**
+     * 사유가 서로 뒤바뀌면 FE 안내가 정반대가 된다 — AGE_UNVERIFIED 는 "카카오 재동의로 열림", NOT_ADULT 는 "회복 불가"다. exhaustive
+     * switch 는 누락만 잡고 뒤바뀜은 못 잡아 매핑을 따로 잠근다.
+     */
+    @ParameterizedTest
+    @CsvSource({
+      "NOT_OPEN_YET, NOT_OPEN_YET",
+      "PHONE_REQUIRED, PHONE_REQUIRED",
+      "AGE_UNVERIFIED, AGE_UNVERIFIED",
+      "NOT_ADULT, NOT_ADULT"
+    })
+    void 자격_판정이_같은_이름의_사유로_매핑된다(
+        C2cHostQualification qualification, HostingEligibilityResponse.Reason expected) {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID)).willReturn(qualification);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason()).isEqualTo(expected);
+    }
+
+    @Test
+    void 미성년이면_NOT_ADULT_사유로_부적격이다() {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.NOT_ADULT);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason()).isEqualTo(HostingEligibilityResponse.Reason.NOT_ADULT);
+      // 자격 미달이면 상한은 볼 필요가 없다 — 제출 게이트의 검사 순서와 같다.
+      then(buncheolDomainService).should(never()).isActiveHostedLimitExceeded(any());
+    }
+
+    @Test
+    void 자격은_되지만_활성_개최_상한을_넘으면_LIMIT_EXCEEDED_사유로_부적격이다() {
+      // given
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.QUALIFIED);
+      given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(true);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason()).isEqualTo(HostingEligibilityResponse.Reason.LIMIT_EXCEEDED);
+    }
+
+    @Test
+    void 정산_계좌가_없으면_BANK_ACCOUNT_REQUIRED_사유로_부적격이다() {
+      // given — 개최 요청이 자격·상한 뒤에 요구하는 검사(USR-025)라, 빠지면 폼을 다 채운 뒤에야 막힌다.
+      given(userDomainService.evaluateC2cHostQualification(HOST_ID))
+          .willReturn(C2cHostQualification.QUALIFIED);
+      given(buncheolDomainService.isActiveHostedLimitExceeded(HOST_ID)).willReturn(false);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(false);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isFalse();
+      assertThat(response.reason())
+          .isEqualTo(HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
+    }
+
+    @Test
+    void 운영진은_자격_게이트와_상한을_보지_않지만_정산_계좌는_본다() {
+      // given — 운영진은 기본 LEGACY 라 C2C 자격 게이트·상한이 적용되지 않는다. 정산 계좌는 LEGACY·C2C 공통 요구다.
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(true);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.eligible()).isTrue();
+      then(userDomainService).should(never()).evaluateC2cHostQualification(any());
+      then(buncheolDomainService).should(never()).isActiveHostedLimitExceeded(any());
+    }
+
+    @Test
+    void 운영진도_정산_계좌가_없으면_부적격이다() {
+      // given
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(userDomainService.hasBankAccount(HOST_ID)).willReturn(false);
+
+      // when
+      HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
+
+      // then
+      assertThat(response.reason())
+          .isEqualTo(HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
+    }
+  }
+
+  @Nested
   @DisplayName("분철 수정 테스트")
   class ModifyBuncheolTest {
 
@@ -358,7 +631,7 @@ class BuncheolServiceTest {
     void 제목과_설명만_갱신되고_이미지는_keepImageIds_기준으로_정리된다() {
       // given
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 1L, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 1L, null, null);
       Buncheol buncheol = mock(Buncheol.class);
 
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -400,10 +673,28 @@ class BuncheolServiceTest {
     }
 
     @Test
+    void 오픈채팅_링크_수정이_도메인_서비스로_위임된다() {
+      // given — 링크 값의 유지/제거/검증 계약은 엔티티(updateOpenChatUrl)가 책임진다.
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest(
+              "수정 제목", "수정 설명", List.of(1L, 2L), 1L, null, "https://open.kakao.com/o/gAbCdEf");
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
+
+      // then
+      then(buncheolDomainService)
+          .should()
+          .updateBuncheolOpenChatUrl(buncheol, "https://open.kakao.com/o/gAbCdEf");
+    }
+
+    @Test
     void thumbnailImageId를_지정하면_기존_이미지로_대표사진을_교체한다() {
       // given
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 2L, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 2L, null, null);
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
 
@@ -423,7 +714,7 @@ class BuncheolServiceTest {
     void thumbnailIndex를_지정하면_기존_플래그를_해제하고_이벤트에_인덱스를_전달한다() {
       // given — 신규 업로드 이미지가 대표가 될 예정이므로 기존 플래그만 해제하고, 지정은 커밋 후 리스너가 수행한다.
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, 0);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, 0, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -444,7 +735,7 @@ class BuncheolServiceTest {
     void 대표사진을_지정하지_않으면_예외가_발생하고_이미지_변경이_진행되지_않는다() {
       // given — 대표사진 지정은 필수(둘 중 정확히 하나)다.
       BuncheolModifyRequest request =
-          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, null);
+          new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, null, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -654,6 +945,99 @@ class BuncheolServiceTest {
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+    }
+
+    // docs/56 H-13 — 돈이 이미 개최자 계좌에 있는 분철은 접을 수 없다. 이 가드를 지우면 취소가 통과해 빨개진다.
+    @Test
+    void 입금_수집중_분철에_입금확인된_참여가_있으면_취소를_막고_전용_코드로_안내한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(1);
+
+      // when & then
+      assertThatThrownBy(() -> buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS);
+
+      then(buncheolDomainService).should(never()).cancelBuncheol(anyLong(), any());
+      then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
+    }
+
+    @Test
+    void 입금_수집중이어도_입금확인된_참여가_없으면_취소된다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(0);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
+    }
+
+    // 모집중 구간은 그대로 열어 둔다 — C2C 는 이 구간에 입금확인이 있을 수 없고, LEGACY 는 회사 계좌 수납이라
+    // 운영진 환불 경로가 따로 있다. 여기까지 조이면 기존 LEGACY 취소가 막힌다.
+    @Test
+    void 모집중_분철은_입금확인된_참여가_있어도_취소된다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.RECRUITING);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
+      then(participationDomainService).should(never()).countConfirmedByBuncheolId(anyLong());
+    }
+  }
+
+  @Nested
+  @DisplayName("진행 확정(finalize-collected) 에러 코드 테스트 (docs/54 4-1)")
+  class FinalizeCollectedErrorCodeTest {
+
+    // 성사 확정(BCH-085)과 코드를 공유하면 개최자가 "진행 확정"을 눌렀는데 "성사 확정을 할 수
+    // 없습니다"가 뜬다. 코드가 다시 합쳐지면 이 테스트가 잡는다.
+    @Test
+    void 수집_종료_실패는_성사확정과_다른_전용_코드를_던진다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheolDomainService.confirmIfAllCollected(BUNCHEOL_ID, NOW)).willReturn(false);
+
+      assertThatThrownBy(() -> buncheolService.finalizeCollected(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
+    }
+
+    // BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
+    // 문구(예: 취소 안내)를 여기에 넣으면 다른 액션에서 엉뚱한 안내가 나간다.
+    @Test
+    void LEGACY_분철의_진행_확정은_범용_플로우_가드로_막힌다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(false);
+
+      assertThatThrownBy(() -> buncheolService.finalizeCollected(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
   }
 }

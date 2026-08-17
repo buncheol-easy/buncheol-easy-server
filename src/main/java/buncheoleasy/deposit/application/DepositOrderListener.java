@@ -3,6 +3,8 @@ package buncheoleasy.deposit.application;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
@@ -27,6 +29,7 @@ public class DepositOrderListener {
 
   private final PayActionClient payActionClient;
   private final ParticipationDomainService participationDomainService;
+  private final BuncheolDomainService buncheolDomainService;
 
   /**
    * 신규 참여 접수 → 매칭 대기 주문 등록. 페이액션은 주문이 입금보다 먼저 도달해야 매칭하므로 커밋 직후 지체 없이 등록한다.
@@ -34,6 +37,10 @@ public class DepositOrderListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onParticipationCreated(final ParticipationCreatedEvent event) {
+    // C2C 는 개최자 개인 계좌 직거래(개최자 수동 확인)라 페이액션 자동확인을 적용하지 않는다 (docs/46 §3-2).
+    if (event.flowType() == FlowType.C2C) {
+      return;
+    }
     if (!payActionClient.isEnabled()) {
       return;
     }
@@ -52,10 +59,13 @@ public class DepositOrderListener {
     }
   }
 
-  /** 입금 기한 만료로 자동 취소됨 → 매칭 대기 해제. */
+  /** 입금 기한 만료로 자동 취소됨 → 매칭 대기 해제. C2C 는 등록된 주문이 없어 스킵한다. */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentExpired(final PaymentExpiredEvent event) {
+    if (isC2cParticipation(event.participationId())) {
+      return;
+    }
     excludeQuietly(event.participationId());
   }
 
@@ -66,7 +76,21 @@ public class DepositOrderListener {
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolCancelled(final BuncheolCancelledEvent event) {
+    if (isC2cParticipation(event.participationId())) {
+      return;
+    }
     excludeQuietly(event.participationId());
+  }
+
+  // C2C 참여 여부 조회. 실패하면 LEGACY 로 간주해 기존 해제 경로를 태운다 — 주문이 없으면 해제도 무해한 no-op 이다.
+  private boolean isC2cParticipation(final Long participationId) {
+    try {
+      Participation participation =
+          participationDomainService.getParticipation(participationId);
+      return buncheolDomainService.getBuncheol(participation.getBuncheolId()).isC2c();
+    } catch (RuntimeException e) {
+      return false;
+    }
   }
 
   /**

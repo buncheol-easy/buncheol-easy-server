@@ -39,6 +39,12 @@ public interface BuncheolRepository {
    */
   boolean existsUnfinishedByHostId(Long hostId);
 
+  /** 그룹의 모집중({@link BuncheolStatus#RECRUITING}) 분철 수. 아티스트 페이지 헤더 표기용. */
+  long countRecruitingByGroupId(Long groupId);
+
+  /** 활성(모집중·입금 수집중) 개최 수 — 일반 유저 개최 상한 판정용. */
+  long countActiveByHostId(Long hostId);
+
   /**
    * {@code since} 이후 등록된 분철 중 CANCELLED 가 아닌 것을 그룹별로 집계해, 등록 수가 많은 순으로 상위 {@code limit} 개 groupId 를
    * 반환한다. 동률은 groupId DESC 로 끊는다. 한 건도 없는 그룹은 결과에 포함되지 않는다.
@@ -46,7 +52,11 @@ public interface BuncheolRepository {
   List<Long> findGroupIdsByBuncheolCountSince(Instant since, int limit);
 
   /** {@code now} 기준 deadline 이 지난 RECRUITING 분철 id 를 deadline 오름차순으로 최대 {@code limit} 개 조회. 자동 마감 폴링용. */
-  List<Long> findRecruitingIdsPastDeadline(Instant now, int limit);
+  /**
+   * 마감 판정 대상 모집중 분철 id. LEGACY 는 deadline 경과 즉시, C2C 는 {@code c2cGraceCutoff}(= now - 확정 유예 48h)
+   * 이전 deadline 만 대상이다 — 유예 중 C2C 분철이 폴링 배치를 잠식하지 않게 쿼리에서 거른다 (docs/46 §7.1-5).
+   */
+  List<Long> findRecruitingIdsPastDeadline(Instant now, Instant c2cGraceCutoff, int limit);
 
   /**
    * 분철이 {@code expectedStatus} 일 때만 {@code newStatus} 로 전이하는 CAS UPDATE ({@code finalized_at}
@@ -81,4 +91,54 @@ public interface BuncheolRepository {
    * @return 갱신된 행 수 (0 이면 아직 매진 아님 / 최소인원 미달 / 이미 마감됨)
    */
   int confirmIfAllSlotsConfirmed(Long buncheolId, long totalSlots, Instant now);
+
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /**
+   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * C2C 분철에만 적용된다(flow_type 조건). {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 RECRUITING 이 아니거나 C2C 분철이 아님)
+   */
+  int startCollectingIfRecruiting(
+      Long buncheolId, Instant paymentDueAt, String bank, String account, String holder, Instant now);
+
+  /**
+   * C2C 전원 입금확인 CAS: 미확정 활성 참여가 없고 확정 참여가 1건 이상일 때만 PAYMENT_COLLECTING → CONFIRMED 로 전이한다.
+   * {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 아직 미확정 참여가 남았거나 입금 수집중이 아님)
+   */
+  int confirmIfAllCollected(Long buncheolId, Instant now);
+
+  /** 입금 수집중이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용, 기한 오름차순). */
+  List<Long> findCollectingIdsPastPaymentDue(Instant now, int limit);
+
+  /**
+   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건) 미성사 취소한다. 확정 참여가 있으면
+   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6).
+   *
+   * @return 갱신된 행 수 (0 이면 활성 참여가 남았거나 입금 수집중이 아님)
+   */
+  int cancelIfCollectingAndEmpty(Long buncheolId, Instant now);
+
+  /**
+   * C2C 입금 수집중 분철의 개최자 취소 CAS (PAYMENT_COLLECTING → HOST_CANCELLED). 입금이 확인된(CONFIRMED) 참여가 한 건도
+   * 없을 때만 전이한다 (docs/56 H-13) — 직거래라 참여자 돈은 이미 개최자 계좌에 있고 플랫폼이 환불을 강제할 수단이 없다.
+   *
+   * <p>{@link #finalizeIfStatus} 와 분리한 이유: 그쪽은 모집중 취소·미성사 취소 등이 함께 쓰는 범용 CAS 라 여기에 확정 참여 조건을
+   * 넣으면 무관한 경로까지 조여진다. 확인 여부를 별도 SELECT 로 먼저 읽고 전이하면 그 사이 입금확인이 커밋되는 read-then-act 갭이 생기므로,
+   * 판정을 UPDATE WHERE 서브쿼리(current read)로 묶는다.
+   *
+   * <p>{@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 입금 수집중이 아니거나 입금확인된 참여가 있음)
+   */
+  int hostCancelIfCollectingAndNoConfirmed(Long buncheolId, Instant now);
+
+  /**
+   * C2C 참여 생성 직렬화용 잠금 조회 (SELECT ... FOR UPDATE). 다슬롯 첫 참여 판정(배송비 1회·배송지/입금자명 스냅샷 일치)의
+   * check-then-insert 레이스를 분철 행 락으로 막는다 (docs/46 §4.7-A1·A2). 호출 측 트랜잭션이 필수다.
+   */
+  Optional<Buncheol> findByIdForUpdate(Long id);
 }

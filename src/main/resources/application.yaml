@@ -60,9 +60,9 @@ spring:
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             client-authentication-method: client_secret_post
-            # 쉼표 구분 목록. name·phone_number 는 카카오 검수 승인 후에만 추가할 것 —
+            # 쉼표 구분 목록. name·phone_number·age_range 는 카카오 검수/권한 승인 후에만 추가할 것 —
             # 미승인 scope 를 요청하면 카카오 로그인 자체가 에러(KOE) 난다.
-            # 검수 승인 후: KAKAO_SCOPES=account_email,openid,name,phone_number
+            # 승인 후: KAKAO_SCOPES=account_email,openid,name,phone_number,age_range
             scope: ${KAKAO_SCOPES:account_email,openid}
 
         provider:
@@ -84,13 +84,23 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+# 기본값은 운영 기준(INFO/WARN)이다. 이 프로젝트엔 Spring 프로파일이 없어 이 파일이 곧 운영 설정이고,
+# 배포 경로 어디에도 LOGGING_LEVEL_* 오버라이드가 없다 — 여기 하드코딩한 레벨이 그대로 프로덕션에 간다.
+# 상세 로그가 필요하면 로컬 .env 에서만 올린다 (예: LOG_LEVEL_APP=DEBUG, LOG_LEVEL_SQL=DEBUG).
 logging:
   level:
-    buncheoleasy.buncheol: TRACE
-    org.springframework.security: TRACE  # TRACE로 변경하면 더 자세함
-    buncheoleasy.auth: TRACE
-    org.springframework.jdbc: TRACE
-    org.hibernate.SQL: DEBUG
+    root: ${LOG_LEVEL_ROOT:INFO}
+    # buncheoleasy.buncheol / .auth 를 따로 잡던 것을 루트 패키지 하나로 합쳤다.
+    buncheoleasy: ${LOG_LEVEL_APP:INFO}
+    # TRACE 면 정적 리소스·헬스체크·프리플라이트까지 요청마다 필터 체인 진행을 남긴다.
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    # Boot 의 sql 그룹(jdbc.core + hibernate.SQL)을 쓰지 않고 개별 키로 둔다 — 그룹은 풀리면서
+    # 자식 로거를 명시 지정하는데, application-test.yaml 은 부모(org.springframework.jdbc)를
+    # 잡고 있어 명시값이 상속을 이겨 테스트의 SQL 로그가 꺼진다. 그룹 키와 개별 로거 키를 파일마다
+    # 섞으면 계속 밟으므로 개별 키로 통일한다.
+    # format_sql: true 와 겹쳐 쿼리 1건이 여러 줄이 되므로 기본은 꺼둔다(DEBUG 이상에서만 출력).
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    org.springframework.jdbc.core: ${LOG_LEVEL_SQL:WARN}
 
 jwt:
   secret:
@@ -99,6 +109,7 @@ jwt:
   access-token-expiration-seconds: 7200   # 2시간
   refresh-token-expiration-seconds: 1209600 # 14일
   admin-token-expiration-seconds: 43200   # 12시간 (관리자 토큰은 refresh 없이 만료 시 재로그인)
+  impersonation-token-expiration-seconds: 900 # 15분 (관리자가 문의 재현용으로 발급하는 유저 토큰 — 짧게)
 
 # 관리자 계정 부트스트랩 (AdminAccountInitializer). 환경변수 미설정 시 건너뛴다.
 admin:
@@ -118,7 +129,6 @@ cloud:
       origin: https://${cloud.aws.s3.bucket}.s3.${cloud.aws.region.static}.amazonaws.com
 
 app:
-  base-url: ${APP_BASE_URL:http://localhost:8080}
   kakao:
     # 카카오 REST API 호스트 (테스트에서 스텁 서버로 교체 가능).
     api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}
@@ -136,6 +146,13 @@ app:
     # 운영자 어드민 웹 base URL. 슬랙 알림의 '어드민에서 처리' 링크로 사용한다.
     # local/staging 은 프론트 origin + /admin 경로, prod 는 별도 어드민 도메인을 env 로 주입한다.
     base-url: ${ADMIN_BASE_URL:http://localhost:3000/admin}
+    login:
+      rate-limit: # 관리자 로그인 무차별 대입 방지 (permitAll 엔드포인트 + 12시간 토큰이라 필수)
+        # ⚠️ 계정 잠금이라 제3자가 운영자 ID 로 도배하면 잠금 자체가 DoS 가 된다. 그때 재배포 없이
+        # 풀 수 있는 유일한 스위치가 이 두 값이므로, 코드의 @Value 기본값에만 두지 말 것.
+        max-attempts: ${ADMIN_LOGIN_RATE_LIMIT_PER_ID:5}
+        # 단위를 붙이지 않으면 '분'으로 읽는다(@DurationUnit) — 10m 처럼 명시하는 것을 권장
+        window: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW:10m}
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}
   cookie:
@@ -234,6 +251,22 @@ aligo:
       PICKUP_REMINDER_GS25: ${ALIGO_TPL_PICKUP_REMINDER_GS25:}
       PAYBACK_COMPLETED: ${ALIGO_TPL_PAYBACK_COMPLETED:}
       PAYBACK_REJECTED: ${ALIGO_TPL_PAYBACK_REJECTED:}
+      # C2C 신규 템플릿 — 알리고 등록·승인 후 코드가 채워질 때까지 미설정이면 발송을 건너뛴다(AlimtalkSender 가드).
+      C2C_BUNCHEOL_FINALIZED: ${ALIGO_TPL_C2C_BUNCHEOL_FINALIZED:}
+      C2C_PAYMENT_EXPIRED: ${ALIGO_TPL_C2C_PAYMENT_EXPIRED:}
+      C2C_BUNCHEOL_NOT_FINALIZED: ${ALIGO_TPL_C2C_BUNCHEOL_NOT_FINALIZED:}
+      C2C_PAYMENT_RECHECK: ${ALIGO_TPL_C2C_PAYMENT_RECHECK:}
+      C2C_PAYMENT_CONFIRMED: ${ALIGO_TPL_C2C_PAYMENT_CONFIRMED:}
+      C2C_BUNCHEOL_CONFIRMED: ${ALIGO_TPL_C2C_BUNCHEOL_CONFIRMED:}
+      C2C_BUNCHEOL_CANCELLED: ${ALIGO_TPL_C2C_BUNCHEOL_CANCELLED:}
+      C2C_BUNCHEOL_FULL: ${ALIGO_TPL_C2C_BUNCHEOL_FULL:}
+      C2C_PAYMENT_SENT: ${ALIGO_TPL_C2C_PAYMENT_SENT:}
+
+# 일반 회원의 C2C 개최 오픈 스위치. 코드를 prod 에 먼저 올려두고 홍보 시점에 true 로 전환한다.
+# 기본값 false — 주입을 빠뜨렸을 때 "안 열림"(즉시 드러남)이 "몰래 열림"(되돌릴 수 없음)보다 안전하다.
+# 운영진(can_host) 개최는 이 스위치와 무관하게 계속 가능하다 (prod 최종 점검용).
+c2c-hosting:
+  enabled: ${C2C_HOSTING_ENABLED:false}
 
 # 오픈 이벤트 배송비 환급(배송비 돌려받기). 이벤트 종료 시 enabled=false 로 내린다.
 shipping-fee-payback:

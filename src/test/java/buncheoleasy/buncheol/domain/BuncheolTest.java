@@ -26,7 +26,56 @@ class BuncheolTest {
 
   private BuncheolParams validParams() {
     return new BuncheolParams(
-        1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+        1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
+  }
+
+  @Nested
+  @DisplayName("오픈채팅 링크 수정 테스트")
+  class UpdateOpenChatUrlTest {
+
+    private Buncheol withOpenChatUrl(String url) {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      buncheol.updateOpenChatUrl(url);
+      return buncheol;
+    }
+
+    @Test
+    void null_은_기존_값을_유지한다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.updateOpenChatUrl(null);
+
+      assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/gAbCdEf");
+    }
+
+    @Test
+    void 빈_문자열은_링크를_제거한다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.updateOpenChatUrl("");
+
+      assertThat(buncheol.getOpenChatUrl()).isNull();
+    }
+
+    @Test
+    void 유효한_값은_검증_후_교체된다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.updateOpenChatUrl("https://open.kakao.com/o/newLink");
+
+      assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/newLink");
+    }
+
+    @Test
+    void 형식이_틀리면_예외가_발생하고_기존_값이_유지된다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      assertThatThrownBy(() -> buncheol.updateOpenChatUrl("https://evil.example.com/x"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_INVALID);
+      assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/gAbCdEf");
+    }
   }
 
   @Nested
@@ -69,7 +118,7 @@ class BuncheolTest {
     void groupId가_null이면_예외가_발생한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(null, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(null, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -89,7 +138,7 @@ class BuncheolTest {
     void 제목이_null이거나_빈_값이면_예외가_발생한다(String title) {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, title, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, title, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -101,10 +150,10 @@ class BuncheolTest {
     @Test
     void 제목이_최대_길이를_초과하면_예외가_발생한다() {
       // given
-      String longTitle = "가".repeat(201);
+      String longTitle = "가".repeat(65);
       BuncheolParams params =
           new BuncheolParams(
-              1L, longTitle, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+              1L, longTitle, null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -122,7 +171,7 @@ class BuncheolTest {
     void 설명이_null이어도_생성에_성공한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -135,7 +184,7 @@ class BuncheolTest {
       String longDescription = "가".repeat(701);
       BuncheolParams params =
           new BuncheolParams(
-              1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+              1L, "제목", longDescription, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -153,7 +202,7 @@ class BuncheolTest {
     void 마감일이_null이면_예외가_발생한다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", null, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", null, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -167,7 +216,7 @@ class BuncheolTest {
       // given
       Instant pastDeadline = Instant.now().minus(1, ChronoUnit.DAYS);
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", pastDeadline, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -180,7 +229,7 @@ class BuncheolTest {
     void 마감일이_현재보다_미래이고_정각이면_유효하다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -193,7 +242,7 @@ class BuncheolTest {
       Instant notOnTheHour =
           Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS).plusSeconds(1);
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", notOnTheHour, MIN_HEADCOUNT, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", notOnTheHour, MIN_HEADCOUNT, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -212,7 +261,7 @@ class BuncheolTest {
     void 최소_인원이_1_미만이면_예외가_발생한다(int minHeadcount) {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, minHeadcount, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, minHeadcount, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatThrownBy(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -225,7 +274,7 @@ class BuncheolTest {
     void 최소_인원이_1_이상이면_유효하다() {
       // given
       BuncheolParams params =
-          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 1, 3000, null);
+          new BuncheolParams(1L, "제목", null, "스토어명", FUTURE_DEADLINE, 1, 3000, null, FlowType.LEGACY, null);
 
       // when & then
       assertThatCode(() -> Buncheol.create(HOST_ID, params, Instant.now()))
@@ -337,6 +386,86 @@ class BuncheolTest {
   }
 
   @Nested
+  @DisplayName("신규 참여 수용 여부 테스트")
+  class AcceptsNewParticipationTest {
+
+    private Buncheol buncheol(final BuncheolStatus status, final FlowType flowType) {
+      Buncheol buncheol =
+          Buncheol.create(
+              HOST_ID,
+              new BuncheolParams(
+                  1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null,
+                  flowType, null),
+              Instant.now());
+      setStatus(buncheol, status);
+      return buncheol;
+    }
+
+    @Test
+    void 모집중이고_마감_전이면_받는다() {
+      assertThat(buncheol(BuncheolStatus.RECRUITING, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+          .isTrue();
+    }
+
+    @Test
+    void 모집중이어도_마감이_지났으면_받지_않는다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.RECRUITING, FlowType.C2C);
+      setDeadline(buncheol, Instant.now().minusSeconds(1));
+
+      assertThat(buncheol.acceptsNewParticipation(Instant.now())).isFalse();
+    }
+
+    @Test
+    void 마감_시각_정각은_받지_않는다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.RECRUITING, FlowType.C2C);
+      Instant deadline = Instant.now().plusSeconds(60);
+      setDeadline(buncheol, deadline);
+
+      assertThat(buncheol.acceptsNewParticipation(deadline)).isFalse();
+    }
+
+    // C2C 는 성사 확정 후 입금 수집중 구간에도 빈 슬롯 추가 모집을 받는다 (docs/46 §4.7-E1).
+    @Test
+    void 입금_수집중이면_C2C_만_받는다() {
+      assertThat(
+              buncheol(BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now()))
+          .isTrue();
+      assertThat(
+              buncheol(BuncheolStatus.PAYMENT_COLLECTING, FlowType.LEGACY)
+                  .acceptsNewParticipation(Instant.now()))
+          .isFalse();
+    }
+
+    @Test
+    void 진행확정_취소_개최자취소는_받지_않는다() {
+      assertThat(buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+          .isFalse();
+      assertThat(buncheol(BuncheolStatus.CANCELLED, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+          .isFalse();
+      assertThat(
+              buncheol(BuncheolStatus.HOST_CANCELLED, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now()))
+          .isFalse();
+    }
+
+    // 참여 가드(validateRecruiting)와 같은 술어여야 한다 — 갈리면 "화면엔 신청 가능한데 신청은 409" 가 재발한다.
+    @Test
+    void 모집중_구간에서는_참여_가드와_판정이_일치한다() {
+      Buncheol beforeDeadline = buncheol(BuncheolStatus.RECRUITING, FlowType.LEGACY);
+      Buncheol afterDeadline = buncheol(BuncheolStatus.RECRUITING, FlowType.LEGACY);
+      setDeadline(afterDeadline, Instant.now().minusSeconds(1));
+
+      assertThatCode(() -> beforeDeadline.validateRecruiting(Instant.now())).doesNotThrowAnyException();
+      assertThat(beforeDeadline.acceptsNewParticipation(Instant.now())).isTrue();
+
+      assertThatThrownBy(() -> afterDeadline.validateRecruiting(Instant.now()))
+          .isInstanceOf(BusinessException.class);
+      assertThat(afterDeadline.acceptsNewParticipation(Instant.now())).isFalse();
+    }
+  }
+
+  @Nested
   @DisplayName("배송방법 지원 검증 테스트")
   class ValidateShippingMethodSupportedTest {
 
@@ -374,6 +503,60 @@ class BuncheolTest {
 
       // when & then
       assertThat(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).isEqualTo(3000L);
+    }
+  }
+
+  @Nested
+  @DisplayName("성사 확정 선후 판정 테스트 (docs/56 H-09)")
+  class IsCreatedBeforeFinalizeTest {
+
+    private static final Instant FINALIZED_AT = Instant.parse("2026-05-14T12:00:00Z");
+
+    private Buncheol finalizedBuncheol() {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      setFinalizedAt(buncheol, FINALIZED_AT);
+      return buncheol;
+    }
+
+    // 모집중에 신청(APPLIED)했다가 성사 확정 일괄 전이로 입금 대기가 된 참여.
+    @Test
+    void 성사_확정보다_먼저_만들어졌으면_true() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT.minusSeconds(1))).isTrue();
+    }
+
+    // 입금 수집중 분철에 추가 모집으로 들어와 바로 입금 대기가 된 참여 (docs/46 §4.7-E1).
+    @Test
+    void 성사_확정_이후에_만들어졌으면_false() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT.plusSeconds(1))).isFalse();
+    }
+
+    // created_at·finalized_at 은 둘 다 DATETIME(초 정밀도)이라 같은 초에 걸릴 수 있다. 동시각은
+    // "확정을 거치지 않았다"(= 취소 허용)로 읽어, 성사 확정과 같은 초의 신청을 잠그지 않는다.
+    @Test
+    void 같은_시각이면_false_로_열어_둔다() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(FINALIZED_AT)).isFalse();
+    }
+
+    @Test
+    void 아직_확정되지_않은_분철은_false() {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+
+      assertThat(buncheol.isCreatedBeforeFinalize(FINALIZED_AT.minusSeconds(1))).isFalse();
+    }
+
+    @Test
+    void 생성_시각을_모르면_false() {
+      assertThat(finalizedBuncheol().isCreatedBeforeFinalize(null)).isFalse();
+    }
+  }
+
+  private void setFinalizedAt(final Buncheol buncheol, final Instant finalizedAt) {
+    try {
+      Field field = Buncheol.class.getDeclaredField("finalizedAt");
+      field.setAccessible(true);
+      field.set(buncheol, finalizedAt);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
     }
   }
 

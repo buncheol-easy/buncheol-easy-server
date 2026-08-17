@@ -32,7 +32,12 @@ public class JpaGroupRepositoryAdapter implements GroupRepository {
   }
 
   @Override
-  public List<Group> findByKeyword(String keyword) {
-    return jpaGroupRepository.findByKeyword(keyword);
+  public List<Group> findByNormalizedKeyword(String normalizedKeyword) {
+    return jpaGroupRepository.findByNormalizedKeyword(normalizedKeyword);
+  }
+
+  @Override
+  public List<Long> findIdsByNormalizedKeyword(String normalizedKeyword) {
+    return jpaGroupRepository.findIdsByNormalizedKeyword(normalizedKeyword);
   }
 }

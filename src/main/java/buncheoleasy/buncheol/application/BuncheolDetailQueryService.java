@@ -22,6 +22,8 @@ import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -40,6 +42,7 @@ public class BuncheolDetailQueryService {
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public BuncheolDetailResponse getDetail(final Long buncheolId, final Long userId) {
@@ -88,9 +91,18 @@ public class BuncheolDetailQueryService {
                 .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
                 .count();
 
+    // 공석 슬롯을 "신청 가능"으로 내릴지의 기준 — 참여 가드와 같은 도메인 술어를 쓴다 (docs/53 Q-14).
+    boolean openForNewParticipation = buncheol.acceptsNewParticipation(Instant.now(clock));
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
-            .map(bm -> toMemberDetail(bm, groupMemberByGroupMemberId, activeByMemberId, userId))
+            .map(
+                bm ->
+                    toMemberDetail(
+                        bm,
+                        groupMemberByGroupMemberId,
+                        activeByMemberId,
+                        openForNewParticipation,
+                        userId))
             .toList();
 
     List<ShippingOptionResponse> shippingOptions =
@@ -113,17 +125,21 @@ public class BuncheolDetailQueryService {
         shippingOptions,
         memberResponses,
         hostedByMe,
-        myParticipation);
+        myParticipation,
+        buncheol.getFlowType(),
+        buncheol.getPaymentDueAt(),
+        buncheol.getOpenChatUrl());
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
       final Map<Long, Participation> activeByMemberId,
+      final boolean openForNewParticipation,
       final Long userId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     Participation active = activeByMemberId.get(buncheolMember.getId());
-    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active);
+    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active, openForNewParticipation);
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
@@ -132,23 +148,40 @@ public class BuncheolDetailQueryService {
         buncheolMember.getPrice(),
         saleStatus,
         saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null,
-        // AVAILABLE(공석) 슬롯은 점유 참여가 없으므로 항상 false — saleStatus 와의 불변식을 코드로 보장한다.
-        saleStatus != BuncheolMemberSaleStatus.AVAILABLE
-            && userId != null
-            && userId.equals(active.getParticipantId()));
+        // 슬롯을 점유한 참여가 있을 때만 true. 취소 참여를 제외해 "공석인데 내 참여" 조합이 생기지 않게 한다
+        // (findActiveByBuncheolId 가 활성만 주므로 실제로는 도달하지 않는 방어 조건).
+        isMine(active, userId));
+  }
+
+  private boolean isMine(final Participation active, final Long userId) {
+    return active != null
+        && active.getStatus() != ParticipationStatus.CANCELLED
+        && userId != null
+        && userId.equals(active.getParticipantId());
   }
 
   // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.
-  private BuncheolMemberSaleStatus toSaleStatus(final Participation active) {
+  private BuncheolMemberSaleStatus toSaleStatus(
+      final Participation active, final boolean openForNewParticipation) {
     if (active == null) {
-      return BuncheolMemberSaleStatus.AVAILABLE;
+      return emptySlotStatus(openForNewParticipation);
     }
     return switch (active.getStatus()) {
+      case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
       case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
+      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정 — 단 만료 면제라 dueAt 카운트다운은 노출하지 않는다.
+      case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
-      // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 두 상태만 온다).
-      case CANCELLED -> BuncheolMemberSaleStatus.AVAILABLE;
+      // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
+      case CANCELLED -> emptySlotStatus(openForNewParticipation);
     };
+  }
+
+  // 공석의 판매 상태 — 신규 참여를 받지 않는 분철에서는 신청 가능한 것처럼 보이면 안 된다 (docs/53 Q-14).
+  private BuncheolMemberSaleStatus emptySlotStatus(final boolean openForNewParticipation) {
+    return openForNewParticipation
+        ? BuncheolMemberSaleStatus.AVAILABLE
+        : BuncheolMemberSaleStatus.CLOSED;
   }
 
   private MyParticipationSummaryResponse toMyParticipation(

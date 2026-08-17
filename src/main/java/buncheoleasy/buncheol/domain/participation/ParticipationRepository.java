@@ -14,6 +14,14 @@ public interface ParticipationRepository {
    */
   boolean saveIfRecruiting(Participation participation);
 
+  /**
+   * C2C 추가 모집: 분철이 입금 수집중({@code PAYMENT_COLLECTING})일 때만 참여를 INSERT 한다 (원자적 — docs/46 §4.7-E1).
+   * 진행확정(CONFIRMED) 이후에는 삽입되지 않는다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return 입금 수집중이라 INSERT 된 경우 true, 아니면 false
+   */
+  boolean saveIfCollecting(Participation participation);
+
   Optional<Participation> findById(Long id);
 
   /** 내 참여 목록 (참여자별 최신순). */
@@ -56,11 +64,29 @@ public interface ParticipationRepository {
   /** 단일 분철의 활성 참여 전체 (호스트 관리 화면 + 분철 취소 시 알림 대상). */
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
+  /**
+   * 단일 분철의 활성 참여별 참여자 id 잠금 조회(current read, 행당 1건 — 다슬롯 참여자는 중복 포함) — RR 스냅샷이 아닌 최신 커밋 기준이
+   * 필요한 C2C 정원 충족 판정용. 리스트 크기 = 채워진 슬롯 수, distinct = 신청 인원.
+   */
+  List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(Long buncheolId);
+
+  /**
+   * 단일 분철의 취소된 참여 전체 — 개최자 관리 화면에서 환불 계좌를 보여주기 위한 목록. 취소되면 활성 참여 조회에서 빠져 환불 계좌에 닿을 길이 없어지는데,
+   * C2C 는 대금이 개최자 계좌로 직접 가는 직거래라 개최자가 환불 주체다. 환불이 실제로 필요한지는 개최자가 판단한다.
+   */
+  List<Participation> findCancelledByBuncheolId(Long buncheolId);
+
   /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */
   List<Participation> findConfirmedByBuncheolId(Long buncheolId);
 
-  /** 단일 분철의 입금확인(CONFIRMED) 참여 수 (마감 시 최소 인원 판정용). */
+  /** 단일 분철의 입금확인(CONFIRMED) 참여 수 (개최자 취소 차단 사전 검사용 — docs/56 H-13). */
   int countConfirmedByBuncheolId(Long buncheolId);
+
+  /**
+   * 여러 분철의 입금확인(CONFIRMED) 참여 수 집계 — 개최 목록의 취소 가능 여부 판정용 (docs/56 S-2). 0 건인 분철은 결과에서 빠지므로 호출
+   * 측이 기본값 0 으로 채운다.
+   */
+  List<BuncheolConfirmedParticipationCount> countConfirmedByBuncheolIds(List<Long> buncheolIds);
 
   /** 입금 만료가 임박/도과한 참여 폴링 (입금 만료 스케줄러용). status=AWAITING_PAYMENT, due_at <= now. */
   List<Participation> findOverduePaymentTargets(Instant now, int limit);
@@ -79,6 +105,39 @@ public interface ParticipationRepository {
    * @return 전이에 성공하면 true
    */
   boolean expirePaymentIfOverdue(Long participationId, Instant now);
+
+  // --- C2C 플로우 CAS (docs/46 §4) ---
+
+  /** C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT, 기한 경과 검사 없음). */
+  boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
+
+  /**
+   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code
+   * dueAt} 을 함께 세팅한다. {@code paymentSentAt} 은 보존.
+   *
+   * @param rejectedAt 개최자 반려면 반려 시각, 참여자 셀프 철회면 {@code null} (docs/53 Q-03 — 두 경로 구분용)
+   */
+  boolean revertPaymentSentIfSent(
+      Long participationId, Instant dueAt, Instant rejectedAt, Instant now);
+
+  /**
+   * C2C 참여자 자발 취소 CAS — APPLIED·AWAITING_PAYMENT 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은
+   * {@link ParticipationCancellability#cancellableStatuses()} 를 공유한다.
+   *
+   * <p>⚠️ <b>판정하는 것은 상태뿐</b>이다. 성사 확정 선후(H-09)와 플로우(C2C 여부)는 이 CAS 조건에 없고 애플리케이션 게이트가 단독으로
+   * 막는다 — 남는 경합 창은 {@link ParticipationCancellability} javadoc 참고.
+   */
+  boolean cancelByUserIfCancellable(Long participationId, Instant now);
+
+  /** C2C 개최자 수동 입금확인 CAS — AWAITING_PAYMENT·PAYMENT_SENT 에서 기한 경과와 무관하게 CONFIRMED 로 전이. */
+  boolean confirmPaymentIfPayable(Long participationId, Instant now);
+
+  /**
+   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1).
+   *
+   * @return 전이된 참여 수
+   */
+  int startPaymentCollecting(Long buncheolId, Instant dueAt, Instant now);
 
   /**
    * 분철의 활성 참여를 모두 CANCELLED({@link ParticipationCancelReason#BUNCHEOL_CANCELLED}) 로 일괄 전이한다. 호스트

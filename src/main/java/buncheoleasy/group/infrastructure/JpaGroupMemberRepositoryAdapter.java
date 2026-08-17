@@ -22,7 +22,7 @@ public class JpaGroupMemberRepositoryAdapter implements GroupMemberRepository {
 
   @Override
   public List<GroupMember> findAllByGroupId(Long groupId) {
-    return jpaGroupMemberRepository.findAllByGroupId(groupId);
+    return jpaGroupMemberRepository.findAllByGroupIdOrderById(groupId);
   }
 
   @Override
@@ -34,8 +34,13 @@ public class JpaGroupMemberRepositoryAdapter implements GroupMemberRepository {
   }
 
   @Override
-  public List<GroupMember> findAllByName(String name) {
-    return jpaGroupMemberRepository.findAllByName(name);
+  public List<GroupMember> findAllByNormalizedName(String normalizedName) {
+    return jpaGroupMemberRepository.findAllByNormalizedName(normalizedName);
+  }
+
+  @Override
+  public List<Long> findIdsByNormalizedName(String normalizedName) {
+    return jpaGroupMemberRepository.findIdsByNormalizedName(normalizedName);
   }
 
   @Override

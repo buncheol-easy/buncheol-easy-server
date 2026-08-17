@@ -60,7 +60,7 @@ class JwtAuthenticationFilterTest {
       MockHttpServletResponse response = new MockHttpServletResponse();
       FilterChain chain = new MockFilterChain();
       given(jwtTokenProvider.parseAccessTokenClaims("valid-token"))
-          .willReturn(new AccessTokenClaims(1L, null));
+          .willReturn(new AccessTokenClaims(1L, null, false));
 
       // when
       filter.doFilter(request, response, chain);
@@ -85,7 +85,7 @@ class JwtAuthenticationFilterTest {
       MockHttpServletResponse response = new MockHttpServletResponse();
       FilterChain chain = new MockFilterChain();
       given(jwtTokenProvider.parseAccessTokenClaims("admin-token"))
-          .willReturn(new AccessTokenClaims(7L, "ADMIN"));
+          .willReturn(new AccessTokenClaims(7L, "ADMIN", false));
 
       // when
       filter.doFilter(request, response, chain);
@@ -97,6 +97,31 @@ class JwtAuthenticationFilterTest {
       assertThat(authentication.getAuthorities())
           .extracting(GrantedAuthority::getAuthority)
           .containsExactly("ROLE_ADMIN");
+    }
+
+    @Test
+    void impersonation_토큰이면_ROLE_USER와_IMPERSONATED_마커를_함께_부여한다() throws Exception {
+      // given
+      JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider);
+      MockHttpServletRequest request = new MockHttpServletRequest();
+      request.addHeader("Authorization", "Bearer imp-token");
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      FilterChain chain = new MockFilterChain();
+      given(jwtTokenProvider.parseAccessTokenClaims("imp-token"))
+          .willReturn(new AccessTokenClaims(21L, null, true));
+
+      // when
+      filter.doFilter(request, response, chain);
+
+      // then
+      Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+      assertThat(authentication).isNotNull();
+      assertThat(authentication.getPrincipal()).isEqualTo(21L);
+      // 유저 API 는 ROLE_USER 로 그대로 통과시키되, IMPERSONATED 마커로 로그아웃 등 위험 동작을 구분한다.
+      assertThat(authentication.getAuthorities())
+          .extracting(GrantedAuthority::getAuthority)
+          .containsExactlyInAnyOrder(
+              "ROLE_USER", JwtAuthenticationFilter.IMPERSONATED_AUTHORITY);
     }
 
     @Test

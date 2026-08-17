@@ -1,6 +1,7 @@
 package buncheoleasy.group.presentation;
 
 import buncheoleasy.group.application.GroupService;
+import buncheoleasy.group.dto.response.GroupDetailResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
@@ -39,6 +40,11 @@ public class GroupController {
   public ResponseEntity<List<GroupWithMembersResponse>> searchGroupsByMemberName(
       @RequestParam @NotBlank @Size(max = 100) final String keyword) {
     return ResponseEntity.ok(groupService.searchGroupsByMemberName(keyword));
+  }
+
+  @GetMapping("/{groupId}")
+  public ResponseEntity<GroupDetailResponse> getGroupDetail(@PathVariable final Long groupId) {
+    return ResponseEntity.ok(groupService.getGroupDetail(groupId));
   }
 
   @GetMapping("/{groupId}/members")

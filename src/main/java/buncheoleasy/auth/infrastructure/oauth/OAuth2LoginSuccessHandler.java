@@ -74,10 +74,9 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 profile.email(),
                 profile.name(),
                 profile.phoneNumber(),
+                profile.ageRange(),
+                profile.ageRangeWithdrawn(),
                 serviceTerms));
-    log.debug(
-        "OAuth2 로그인 성공: provider={}, providerId={}", profile.provider(), profile.providerId());
-
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
 
@@ -102,15 +101,24 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     }
   }
 
-  /** 이름·전화번호가 클레임에 없으면 카카오 API 로 보강한다. 실패는 로깅만 하고 가입을 막지 않는다. */
+  /**
+   * 이름·전화번호·연령대가 클레임에 없으면 카카오 API 로 보강한다. 실패는 로깅만 하고 가입을 막지 않는다.
+   *
+   * <p>조기 반환 조건은 현재 항상 통과된다 — 카카오 ID 토큰에 세 클레임이 모두 실리는 경우가 없다. 방어적으로만 유지하며, 보강 조회는 연령대 동의
+   * 철회(needs_agreement) 신호의 유일한 출처이기도 하다.
+   */
   private OAuth2UserProfile enrichFromKakaoApi(
       final OAuth2UserProfile profile, final String kakaoAccessToken) {
-    if (profile.name() != null && profile.phoneNumber() != null) {
+    if (profile.name() != null && profile.phoneNumber() != null && profile.ageRange() != null) {
       return profile;
     }
     try {
       KakaoApiClient.KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
-      return profile.withUserInfo(userInfo.name(), userInfo.phoneNumber());
+      return profile.withUserInfo(
+          userInfo.name(),
+          userInfo.phoneNumber(),
+          userInfo.ageRange(),
+          Boolean.TRUE.equals(userInfo.ageRangeNeedsAgreement()));
     } catch (RuntimeException exception) {
       log.warn("카카오 사용자 정보 보강 조회 실패: {}", exception.getMessage());
       return profile;

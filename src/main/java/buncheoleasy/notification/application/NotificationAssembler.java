@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.group.domain.GroupDomainService;
@@ -39,6 +40,12 @@ public class NotificationAssembler {
     // 입금 총액(멤버 금액 + 배송비)은 참여 생성 시 산정·스냅샷된 값을 그대로 쓴다.
     return new ParticipationView(
         participation, buncheol, memberName, participant, host, participation.getTotalAmount());
+  }
+
+  public BuncheolHostView loadBuncheolHost(final Long buncheolId) {
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    User host = userDomainService.getUser(buncheol.getHostId());
+    return new BuncheolHostView(buncheol, host);
   }
 
   public Delivery loadDelivery(final Long deliveryId) {

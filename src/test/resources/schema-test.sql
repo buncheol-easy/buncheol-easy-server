@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS buncheol_bookmarks;
 DROP TABLE IF EXISTS buncheols;
 DROP TABLE IF EXISTS user_recent_searches;
 DROP TABLE IF EXISTS user_favorite_groups;
+DROP TABLE IF EXISTS group_aliases;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS `groups`;
 DROP TABLE IF EXISTS shipping_addresses;
@@ -32,6 +33,7 @@ CREATE TABLE users
     profile_completed   BOOLEAN      NOT NULL DEFAULT FALSE,
     can_host            BOOLEAN      NOT NULL DEFAULT FALSE,
     marketing_agreed_at TIMESTAMP    NULL,
+    age_range           VARCHAR(10)  NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP    NULL,
@@ -88,9 +90,14 @@ CREATE UNIQUE INDEX uq_shipping_addresses_user_method_store ON shipping_addresse
 -- Test H2 Database용 buncheol 관련 테이블 생성
 CREATE TABLE `groups`
 (
-    id         BIGINT       NOT NULL AUTO_INCREMENT,
-    name       VARCHAR(100) NOT NULL,
-    image      VARCHAR(500) NULL,
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    name        VARCHAR(100) NOT NULL,
+    image       VARCHAR(500) NULL,
+    -- MySQL schema.sql 과 동일 규칙. H2 생성 컬럼은 항상 stored 라 STORED 키워드를 받지 않는다.
+    search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -98,13 +105,18 @@ CREATE TABLE `groups`
 );
 
 CREATE INDEX idx_groups_name ON `groups` (name);
+CREATE INDEX idx_groups_search_name ON `groups` (search_name);
 
 CREATE TABLE group_members
 (
-    id         BIGINT       NOT NULL AUTO_INCREMENT,
-    group_id   BIGINT       NOT NULL,
-    name       VARCHAR(100) NOT NULL,
-    image      VARCHAR(500) NULL,
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    group_id    BIGINT       NOT NULL,
+    name        VARCHAR(100) NOT NULL,
+    image       VARCHAR(500) NULL,
+    search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -114,6 +126,28 @@ CREATE TABLE group_members
 
 CREATE INDEX idx_group_members_group_id ON group_members (group_id);
 CREATE INDEX idx_group_members_name ON group_members (name);
+CREATE INDEX idx_group_members_search_name ON group_members (search_name);
+
+CREATE TABLE group_aliases
+(
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    group_id     BIGINT       NOT NULL,
+    alias        VARCHAR(100) NOT NULL,
+    -- MySQL schema.sql 과 동일 규칙. H2 생성 컬럼은 항상 stored 라 STORED 키워드를 받지 않는다.
+    search_alias VARCHAR(100) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        alias, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
+    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT ck_group_aliases_min_length CHECK (CHAR_LENGTH(search_alias) >= 2),
+    CONSTRAINT uk_group_aliases_group_search UNIQUE (group_id, search_alias),
+    CONSTRAINT fk_group_aliases_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_group_aliases_search_alias ON group_aliases (search_alias);
 
 CREATE TABLE buncheols
 (
@@ -121,6 +155,10 @@ CREATE TABLE buncheols
     host_id           BIGINT       NOT NULL,
     group_id          BIGINT       NOT NULL,
     title             VARCHAR(200) NOT NULL,
+    search_title      VARCHAR(200) GENERATED ALWAYS AS (LOWER(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+        title, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
+    )),
     description       TEXT         NULL,
     purchase_site     VARCHAR(200) NOT NULL,
     deadline          TIMESTAMP    NOT NULL,
@@ -131,6 +169,13 @@ CREATE TABLE buncheols
     finalized_at      TIMESTAMP    NULL,
     created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- C2C 플로우 병존 컬럼 (schema.sql buncheols 와 동일 구성)
+    flow_type         VARCHAR(10)  NOT NULL DEFAULT 'LEGACY',
+    payment_due_at    TIMESTAMP    NULL,
+    open_chat_url     VARCHAR(200) NULL,
+    payment_bank      VARCHAR(50)  NULL,
+    payment_account   VARCHAR(50)  NULL,
+    payment_holder    VARCHAR(50)  NULL,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheols_host FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE,
@@ -188,7 +233,7 @@ CREATE TABLE participations
     refund_bank         VARCHAR(50)  NOT NULL,
     refund_account      VARCHAR(50)  NOT NULL,
     refund_holder       VARCHAR(50)  NOT NULL,
-    due_at              TIMESTAMP    NOT NULL,
+    due_at              TIMESTAMP    NULL,
     confirmed_at        TIMESTAMP    NULL,
     cancelled_at        TIMESTAMP    NULL,
     cancel_reason       VARCHAR(30)  NULL,
@@ -201,11 +246,17 @@ CREATE TABLE participations
     payback_reject_reason VARCHAR(200) NULL,
     payback_amount        BIGINT       NULL,
     -- 활성 상태일 때만 멤버 슬롯 id 값을 갖는 가상 컬럼 (선착순 유니크용). users 테이블과 동일하게 H2 computed column 사용.
-    active_member_id    BIGINT AS (CASE WHEN status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN buncheol_member_id END),
-    -- 활성 상태일 때만 참여자 id 값을 갖는 가상 컬럼 (분철당 중복 참여 방지 유니크용).
-    active_participant_id BIGINT AS (CASE WHEN status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN participant_id END),
+    active_member_id    BIGINT AS (CASE WHEN status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED') THEN buncheol_member_id END),
+    -- 활성 참여자 가상 컬럼. 유니크는 제거됨(C2C 다슬롯 허용 — schema.sql 과 동일).
+    active_participant_id BIGINT AS (CASE WHEN status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED') THEN participant_id END),
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- C2C 컬럼 (schema.sql participations 와 동일 구성)
+    payment_sent_at     TIMESTAMP    NULL,
+    payment_rejected_at TIMESTAMP    NULL,
+    flow_type           VARCHAR(10)  NOT NULL DEFAULT 'LEGACY',
+    -- LEGACY 전용 1인 1참여 유니크용 (C2C 다슬롯 허용 — schema.sql 과 동일)
+    legacy_active_participant_id BIGINT AS (CASE WHEN flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED') THEN participant_id END),
 
     PRIMARY KEY (id),
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -215,7 +266,8 @@ CREATE TABLE participations
 );
 
 CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_member_id);
-CREATE UNIQUE INDEX uq_participations_active_participant ON participations (buncheol_id, active_participant_id);
+-- uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됨 (docs/46 §2.3-4)
+CREATE UNIQUE INDEX uq_participations_legacy_active_participant ON participations (buncheol_id, legacy_active_participant_id);
 CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
 CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);

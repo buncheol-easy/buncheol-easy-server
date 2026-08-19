@@ -27,7 +27,7 @@ public class BuncheolDomainService {
 
   // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·건당 이미지 5장 업로드) —
   // 일반 유저의 활성(모집중·입금 수집중) 개최 수 상한. 운영진(can_host)은 이벤트 운영을 위해 적용하지 않는다.
-  private static final int MAX_ACTIVE_HOSTED = 5;
+  private static final int MAX_ACTIVE_HOSTED = 20;
 
   public void validateActiveHostedLimit(final Long hostId) {
     if (isActiveHostedLimitExceeded(hostId)) {

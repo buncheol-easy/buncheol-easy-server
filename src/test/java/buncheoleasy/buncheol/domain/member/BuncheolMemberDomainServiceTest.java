@@ -70,17 +70,17 @@ class BuncheolMemberDomainServiceTest {
     }
 
     @Test
-    void 무료_슬롯과_유료_슬롯이_섞여_있으면_예외가_발생한다() {
+    void 무료_슬롯과_유료_슬롯을_섞어도_저장에_성공한다() {
       // given
       Long buncheolId = 1L;
       List<BuncheolMemberParams> params =
           List.of(new BuncheolMemberParams(1L, 0L), new BuncheolMemberParams(2L, 5_000L));
 
-      // when & then
-      assertThatThrownBy(() -> buncheolMemberDomainService.createBuncheolMembers(buncheolId, params))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_FREE_PRICE_MIXED);
+      // when
+      buncheolMemberDomainService.createBuncheolMembers(buncheolId, params);
+
+      // then
+      then(buncheolMemberRepository).should().saveAll(anyList());
     }
 
     @Test

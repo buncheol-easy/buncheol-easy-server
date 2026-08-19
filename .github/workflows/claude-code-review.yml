@@ -9,14 +9,10 @@ on:
 jobs:
   claude-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # comment.user.type != 'Bot' 가 필요한 이유: 리뷰 본문이 트리거 문구를 인용하면
-    # 자기 자신을 다시 촉발하고, 액션은 봇 actor 를 거부해 실패로 끝난다 (client run 32220689575).
     if: |
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
-       github.event.comment.user.type != 'Bot' &&
        contains(github.event.comment.body, '@claude re-review'))
     permissions:
       contents: read
@@ -30,43 +26,6 @@ jobs:
           fetch-depth: 1
           ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/head', github.event.issue.number) || github.ref }}
 
-      # PR 메타·diff 를 미리 받아둔다. 에이전트가 gh 호출로 턴을 쓰지 않게 하려는 것.
-      # 워크스페이스 밖(RUNNER_TEMP)에 두는 이유: 레포 안에 diff 파일이 있으면 사용처 Grep 에 걸려
-      # 존재하지 않는 호출부를 찾은 것처럼 오인한다.
-      # 이 스텝이 죽어도 리뷰는 돌아야 한다 — 프롬프트에 gh 직접 호출 폴백이 있다.
-      - name: Prefetch PR context
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-        run: |
-          echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-          set -euo pipefail
-          CTX="$RUNNER_TEMP/pr-context"
-          mkdir -p "$CTX"
-          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author,baseRefName,headRefName,additions,deletions,changedFiles,files \
-            > "$CTX/meta.json"
-          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$CTX/diff.patch"
-          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only > "$CTX/changed-files.txt"
-          # 이 워크플로 자체를 바꾸는 PR 은 액션이 기본 브랜치 대조 검증에서 스킵한다.
-          # 그때는 코멘트가 안 달리는 게 정상이라 아래 게시 확인 스텝을 건너뛴다.
-          if grep -qx '.github/workflows/claude-code-review.yml' "$CTX/changed-files.txt"; then
-            echo "REVIEW_SELF_EDIT=true" >> "$GITHUB_ENV"
-          fi
-          {
-            jq -r '"# PR #\(.number) \(.title)\n작성자: \(.author.login)\nbase: \(.baseRefName) ← head: \(.headRefName)\n변경량: +\(.additions)/-\(.deletions), \(.changedFiles) files"' "$CTX/meta.json"
-            printf 'diff.patch: %s 줄 (Read 는 기본 2000 줄에서 잘린다 — 넘으면 offset 으로 이어 읽거나 파일별로 읽을 것)\n\n' "$(wc -l < "$CTX/diff.patch")"
-            echo "## 변경 파일"
-            # gh --json files 는 100개에서 잘린다. 전체 목록은 changed-files.txt 가 정본.
-            jq -r 'if (.changedFiles > (.files | length))
-                   then "⚠️ 전체 \(.changedFiles)개 중 \(.files | length)개만 아래에 있다 (gh 100개 상한). 전체 목록은 changed-files.txt 를 볼 것."
-                   else empty end' "$CTX/meta.json"
-            jq -r '.files[] | "- \(.path) (+\(.additions)/-\(.deletions))"' "$CTX/meta.json"
-            printf '\n## PR 본문\n%s\n' "$(jq -r 'if (.body // "") == "" then "(본문 없음)" else .body end' "$CTX/meta.json")"
-          } > "$CTX/summary.md"
-          wc -l "$CTX"/* || true
-
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
@@ -77,28 +36,15 @@ jobs:
 
             이 PR의 코드를 리뷰해주세요. 한국어로 답변해주세요.
 
-            PR 컨텍스트는 이미 수집되어 있습니다 — `${{ runner.temp }}/pr-context/`
-            - `summary.md`        PR 제목·작성자·변경 파일 목록(파일별 증감 포함)·PR 본문
-            - `diff.patch`        전체 diff
-            - `changed-files.txt` 변경 파일 경로 목록 (파일이 100개를 넘어도 여기는 전부 들어있다)
-            - `meta.json`         gh pr view 원본 JSON
-
             레포 전체가 현재 디렉터리에 체크아웃되어 있습니다. diff만 보고 판단하지 말고
             다음 순서로 코드베이스 컨텍스트를 확보한 뒤 리뷰하세요:
-            1. `summary.md` 와 `diff.patch` 를 Read 로 읽어 PR 의도와 변경 범위를 파악한다.
-               `gh pr view` / `gh pr diff` 를 다시 호출하지 않는다. 단 `pr-context/` 가 없거나
-               Read 가 실패하면 프리페치 스텝이 실패한 것이니 `gh pr view` · `gh pr diff` ·
-               `gh pr diff --name-only` 로 직접 받아서 그대로 진행한다 (리뷰를 거르지 말 것).
+            1. `gh pr view`, `gh pr diff`로 PR 의도와 변경 범위를 파악한다.
             2. 변경된 파일은 diff 조각이 아니라 **파일 전체를 Read로 읽어** 변경이 놓인 맥락을 확인한다.
             3. 변경된 클래스·메서드의 호출부/사용처를 Grep으로 추적해 영향 범위를 검증한다
                (호출 계약 변화, 상태 전이 CAS, 이벤트 리스너, 스케줄러 경로 등).
             4. CLAUDE.md와 같은 레이어의 기존 코드를 읽고 컨벤션·패턴 일치 여부를 대조한다.
             5. 확신이 없는 지적은 관련 코드를 실제로 열어 확인한 뒤에만 코멘트한다.
                diff 밖 코드를 근거로 한 지적에는 해당 파일 경로를 근거로 명시한다.
-
-            **속도 요건 — 도구 호출은 항상 한 메시지에 여러 개를 병렬로 묶으세요.**
-            파일 10개를 볼 거면 한 턴에 Read 10개를 동시에 호출합니다. 한 턴에 하나씩 순차로
-            읽지 마세요. Grep 도 같습니다. 읽는 양을 줄이라는 뜻이 아니라 왕복 횟수만 줄이라는 뜻입니다.
 
             다음 항목들을 확인해주세요:
             - 코드 품질 및 가독성
@@ -110,54 +56,8 @@ jobs:
 
             발견된 문제점과 개선 제안을 구체적으로 설명해주세요.
 
-            ## 게시
-
-            아래 형식으로 `gh pr comment` 를 **한 번만** 호출해 게시합니다.
-            리뷰 텍스트를 메시지로만 출력하고 끝내지 마세요 — 게시하지 않으면 리뷰가 없는 것과 같습니다.
-
-            ```
-            ## 📋 리뷰 요약
-
-            - **리뷰 대상**: 변경의 핵심 지점 요약
-            - **전체 평가**: 2~4문장
-            - **발견 이슈**: Critical N개 / Major N개 / Minor N개 / Suggestion N개
-
-            ## 🔴 Critical
-            ### [파일명:라인] 한 줄 제목
-            **문제**: ...
-            **근거**: ... (diff 밖이면 파일경로:라인 명시)
-            **개선안**: ...
-
-            ## 🟠 Major
-            ## 🟡 Minor
-            ## 💡 Suggestion
-            ## ✅ 좋았던 점
-            ```
-
-            해당 심각도의 항목이 없으면 그 절은 통째로 생략합니다.
-          # claude_args 는 '#' 으로 시작하는 줄이 통째로 삭제되는 파서를 탄다 — 값 안에 주석 금지.
-          # allowedTools 에 find / rg / gh api 를 넣지 말 것: Bash 규칙은 접두사 매칭이라
-          # `find -exec`, `rg --pre`, `gh api -X POST` 로 허용 목록 자체가 우회된다.
-          # 탐색은 Glob / Grep 으로 충분하다.
+            Use `gh pr comment` for top-level feedback.
+            Only post GitHub comments - don't submit review text as messages.
           claude_args: |
             --model opus
-            --allowedTools "Read,Grep,Glob,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(ls:*),Bash(wc:*)"
-            --append-system-prompt "이 실행은 GitHub Actions 의 PR 코드리뷰 전용이다. 저장소 CLAUDE.md 의 '작업 단위 완료 시 자동 코드 리뷰' 절차와 커밋/PR 작성 규칙 섹션은 이 실행에 적용하지 않는다(코드 컨벤션 섹션은 리뷰 기준으로 그대로 사용한다). 코드를 수정하지 않고 리뷰 코멘트 1건만 게시한다. 파일을 여러 개 읽거나 검색할 때는 항상 한 메시지에서 도구 호출을 병렬로 묶어 호출한다."
-
-      # 에이전트가 오류 없이 조용히 코멘트를 안 남기는 경우가 있었다 (client run 32223149053:
-      # subtype=success, 9턴, 코멘트 0건). 침묵 실패를 빨간 X 로 드러낸다.
-      - name: Verify review comment posted
-        if: always() && env.REVIEW_SELF_EDIT != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-        run: |
-          set -uo pipefail
-          n=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
-                --jq "[.[] | select(.user.login == \"claude[bot]\")
-                           | select(.created_at >= \"${STARTED_AT:-}\")] | length" | awk '{s+=$1} END {print s+0}')
-          if [ "$n" -eq 0 ]; then
-            echo "::error::리뷰 코멘트가 게시되지 않았다. 위 스텝 로그의 result JSON(num_turns·permission_denials_count)을 확인할 것."
-            exit 1
-          fi
-          echo "리뷰 코멘트 ${n}건 확인"
+            --allowedTools "Read,Grep,Glob,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

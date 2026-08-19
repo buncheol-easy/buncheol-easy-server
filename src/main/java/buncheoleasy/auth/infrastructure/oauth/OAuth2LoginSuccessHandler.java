@@ -10,6 +10,7 @@ import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +23,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 @Component
 @Slf4j
@@ -80,9 +82,22 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
 
+    // 액세스 토큰은 쿼리가 아니라 프래그먼트(#)로 넘긴다. 프래그먼트는 서버로 전송되지 않으므로
+    // nginx/ALB 액세스 로그와 Referer 헤더에서 유효기간 2시간 JWT 원문이 사라진다.
+    //
+    // ⚠️ 이것만으로 클라이언트 측 유출까지 막히지는 않는다. PostHog $current_url / GA page_location 은
+    // location.href 기반이라 해시를 포함하고, 페이지뷰는 초기 로드에 캡처되므로 프론트가 해시를 읽어
+    // 지우기 전에 이미 전송된다. 브라우저 히스토리에도 남는다. 콜백 진입 즉시 해시를 읽고
+    // history.replaceState 로 제거하는 후속 조치가 클라 쪽에 필요하다 (server#116 리뷰 참고).
+    //
+    // encodeFragment 는 현재 토큰(base64url + '.')과 '=' 에 대해 no-op 이다 — RFC 3986 의
+    // fragment 는 pchar 를 허용하고 pchar 에 sub-delims('=')와 unreserved 가 포함된다.
+    // 토큰 형식이 바뀌어 '%'·공백·'#' 이 섞이면 그때 자동으로 올바르게 이스케이프된다.
     String redirectUrl =
         UriComponentsBuilder.fromUriString(loginCallbackUrl)
-            .queryParam("accessToken", token.accessToken())
+            .fragment(
+                UriUtils.encodeFragment(
+                    "accessToken=" + token.accessToken(), StandardCharsets.UTF_8))
             .build()
             .toUriString();
     response.sendRedirect(redirectUrl);

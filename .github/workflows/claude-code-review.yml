@@ -10,10 +10,13 @@ jobs:
   claude-review:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # comment.user.type != 'Bot' 가 필요한 이유: 리뷰 본문이 트리거 문구를 인용하면
+    # 자기 자신을 다시 촉발하고, 액션은 봇 actor 를 거부해 실패로 끝난다 (client run 32220689575).
     if: |
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
+       github.event.comment.user.type != 'Bot' &&
        contains(github.event.comment.body, '@claude re-review'))
     permissions:
       contents: read
@@ -30,14 +33,14 @@ jobs:
       # PR 메타·diff 를 미리 받아둔다. 에이전트가 gh 호출로 턴을 쓰지 않게 하려는 것.
       # 워크스페이스 밖(RUNNER_TEMP)에 두는 이유: 레포 안에 diff 파일이 있으면 사용처 Grep 에 걸려
       # 존재하지 않는 호출부를 찾은 것처럼 오인한다.
-      # 이 스텝이 죽어도 리뷰는 돌아야 한다 (프롬프트에 gh 직접 호출 폴백이 있다).
-      # continue-on-error 를 빼면 gh 일시 장애가 '느린 리뷰'가 아니라 '리뷰 없음'이 된다.
+      # 이 스텝이 죽어도 리뷰는 돌아야 한다 — 프롬프트에 gh 직접 호출 폴백이 있다.
       - name: Prefetch PR context
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
+          echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           set -euo pipefail
           CTX="$RUNNER_TEMP/pr-context"
           mkdir -p "$CTX"
@@ -46,6 +49,11 @@ jobs:
             > "$CTX/meta.json"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$CTX/diff.patch"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only > "$CTX/changed-files.txt"
+          # 이 워크플로 자체를 바꾸는 PR 은 액션이 기본 브랜치 대조 검증에서 스킵한다.
+          # 그때는 코멘트가 안 달리는 게 정상이라 아래 게시 확인 스텝을 건너뛴다.
+          if grep -qx '.github/workflows/claude-code-review.yml' "$CTX/changed-files.txt"; then
+            echo "REVIEW_SELF_EDIT=true" >> "$GITHUB_ENV"
+          fi
           {
             jq -r '"# PR #\(.number) \(.title)\n작성자: \(.author.login)\nbase: \(.baseRefName) ← head: \(.headRefName)\n변경량: +\(.additions)/-\(.deletions), \(.changedFiles) files"' "$CTX/meta.json"
             printf 'diff.patch: %s 줄 (Read 는 기본 2000 줄에서 잘린다 — 넘으면 offset 으로 이어 읽거나 파일별로 읽을 것)\n\n' "$(wc -l < "$CTX/diff.patch")"
@@ -67,87 +75,45 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
-            이 PR 을 리뷰하고 결과를 한국어 코멘트 1건으로 게시하세요.
-            레포 전체가 현재 디렉터리에 체크아웃되어 있습니다.
+            이 PR의 코드를 리뷰해주세요. 한국어로 답변해주세요.
 
             PR 컨텍스트는 이미 수집되어 있습니다 — `${{ runner.temp }}/pr-context/`
             - `summary.md`        PR 제목·작성자·변경 파일 목록(파일별 증감 포함)·PR 본문
             - `diff.patch`        전체 diff
-            - `changed-files.txt` 변경 파일 경로 목록
+            - `changed-files.txt` 변경 파일 경로 목록 (파일이 100개를 넘어도 여기는 전부 들어있다)
             - `meta.json`         gh pr view 원본 JSON
 
-            ## 실행 방식 (속도 요건 — 반드시 지킬 것)
+            레포 전체가 현재 디렉터리에 체크아웃되어 있습니다. diff만 보고 판단하지 말고
+            다음 순서로 코드베이스 컨텍스트를 확보한 뒤 리뷰하세요:
+            1. `summary.md` 와 `diff.patch` 를 Read 로 읽어 PR 의도와 변경 범위를 파악한다.
+               `gh pr view` / `gh pr diff` 를 다시 호출하지 않는다. 단 `pr-context/` 가 없거나
+               Read 가 실패하면 프리페치 스텝이 실패한 것이니 `gh pr view` · `gh pr diff` ·
+               `gh pr diff --name-only` 로 직접 받아서 그대로 진행한다 (리뷰를 거르지 말 것).
+            2. 변경된 파일은 diff 조각이 아니라 **파일 전체를 Read로 읽어** 변경이 놓인 맥락을 확인한다.
+            3. 변경된 클래스·메서드의 호출부/사용처를 Grep으로 추적해 영향 범위를 검증한다
+               (호출 계약 변화, 상태 전이 CAS, 이벤트 리스너, 스케줄러 경로 등).
+            4. CLAUDE.md와 같은 레이어의 기존 코드를 읽고 컨벤션·패턴 일치 여부를 대조한다.
+            5. 확신이 없는 지적은 관련 코드를 실제로 열어 확인한 뒤에만 코멘트한다.
+               diff 밖 코드를 근거로 한 지적에는 해당 파일 경로를 근거로 명시한다.
 
-            - `gh pr view` / `gh pr diff` 를 다시 호출하지 마세요. 위 파일을 Read 로 읽습니다.
-              단 `pr-context/` 파일이 없거나 Read 가 실패하면 프리페치 스텝이 실패한 것이니,
-              `gh pr view` · `gh pr diff` · `gh pr diff --name-only` 로 직접 받아서 그대로 진행합니다
-              (리뷰를 거르지 마세요).
-            - **도구 호출은 항상 한 메시지에 여러 개를 병렬로 묶으세요.** 파일 10개를 볼 거면
-              한 턴에 Read 10개를 동시에 호출합니다. 한 턴에 하나씩 순차로 읽지 마세요. Grep 도 같습니다.
-            - 리뷰 본체는 아래 3개 축으로 나눠 **Task 도구로 서브에이전트 3개를 한 메시지에서 동시에**
-              띄워 병렬 수행합니다. 하나씩 순차로 띄우지 마세요. 메인은 취합·게시만 합니다.
-            - 코드를 수정하지 마세요. 읽기와 코멘트 게시만 합니다.
+            **속도 요건 — 도구 호출은 항상 한 메시지에 여러 개를 병렬로 묶으세요.**
+            파일 10개를 볼 거면 한 턴에 Read 10개를 동시에 호출합니다. 한 턴에 하나씩 순차로
+            읽지 마세요. Grep 도 같습니다. 읽는 양을 줄이라는 뜻이 아니라 왕복 횟수만 줄이라는 뜻입니다.
 
-            ## 0단계 — 변경 파악 (1턴)
+            다음 항목들을 확인해주세요:
+            - 코드 품질 및 가독성
+            - 잠재적인 버그나 에러 (특히 diff 밖 호출부와의 계약 불일치)
+            - 성능 이슈
+            - 보안 취약점
+            - 모범 사례 준수 여부 (특히 프로젝트 CLAUDE.md 컨벤션)
+            - 동시성 이슈 (CLAUDE.md의 동시성 분석 원칙 참고)
 
-            `summary.md` 와 `diff.patch` 를 한 턴에 병렬 Read 로 읽고 변경 의도·범위를 파악합니다.
-            2단계의 요약 작성과 축 간 판정 충돌 조정은 메인이 직접 본 내용을 근거로 해야 합니다.
+            발견된 문제점과 개선 제안을 구체적으로 설명해주세요.
 
-            ## 1단계 — 서브에이전트 3개 동시 실행
+            ## 게시
 
-            각 서브에이전트(general-purpose) 프롬프트에 공통으로 넣을 지침:
-
-            - PR 컨텍스트 경로는 `${{ runner.temp }}/pr-context/` 이고, 레포는 현재 디렉터리에 있다.
-              먼저 `summary.md` 와 `diff.patch` 를 읽고 시작한다.
-            - diff 조각만 보고 판단하지 않는다. `changed-files.txt` 의 파일들을 **전체를 Read 로**
-              읽어 변경이 놓인 맥락을 확인한다 (여러 파일을 한 턴에 병렬 Read).
-            - 변경된 클래스·메서드의 호출부/사용처를 Grep 으로 추적해 영향 범위를 검증한다
-              (한 턴에 여러 Grep 병렬 호출).
-            - `CLAUDE.md` 와 같은 레이어의 기존 코드를 읽고 컨벤션·패턴 일치 여부를 대조한다.
-            - **확신이 없는 지적은 관련 코드를 실제로 열어 확인한 뒤에만 보고한다.** 확인하지 못했으면
-              보고하지 말고, 확인이 필요한 사항이면 "확인 필요"로 표시한다. diff 밖 코드를 근거로 한
-              지적에는 반드시 `파일경로:라인` 을 근거로 명시한다.
-            - 사용할 도구는 Read / Grep / Glob 뿐이다. 코멘트를 게시하지 않는다. 코드를 수정하지 않는다.
-            - 반환값은 발견 항목 목록만. 항목마다:
-              `[심각도 Critical|Major|Minor|Suggestion] 파일:라인 · 제목 / 문제 / 근거 / 개선안`.
-              발견이 없으면 "없음". 잘한 점이 있으면 끝에 `좋았던 점:` 으로 1~3개 덧붙인다.
-
-            축별 담당 범위:
-
-            **축 A — 정합성·버그·동시성**
-            - diff 밖 호출부와의 계약 불일치 (시그니처·null 계약·반환 의미 변화)
-            - 상태 전이: status CAS(`@Modifying` JPQL) 정확성, 더티체킹과 CAS 혼용 여부,
-              `@Transactional` 경계, CAS 실패 분기(`*_CONFLICT` / `STATE_TRANSITION_INVALID`)
-            - 이벤트 리스너(`@TransactionalEventListener(AFTER_COMMIT)`)·스케줄러
-              (`BuncheolAutoCloseScheduler`, `ParticipationPaymentExpiryScheduler`) 경로 영향
-            - CLAUDE.md 「동시성 분석 원칙」대로 방어 로직의 **실행 시점과 커밋 시점 사이 갭**까지 추적.
-              모든 쓰기 조합과 라이프사이클 전체에서 race 검토, 발생 확률·영향도까지 제시
-            - 엣지 케이스·null·예외 처리·경계값
-
-            **축 B — 컨벤션·품질·테스트**
-            - CLAUDE.md 핵심 컨벤션: 엔티티(정적 팩토리 `create()`, setter 금지, 도메인 메서드로 상태 변경),
-              VO(record + AttributeConverter / `@Embeddable record`, compact constructor 검증),
-              단방향 `Long xxxId` FK, 도메인 내부 방어 검증, `ErrorCode` → `BusinessException` → `ProblemDetail`,
-              포트-어댑터 리포지토리 분리(`JpaXxxRepository` + `JpaXxxRepositoryAdapter`)
-            - 테스트 규약: 도메인 순수 단위 테스트, 서비스 Mockito, 어댑터 `@SpringBootTest + @Transactional`,
-              `*ControllerDocsTest` 의 `DocsTestSupport`·인증 헬퍼·builder 순서·스키마 명시,
-              에러 표와 실제 `ErrorCode` 정의 일치
-            - 주석 최소화 규칙 위반(코드 재서술·작업 경위 설명), 네이밍·구조 일관성, 가독성
-            - 변경 대비 테스트 공백 (새 분기가 테스트로 고정되지 않은 곳)
-
-            **축 C — 성능·보안**
-            - N+1, 불필요한 추가 쿼리, 인덱스 부재, 커서 페이징(`global.page`) 이탈, 응답 페이로드 비대화
-            - 트랜잭션 길이, 외부 호출(Aligo·S3)이 트랜잭션 안에 들어갔는지
-            - 인증·인가 누락, 소유권 검증 누락, 개인정보(이름·전화·주소·계좌) 노출 범위 확대
-            - 입력 검증 누락, 로그·응답으로의 시크릿/민감정보 유출
-
-            ## 2단계 — 취합 후 코멘트 1건 게시
-
-            - 3개 결과를 합쳐 중복을 제거하고 심각도 순으로 정렬합니다.
-            - 근거가 약하거나 서브에이전트가 실제로 확인하지 못한 추측성 지적은 버립니다.
-            - 축이 서로 충돌하면 코드를 직접 열어 확인한 뒤 판단합니다.
-            - 아래 형식으로 `gh pr comment` 를 **한 번만** 호출해 게시합니다.
-              리뷰 텍스트를 메시지로만 출력하고 끝내지 마세요.
+            아래 형식으로 `gh pr comment` 를 **한 번만** 호출해 게시합니다.
+            리뷰 텍스트를 메시지로만 출력하고 끝내지 마세요 — 게시하지 않으면 리뷰가 없는 것과 같습니다.
 
             ```
             ## 📋 리뷰 요약
@@ -175,5 +141,23 @@ jobs:
           # 탐색은 Glob / Grep 으로 충분하다.
           claude_args: |
             --model opus
-            --allowedTools "Read,Grep,Glob,Task,Agent,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(ls:*),Bash(wc:*)"
+            --allowedTools "Read,Grep,Glob,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(ls:*),Bash(wc:*)"
             --append-system-prompt "이 실행은 GitHub Actions 의 PR 코드리뷰 전용이다. 저장소 CLAUDE.md 의 '작업 단위 완료 시 자동 코드 리뷰' 절차와 커밋/PR 작성 규칙 섹션은 이 실행에 적용하지 않는다(코드 컨벤션 섹션은 리뷰 기준으로 그대로 사용한다). 코드를 수정하지 않고 리뷰 코멘트 1건만 게시한다. 파일을 여러 개 읽거나 검색할 때는 항상 한 메시지에서 도구 호출을 병렬로 묶어 호출한다."
+
+      # 에이전트가 오류 없이 조용히 코멘트를 안 남기는 경우가 있었다 (client run 32223149053:
+      # subtype=success, 9턴, 코멘트 0건). 침묵 실패를 빨간 X 로 드러낸다.
+      - name: Verify review comment posted
+        if: always() && env.REVIEW_SELF_EDIT != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -uo pipefail
+          n=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+                --jq "[.[] | select(.user.login == \"claude[bot]\")
+                           | select(.created_at >= \"${STARTED_AT:-}\")] | length" | awk '{s+=$1} END {print s+0}')
+          if [ "$n" -eq 0 ]; then
+            echo "::error::리뷰 코멘트가 게시되지 않았다. 위 스텝 로그의 result JSON(num_turns·permission_denials_count)을 확인할 것."
+            exit 1
+          fi
+          echo "리뷰 코멘트 ${n}건 확인"

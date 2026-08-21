@@ -22,14 +22,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
   long countByHostIdAndStatusIn(Long hostId, Set<BuncheolStatus> statuses);
 
-  long countByGroupIdAndStatus(Long groupId, BuncheolStatus status);
+  long countByGroupIdAndStatusIn(Long groupId, Collection<BuncheolStatus> statuses);
 
   List<Buncheol> findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
       Long hostId, BuncheolStatus excludedStatus);
 
   /**
-   * 공개 목록의 <b>모집중(RECRUITING) 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
-   * BuncheolStatus#RECRUITING} 을 전달한다.
+   * 공개 목록의 <b>모집중 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
+   * BuncheolStatus#RECRUITING} 과 {@link BuncheolStatus#PAYMENT_COLLECTING} 을 함께 전달한다 — 둘 다 아직 진행 중인
+   * 분철이라 같은 그룹·같은 정렬 축(createdAt)을 쓴다 ({@link
+   * buncheoleasy.buncheol.domain.BuncheolListCursor#RANK_RECRUITING}).
    *
    * <p>검색어는 정규화된 {@code searchTitle}(공백·구두점 무시) 과 애플리케이션이 해석해 넘긴 그룹·멤버 id, 그리고 설명 원문
    * 부분일치에 걸린다. 설명은 정규화 컬럼이 없어 원문 비교라 공백을 무시하지 않는다.
@@ -38,13 +40,28 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * NULL, '%')} 를 NULL 로 접어 매칭 0건이 되지만 H2 는 {@code '%%'} 로 접어 전 행이 매칭된다. 가드가 없으면
    * 구두점만 입력한 검색이 테스트(H2)에서는 전건, 운영(MySQL)에서는 0건으로 갈린다.
    *
-   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다. {@code
-   * idx_buncheols_status_created (status, created_at DESC, id DESC)}(groupId 동반 시 {@code
-   * idx_buncheols_group_created}) 인덱스로 정렬을 커버한다.
+   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다.
+   *
+   * <p><b>⚠️ 이 쿼리는 정렬을 인덱스로 커버하지 못한다.</b> {@code idx_buncheols_status_created (status, created_at
+   * DESC, id DESC)} 는 선행 컬럼이 상수일 때만 정렬을 커버하는데, 상태가 둘이라 {@code IN} = range 스캔이 되어 두 구간을 읽은 뒤
+   * 정렬해야 한다. staging MySQL 실측(2026-08-21):
+   *
+   * <pre>
+   * status = 'RECRUITING'                          → type=ref   Extra: Using index
+   * status IN ('RECRUITING','PAYMENT_COLLECTING')  → type=range Extra: Using where; Using index; Using filesort
+   * </pre>
+   *
+   * <p>커버링 인덱스라 테이블 접근은 없지만 {@code LIMIT} 조기 종료가 사라져, 조건에 걸리는 두 상태의 <b>전 행</b>을 읽고 filesort 한다.
+   * 활성 분철이 수십 건인 현 규모에서는 수용 가능하다고 보고 받아들였다 — 이 판단은 <b>활성 분철 수</b>에 달려 있으므로, 목록 지연이
+   * 관측되면 여기부터 본다. 고칠 때는 그룹 순위를 접은 생성 컬럼({@code list_rank}) + {@code (list_rank, created_at DESC, id
+   * DESC)} 인덱스가, rank0 을 두 쿼리로 쪼개 애플리케이션에서 머지하는 것보다 깔끔하다. <b>이는 rank0 전용 인덱스 교체다</b> —
+   * rank1·rank2 는 {@code deadline} 축이라 {@code idx_buncheols_status_deadline} 이 그대로 필요하다.
+   *
+   * <p>{@code groupId} 필터가 붙는 경로는 {@code idx_buncheols_group_created} 를 타므로 영향이 없다.
    */
   @Query(
       "SELECT b FROM Buncheol b "
-          + "WHERE b.status = :status "
+          + "WHERE b.status IN :statuses "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
           + "  AND (:onlyFavoriteGroups = FALSE OR b.groupId IN :favoriteGroupIds) "
           + "  AND (:memberId IS NULL OR b.id IN "
@@ -62,7 +79,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR (b.createdAt = :cursorCreatedAt AND b.id < :cursorId)) "
           + "ORDER BY b.createdAt DESC, b.id DESC")
   List<Buncheol> searchRecruiting(
-      @Param("status") BuncheolStatus status,
+      @Param("statuses") Set<BuncheolStatus> statuses,
       @Param("groupId") Long groupId,
       @Param("onlyFavoriteGroups") boolean onlyFavoriteGroups,
       @Param("favoriteGroupIds") List<Long> favoriteGroupIds,

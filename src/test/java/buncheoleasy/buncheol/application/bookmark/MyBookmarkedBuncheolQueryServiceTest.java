@@ -210,6 +210,39 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
+    void hideClosed_true_여도_입금_수집중_분철은_남는다() {
+      // 공개 목록 rank0 과 같은 기준(BuncheolStatus.recruitingGroup)이어야 한다 — 개최자가 성사를 확정했다고
+      // 찜에서 사라지면, 정작 입금 안내를 기다리는 사람이 그 분철을 잃는다.
+      BuncheolBookmark bmRecruiting = bookmark(500L, USER_ID, 10L);
+      BuncheolBookmark bmCollecting = bookmark(501L, USER_ID, 20L);
+      BuncheolBookmark bmConfirmed = bookmark(502L, USER_ID, 30L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bmRecruiting, bmCollecting, bmConfirmed));
+
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L)))
+          .willReturn(
+              List.of(
+                  buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, deadline),
+                  buncheol(20L, 100L, "분철 B", BuncheolStatus.PAYMENT_COLLECTING, deadline),
+                  buncheol(30L, 100L, "분철 C", BuncheolStatus.CONFIRMED, deadline)));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, true, false);
+
+      assertThat(result).extracting(MyBookmarkedBuncheolResponse::buncheolId).containsExactly(10L, 20L);
+    }
+
+    @Test
     void onlyFavoriteGroups_true_면_사용자_최애_그룹의_분철만_포함된다() {
       BuncheolBookmark bmFav = bookmark(500L, USER_ID, 10L);
       BuncheolBookmark bmNonFav = bookmark(501L, USER_ID, 20L);

@@ -112,16 +112,18 @@ public class MyBookmarkedBuncheolQueryService {
         .toList();
   }
 
-  // 마감 임박순 정렬 비교자: 모집중(RECRUITING) 우선 → 모집중은 deadline ASC, 비모집중(CONFIRMED/CANCELLED)은 deadline DESC, 동일 키는 찜 id DESC.
-  // 전제: HOST_CANCELLED 는 isVisible 에서 제거됨 → RECRUITING/CONFIRMED/CANCELLED 만 진입(CANCELLED 도 비모집중으로 묶여 마감군과 함께 정렬).
+  // 마감 임박순 정렬 비교자: 모집중 그룹 우선 → 모집중군은 deadline ASC, 비모집중(CONFIRMED/CANCELLED)은 deadline DESC, 동일 키는 찜 id DESC.
+  // 모집중 판정은 공개 목록 rank0 과 같은 BuncheolStatus.recruitingGroup() 을 쓴다 — 같은 분철이 홈에선 모집중,
+  // 찜에선 마감으로 갈리면 안 된다.
+  // 전제: HOST_CANCELLED 는 isVisible 에서 제거됨 → 그 외 상태만 진입(CANCELLED 도 비모집중으로 묶여 마감군과 함께 정렬).
   private int compareByDeadlineGroup(
       final BuncheolBookmark a,
       final BuncheolBookmark b,
       final Map<Long, Buncheol> buncheolById) {
     Buncheol ba = buncheolById.get(a.getBuncheolId());
     Buncheol bb = buncheolById.get(b.getBuncheolId());
-    boolean aRecruiting = ba.getStatus() == BuncheolStatus.RECRUITING;
-    boolean bRecruiting = bb.getStatus() == BuncheolStatus.RECRUITING;
+    boolean aRecruiting = ba.getStatus().isRecruitingGroup();
+    boolean bRecruiting = bb.getStatus().isRecruitingGroup();
     if (aRecruiting != bRecruiting) {
       return aRecruiting ? -1 : 1;
     }
@@ -150,7 +152,9 @@ public class MyBookmarkedBuncheolQueryService {
     if (buncheol.getStatus() == BuncheolStatus.HOST_CANCELLED) {
       return false;
     }
-    if (hideClosed && buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+    // "마감 제외" 는 모집중 그룹(RECRUITING·PAYMENT_COLLECTING)을 남긴다 — 개최자가 성사를 확정했다고 해서
+    // 찜해둔 분철이 사라지면, 정작 입금 안내를 기다리는 사람이 그 분철을 찜에서 잃는다.
+    if (hideClosed && !buncheol.getStatus().isRecruitingGroup()) {
       return false;
     }
     if (onlyFavoriteGroups && !favoriteGroupIds.contains(buncheol.getGroupId())) {

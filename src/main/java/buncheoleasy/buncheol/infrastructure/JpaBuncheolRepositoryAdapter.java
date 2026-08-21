@@ -63,7 +63,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         cursor.isFirstPage() ? BuncheolListCursor.RANK_RECRUITING : cursor.groupRank();
     List<Buncheol> result = new ArrayList<>(limit);
 
-    // rank0: 모집중(RECRUITING) — createdAt keyset. 첫 페이지이거나 커서가 모집중 그룹일 때만 시작점이 된다.
+    // rank0: 모집중(RECRUITING·PAYMENT_COLLECTING) — createdAt keyset. 첫 페이지이거나 커서가 모집중 그룹일 때만 시작점이 된다.
     if (startRank == BuncheolListCursor.RANK_RECRUITING) {
       Instant cursorCreatedAt = cursor.isFirstPage() ? null : cursor.sortAt();
       Long cursorId = cursor.isFirstPage() ? null : cursor.id();
@@ -93,7 +93,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   private List<Buncheol> searchRecruiting(
       BuncheolSearchCondition condition, Instant cursorCreatedAt, Long cursorId, int limit) {
     return jpaBuncheolRepository.searchRecruiting(
-        BuncheolStatus.RECRUITING,
+        BuncheolStatus.recruitingGroup(),
         condition.groupId(),
         condition.onlyFavoriteGroups(),
         condition.favoriteGroupIds(),
@@ -137,7 +137,9 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
 
   @Override
   public long countRecruitingByGroupId(Long groupId) {
-    return jpaBuncheolRepository.countByGroupIdAndStatus(groupId, BuncheolStatus.RECRUITING);
+    // 공개 목록 rank0 과 같은 집합을 쓴다 — 헤더 카운트와 그 아래 목록이 다른 말을 하면 안 된다.
+    return jpaBuncheolRepository.countByGroupIdAndStatusIn(
+        groupId, BuncheolStatus.recruitingGroup());
   }
 
   @Override

@@ -22,7 +22,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
   long countByHostIdAndStatusIn(Long hostId, Set<BuncheolStatus> statuses);
 
-  long countByGroupIdAndStatus(Long groupId, BuncheolStatus status);
+  long countByGroupIdAndStatusIn(Long groupId, Collection<BuncheolStatus> statuses);
 
   List<Buncheol> findAllByHostIdAndStatusNotOrderByCreatedAtDesc(
       Long hostId, BuncheolStatus excludedStatus);
@@ -54,7 +54,8 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * <p>커버링 인덱스라 테이블 접근은 없지만 {@code LIMIT} 조기 종료가 사라져, 조건에 걸리는 두 상태의 <b>전 행</b>을 읽고 filesort 한다.
    * 활성 분철이 수십 건인 현 규모에서는 수용 가능하다고 보고 받아들였다 — 이 판단은 <b>활성 분철 수</b>에 달려 있으므로, 목록 지연이
    * 관측되면 여기부터 본다. 고칠 때는 그룹 순위를 접은 생성 컬럼({@code list_rank}) + {@code (list_rank, created_at DESC, id
-   * DESC)} 인덱스가, rank0 을 두 쿼리로 쪼개 애플리케이션에서 머지하는 것보다 깔끔하다.
+   * DESC)} 인덱스가, rank0 을 두 쿼리로 쪼개 애플리케이션에서 머지하는 것보다 깔끔하다. <b>이는 rank0 전용 인덱스 교체다</b> —
+   * rank1·rank2 는 {@code deadline} 축이라 {@code idx_buncheols_status_deadline} 이 그대로 필요하다.
    *
    * <p>{@code groupId} 필터가 붙는 경로는 {@code idx_buncheols_group_created} 를 타므로 영향이 없다.
    */

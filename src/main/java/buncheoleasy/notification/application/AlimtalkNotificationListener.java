@@ -52,8 +52,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class AlimtalkNotificationListener {
 
-  // 멤버명 나열 상한. 알림톡 문안의 "▶ 참여 멤버:" 한 줄이 감당할 만한 길이로 잡았다 — 넘으면 뒤를 "외 N" 으로 접는다.
-  private static final int MERGED_MEMBER_NAME_MAX_LENGTH = 60;
+  // 멤버명 "나열" 예산. 최종 문자열 상한이 아니다 — 접힐 때 뒤에 " 외 N" 이 더 붙으므로 결과는 이 값을 조금 넘는다.
+  // 알림톡 문안의 "▶ 참여 멤버:" 한 줄이 감당할 만한 길이로 잡았다.
+  private static final int MEMBER_NAME_LIST_BUDGET = 60;
   private static final String MEMBER_NAME_DELIMITER = ", ";
 
   private final NotificationAssembler assembler;
@@ -344,21 +345,21 @@ public class AlimtalkNotificationListener {
    * <p>예전에는 "첫 멤버 외 N" 으로 줄였는데, 금액은 합산해 1건으로 보내면서 멤버명만 접으면 참여자가 그 금액이 무엇에 대한 것인지 대조할 수 없다. 특히
    * 다슬롯은 배송비가 묶음 첫 슬롯에만 붙어 슬롯별 금액이 다르므로(docs/53 Q-22), 무엇을 신청했는지가 금액을 이해하는 유일한 단서다.
    *
-   * <p>다만 한 사람이 가져갈 수 있는 슬롯 수에 상한이 없어, 나열이 {@value #MERGED_MEMBER_NAME_MAX_LENGTH} 자를 넘으면
+   * <p>다만 한 사람이 가져갈 수 있는 슬롯 수에 상한이 없어, 나열이 {@value #MEMBER_NAME_LIST_BUDGET} 자를 넘으면
    * 담기는 데까지만 나열하고 나머지는 "외 N" 으로 접는다. 이 상한의 근거는 <b>합산 문안 한 줄의 가독성</b>이지 템플릿 전체 길이 제한이
    * 아니다 — 후자라면 단일 슬롯 경로({@code view.memberName()} 을 그대로 넘기는 곳들)까지 함께 막아야 하고, 그건
    * {@code AlimtalkSender}/{@code AlimtalkTemplate#render} 레이어의 몫이다.
    */
   private String mergedMemberName(final List<ParticipationView> group) {
     final List<String> names = group.stream().map(ParticipationView::memberName).toList();
-    // 한 명이면 상한과 무관하게 원본을 그대로 쓴다. 접기 분기에 들여보내면 담을 다음 이름이 없어
-    // " 외 0" 이 붙는다 (단일 슬롯 경로는 애초에 이 메서드를 타지 않으므로 이름을 자를 이유도 없다).
+    // 한 명이면 예산과 무관하게 원본을 그대로 쓴다. 접기 분기에 들여보내면 담을 다음 이름이 없어 " 외 0" 이 붙는다.
+    // 합산할 게 없으니 자를 이유도 없다 — 이 예산은 여러 이름을 한 줄에 늘어놓을 때의 가독성 장치다.
     if (names.size() == 1) {
       return names.getFirst();
     }
 
     final String joined = String.join(MEMBER_NAME_DELIMITER, names);
-    if (joined.length() <= MERGED_MEMBER_NAME_MAX_LENGTH) {
+    if (joined.length() <= MEMBER_NAME_LIST_BUDGET) {
       return joined;
     }
 
@@ -367,7 +368,7 @@ public class AlimtalkNotificationListener {
     int listedCount = 1;
     while (listedCount < names.size()
         && listed.length() + MEMBER_NAME_DELIMITER.length() + names.get(listedCount).length()
-            <= MERGED_MEMBER_NAME_MAX_LENGTH) {
+            <= MEMBER_NAME_LIST_BUDGET) {
       listed.append(MEMBER_NAME_DELIMITER).append(names.get(listedCount));
       listedCount++;
     }

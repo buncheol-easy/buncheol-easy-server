@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -46,5 +47,24 @@ class AlimtalkExecutorConfigTest {
                   .as("%s 가 알림톡 전용 executor 를 지정하지 않았다", method.getName())
                   .isEqualTo(AlimtalkExecutorConfig.ALIMTALK_EXECUTOR);
             });
+  }
+
+  @Test
+  @DisplayName("발송 핸들러에 @Order 가 없다 — 붙는 순간 발행 순서 보장이 깨진다")
+  void 발송_핸들러에_Order_가_없다() {
+    // 커밋 후 동기화는 OrderComparator 로 먼저 정렬되고 발행 순서는 동순위 안에서만 유지된다.
+    // @Order 가 하나라도 붙으면 단일 스레드로도 "발행 순서 = 발송 순서" 가 성립하지 않는다.
+    assertThat(AlimtalkNotificationListener.class.getAnnotation(Order.class))
+        .as("리스너 클래스에 @Order 가 붙었다")
+        .isNull();
+    assertThat(
+            Arrays.stream(AlimtalkNotificationListener.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(TransactionalEventListener.class))
+                .toList())
+        .allSatisfy(
+            method ->
+                assertThat(method.getAnnotation(Order.class))
+                    .as("%s 에 @Order 가 붙었다", method.getName())
+                    .isNull());
   }
 }

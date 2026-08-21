@@ -656,6 +656,30 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
+    void 아티스트_헤더_카운트가_목록_rank0_과_같은_집합을_센다() {
+      // 목록만 고치고 카운트를 그대로 두면 아티스트 페이지가 "모집중 0개" 를 띄운 채 그 밑에
+      // 입금 수집중 카드를 보여준다 — 같은 화면이 서로 모순된 말을 한다.
+      persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long confirmed =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
+
+      long headerCount = buncheolRepository.countRecruitingByGroupId(groupId);
+
+      long rank0Count =
+          buncheolRepository
+              .search(new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10)
+              .stream()
+              .filter(buncheol -> buncheol.getStatus().isRecruitingGroup())
+              .count();
+
+      assertThat(headerCount).isEqualTo(2).isEqualTo(rank0Count);
+    }
+
+    @Test
     void groupId_필터가_적용된다() {
       Long otherGroupId = TestGroupFixture.insertGroup(jdbcTemplate, "다른 그룹");
       Long target =

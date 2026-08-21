@@ -3,7 +3,12 @@ server:
   # Spring Security OAuth2 의 {baseUrl} 자동치환, sendRedirect 등에 영향.
   forward-headers-strategy: framework
   # Boot 3.4+ 기본값이지만 명시로 고정한다 — compose 의 stop_grace_period: 45s 는
-  # 이 graceful 유예(아래 30s) + @Async executor 대기(5s×2) + 여유라는 계약 위에 서 있다 (docs/39).
+  # 이 graceful 유예(아래 30s) + @Async executor 대기 + 여유라는 계약 위에 서 있다 (docs/39).
+  # executor 대기는 빈마다 순차로 붙어 합산된다. 현재 3개:
+  #   trackingExecutor 5s (코드) + alimtalkExecutor 3s (코드) + applicationTaskExecutor 3s (아래)
+  #   → 30 + 11 = 41s < 45s (여유 4s).
+  # ⚠️ executor 를 하나 더 만들거나 대기 시간을 올리면 이 합이 45s 를 넘어 SIGKILL 로 끝난다.
+  #    여유가 얇으니 executor 를 늘릴 일이 생기면 stop_grace_period 를 60s 로 올리는 쪽을 먼저 검토할 것.
   shutdown: graceful
 
 spring:
@@ -43,7 +48,8 @@ spring:
         # 대기 5s 는 web 30s 와 "순차" 합산되므로 compose stop_grace_period(45s) 예산 안이어야
         # 한다 (docs/39, #92 6차 리뷰).
         await-termination: true
-        await-termination-period: 5s
+        # 위 종료 예산(server.shutdown 주석) 합산에 들어간다. 올리기 전에 그 산식을 먼저 볼 것.
+        await-termination-period: 3s
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver

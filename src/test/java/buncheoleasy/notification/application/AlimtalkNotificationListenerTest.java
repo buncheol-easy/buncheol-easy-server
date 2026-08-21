@@ -226,6 +226,33 @@ class AlimtalkNotificationListenerTest {
     }
 
     @Test
+    @DisplayName("단일 참여의 이름이 상한을 넘어도 '외 0' 이 붙지 않는다")
+    void keepsSingleLongMemberNameIntact() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      // group_members.name 은 VARCHAR(100) 이고 길이 검증이 없어 61자 이상이 들어올 수 있다.
+      String longName = "가".repeat(61);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class),
+                  buncheol,
+                  longName,
+                  participant,
+                  mock(User.class),
+                  25_000L));
+
+      listener.onBuncheolConfirmed(
+          new BuncheolConfirmedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID)));
+
+      assertThat(captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED, PARTICIPANT_PHONE))
+          .containsEntry("멤버명", longName);
+    }
+
+    @Test
     @DisplayName("나열이 길어지면 담기는 만큼만 나열하고 나머지는 '외 N' 으로 접는다")
     void foldsMemberNamesWhenTooLong() {
       Buncheol buncheol = mock(Buncheol.class);

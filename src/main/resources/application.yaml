@@ -30,6 +30,13 @@ spring:
         # 기본 1 이면 외부 HTTP 를 도는 스케줄러(추적 웹훅 갱신)가 지연될 때 입금만료·자동마감까지 같이 굶는다.
         size: 4
     execution:
+      # ⚠️ force 가 없으면 applicationTaskExecutor 가 등록되지 않는다 — 자동설정이
+      # @ConditionalOnMissingBean(Executor.class) 인데 trackingExecutor·alimtalkExecutor 는 물론
+      # taskScheduler 까지 TaskExecutor 타입이라 조건이 깨진다. 그러면 executor 를 지정하지 않은
+      # @Async(슬랙·입금·이미지·최근검색 8건)가 SimpleAsyncTaskExecutor 로 폴백해 호출마다 새 스레드를
+      # 만들고(상한 없음) 종료 드레인에서도 빠진다. 아래 shutdown 설정도 이 빈 전용이라 함께 무효가 된다.
+      # 실측으로 확인했다 — force 없이는 `SimpleAsyncTaskExecutor-1`, 있으면 `task-1`.
+      mode: force
       shutdown:
         # graceful shutdown(웹 요청 30s)은 @Async executor 를 기다려주지 않는다 — 기본값
         # (false)이면 드레인 막바지에 커밋된 알림톡·슬랙 이벤트가 shutdownNow 로 폐기된다.

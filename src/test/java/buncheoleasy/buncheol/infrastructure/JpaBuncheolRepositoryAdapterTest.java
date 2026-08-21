@@ -607,6 +607,55 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
+    void rank0_커서로_이어받으면_입금_수집중_분철도_개최일순으로_따라온다() {
+      // 배포 중 이전 버전이 발급한 "0_<createdAt>_<id>" 커서가 그대로 유효해야 한다 — rank 번호를
+      // 새로 매기지 않고 기존 rank0 에 합류시킨 이유가 이것이다. 조용히 깨지면 발견이 늦다.
+      Long newest =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-17T08:00:00Z"));
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long oldest =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+
+      List<Buncheol> firstPage =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 1);
+      assertThat(firstPage).extracting(Buncheol::getId).containsExactly(newest);
+
+      // 인코딩·파싱을 거쳐 실제 커서 문자열 왕복까지 태운다.
+      BuncheolListCursor next =
+          BuncheolListCursor.parse(BuncheolListCursor.from(firstPage.getLast()).encode());
+      assertThat(next.groupRank()).isEqualTo(BuncheolListCursor.RANK_RECRUITING);
+
+      List<Buncheol> secondPage =
+          buncheolRepository.search(new BuncheolSearchCondition(null, null, null), next, 10);
+
+      assertThat(secondPage).extracting(Buncheol::getId).containsExactly(collecting, oldest);
+    }
+
+    @Test
+    void 입금_수집중_커서에서_진행확정_그룹으로_경계를_넘는다() {
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long confirmed =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
+
+      // rank0 의 마지막 항목이 입금 수집중이어도 rank1 로 정상적으로 넘어간다.
+      BuncheolListCursor next =
+          BuncheolListCursor.parse(
+              BuncheolListCursor.from(buncheolRepository.findById(collecting).orElseThrow())
+                  .encode());
+
+      List<Buncheol> nextPage =
+          buncheolRepository.search(new BuncheolSearchCondition(null, null, null), next, 10);
+
+      assertThat(nextPage).extracting(Buncheol::getId).containsExactly(confirmed);
+    }
+
+    @Test
     void groupId_필터가_적용된다() {
       Long otherGroupId = TestGroupFixture.insertGroup(jdbcTemplate, "다른 그룹");
       Long target =

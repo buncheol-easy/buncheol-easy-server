@@ -40,9 +40,23 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * NULL, '%')} 를 NULL 로 접어 매칭 0건이 되지만 H2 는 {@code '%%'} 로 접어 전 행이 매칭된다. 가드가 없으면
    * 구두점만 입력한 검색이 테스트(H2)에서는 전건, 운영(MySQL)에서는 0건으로 갈린다.
    *
-   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다. {@code
-   * idx_buncheols_status_created (status, created_at DESC, id DESC)}(groupId 동반 시 {@code
-   * idx_buncheols_group_created}) 인덱스로 정렬을 커버한다.
+   * <p>각 필터는 인자가 {@code null} 이면 미적용된다. 커서가 있으면 {@code (createdAt, id)} 미만으로 keyset 페이지네이션한다.
+   *
+   * <p><b>⚠️ 이 쿼리는 정렬을 인덱스로 커버하지 못한다.</b> {@code idx_buncheols_status_created (status, created_at
+   * DESC, id DESC)} 는 선행 컬럼이 상수일 때만 정렬을 커버하는데, 상태가 둘이라 {@code IN} = range 스캔이 되어 두 구간을 읽은 뒤
+   * 정렬해야 한다. staging MySQL 실측(2026-08-21):
+   *
+   * <pre>
+   * status = 'RECRUITING'                          → type=ref   Extra: Using index
+   * status IN ('RECRUITING','PAYMENT_COLLECTING')  → type=range Extra: Using where; Using index; Using filesort
+   * </pre>
+   *
+   * <p>커버링 인덱스라 테이블 접근은 없지만 {@code LIMIT} 조기 종료가 사라져, 조건에 걸리는 두 상태의 <b>전 행</b>을 읽고 filesort 한다.
+   * 활성 분철이 수십 건인 현 규모에서는 수용 가능하다고 보고 받아들였다 — 이 판단은 <b>활성 분철 수</b>에 달려 있으므로, 목록 지연이
+   * 관측되면 여기부터 본다. 고칠 때는 그룹 순위를 접은 생성 컬럼({@code list_rank}) + {@code (list_rank, created_at DESC, id
+   * DESC)} 인덱스가, rank0 을 두 쿼리로 쪼개 애플리케이션에서 머지하는 것보다 깔끔하다.
+   *
+   * <p>{@code groupId} 필터가 붙는 경로는 {@code idx_buncheols_group_created} 를 타므로 영향이 없다.
    */
   @Query(
       "SELECT b FROM Buncheol b "

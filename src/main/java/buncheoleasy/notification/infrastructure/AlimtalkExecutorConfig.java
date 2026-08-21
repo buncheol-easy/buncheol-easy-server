@@ -9,8 +9,9 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  * 알림톡 발송 전용 스레드풀. <b>스레드가 하나인 것이 이 빈의 핵심</b>이다 — 풀 크기는 성능 조정값이 아니라 발송 순서를 지키기 위한 제약이다.
  *
  * <p>발송 핸들러는 모두 {@code @Async} + {@code @TransactionalEventListener(AFTER_COMMIT)} 인데, 한 트랜잭션이 이벤트를 둘
- * 이상 발행하면 그 핸들러들이 커밋 후 <b>동시에</b> 제출된다. 기본 {@code applicationTaskExecutor}(멀티 스레드)에 태우면 어느 쪽이 먼저
- * 나갈지가 실행마다 갈린다. 실제로 마지막 참여자의 입금을 확인하는 순간 {@code PaymentConfirmedEvent} 와 {@code
+ * 이상 발행하면 그 핸들러들이 커밋 후 <b>동시에</b> 제출된다. 이 빈이 생기기 전에는 executor 를 지정하지 않아
+ * {@code SimpleAsyncTaskExecutor}(호출마다 새 스레드) 로 떨어졌고 — {@code applicationTaskExecutor} 는 다른 전용 풀 때문에
+ * 애초에 등록되지 않았다, {@code spring.task.execution.mode} 참고 — 태스크마다 스레드가 따로라 순서가 실행마다 갈렸다. 실제로 마지막 참여자의 입금을 확인하는 순간 {@code PaymentConfirmedEvent} 와 {@code
  * BuncheolConfirmedEvent} 가 같은 트랜잭션에서 발행돼(전원 입금확인 시 조기 진행확정), 참여자에게 <b>"진행이 확정됐어요" 가 "입금을
  * 확인했어요" 보다 먼저 도착</b>하는 일이 있었다.
  *

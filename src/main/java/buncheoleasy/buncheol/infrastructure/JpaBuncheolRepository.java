@@ -28,8 +28,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       Long hostId, BuncheolStatus excludedStatus);
 
   /**
-   * 공개 목록의 <b>모집중(RECRUITING) 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
-   * BuncheolStatus#RECRUITING} 을 전달한다.
+   * 공개 목록의 <b>모집중 그룹</b>을 {@code createdAt DESC, id DESC}(최신 개최순) 로 검색한다. 어댑터에서 {@link
+   * BuncheolStatus#RECRUITING} 과 {@link BuncheolStatus#PAYMENT_COLLECTING} 을 함께 전달한다 — 둘 다 아직 진행 중인
+   * 분철이라 같은 그룹·같은 정렬 축(createdAt)을 쓴다 ({@link
+   * buncheoleasy.buncheol.domain.BuncheolListCursor#RANK_RECRUITING}).
    *
    * <p>검색어는 정규화된 {@code searchTitle}(공백·구두점 무시) 과 애플리케이션이 해석해 넘긴 그룹·멤버 id, 그리고 설명 원문
    * 부분일치에 걸린다. 설명은 정규화 컬럼이 없어 원문 비교라 공백을 무시하지 않는다.
@@ -44,7 +46,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    */
   @Query(
       "SELECT b FROM Buncheol b "
-          + "WHERE b.status = :status "
+          + "WHERE b.status IN :statuses "
           + "  AND (:groupId IS NULL OR b.groupId = :groupId) "
           + "  AND (:onlyFavoriteGroups = FALSE OR b.groupId IN :favoriteGroupIds) "
           + "  AND (:memberId IS NULL OR b.id IN "
@@ -62,7 +64,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR (b.createdAt = :cursorCreatedAt AND b.id < :cursorId)) "
           + "ORDER BY b.createdAt DESC, b.id DESC")
   List<Buncheol> searchRecruiting(
-      @Param("status") BuncheolStatus status,
+      @Param("statuses") Set<BuncheolStatus> statuses,
       @Param("groupId") Long groupId,
       @Param("onlyFavoriteGroups") boolean onlyFavoriteGroups,
       @Param("favoriteGroupIds") List<Long> favoriteGroupIds,

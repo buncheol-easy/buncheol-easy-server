@@ -21,6 +21,14 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
 
+  /**
+   * 공개 목록 rank0(모집중) 그룹이 포함하는 상태. PAYMENT_COLLECTING 은 C2C 개최자가 성사를 확정해 입금을 수집하는 구간으로, 아직 진행 중인
+   * 분철이라 모집중과 같은 그룹에서 {@code createdAt} 축으로 정렬한다. 빠져 있던 동안에는 개최자가 성사를 확정하는 순간 분철이 목록·검색에서 사라졌다가
+   * 전원 입금확인 후 CONFIRMED 가 되어서야 다시 나타났다.
+   */
+  private static final Set<BuncheolStatus> RECRUITING_GROUP_STATUSES =
+      Set.of(BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING);
+
   private final JpaBuncheolRepository jpaBuncheolRepository;
 
   @Override
@@ -63,7 +71,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         cursor.isFirstPage() ? BuncheolListCursor.RANK_RECRUITING : cursor.groupRank();
     List<Buncheol> result = new ArrayList<>(limit);
 
-    // rank0: 모집중(RECRUITING) — createdAt keyset. 첫 페이지이거나 커서가 모집중 그룹일 때만 시작점이 된다.
+    // rank0: 모집중(RECRUITING·PAYMENT_COLLECTING) — createdAt keyset. 첫 페이지이거나 커서가 모집중 그룹일 때만 시작점이 된다.
     if (startRank == BuncheolListCursor.RANK_RECRUITING) {
       Instant cursorCreatedAt = cursor.isFirstPage() ? null : cursor.sortAt();
       Long cursorId = cursor.isFirstPage() ? null : cursor.id();
@@ -93,7 +101,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   private List<Buncheol> searchRecruiting(
       BuncheolSearchCondition condition, Instant cursorCreatedAt, Long cursorId, int limit) {
     return jpaBuncheolRepository.searchRecruiting(
-        BuncheolStatus.RECRUITING,
+        RECRUITING_GROUP_STATUSES,
         condition.groupId(),
         condition.onlyFavoriteGroups(),
         condition.favoriteGroupIds(),

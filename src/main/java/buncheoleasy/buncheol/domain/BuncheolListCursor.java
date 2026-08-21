@@ -10,10 +10,10 @@ import java.time.Instant;
  * <p>정렬 키는 {@code (그룹 순위, 그룹 내 정렬 시각, id)} 3-튜플이다.
  *
  * <ul>
- *   <li>그룹 순위: RECRUITING = {@value #RANK_RECRUITING}, CONFIRMED = {@value #RANK_CONFIRMED}, CANCELLED(인원
- *       미달) = {@value #RANK_CANCELLED}. 오름차순이라 모집중 → 진행확정 → 인원미달취소 순으로 노출된다. (HOST_CANCELLED 는
- *       목록 비노출이라 커서에 등장하지 않는다.)
- *   <li>그룹 내 정렬 시각: 모집중은 {@code createdAt}(최신 개최순), 마감·취소분은 {@code deadline}(현재와 가까운 마감순). 모두 내림차순.
+ *   <li>그룹 순위: RECRUITING·PAYMENT_COLLECTING = {@value #RANK_RECRUITING}, CONFIRMED = {@value
+ *       #RANK_CONFIRMED}, CANCELLED(인원 미달) = {@value #RANK_CANCELLED}. 오름차순이라 모집중 → 진행확정 →
+ *       인원미달취소 순으로 노출된다. (HOST_CANCELLED 는 목록 비노출이라 커서에 등장하지 않는다.)
+ *   <li>그룹 내 정렬 시각: 모집중 그룹은 {@code createdAt}(최신 개최순), 마감·취소분은 {@code deadline}(현재와 가까운 마감순). 모두 내림차순.
  *   <li>id: 동일 시각 tie-break (내림차순).
  * </ul>
  *
@@ -30,7 +30,13 @@ import java.time.Instant;
  */
 public record BuncheolListCursor(Integer groupRank, Instant sortAt, Long id) {
 
-  /** 모집중(RECRUITING) 그룹 순위 — 항상 마감 그룹보다 먼저 노출된다. */
+  /**
+   * 모집중 그룹 순위 — 항상 마감 그룹보다 먼저 노출된다.
+   *
+   * <p>RECRUITING 과 <b>PAYMENT_COLLECTING</b>(C2C 개최자가 성사를 확정해 입금을 수집하는 구간)이 이 그룹을 공유한다. 둘 다 아직
+   * 진행 중인 분철이고 {@code createdAt} 이라는 같은 정렬 축을 쓴다. 예전에는 PAYMENT_COLLECTING 이 어느 그룹에도 없어, 개최자가 성사를
+   * 확정하는 순간 분철이 목록·검색에서 통째로 사라졌다가 전원 입금확인 후 CONFIRMED 가 되어서야 다시 나타났다.
+   */
   public static final int RANK_RECRUITING = 0;
 
   /** 진행확정(CONFIRMED) 그룹 순위. */
@@ -68,12 +74,13 @@ public record BuncheolListCursor(Integer groupRank, Instant sortAt, Long id) {
   }
 
   /**
-   * 직전 페이지의 마지막 분철로부터 다음 커서를 만든다. 분철의 현재 상태로 그룹 순위와 정렬 시각을 결정한다: RECRUITING 은 (rank0, createdAt),
-   * CONFIRMED 는 (rank1, deadline), CANCELLED 는 (rank2, deadline). 목록은 이 세 상태만 노출하므로 다른 상태는 들어오지 않는다.
+   * 직전 페이지의 마지막 분철로부터 다음 커서를 만든다. 분철의 현재 상태로 그룹 순위와 정렬 시각을 결정한다: RECRUITING·PAYMENT_COLLECTING 은
+   * (rank0, createdAt), CONFIRMED 는 (rank1, deadline), CANCELLED 는 (rank2, deadline). 목록은 이 네 상태만 노출하므로 다른
+   * 상태는 들어오지 않는다.
    */
   public static BuncheolListCursor from(final Buncheol buncheol) {
     return switch (buncheol.getStatus()) {
-      case RECRUITING ->
+      case RECRUITING, PAYMENT_COLLECTING ->
           new BuncheolListCursor(RANK_RECRUITING, buncheol.getCreatedAt(), buncheol.getId());
       case CONFIRMED ->
           new BuncheolListCursor(RANK_CONFIRMED, buncheol.getDeadline(), buncheol.getId());

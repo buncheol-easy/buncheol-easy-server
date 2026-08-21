@@ -585,6 +585,28 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
+    void 입금_수집중_분철도_모집중과_같은_그룹에서_개최일순으로_노출된다() {
+      Long recruiting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long confirmed =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
+
+      // 개최자가 성사를 확정해도 목록에서 사라지지 않는다 — 모집중과 같은 rank0 에서 개최일 내림차순으로
+      // 섞이고, 진행확정(rank1)이 그 뒤에 온다.
+      assertThat(result)
+          .extracting(Buncheol::getId)
+          .containsExactly(collecting, recruiting, confirmed);
+    }
+
+    @Test
     void groupId_필터가_적용된다() {
       Long otherGroupId = TestGroupFixture.insertGroup(jdbcTemplate, "다른 그룹");
       Long target =

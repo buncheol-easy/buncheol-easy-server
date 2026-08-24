@@ -39,7 +39,10 @@ public interface BuncheolRepository {
    */
   boolean existsUnfinishedByHostId(Long hostId);
 
-  /** 그룹의 모집중({@link BuncheolStatus#RECRUITING}) 분철 수. 아티스트 페이지 헤더 표기용. */
+  /**
+   * 그룹의 모집중 그룹({@link BuncheolStatus#recruitingGroup()} — RECRUITING·PAYMENT_COLLECTING) 분철 수. 아티스트 페이지
+   * 헤더 표기용이며, <b>같은 화면의 목록(rank0)과 반드시 같은 집합</b>이어야 한다.
+   */
   long countRecruitingByGroupId(Long groupId);
 
   /** 활성(모집중·입금 수집중) 개최 수 — 일반 유저 개최 상한 판정용. */

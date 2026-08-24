@@ -33,6 +33,7 @@ import buncheoleasy.user.domain.PhoneNumber;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -196,7 +197,7 @@ class AlimtalkNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("C2C 다슬롯 참여자에게는 슬롯 수만큼이 아니라 멤버명을 합산해 1건만 발송")
+    @DisplayName("C2C 다슬롯 참여자에게는 슬롯 수만큼이 아니라 멤버명을 모두 나열해 1건만 발송")
     void mergesMultipleSlotsOfSameParticipant() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
@@ -218,9 +219,73 @@ class AlimtalkNotificationListenerTest {
 
       Map<String, String> variables =
           captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED, PARTICIPANT_PHONE);
-      assertThat(variables).containsEntry("멤버명", "호시 외 1");
+      // 금액이 합산돼 1건으로 가므로 무엇을 신청했는지는 멤버명이 유일한 단서다 — 접지 않고 전부 나열한다.
+      assertThat(variables).containsEntry("멤버명", "호시, 우지");
       verify(inboxRecorder)
           .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED), any());
+    }
+
+    @Test
+    @DisplayName("단일 참여의 이름이 상한을 넘어도 '외 0' 이 붙지 않는다")
+    void keepsSingleLongMemberNameIntact() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      // group_members.name 은 VARCHAR(100) 이고 길이 검증이 없어 61자 이상이 들어올 수 있다.
+      String longName = "가".repeat(61);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class),
+                  buncheol,
+                  longName,
+                  participant,
+                  mock(User.class),
+                  25_000L));
+
+      listener.onBuncheolConfirmed(
+          new BuncheolConfirmedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID)));
+
+      assertThat(captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED, PARTICIPANT_PHONE))
+          .containsEntry("멤버명", longName);
+    }
+
+    @Test
+    @DisplayName("나열이 길어지면 담기는 만큼만 나열하고 나머지는 '외 N' 으로 접는다")
+    void foldsMemberNamesWhenTooLong() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+
+      // 5자 이름 15개 = 나열 시 103자. 상한(60자)을 넘겨 접기 분기를 태운다.
+      List<Long> participationIds = new ArrayList<>();
+      for (int index = 0; index < 15; index++) {
+        Long participationId = 100L + index;
+        participationIds.add(participationId);
+        given(assembler.loadByParticipation(participationId))
+            .willReturn(
+                new ParticipationView(
+                    mock(Participation.class),
+                    buncheol,
+                    "멤버%02d님".formatted(index),
+                    participant,
+                    mock(User.class),
+                    25_000L));
+      }
+
+      listener.onBuncheolConfirmed(new BuncheolConfirmedEvent(BUNCHEOL_ID, participationIds));
+
+      String memberNames =
+          captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED, PARTICIPANT_PHONE).get("멤버명");
+      // 접히더라도 앞쪽 이름은 남고, 못 담은 수를 밝힌다 — "외 N" 만 남는 문안이 되면 안 된다.
+      assertThat(memberNames).startsWith("멤버00님, 멤버01님");
+      assertThat(memberNames).matches(".* 외 \\d+$");
+      // 상한 + 접미사("외 NN") 여유. 문안 한 줄이 감당할 수 없게 길어지지 않는다.
+      assertThat(memberNames.length()).isLessThanOrEqualTo(70);
     }
 
     @Test
@@ -335,7 +400,7 @@ class AlimtalkNotificationListenerTest {
   class BuncheolCollectingStarted {
 
     @Test
-    @DisplayName("다슬롯 참여자에게는 멤버명·금액을 합산해 1건만 발송")
+    @DisplayName("다슬롯 참여자에게는 멤버명을 모두 나열하고 금액은 합산해 1건만 발송")
     void mergesMultipleSlotsOfSameParticipant() {
       Buncheol buncheol = c2cCollectingBuncheol();
       User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
@@ -352,7 +417,7 @@ class AlimtalkNotificationListenerTest {
       Map<String, String> variables =
           captureSend(AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED, PARTICIPANT_PHONE);
       assertThat(variables)
-          .containsEntry("멤버명", "호시 외 1")
+          .containsEntry("멤버명", "호시, 우지")
           .containsEntry("입금금액", "55,000")
           .containsEntry("은행명", "국민은행");
       verify(inboxRecorder)

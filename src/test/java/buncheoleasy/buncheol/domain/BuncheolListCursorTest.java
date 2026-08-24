@@ -127,6 +127,25 @@ class BuncheolListCursorTest {
     }
 
     @Test
+    void 입금_수집중_분철도_모집중과_같은_rank0_와_createdAt_으로_인코딩된다() {
+      // 개최자가 성사를 확정해도 목록에서 사라지면 안 된다 — 모집중과 같은 그룹·같은 정렬 축을 쓴다.
+      Instant createdAt = Instant.parse("2026-05-22T00:00:00Z");
+      Buncheol buncheol =
+          buncheol(
+              43L,
+              BuncheolStatus.PAYMENT_COLLECTING,
+              createdAt,
+              Instant.parse("2026-06-01T12:00:00Z"));
+
+      BuncheolListCursor cursor = BuncheolListCursor.from(buncheol);
+
+      assertThat(cursor.groupRank()).isEqualTo(BuncheolListCursor.RANK_RECRUITING);
+      assertThat(cursor.sortAt()).isEqualTo(createdAt);
+      assertThat(cursor.encode()).isEqualTo("0_2026-05-22T00:00:00Z_43");
+      assertThat(BuncheolListCursor.parse(cursor.encode())).isEqualTo(cursor);
+    }
+
+    @Test
     void 마감_분철은_rank1_과_deadline_으로_인코딩되고_라운드트립된다() {
       Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
       Buncheol buncheol =

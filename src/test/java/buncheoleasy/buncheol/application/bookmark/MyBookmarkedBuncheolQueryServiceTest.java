@@ -1,12 +1,15 @@
 package buncheoleasy.buncheol.application.bookmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.BDDMockito.given;
 
 import buncheoleasy.buncheol.application.BuncheolMemberNameResolver;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmark;
 import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
@@ -207,6 +210,39 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
+    void hideClosed_true_여도_입금_수집중_분철은_남는다() {
+      // 공개 목록 rank0 과 같은 기준(BuncheolStatus.recruitingGroup)이어야 한다 — 개최자가 성사를 확정했다고
+      // 찜에서 사라지면, 정작 입금 안내를 기다리는 사람이 그 분철을 잃는다.
+      BuncheolBookmark bmRecruiting = bookmark(500L, USER_ID, 10L);
+      BuncheolBookmark bmCollecting = bookmark(501L, USER_ID, 20L);
+      BuncheolBookmark bmConfirmed = bookmark(502L, USER_ID, 30L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bmRecruiting, bmCollecting, bmConfirmed));
+
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L, 30L)))
+          .willReturn(
+              List.of(
+                  buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, deadline),
+                  buncheol(20L, 100L, "분철 B", BuncheolStatus.PAYMENT_COLLECTING, deadline),
+                  buncheol(30L, 100L, "분철 C", BuncheolStatus.CONFIRMED, deadline)));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, true, false);
+
+      assertThat(result).extracting(MyBookmarkedBuncheolResponse::buncheolId).containsExactly(10L, 20L);
+    }
+
+    @Test
     void onlyFavoriteGroups_true_면_사용자_최애_그룹의_분철만_포함된다() {
       BuncheolBookmark bmFav = bookmark(500L, USER_ID, 10L);
       BuncheolBookmark bmNonFav = bookmark(501L, USER_ID, 20L);
@@ -304,6 +340,52 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
+    void 배송비가_모두_0원인_분철만_freeShippingEventTarget_true_로_내려간다() {
+      BuncheolBookmark bm1 = bookmark(500L, USER_ID, 10L);
+      BuncheolBookmark bm2 = bookmark(501L, USER_ID, 20L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bm1, bm2));
+
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Buncheol freeShipping =
+          buncheol(
+              10L,
+              100L,
+              "배송비 0원 이벤트 분철",
+              BuncheolStatus.RECRUITING,
+              deadline,
+              ShippingFeePolicy.of(0, 0));
+      Buncheol paidShipping =
+          buncheol(
+              20L,
+              100L,
+              "유료배송 분철",
+              BuncheolStatus.RECRUITING,
+              deadline,
+              ShippingFeePolicy.of(3000, 3000));
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L)))
+          .willReturn(List.of(freeShipping, paidShipping));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, false);
+
+      assertThat(result)
+          .extracting(
+              MyBookmarkedBuncheolResponse::buncheolId,
+              MyBookmarkedBuncheolResponse::freeShippingEventTarget)
+          .containsExactly(tuple(10L, true), tuple(20L, false));
+    }
+
+    @Test
     void 필터로_모두_제외되면_빈_리스트를_반환한다() {
       BuncheolBookmark bm = bookmark(500L, USER_ID, 10L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
@@ -339,12 +421,24 @@ class MyBookmarkedBuncheolQueryServiceTest {
 
   private Buncheol buncheol(
       Long id, Long groupId, String title, BuncheolStatus status, Instant deadline) {
+    return buncheol(id, groupId, title, status, deadline, ShippingFeePolicy.of(3000, null));
+  }
+
+  private Buncheol buncheol(
+      Long id,
+      Long groupId,
+      String title,
+      BuncheolStatus status,
+      Instant deadline,
+      ShippingFeePolicy shippingFeePolicy) {
     Buncheol buncheol = newInstance(Buncheol.class);
     setField(buncheol, "id", id);
     setField(buncheol, "groupId", groupId);
     setField(buncheol, "title", title);
     setField(buncheol, "status", status);
     setField(buncheol, "deadline", deadline);
+    setField(buncheol, "flowType", FlowType.LEGACY);
+    setField(buncheol, "shippingFeePolicy", shippingFeePolicy);
     return buncheol;
   }
 

@@ -34,6 +34,15 @@ public record ShippingFeePolicy(
     return fee;
   }
 
+  /** 이용 가능한 배송수단의 배송비가 모두 0원인가. 등록하지 않은(null) 배송수단은 선택 자체가 불가하므로 판정에서 뺀다. */
+  public boolean isFree() {
+    return isFreeOrUnsupported(gs25ShippingFee) && isFreeOrUnsupported(cuShippingFee);
+  }
+
+  private static boolean isFreeOrUnsupported(final Integer fee) {
+    return fee == null || fee == 0;
+  }
+
   private void validateAtLeastOneFeeProvided(
       final Integer gs25ShippingFee, final Integer cuShippingFee) {
     if (gs25ShippingFee == null && cuShippingFee == null) {

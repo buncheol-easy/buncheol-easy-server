@@ -585,6 +585,101 @@ class JpaBuncheolRepositoryAdapterTest {
     }
 
     @Test
+    void 입금_수집중_분철도_모집중과_같은_그룹에서_개최일순으로_노출된다() {
+      Long recruiting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long confirmed =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10);
+
+      // 개최자가 성사를 확정해도 목록에서 사라지지 않는다 — 모집중과 같은 rank0 에서 개최일 내림차순으로
+      // 섞이고, 진행확정(rank1)이 그 뒤에 온다.
+      assertThat(result)
+          .extracting(Buncheol::getId)
+          .containsExactly(collecting, recruiting, confirmed);
+    }
+
+    @Test
+    void rank0_커서로_이어받으면_입금_수집중_분철도_개최일순으로_따라온다() {
+      // 배포 중 이전 버전이 발급한 "0_<createdAt>_<id>" 커서가 그대로 유효해야 한다 — rank 번호를
+      // 새로 매기지 않고 기존 rank0 에 합류시킨 이유가 이것이다. 조용히 깨지면 발견이 늦다.
+      Long newest =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-17T08:00:00Z"));
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long oldest =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+
+      List<Buncheol> firstPage =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 1);
+      assertThat(firstPage).extracting(Buncheol::getId).containsExactly(newest);
+
+      // 인코딩·파싱을 거쳐 실제 커서 문자열 왕복까지 태운다.
+      BuncheolListCursor next =
+          BuncheolListCursor.parse(BuncheolListCursor.from(firstPage.getLast()).encode());
+      assertThat(next.groupRank()).isEqualTo(BuncheolListCursor.RANK_RECRUITING);
+
+      List<Buncheol> secondPage =
+          buncheolRepository.search(new BuncheolSearchCondition(null, null, null), next, 10);
+
+      assertThat(secondPage).extracting(Buncheol::getId).containsExactly(collecting, oldest);
+    }
+
+    @Test
+    void 입금_수집중_커서에서_진행확정_그룹으로_경계를_넘는다() {
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long confirmed =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
+
+      // rank0 의 마지막 항목이 입금 수집중이어도 rank1 로 정상적으로 넘어간다.
+      BuncheolListCursor next =
+          BuncheolListCursor.parse(
+              BuncheolListCursor.from(buncheolRepository.findById(collecting).orElseThrow())
+                  .encode());
+
+      List<Buncheol> nextPage =
+          buncheolRepository.search(new BuncheolSearchCondition(null, null, null), next, 10);
+
+      assertThat(nextPage).extracting(Buncheol::getId).containsExactly(confirmed);
+    }
+
+    @Test
+    void 아티스트_헤더_카운트가_목록_rank0_과_같은_집합을_센다() {
+      // 목록만 고치고 카운트를 그대로 두면 아티스트 페이지가 "모집중 0개" 를 띄운 채 그 밑에
+      // 입금 수집중 카드를 보여준다 — 같은 화면이 서로 모순된 말을 한다.
+      persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-15T08:00:00Z"));
+      Long collecting =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-16T08:00:00Z"));
+      Long confirmed =
+          persistWithCreatedAt(hostId, validParams(), Instant.parse("2026-05-14T08:00:00Z"));
+      forceStatus(collecting, BuncheolStatus.PAYMENT_COLLECTING);
+      forceStatus(confirmed, BuncheolStatus.CONFIRMED);
+
+      long headerCount = buncheolRepository.countRecruitingByGroupId(groupId);
+
+      long rank0Count =
+          buncheolRepository
+              .search(new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 10)
+              .stream()
+              .filter(buncheol -> buncheol.getStatus().isRecruitingGroup())
+              .count();
+
+      assertThat(headerCount).isEqualTo(2).isEqualTo(rank0Count);
+    }
+
+    @Test
     void groupId_필터가_적용된다() {
       Long otherGroupId = TestGroupFixture.insertGroup(jdbcTemplate, "다른 그룹");
       Long target =

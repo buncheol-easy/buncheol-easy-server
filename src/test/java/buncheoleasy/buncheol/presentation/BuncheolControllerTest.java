@@ -949,7 +949,7 @@ class BuncheolControllerTest {
               4,
               4,
               1,
-              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null);
+              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null);
       given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
       mockMvc

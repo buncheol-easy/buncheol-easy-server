@@ -955,7 +955,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             List.of(confirmed, awaiting),
             List.of(cancelled),
             FlowType.LEGACY,
-            null);
+            null,
+            "https://open.kakao.com/o/gAbCdEf");
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -1162,6 +1163,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")
                                 .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("openChatUrl")
+                                .description(
+                                    "참여자 소통용 오픈채팅 링크. 등록하지 않았으면 null "
+                                        + "(개최자가 이 화면에서 PATCH /v1/buncheols/{id}/open-chat-url 로 수정한다)")
                                 .optional())
                         .build())));
   }

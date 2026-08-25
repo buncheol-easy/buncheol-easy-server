@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.request.OpenChatUrlUpdateRequest;
 import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
@@ -32,9 +33,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -149,6 +152,19 @@ public class BuncheolController {
       @Valid @RequestPart("request") final BuncheolModifyRequest request,
       @RequestPart(value = "images", required = false) final List<MultipartFile> images) {
     buncheolService.modifyBuncheol(hostId, id, request, toImageFiles(images));
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 오픈채팅 링크만 수정한다. 전체 수정(PUT)은 모집중에만 열리지만 링크는 입금 수집중·진행확정에서도 필요하다 — 가격·멤버 보호 가드는 PUT 쪽에
+   * 그대로 두고 링크만 별도 경로로 뺐다.
+   */
+  @PatchMapping("/{id}/open-chat-url")
+  public ResponseEntity<Void> updateOpenChatUrl(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @Valid @RequestBody final OpenChatUrlUpdateRequest request) {
+    buncheolService.updateOpenChatUrl(hostId, id, request.openChatUrl());
     return ResponseEntity.noContent().build();
   }
 

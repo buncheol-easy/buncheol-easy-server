@@ -183,6 +183,18 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   }
 
   /**
+   * 오픈채팅 링크만 수정할 수 있는 구간인가. 전체 수정({@link #validateRecruiting})보다 넓다 — 가격·멤버는 참여자가 보고 입금한 거래
+   * 조건이라 모집중에만 열지만, 링크는 소통 수단이라 입금 수집중·진행확정 구간에서 오히려 더 필요하다(방이 터지거나 잘못 입력한 경우 연락이 끊긴다).
+   *
+   * <p>취소(자동·개최자)만 막는다. 되돌아올 수 없는 종착 상태라 소통 채널을 바꿀 이유가 없다.
+   */
+  public void validateOpenChatUrlEditable() {
+    if (status == BuncheolStatus.CANCELLED || status == BuncheolStatus.HOST_CANCELLED) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE);
+    }
+  }
+
+  /**
    * 지금 이 분철이 빈 슬롯에 신규 참여를 받는가. 참여 가드와 상세 조회의 공석 표시(docs/53 Q-14)가 같은 술어를 보게 하려고 도메인에 둔다 — 두 곳이
    * 갈리면 "화면엔 신청 가능한데 신청은 409" 가 다시 생긴다.
    *

@@ -187,6 +187,10 @@ public enum ErrorCode {
       "BCH-093",
       "입금이 확인된 참여자가 있어 분철을 취소할 수 없어요. 받은 금액을 환불한 뒤 고객센터로 문의해 주세요.",
       HttpStatus.CONFLICT),
+  // 전체 수정 가드(BCH-060)와 분리한다 — 링크 수정은 모집중이 끝난 뒤에도 열려 있어서
+  // "모집 중인 분철이 아닙니다" 가 뜨면 실패 사유를 오해한다. 취소된 분철에서만 막힌다.
+  BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE(
+      "BCH-094", "취소된 분철은 오픈채팅 링크를 수정할 수 없습니다.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

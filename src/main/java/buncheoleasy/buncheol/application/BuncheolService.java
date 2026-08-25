@@ -185,6 +185,24 @@ public class BuncheolService {
   }
 
   /**
+   * 오픈채팅 링크만 수정한다. 전체 수정({@link #modifyBuncheol})은 모집중·마감 전으로 묶여 있는데, 링크는 참여자가 입금하며 문의하는
+   * 구간에서 오히려 더 필요하다. 그 구간을 열어 주되 가격·멤버 보호 가드는 전체 수정 경로에 그대로 둔다.
+   *
+   * <p>⚠️ 전체 수정과 null 해석이 다르다 — 거기서는 "필드를 안 보낸 구 클라이언트"라 유지지만, 이 요청은 링크 하나만 담으므로 null 을 유지로
+   * 보면 비우기를 표현할 수 없다. 빈 문자열로 정규화해 제거로 처리한다.
+   */
+  @Transactional
+  public void updateOpenChatUrl(
+      final Long hostId, final Long buncheolId, final String openChatUrl) {
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    buncheol.validateOwner(hostId);
+    buncheol.validateOpenChatUrlEditable();
+
+    buncheolDomainService.updateBuncheolOpenChatUrl(
+        buncheol, openChatUrl == null ? "" : openChatUrl);
+  }
+
+  /**
    * C2C 개최자 성사 확정 (RECRUITING → PAYMENT_COLLECTING, docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금
    * 대기로 전이하고, 확정 시점 개최자 계좌를 분철에 스냅샷한다(§4.7-B1). 정원 미달이어도 개최자 재량으로 확정할 수 있고(§7.1-2), deadline
    * 전 조기 확정도 허용한다(§4.7-E2) — 미달 경고·재확인은 FE 가 담당한다.

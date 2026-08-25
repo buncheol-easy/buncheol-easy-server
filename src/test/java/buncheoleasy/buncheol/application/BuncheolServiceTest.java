@@ -624,6 +624,78 @@ class BuncheolServiceTest {
   }
 
   @Nested
+  @DisplayName("오픈채팅 링크 전용 수정 테스트")
+  class UpdateOpenChatUrlTest {
+
+    @Test
+    void 소유자와_수정_가능_구간을_확인한_뒤_링크를_교체한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.updateOpenChatUrl(
+          HOST_ID, BUNCHEOL_ID, "https://open.kakao.com/o/newLink");
+
+      // then
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(buncheol).should().validateOpenChatUrlEditable();
+      then(buncheolDomainService)
+          .should()
+          .updateBuncheolOpenChatUrl(buncheol, "https://open.kakao.com/o/newLink");
+    }
+
+    // 전체 수정은 모집중·마감 전으로 묶여 있다 — 링크 경로가 그 가드를 타면 입금 구간에서 못 고친다.
+    @Test
+    void 전체_수정_가드는_타지_않는다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.updateOpenChatUrl(
+          HOST_ID, BUNCHEOL_ID, "https://open.kakao.com/o/newLink");
+
+      // then
+      then(buncheol).should(never()).validateRecruiting(any(Instant.class));
+    }
+
+    // 이 요청은 링크 하나만 담는다 — null 을 "유지" 로 보면 비우기를 표현할 방법이 없어진다.
+    @Test
+    void null_은_빈_문자열로_정규화해_링크를_제거한다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+
+      // when
+      buncheolService.updateOpenChatUrl(HOST_ID, BUNCHEOL_ID, null);
+
+      // then
+      then(buncheolDomainService).should().updateBuncheolOpenChatUrl(buncheol, "");
+    }
+
+    @Test
+    void 수정_불가_구간이면_링크를_건드리지_않는다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE))
+          .given(buncheol)
+          .validateOpenChatUrlEditable();
+
+      // when & then
+      assertThatThrownBy(
+              () ->
+                  buncheolService.updateOpenChatUrl(
+                      HOST_ID, BUNCHEOL_ID, "https://open.kakao.com/o/newLink"))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE);
+      then(buncheolDomainService).should(never()).updateBuncheolOpenChatUrl(any(), any());
+    }
+  }
+
+  @Nested
   @DisplayName("분철 수정 테스트")
   class ModifyBuncheolTest {
 

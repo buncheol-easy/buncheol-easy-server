@@ -111,7 +111,8 @@ public class BuncheolManagementQueryService {
         participants,
         cancelledParticipants,
         buncheol.getFlowType(),
-        buncheol.getPaymentDueAt());
+        buncheol.getPaymentDueAt(),
+        buncheol.getOpenChatUrl());
   }
 
   // 멤버 슬롯 id → 그룹 멤버명. 멤버 슬롯 → 그룹 멤버 2단계로 해석한다. (group_members 누락 시 null 허용을 위해 HashMap 사용)

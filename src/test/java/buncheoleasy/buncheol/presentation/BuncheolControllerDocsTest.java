@@ -9,6 +9,7 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -838,6 +839,59 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
+  void 오픈채팅_링크_수정() throws Exception {
+    mockMvc
+        .perform(
+            patch("/v1/buncheols/{id}/open-chat-url", 10L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"openChatUrl\": \"https://open.kakao.com/o/gAbCdEf\"}")
+                .with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-update-open-chat-url",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("오픈채팅 링크 수정")
+                        .description(
+                            """
+                            개최자가 참여자 소통용 오픈채팅 링크만 수정한다.
+
+                            **전체 수정(`PUT /v1/buncheols/{id}`)과 열려 있는 구간이 다르다.** 전체 수정은 가격·멤버가
+                            참여자가 보고 입금한 거래 조건이라 모집중·마감 전으로 묶여 있지만, 링크는 소통 수단이라
+                            모집중·입금 수집중·진행확정 어디서든 고칠 수 있다 — 방이 터지거나 잘못 입력한 경우
+                            참여자와 연락이 끊기는 쪽이 더 큰 손해다. **마감이 지난 모집중에서도 수정할 수 있다.**
+
+                            취소(`CANCELLED`·`HOST_CANCELLED`)된 분철에서만 막힌다.
+
+                            `openChatUrl` 을 생략하거나 빈 문자열·공백으로 보내면 **링크가 제거된다**. 전체 수정에서
+                            null 이 "기존 값 유지" 인 것과 다르다 — 이 요청은 링크 하나만 담으므로 null 을 유지로
+                            해석하면 비우기를 표현할 방법이 없어진다.
+
+                            **권한**: 해당 분철의 **개최자 본인만** 호출 가능.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 공백·제어문자 포함 |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | 200자 초과 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-094` (`BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE`) | 취소된 분철이라 수정 불가 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestSchema(Schema.schema("OpenChatUrlUpdateRequest"))
+                        .requestFields(
+                            fieldWithPath("openChatUrl")
+                                .optional()
+                                .description(
+                                    "카카오 오픈채팅 링크 (최대 200자). 생략·빈 문자열·공백이면 링크를 제거한다."))
+                        .build())));
+  }
+
+  @Test
   void 개최자_분철_관리_화면_조회() throws Exception {
     Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
     BuncheolManagementParticipantResponse confirmed =
@@ -901,7 +955,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             List.of(confirmed, awaiting),
             List.of(cancelled),
             FlowType.LEGACY,
-            null);
+            null,
+            "https://open.kakao.com/o/gAbCdEf");
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -1108,6 +1163,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")
                                 .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("openChatUrl")
+                                .description(
+                                    "참여자 소통용 오픈채팅 링크. 등록하지 않았으면 null "
+                                        + "(개최자가 이 화면에서 PATCH /v1/buncheols/{id}/open-chat-url 로 수정한다)")
                                 .optional())
                         .build())));
   }

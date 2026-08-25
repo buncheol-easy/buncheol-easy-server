@@ -660,18 +660,18 @@ class BuncheolServiceTest {
       then(buncheol).should(never()).validateRecruiting(any(Instant.class));
     }
 
-    // null·공백 해석은 도메인(replaceOpenChatUrl)이 쥔다 — 서비스는 값을 그대로 넘긴다.
+    // 제거는 빈 문자열로만 표현한다 (DTO @NotNull) — 서비스는 값을 해석하지 않고 그대로 넘긴다.
     @Test
-    void null_을_그대로_넘겨_도메인이_제거로_처리하게_한다() {
+    void 빈_문자열을_그대로_넘겨_도메인이_제거로_처리하게_한다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
 
       // when
-      buncheolService.updateOpenChatUrl(HOST_ID, BUNCHEOL_ID, null);
+      buncheolService.updateOpenChatUrl(HOST_ID, BUNCHEOL_ID, "");
 
       // then
-      then(buncheolDomainService).should().replaceBuncheolOpenChatUrl(buncheol, null);
+      then(buncheolDomainService).should().replaceBuncheolOpenChatUrl(buncheol, "");
     }
 
     @Test

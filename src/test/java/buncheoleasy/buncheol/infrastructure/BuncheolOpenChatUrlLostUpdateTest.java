@@ -1,10 +1,9 @@
-package buncheoleasy.buncheol.application;
+package buncheoleasy.buncheol.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.domain.Buncheol;
-import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
-import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
@@ -20,11 +19,15 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 링크 수정 더티체킹 flush 가 상태 전이 CAS 결과를 되돌리지 않는지 지키는 회귀 테스트.
+ * 링크 수정 flush 가 <b>어떤 컬럼 집합을 쓰는지</b> 고정하는 회귀 테스트.
  *
  * <p>링크 전용 수정은 모집중이 끝난 뒤에도 열려 있어(취소만 차단) 마감 CAS·성사 확정 CAS 와 같은 행을 두고 겹친다. {@code Buncheol} 에
- * {@code @DynamicUpdate} 가 없으면 flush 가 <b>행 전체</b>를 로드 시점 stale 값으로 다시 써서, 그 사이 CAS 가 기록한
+ * {@code @DynamicUpdate} 가 없으면 flush 가 <b>행 전체</b>를 로드 시점 stale 값으로 다시 써서, 그 사이 기록된
  * {@code status}·{@code finalized_at} 이 되돌아간다(lost update). 애노테이션을 떼면 이 테스트가 깨진다.
+ *
+ * <p>⚠️ <b>동시성 자체를 재현하지는 않는다.</b> 클래스에 {@code @Transactional} 이 걸려 있어 아래 {@code jdbcTemplate}
+ * UPDATE 는 EntityManager 와 <b>같은 트랜잭션·같은 커넥션</b>에서 실행된다 — 별도 트랜잭션 커밋이 아니다. 검증 대상은 "flush 가 쓰는
+ * 컬럼 집합" 이며, 실제 경합 안전성은 CAS 쿼리 쪽이 담보한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -32,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @DisplayName("오픈채팅 링크 수정 lost update 회귀 테스트")
 class BuncheolOpenChatUrlLostUpdateTest {
 
+  @Autowired private BuncheolService buncheolService;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @PersistenceContext private EntityManager em;
@@ -46,31 +50,31 @@ class BuncheolOpenChatUrlLostUpdateTest {
   }
 
   @Test
-  void 링크_flush_가_그_사이_전이된_상태를_되돌리지_않는다() {
+  void 링크_flush_가_그_사이_기록된_상태를_되돌리지_않는다() {
     Instant finalizedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-    Long buncheolId = insertBuncheol("RECRUITING");
+    Long buncheolId = insertBuncheol();
 
     // 개최자가 링크 수정을 시작한다 — 이 시점 스냅샷은 RECRUITING / finalized_at NULL.
     Buncheol buncheol = em.find(Buncheol.class, buncheolId);
     assertThat(buncheol.getStatus().name()).isEqualTo("RECRUITING");
 
-    // 그 사이 마감 CAS 가 커밋된다(스케줄러). 영속성 컨텍스트를 거치지 않는 UPDATE 라 위 스냅샷은 낡은 채로 남는다.
+    // 마감 CAS 가 같은 행을 전이시킨 상황. 영속성 컨텍스트를 거치지 않아 위 스냅샷은 낡은 채로 남는다.
     jdbcTemplate.update(
         "UPDATE buncheols SET status = 'CONFIRMED', finalized_at = ? WHERE id = ?",
         Timestamp.from(finalizedAt),
         buncheolId);
 
-    // 링크 수정 커밋.
-    buncheol.replaceOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+    // 실제 진입 경로로 링크를 고친다 — 서비스가 다른 필드를 함께 더럽히게 되어도 이 테스트가 잡는다.
+    buncheolService.updateOpenChatUrl(hostId, buncheolId, "https://open.kakao.com/o/gAbCdEf");
     em.flush();
 
-    // 링크는 바뀌고, CAS 가 기록한 상태는 살아 있어야 한다.
+    // 링크는 바뀌고, 먼저 기록된 상태는 값까지 그대로 살아 있어야 한다.
     assertThat(openChatUrl(buncheolId)).isEqualTo("https://open.kakao.com/o/gAbCdEf");
     assertThat(status(buncheolId)).isEqualTo("CONFIRMED");
-    assertThat(finalizedAtOf(buncheolId)).isNotNull();
+    assertThat(finalizedAtOf(buncheolId)).isEqualTo(Timestamp.from(finalizedAt));
   }
 
-  private Long insertBuncheol(final String status) {
+  private Long insertBuncheol() {
     jdbcTemplate.update(
         "INSERT INTO buncheols (host_id, group_id, title, purchase_site, deadline,"
             + " min_headcount, gs25_shipping_fee, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -81,7 +85,7 @@ class BuncheolOpenChatUrlLostUpdateTest {
         Timestamp.from(Instant.now().plus(1, ChronoUnit.DAYS)),
         1,
         3000,
-        status);
+        "RECRUITING");
     return jdbcTemplate.queryForObject(
         "SELECT id FROM buncheols WHERE host_id = ? ORDER BY id DESC LIMIT 1", Long.class, hostId);
   }

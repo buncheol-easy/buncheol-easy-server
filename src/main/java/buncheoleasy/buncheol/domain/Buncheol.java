@@ -169,16 +169,12 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   }
 
   // 수정 계약 (docs/51 §3-1-2): null = 유지(필드를 안 보내는 구 클라이언트 호환), 빈 문자열·공백 = 제거, 값 = 검증 후 교체.
+  // null 해석 한 줄만 다르고 나머지는 replaceOpenChatUrl 과 같다.
   public void updateOpenChatUrl(final String value) {
     if (value == null) {
       return;
     }
-    if (value.isBlank()) {
-      this.openChatUrl = null;
-      return;
-    }
-    validateOpenChatUrl(value);
-    this.openChatUrl = value;
+    replaceOpenChatUrl(value);
   }
 
   public void validateOwner(final Long userId) {
@@ -188,9 +184,11 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   }
 
   /**
-   * 링크 전용 수정 — null·공백을 모두 <b>제거</b> 로 본다. 전체 수정의 {@link #updateOpenChatUrl}(null = 유지) 와 계약이
-   * 다르다: 그쪽은 "필드를 안 보낸 구 클라이언트" 를 유지로 봐야 하지만, 링크 하나만 담는 요청에서 null 을 유지로 보면 비우기를 표현할 방법이
-   * 없어진다.
+   * 링크 전용 수정 — 공백은 <b>제거</b>, 값은 검증 후 교체다. 제거는 빈 문자열로만 표현하며, 요청 DTO 가 {@code @NotNull} 로
+   * 필드를 강제하므로 null 은 정상 경로에서 오지 않는다(방어적 처리).
+   *
+   * <p>⚠️ null 을 제거로 보이게 두면 <b>필드를 빠뜨린 요청이 링크를 조용히 지우는 경로</b>가 생긴다 — 비우기는 {@code ""} 로 이미
+   * 표현되므로 얻는 것 없이 사고 경로만 늘어난다.
    */
   public void replaceOpenChatUrl(final String value) {
     if (value == null || value.isBlank()) {
@@ -208,7 +206,16 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
    * <p>취소(자동·개최자)만 막는다. 되돌아올 수 없는 종착 상태라 소통 채널을 바꿀 이유가 없다.
    */
   public void validateOpenChatUrlEditable() {
-    if (status == BuncheolStatus.CANCELLED || status == BuncheolStatus.HOST_CANCELLED) {
+    // ⚠️ switch 식으로 둔다 — == 비교나 switch 문이면 새 종착 상태(정산완료·환불완료 등)가 아무 분기도 안 타고
+    // "수정 가능" 으로 통과하는 fail-open 이 된다. 새 상태는 컴파일 에러로 결정을 강제한다
+    // (BuncheolHostCancellability 매핑과 같은 이유 — BuncheolService#cancelBuncheol 주석).
+    boolean editable =
+        switch (status) {
+          case RECRUITING, PAYMENT_COLLECTING, CONFIRMED -> true;
+          case CANCELLED, HOST_CANCELLED -> false;
+        };
+
+    if (!editable) {
       throw new BusinessException(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE);
     }
   }

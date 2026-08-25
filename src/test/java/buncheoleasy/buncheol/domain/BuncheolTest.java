@@ -58,6 +58,16 @@ class BuncheolTest {
       assertThat(buncheol.getOpenChatUrl()).isNull();
     }
 
+    // 링크 전용 경로는 공백만 제거로 본다. null 은 DTO @NotNull 이 막아 정상 경로에 오지 않지만 방어적으로 같게 처리한다.
+    @Test
+    void 링크_전용_교체는_공백을_제거로_본다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.replaceOpenChatUrl("   ");
+
+      assertThat(buncheol.getOpenChatUrl()).isNull();
+    }
+
     @Test
     void 유효한_값은_검증_후_교체된다() {
       Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
@@ -90,12 +100,12 @@ class BuncheolTest {
     }
 
     // 링크는 소통 수단이라 전체 수정(모집중 전용)보다 넓게 연다 — 입금 구간에서 오히려 더 필요하다.
-    // 가드가 "취소만 막는다" 는 여집합 정의라 테스트도 여집합으로 둔다 — 새 상태가 생기면 자동으로 편입돼 결정을 강제한다.
+    // ⚠️ EXCLUDE 로 두지 마라 — 새 상태가 "수정 가능" 쪽으로 자동 편입돼 아무 결정 없이 그린이 된다.
+    // 새 상태를 강제하는 것은 이 목록이 아니라 validateOpenChatUrlEditable 의 exhaustive switch(컴파일 에러)다.
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        mode = EnumSource.Mode.EXCLUDE,
-        names = {"CANCELLED", "HOST_CANCELLED"})
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CONFIRMED"})
     void 진행_중인_구간에서는_수정할_수_있다(final BuncheolStatus status) {
       Buncheol buncheol = withStatus(status);
 

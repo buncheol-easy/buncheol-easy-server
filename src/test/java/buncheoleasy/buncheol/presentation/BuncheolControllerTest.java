@@ -13,6 +13,7 @@ import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -67,6 +68,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
@@ -475,6 +477,84 @@ class BuncheolControllerTest {
           .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("오픈채팅 링크 수정 테스트")
+  class UpdateOpenChatUrlTest {
+
+    private ResultActions perform(final String body) throws Exception {
+      return mockMvc.perform(
+          patch("/v1/buncheols/{id}/open-chat-url", 10L)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(body)
+              .with(mockAuth()));
+    }
+
+    @Test
+    void 링크_수정에_성공하면_204를_반환한다() throws Exception {
+      perform("{\"openChatUrl\": \"https://open.kakao.com/o/gAbCdEf\"}")
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .updateOpenChatUrl(HOST_ID, 10L, "https://open.kakao.com/o/gAbCdEf");
+    }
+
+    @Test
+    void 빈_문자열은_링크_제거로_그대로_전달된다() throws Exception {
+      perform("{\"openChatUrl\": \"\"}").andExpect(status().isNoContent());
+
+      then(buncheolService).should().updateOpenChatUrl(HOST_ID, 10L, "");
+    }
+
+    // 누락을 제거로 받으면 폼 조립 실수가 링크를 조용히 지운다 — DTO @NotNull 이 웹 레이어에서 막는지 고정한다.
+    @Test
+    void 필드를_빠뜨리면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).updateOpenChatUrl(any(), any(), any());
+    }
+
+    // 길이 상한은 DTO(@Size → C-001)와 도메인(BCH-088)이 함께 든다 — 웹 레이어가 먼저 걸러 서비스에 닿지 않는다.
+    @Test
+    void 상한을_넘기면_400이고_서비스를_호출하지_않는다() throws Exception {
+      String tooLong = "https://open.kakao.com/o/" + "a".repeat(200);
+
+      perform("{\"openChatUrl\": \"" + tooLong + "\"}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).updateOpenChatUrl(any(), any(), any());
+    }
+
+    @Test
+    void 개최자가_아니면_403을_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
+          .given(buncheolService)
+          .updateOpenChatUrl(eq(HOST_ID), eq(10L), any());
+
+      perform("{\"openChatUrl\": \"https://open.kakao.com/o/gAbCdEf\"}")
+          .andExpect(status().isForbidden())
+          .andExpect(
+              content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+
+    @Test
+    void 취소된_분철이면_409를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE))
+          .given(buncheolService)
+          .updateOpenChatUrl(eq(HOST_ID), eq(10L), any());
+
+      perform("{\"openChatUrl\": \"https://open.kakao.com/o/gAbCdEf\"}")
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      containsString(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE.getCode())));
     }
   }
 

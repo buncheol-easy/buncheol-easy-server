@@ -642,7 +642,7 @@ class BuncheolServiceTest {
       then(buncheol).should().validateOpenChatUrlEditable();
       then(buncheolDomainService)
           .should()
-          .updateBuncheolOpenChatUrl(buncheol, "https://open.kakao.com/o/newLink");
+          .replaceBuncheolOpenChatUrl(buncheol, "https://open.kakao.com/o/newLink");
     }
 
     // 전체 수정은 모집중·마감 전으로 묶여 있다 — 링크 경로가 그 가드를 타면 입금 구간에서 못 고친다.
@@ -660,9 +660,9 @@ class BuncheolServiceTest {
       then(buncheol).should(never()).validateRecruiting(any(Instant.class));
     }
 
-    // 이 요청은 링크 하나만 담는다 — null 을 "유지" 로 보면 비우기를 표현할 방법이 없어진다.
+    // null·공백 해석은 도메인(replaceOpenChatUrl)이 쥔다 — 서비스는 값을 그대로 넘긴다.
     @Test
-    void null_은_빈_문자열로_정규화해_링크를_제거한다() {
+    void null_을_그대로_넘겨_도메인이_제거로_처리하게_한다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -671,7 +671,7 @@ class BuncheolServiceTest {
       buncheolService.updateOpenChatUrl(HOST_ID, BUNCHEOL_ID, null);
 
       // then
-      then(buncheolDomainService).should().updateBuncheolOpenChatUrl(buncheol, "");
+      then(buncheolDomainService).should().replaceBuncheolOpenChatUrl(buncheol, null);
     }
 
     @Test
@@ -691,7 +691,7 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE);
-      then(buncheolDomainService).should(never()).updateBuncheolOpenChatUrl(any(), any());
+      then(buncheolDomainService).should(never()).replaceBuncheolOpenChatUrl(any(), any());
     }
   }
 

@@ -90,10 +90,12 @@ class BuncheolTest {
     }
 
     // 링크는 소통 수단이라 전체 수정(모집중 전용)보다 넓게 연다 — 입금 구간에서 오히려 더 필요하다.
+    // 가드가 "취소만 막는다" 는 여집합 정의라 테스트도 여집합으로 둔다 — 새 상태가 생기면 자동으로 편입돼 결정을 강제한다.
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING", "CONFIRMED"})
+        mode = EnumSource.Mode.EXCLUDE,
+        names = {"CANCELLED", "HOST_CANCELLED"})
     void 진행_중인_구간에서는_수정할_수_있다(final BuncheolStatus status) {
       Buncheol buncheol = withStatus(status);
 

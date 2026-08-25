@@ -21,9 +21,14 @@ import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Entity
 @Table(name = "buncheols")
+// 상태 전이는 전부 CAS(@Modifying)로 하는데 링크 수정만 더티체킹으로 같은 행을 쓴다. @DynamicUpdate 가 없으면
+// flush 가 행 전체를 로드 시점 stale 값으로 다시 써서, 그 사이 CAS 가 전이해 둔 status·finalized_at·
+// payment_* 스냅샷을 되돌린다(lost update). Participation 이 같은 이유로 이미 붙여 뒀다.
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Buncheol extends TimestampedEntity implements Cursorable {
@@ -180,6 +185,20 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     if (!isHost(userId)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION);
     }
+  }
+
+  /**
+   * 링크 전용 수정 — null·공백을 모두 <b>제거</b> 로 본다. 전체 수정의 {@link #updateOpenChatUrl}(null = 유지) 와 계약이
+   * 다르다: 그쪽은 "필드를 안 보낸 구 클라이언트" 를 유지로 봐야 하지만, 링크 하나만 담는 요청에서 null 을 유지로 보면 비우기를 표현할 방법이
+   * 없어진다.
+   */
+  public void replaceOpenChatUrl(final String value) {
+    if (value == null || value.isBlank()) {
+      this.openChatUrl = null;
+      return;
+    }
+    validateOpenChatUrl(value);
+    this.openChatUrl = value;
   }
 
   /**

@@ -188,8 +188,13 @@ public class BuncheolService {
    * 오픈채팅 링크만 수정한다. 전체 수정({@link #modifyBuncheol})은 모집중·마감 전으로 묶여 있는데, 링크는 참여자가 입금하며 문의하는
    * 구간에서 오히려 더 필요하다. 그 구간을 열어 주되 가격·멤버 보호 가드는 전체 수정 경로에 그대로 둔다.
    *
-   * <p>⚠️ 전체 수정과 null 해석이 다르다 — 거기서는 "필드를 안 보낸 구 클라이언트"라 유지지만, 이 요청은 링크 하나만 담으므로 null 을 유지로
-   * 보면 비우기를 표현할 수 없다. 빈 문자열로 정규화해 제거로 처리한다.
+   * <p>null·공백 해석은 {@link Buncheol#replaceOpenChatUrl} 이 쥔다 — 둘 다 제거다.
+   *
+   * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(성사 확정·진행
+   * 확정)만 {@code isC2c()} 로 막는다.
+   *
+   * <p><b>참여자 알림은 보내지 않는다</b>(이번 범위 밖). 링크가 바뀌어도 참여자는 상세·내 참여를 다시 열어야 새 링크를 본다 — 이미 링크를
+   * 복사해 간 사람에게는 안내가 닿지 않는다. 수신함 기록은 별도로 다룬다.
    */
   @Transactional
   public void updateOpenChatUrl(
@@ -198,8 +203,7 @@ public class BuncheolService {
     buncheol.validateOwner(hostId);
     buncheol.validateOpenChatUrlEditable();
 
-    buncheolDomainService.updateBuncheolOpenChatUrl(
-        buncheol, openChatUrl == null ? "" : openChatUrl);
+    buncheolDomainService.replaceBuncheolOpenChatUrl(buncheol, openChatUrl);
   }
 
   /**

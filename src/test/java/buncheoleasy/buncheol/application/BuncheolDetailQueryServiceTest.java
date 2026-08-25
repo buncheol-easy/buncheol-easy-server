@@ -467,7 +467,6 @@ class BuncheolDetailQueryServiceTest {
     }
   }
 
-  // flow_type 은 NOT NULL 컬럼이라 프로덕션에 null 은 없다 — 기본값을 LEGACY 로 둔다.
   @Nested
   @DisplayName("오픈채팅 링크 노출 범위")
   class OpenChatUrlVisibilityTest {
@@ -539,15 +538,17 @@ class BuncheolDetailQueryServiceTest {
           .isEqualTo(LINK);
     }
 
-    // 취소한 참여는 활성 목록에서 빠진다 — 참여 내역 화면이 취소 건에 링크를 숨기는 것과 같은 기준이다.
+    // 정상 경로에선 활성 조회가 취소를 걸러 주지만, 조회가 바뀌어도 게이트가 버티는지까지 본다
+    // (같은 클래스의 isMine 이 같은 이유로 같은 방어를 갖고 있다).
     @Test
     void 취소한_참여자에게는_내려가지_않는다() {
-      stubBuncheolWithLink();
+      stubBuncheolWithLink(active(1L, 101L, ME, ParticipationStatus.CANCELLED));
 
       assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).openChatUrl()).isNull();
     }
   }
 
+  // flow_type 은 NOT NULL 컬럼이라 프로덕션에 null 은 없다 — 기본값을 LEGACY 로 둔다.
   private void stubBasicBuncheol(final BuncheolStatus status, final ShippingFeePolicy policy) {
     stubBasicBuncheol(status, policy, FlowType.LEGACY);
   }

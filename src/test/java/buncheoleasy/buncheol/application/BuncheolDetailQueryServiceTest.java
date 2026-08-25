@@ -468,6 +468,86 @@ class BuncheolDetailQueryServiceTest {
   }
 
   // flow_type 은 NOT NULL 컬럼이라 프로덕션에 null 은 없다 — 기본값을 LEGACY 로 둔다.
+  @Nested
+  @DisplayName("오픈채팅 링크 노출 범위")
+  class OpenChatUrlVisibilityTest {
+
+    private static final String LINK = "https://open.kakao.com/o/gAbCdEf";
+
+    /** 링크가 등록된 C2C 분철 + 멤버 슬롯 1개. 활성 참여는 인자로 받은 것만 둔다. */
+    private void stubBuncheolWithLink(final Participation... activeParticipations) {
+      Buncheol buncheol =
+          buncheol(
+              BUNCHEOL_ID,
+              GROUP_ID,
+              "뉴진스 1집 분철",
+              BuncheolStatus.PAYMENT_COLLECTING,
+              ShippingFeePolicy.of(3000, null),
+              FlowType.C2C,
+              DEADLINE);
+      setField(buncheol, "openChatUrl", LINK);
+
+      given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(buncheol));
+      given(groupRepository.findById(GROUP_ID)).willReturn(Optional.of(group(GROUP_ID, "뉴진스")));
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(image(1L, "img-a.jpg")));
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(activeParticipations));
+    }
+
+    // 이 조회는 비로그인도 열려 있다 — 무조건 실으면 목록을 훑어 전 분철의 채팅방 링크를 모을 수 있다.
+    @Test
+    void 비로그인에게는_내려가지_않는다() {
+      stubBuncheolWithLink();
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null).openChatUrl()).isNull();
+    }
+
+    @Test
+    void 참여하지_않은_로그인_유저에게는_내려가지_않는다() {
+      stubBuncheolWithLink(active(1L, 101L, OTHER_USER, ParticipationStatus.CONFIRMED));
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).openChatUrl()).isNull();
+    }
+
+    // 성사 확정 전에도 개최자에게 물어볼 일이 생긴다 — 신청 단계부터 연다.
+    @Test
+    void 신청만_한_참여자에게도_내려간다() {
+      stubBuncheolWithLink(active(1L, 101L, ME, ParticipationStatus.APPLIED));
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).openChatUrl())
+          .isEqualTo(LINK);
+    }
+
+    @Test
+    void 입금_확인된_참여자에게_내려간다() {
+      stubBuncheolWithLink(active(1L, 101L, ME, ParticipationStatus.CONFIRMED));
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).openChatUrl())
+          .isEqualTo(LINK);
+    }
+
+    @Test
+    void 개최자_본인에게_내려간다() {
+      stubBuncheolWithLink();
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID).openChatUrl())
+          .isEqualTo(LINK);
+    }
+
+    // 취소한 참여는 활성 목록에서 빠진다 — 참여 내역 화면이 취소 건에 링크를 숨기는 것과 같은 기준이다.
+    @Test
+    void 취소한_참여자에게는_내려가지_않는다() {
+      stubBuncheolWithLink();
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).openChatUrl()).isNull();
+    }
+  }
+
   private void stubBasicBuncheol(final BuncheolStatus status, final ShippingFeePolicy policy) {
     stubBasicBuncheol(status, policy, FlowType.LEGACY);
   }

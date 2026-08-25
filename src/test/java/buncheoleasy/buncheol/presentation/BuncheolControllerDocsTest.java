@@ -717,7 +717,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
                                 .optional(),
                             fieldWithPath("openChatUrl")
-                                .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
+                                .description(
+                                    "C2C 개최자 오픈채팅 링크. **개최자 본인과 활성 참여자에게만 내려간다** — "
+                                        + "비로그인·비참여자·취소한 참여자에게는 등록돼 있어도 null 이다"
+                                        + "(이 조회가 비로그인에 열려 있어 무조건 실으면 링크가 수집된다). "
+                                        + "신청 단계(APPLIED)부터 노출된다. 미등록이거나 LEGACY 면 null")
                                 .optional())
                         .build())));
   }

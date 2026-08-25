@@ -111,6 +111,21 @@ public class BuncheolDetailQueryService {
         userId == null ? null : toMyParticipation(userId, activeParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
 
+    // 오픈채팅 링크는 개최자·참여자에게만 준다. 이 조회는 비로그인도 열려 있어서(SecurityConfig PUBLIC_GET_PATHS)
+    // 무조건 실으면 목록을 훑어 전 분철의 채팅방 링크를 수집할 수 있다 — "아는 사람만 들어오는" 값의 성격과 어긋난다.
+    //
+    // 신청 단계(APPLIED)부터 열어 준다 — 성사 확정 전에도 개최자에게 물어볼 일이 생긴다.
+    // 취소된 참여는 활성 목록에서 빠져 제외된다 — 참여 내역 화면도 취소 건에는 링크를 숨기므로 같은 기준이다.
+    //
+    // ⚠️ myParticipation 은 참여가 없어도 count=0 인 객체로 내려간다(null 이 아니다). null 검사로 두면
+    // 로그인만 하면 링크가 보인다 — 참여 여부는 활성 참여 목록에서 직접 판정한다.
+    boolean participatedByMe =
+        userId != null
+            && activeParticipations.stream()
+                .anyMatch(p -> userId.equals(p.getParticipantId()));
+    String visibleOpenChatUrl =
+        hostedByMe || participatedByMe ? buncheol.getOpenChatUrl() : null;
+
     return new BuncheolDetailResponse(
         buncheol.getId(),
         buncheol.getTitle(),
@@ -128,7 +143,7 @@ public class BuncheolDetailQueryService {
         myParticipation,
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
-        buncheol.getOpenChatUrl());
+        visibleOpenChatUrl);
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(

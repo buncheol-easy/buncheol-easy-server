@@ -97,7 +97,11 @@ public class BuncheolController {
     return ResponseEntity.ok(buncheolService.getHostingEligibility(hostId));
   }
 
-  /** 분철 단건 상세 조회 (비로그인 허용). 멤버별 가격·참여 가능 여부, 최소 진행 인원·현재 확정 인원, 로그인 유저의 내 참여 현황을 포함한다. */
+  /**
+   * 분철 단건 상세 조회 (비로그인 허용). 멤버별 가격·참여 가능 여부, 최소 진행 인원·현재 확정 인원, 로그인 유저의 내 참여 현황을 포함한다.
+   *
+   * <p>⚠️ 인증 principal 유무로 <b>응답 본문이 달라진다</b> — 오픈채팅 링크는 개최자·활성 참여자에게만 실린다.
+   */
   @GetMapping("/{id}")
   public ResponseEntity<BuncheolDetailResponse> getBuncheolDetail(
       @AuthenticationPrincipal final Long userId, @PathVariable final Long id) {

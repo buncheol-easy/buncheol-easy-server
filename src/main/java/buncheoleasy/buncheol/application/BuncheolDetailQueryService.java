@@ -107,9 +107,35 @@ public class BuncheolDetailQueryService {
 
     List<ShippingOptionResponse> shippingOptions =
         ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy());
+    // 내 활성 참여 — 요약 응답과 링크 노출 판정이 같은 목록을 본다. 판정 기준을 두 곳에 복사하면 갈린다.
+    // CANCELLED 조건은 정상 경로에선 도달하지 않는다(findActiveByBuncheolId 가 이미 거른다). 조회가 바뀌어도
+    // 게이트가 버티도록 남겨 둔다 — 아래 isMine 이 같은 이유로 같은 방어를 갖고 있다.
+    List<Participation> myActiveParticipations =
+        userId == null
+            ? List.of()
+            : activeParticipations.stream()
+                .filter(
+                    p ->
+                        p.getStatus() != ParticipationStatus.CANCELLED
+                            && userId.equals(p.getParticipantId()))
+                .toList();
     MyParticipationSummaryResponse myParticipation =
-        userId == null ? null : toMyParticipation(userId, activeParticipations);
+        userId == null ? null : toMyParticipation(myActiveParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
+
+    // 오픈채팅 링크는 개최자·활성 참여자에게만 싣는다. 이 조회는 비로그인도 열려 있어서
+    // (SecurityConfig PUBLIC_GET_PATHS) 무조건 실으면 목록을 훑어 전 분철의 채팅방 링크를 모을 수 있다.
+    //
+    // ⚠️ 이건 차단이 아니라 <b>수집 비용을 올리는</b> 조치다 — 신청(APPLIED)은 무입금 슬롯 선점이고 즉시 자발
+    // 취소가 되므로, 공석이 있는 분철이라면 신청 → 링크 취득 → 취소 로 여전히 모을 수 있다. 다만 참여 기록이
+    // 남아 추적되고 슬롯을 점유하며 모집이 닫힌 분철에는 아예 못 들어간다. 신청 스팸 자체의 레이트 리밋은 별건.
+    //
+    // 신청 단계부터 여는 것은 사용자 결정이다 — 성사 확정 전에도 개최자에게 물어볼 일이 생긴다.
+    //
+    // ⚠️ myParticipation 의 null 여부로 판정하면 안 된다 — toMyParticipation 은 참여가 없어도 count=0 인
+    // 객체를 돌려주므로, 로그인만 하면 링크가 보이게 된다.
+    String visibleOpenChatUrl =
+        hostedByMe || !myActiveParticipations.isEmpty() ? buncheol.getOpenChatUrl() : null;
 
     return new BuncheolDetailResponse(
         buncheol.getId(),
@@ -128,7 +154,7 @@ public class BuncheolDetailQueryService {
         myParticipation,
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
-        buncheol.getOpenChatUrl());
+        visibleOpenChatUrl);
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(
@@ -185,10 +211,9 @@ public class BuncheolDetailQueryService {
   }
 
   private MyParticipationSummaryResponse toMyParticipation(
-      final Long userId, final List<Participation> activeParticipations) {
+      final List<Participation> myActiveParticipations) {
     List<MyParticipationItemResponse> items =
-        activeParticipations.stream()
-            .filter(p -> userId.equals(p.getParticipantId()))
+        myActiveParticipations.stream()
             .map(
                 p ->
                     new MyParticipationItemResponse(

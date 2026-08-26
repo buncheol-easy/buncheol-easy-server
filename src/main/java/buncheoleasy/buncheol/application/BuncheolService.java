@@ -79,6 +79,7 @@ public class BuncheolService {
 
     List<BuncheolMemberParams> memberParams =
         request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();
+    validateCodeOnlySlotsAllowed(flowType, memberParams);
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), memberParams);
 
     if (!images.isEmpty()) {
@@ -87,6 +88,17 @@ public class BuncheolService {
     }
 
     return buncheol.getId();
+  }
+
+  /** 코드 발급 API 가 관리자 전용이라, C2C 에 코드 슬롯을 만들면 아무도 발급할 수 없는 영구 잠긴 슬롯이 된다. */
+  private void validateCodeOnlySlotsAllowed(
+      final FlowType flowType, final List<BuncheolMemberParams> memberParams) {
+    if (flowType == FlowType.LEGACY) {
+      return;
+    }
+    if (memberParams.stream().anyMatch(param -> param.accessType().requiresCode())) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+    }
   }
 
   /**

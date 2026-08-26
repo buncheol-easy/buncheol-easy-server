@@ -9,6 +9,7 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.member.SlotAccessType;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
@@ -86,6 +87,89 @@ class JpaBuncheolMemberRepositoryAdapterTest {
               BuncheolMember.create(buncheolId, memberId3, 20_000L));
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(members)).doesNotThrowAnyException();
+    }
+  }
+
+  @Nested
+  @DisplayName("슬롯 접근 정책 전환 CAS 테스트")
+  class ChangeAccessTypeTest {
+
+    private Long saveSlot() {
+      BuncheolMember member = BuncheolMember.create(buncheolId, memberId, 0L);
+      buncheolMemberRepository.saveAll(List.of(member));
+      em.flush();
+      em.clear();
+      return member.getId();
+    }
+
+    @Test
+    void 참여가_없는_슬롯은_코드_참여로_전환된다() {
+      Long slotId = saveSlot();
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, SlotAccessType.CODE_ONLY))
+          .isTrue();
+
+      em.clear();
+      assertThat(
+              buncheolMemberRepository
+                  .findByIdAndBuncheolId(slotId, buncheolId)
+                  .orElseThrow()
+                  .getAccessType())
+          .isEqualTo(SlotAccessType.CODE_ONLY);
+    }
+
+    @Test
+    void 활성_참여가_있는_슬롯은_전환되지_않는다() {
+      Long slotId = saveSlot();
+      insertActiveParticipation(slotId);
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, SlotAccessType.CODE_ONLY))
+          .isFalse();
+    }
+
+    @Test
+    void 취소된_참여만_있는_슬롯은_전환된다() {
+      Long slotId = saveSlot();
+      insertCancelledParticipation(slotId);
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, SlotAccessType.CODE_ONLY))
+          .isTrue();
+    }
+
+    @Test
+    void 다른_분철의_슬롯은_전환되지_않는다() {
+      Long slotId = saveSlot();
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId + 9_999L, SlotAccessType.CODE_ONLY))
+          .isFalse();
+    }
+
+    private void insertActiveParticipation(final Long slotId) {
+      insertParticipation(slotId, "CONFIRMED");
+    }
+
+    private void insertCancelledParticipation(final Long slotId) {
+      insertParticipation(slotId, "CANCELLED");
+    }
+
+    private void insertParticipation(final Long slotId, final String status) {
+      Long participantId = TestUserFixture.insertUser(jdbcTemplate, status.substring(0, 4));
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, amount,"
+              + " shipping_fee, refund_bank, refund_account, refund_holder, status, flow_type)"
+              + " VALUES (?, ?, ?, 0, 0, NULL, NULL, NULL, ?, 'LEGACY')",
+          buncheolId,
+          slotId,
+          participantId,
+          status);
     }
   }
 

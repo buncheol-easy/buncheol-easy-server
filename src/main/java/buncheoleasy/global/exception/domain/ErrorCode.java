@@ -67,14 +67,12 @@ public enum ErrorCode {
   USER_AGE_NOT_VERIFIED(
       "USR-032", "연령대 확인이 필요합니다. 카카오 로그인에서 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
   USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
-  USER_BANK_ACCOUNT_TOO_SHORT(
-      "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
+  USER_BANK_ACCOUNT_TOO_SHORT("USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
   // 회원 개최 오픈 전(서비스 스위치 off). 같은 성격의 선례인 배송비 환급 이벤트 off 가 409
   // (PAYBACK_NOT_ELIGIBLE) 라 계열을 맞춘다. 503 은 이 서비스에서 "진짜 장애" 와 1:1 로 쓰여 왔고
   // (5xx 는 S3 업로드 실패·내부 오류 둘뿐), 정상 사용자 동작인 개최 버튼 클릭이 5xx 를 만들면
   // 오픈 직전 트래픽이 몰리는 시점에 5xx 지표가 통째로 올라간다.
-  C2C_HOSTING_NOT_OPEN(
-      "USR-035", "회원 개최는 아직 오픈 전이에요. 준비되면 공지로 알려드릴게요.", HttpStatus.CONFLICT),
+  C2C_HOSTING_NOT_OPEN("USR-035", "회원 개최는 아직 오픈 전이에요. 준비되면 공지로 알려드릴게요.", HttpStatus.CONFLICT),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
@@ -143,8 +141,7 @@ public enum ErrorCode {
   PAYBACK_STATE_TRANSITION_INVALID(
       "BCH-077", "현재 환급 상태에서는 요청한 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
   PAYBACK_TWEET_URL_INVALID("BCH-078", "올바른 X(트위터) 트윗 URL 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
-  PAYBACK_TWEET_URL_DUPLICATE(
-      "BCH-079", "이미 다른 환급 신청에 사용된 트윗 URL 입니다.", HttpStatus.CONFLICT),
+  PAYBACK_TWEET_URL_DUPLICATE("BCH-079", "이미 다른 환급 신청에 사용된 트윗 URL 입니다.", HttpStatus.CONFLICT),
   PAYBACK_REFUND_ACCOUNT_MISSING("BCH-080", "환급받을 환불 계좌가 등록되어 있지 않습니다.", HttpStatus.CONFLICT),
   PAYBACK_REJECT_REASON_REQUIRED("BCH-081", "반려 사유는 필수입니다.", HttpStatus.BAD_REQUEST),
 
@@ -152,18 +149,15 @@ public enum ErrorCode {
   BUNCHEOL_BOOKMARK_NOT_FOUND("BCH-072", "찜하지 않은 분철입니다.", HttpStatus.NOT_FOUND),
 
   // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
-  BUNCHEOL_FLOW_NOT_SUPPORTED(
-      "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_FLOW_NOT_SUPPORTED("BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_CANCEL_NOT_ALLOWED(
       "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
   PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED(
       "BCH-087", "현재 상태에서는 '보냈어요' 처리를 할 수 없습니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_OPEN_CHAT_URL_INVALID(
-      "BCH-088", "카카오 오픈채팅 링크 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_OPEN_CHAT_URL_INVALID("BCH-088", "카카오 오픈채팅 링크 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
   // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
-  BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
-      "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED("BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
   // 성사 확정(BCH-085)과 분리한다 — 개최자가 누른 건 "진행 확정"인데 "성사 확정" 실패라고 뜨면
   // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
   BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
@@ -172,9 +166,7 @@ public enum ErrorCode {
   // C2C 전용 액션 6곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서 엉뚱한
   // 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
   PARTICIPATION_CANCEL_NOT_SUPPORTED(
-      "BCH-091",
-      "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
-      HttpStatus.CONFLICT),
+      "BCH-091", "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.", HttpStatus.CONFLICT),
   // 성사 확정을 거친 참여의 자발 취소 차단 (docs/56 H-09). 취소 불가 구간을 공유하는 BCH-086("고객센터로 문의")과
   // 분리한다 — 여기서 막힌 사람이 연락할 상대는 고객센터가 아니라 돈을 받을 개최자다(직거래).
   PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM(
@@ -192,6 +184,32 @@ public enum ErrorCode {
   BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE(
       "BCH-094", "취소된 분철은 오픈채팅 링크를 수정할 수 없습니다.", HttpStatus.CONFLICT),
 
+  // 참여 코드 — 사유별로 코드를 나눈다. 사용자가 해야 할 일이 다르기 때문이다(재발급 요청 / 문의 / 재입력).
+  PARTICIPATION_CODE_REQUIRED("BCH-095", "이 슬롯은 참여 코드가 있어야 참여할 수 있어요.", HttpStatus.BAD_REQUEST),
+  // 선착순 슬롯에 코드를 보내면 조용히 무시하지 않고 거부한다 — 무시하면 "코드를 넣었는데 엉뚱한 슬롯에 참여됐다" 를
+  // 사후에 추적할 수 없다.
+  PARTICIPATION_CODE_NOT_APPLICABLE("BCH-096", "이 슬롯은 코드 없이 참여할 수 있어요.", HttpStatus.BAD_REQUEST),
+  // 형식 오류·미존재·타 슬롯 코드를 같은 코드로 응답한다. 특히 타 슬롯을 구분해 알리면, 남의 코드를 받은 사람이
+  // "그 멤버로 가면 되는구나" 하고 실제로 그 슬롯을 점유해 버린다 — 발급 실수가 오배정으로 이어진다.
+  PARTICIPATION_CODE_INVALID("BCH-097", "참여 코드를 다시 확인해 주세요.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_CODE_EXPIRED(
+      "BCH-098", "참여 코드가 만료되었습니다. 코드를 보내드린 곳으로 문의해 주세요.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_ALREADY_USED("BCH-099", "이미 사용된 참여 코드예요.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_REVOKED("BCH-100", "더 이상 사용할 수 없는 코드예요.", HttpStatus.CONFLICT),
+  // 이하 운영자(어드민) 발급 경로 전용.
+  PARTICIPATION_CODE_NOT_FOUND("BCH-101", "존재하지 않는 참여 코드입니다.", HttpStatus.NOT_FOUND),
+  PARTICIPATION_CODE_SLOT_ALREADY_ISSUED(
+      "BCH-102", "이 슬롯에 아직 쓸 수 있는 코드가 있습니다. 재발급으로 이전 코드를 폐기하고 새로 발급하세요.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY("BCH-103", "코드 참여 슬롯이 아닙니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_EXPIRY_INVALID("BCH-104", "코드 유효기한은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_CODE_REQUIRED_FIELD_MISSING(
+      "BCH-105", "참여 코드 발급에 필요한 값이 누락되었습니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_CODE_REVOKE_NOT_ALLOWED("BCH-106", "이미 사용되었거나 폐기된 코드입니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED(
+      "BCH-107", "참여자가 있는 슬롯의 접근 정책은 바꿀 수 없습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_SLOT_TAKEN(
+      "BCH-108", "이미 참여자가 확정된 슬롯입니다. 발급해도 사용할 수 없어요.", HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),
@@ -202,8 +220,7 @@ public enum ErrorCode {
   DELIVERY_STATE_TRANSITION_INVALID(
       "DLV-007", "현재 배송 상태에서는 해당 작업을 수행할 수 없습니다.", HttpStatus.CONFLICT),
   DELIVERY_NO_PERMISSION("DLV-008", "배송 정보에 접근할 권한이 없습니다.", HttpStatus.FORBIDDEN),
-  DELIVERY_BUNCHEOL_NOT_CONFIRMED(
-      "DLV-009", "진행확정된 분철만 운송장을 등록할 수 있습니다.", HttpStatus.CONFLICT),
+  DELIVERY_BUNCHEOL_NOT_CONFIRMED("DLV-009", "진행확정된 분철만 운송장을 등록할 수 있습니다.", HttpStatus.CONFLICT),
 
   /** GRP - 그룹 관련 에러 */
   GROUP_NOT_FOUND("GRP-001", "존재하지 않는 그룹입니다.", HttpStatus.NOT_FOUND),
@@ -221,8 +238,7 @@ public enum ErrorCode {
   INBOX_PIN_NOT_ALLOWED("INB-004", "공지만 상단 고정할 수 있습니다.", HttpStatus.CONFLICT),
   INBOX_LINK_PATH_INVALID(
       "INB-005", "연결 경로는 '//' 로 시작하지 않는 상대 경로(/...)여야 합니다.", HttpStatus.BAD_REQUEST),
-  NOTICE_BANNER_INCOMPLETE(
-      "INB-006", "배너는 제목과 이미지를 함께 입력해야 합니다.", HttpStatus.BAD_REQUEST),
+  NOTICE_BANNER_INCOMPLETE("INB-006", "배너는 제목과 이미지를 함께 입력해야 합니다.", HttpStatus.BAD_REQUEST),
 
   /** ADM - 관리자 관련 에러 */
   // 인증된 토큰이지만 관리자 계정이 (더 이상) 없는 경우. 404 가 아니라 403 인 것은 의도 — 계정 존재 여부를 노출하지 않는다.
@@ -235,7 +251,8 @@ public enum ErrorCode {
 
   /** FDB - 의견 보내기 관련 에러 */
   // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.
-  FEEDBACK_RATE_LIMITED("FDB-001", "의견을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+  FEEDBACK_RATE_LIMITED(
+      "FDB-001", "의견을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
 
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),

@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS cvs_stores;
 DROP TABLE IF EXISTS inbox_messages;
 DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS deliveries;
+DROP TABLE IF EXISTS participation_codes;
 DROP TABLE IF EXISTS participations;
 DROP TABLE IF EXISTS buncheol_images;
 DROP TABLE IF EXISTS buncheol_members;
@@ -191,12 +192,13 @@ CREATE INDEX idx_buncheols_status_deadline ON buncheols (status, deadline);
 
 CREATE TABLE buncheol_members
 (
-    id          BIGINT    NOT NULL AUTO_INCREMENT,
-    buncheol_id BIGINT    NOT NULL,
-    member_id   BIGINT    NOT NULL,
-    price       BIGINT    NOT NULL,
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id          BIGINT      NOT NULL AUTO_INCREMENT,
+    buncheol_id BIGINT      NOT NULL,
+    member_id   BIGINT      NOT NULL,
+    price       BIGINT      NOT NULL,
+    access_type VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+    created_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -230,9 +232,10 @@ CREATE TABLE participations
     shipping_address_id BIGINT       NULL,
     amount              BIGINT       NOT NULL,
     shipping_fee        BIGINT       NOT NULL DEFAULT 0,
-    refund_bank         VARCHAR(50)  NOT NULL,
-    refund_account      VARCHAR(50)  NOT NULL,
-    refund_holder       VARCHAR(50)  NOT NULL,
+    -- 0원(코드) 참여는 환불 계좌를 받지 않는다 (schema.sql 과 동일 — NULL 허용)
+    refund_bank         VARCHAR(50)  NULL,
+    refund_account      VARCHAR(50)  NULL,
+    refund_holder       VARCHAR(50)  NULL,
     due_at              TIMESTAMP    NULL,
     confirmed_at        TIMESTAMP    NULL,
     cancelled_at        TIMESTAMP    NULL,
@@ -274,6 +277,29 @@ CREATE INDEX idx_participations_participant_created ON participations (participa
 CREATE INDEX idx_participations_created ON participations (created_at DESC, id DESC);
 CREATE UNIQUE INDEX uq_participations_payback_tweet_url ON participations (payback_tweet_url);
 CREATE INDEX idx_participations_payback_requested ON participations (payback_status, payback_requested_at DESC, id DESC);
+
+CREATE TABLE participation_codes
+(
+    id                    BIGINT      NOT NULL AUTO_INCREMENT,
+    code                  VARCHAR(16) NOT NULL,
+    buncheol_id           BIGINT      NOT NULL,
+    buncheol_member_id    BIGINT      NULL,
+    issued_to             VARCHAR(50) NULL,
+    expires_at            TIMESTAMP   NOT NULL,
+    revoked_at            TIMESTAMP   NULL,
+    used_at               TIMESTAMP   NULL,
+    used_participation_id BIGINT      NULL,
+    created_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_participation_codes_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
+    CONSTRAINT fk_participation_codes_member FOREIGN KEY (buncheol_member_id) REFERENCES buncheol_members (id)
+);
+
+CREATE UNIQUE INDEX uq_participation_codes_code ON participation_codes (code);
+CREATE INDEX idx_participation_codes_slot ON participation_codes (buncheol_member_id, id DESC);
+CREATE INDEX idx_participation_codes_buncheol ON participation_codes (buncheol_id, id DESC);
 
 -- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)
 CREATE TABLE admins

@@ -150,7 +150,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "buncheolMembers": [
                                 {
                                   "memberId": Long,
-                                  "price": Long               // 0 이상, 100원 단위. 호스트 고정 금액 (0원은 오픈 이벤트 무료 분철 용도)
+                                  "price": Long,              // 0 이상, 100원 단위. 호스트 고정 금액 (0원은 오픈 이벤트 무료 분철 용도)
+                                  "accessType": String?       // 선택 ("OPEN"|"CODE_ONLY") — 생략 시 OPEN(선착순). CODE_ONLY 는 참여 코드 보유자 전용 배정 슬롯이며 운영진(LEGACY) 개최에서만 지정할 수 있다
                                 }
                               ]
                             }
@@ -174,6 +175,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
+                            | 409 | `BCH-103` (`PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
                             | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 카카오 로그인 재동의(연령대 제공)로 해소 가능 |
@@ -573,7 +575,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, **0 이상·100원 단위** — 0원 슬롯은 오픈 이벤트 무료 분철 용도)
                             - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) / `APPLIED`(C2C 무입금 신청으로 선점) /
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료) /
-                              `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가)
+                              `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가) /
+                              `CODE_ONLY`(참여 코드 보유자에게 배정된 공석 — 선착순으로는 참여 불가. "마감"이 아니라
+                              "배정된 자리"로 표시할 것)
                             - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
                               내려가며, 이 시각이 지나면 슬롯이 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용.
                               단 그 시점에 분철이 신규 참여를 받지 않는 상태면 슬롯은 `AVAILABLE` 이 아니라 `CLOSED` 가 되므로,
@@ -681,7 +685,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("members[].saleStatus")
                                 .description(
                                     "판매 상태 (AVAILABLE=공석 | APPLIED=C2C 신청 선점 | AWAITING_PAYMENT=입금 확인 대기 중"
-                                        + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석)"),
+                                        + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석"
+                                        + " | CODE_ONLY=참여 코드 보유자에게 배정된 공석)"),
                             fieldWithPath("members[].paymentDueAt")
                                 .description(
                                     "선점한 참여의 입금 기한 (UTC ISO-8601). AWAITING_PAYMENT 일 때만 값이 있고,"

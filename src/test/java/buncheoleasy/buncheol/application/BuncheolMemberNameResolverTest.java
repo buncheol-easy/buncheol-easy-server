@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.member.SlotAccessType;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.lang.reflect.Field;
@@ -97,6 +98,22 @@ class BuncheolMemberNameResolverTest {
 
     assertThat(result.all().get(10L)).containsExactly("하니", "민지", "혜인");
     assertThat(result.available().get(10L)).containsExactly("하니", "혜인");
+  }
+
+  @Test
+  void 코드_참여_슬롯은_비어_있어도_잔여에서_제외된다() {
+    BuncheolMember codeSlot = buncheolMember(802L, 10L, 2002L);
+    setField(codeSlot, "accessType", SlotAccessType.CODE_ONLY);
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(801L, 10L, 2001L), codeSlot));
+    given(groupMemberRepository.findAllByIds(List.of(2001L, 2002L)))
+        .willReturn(List.of(groupMember(2001L, "하니"), groupMember(2002L, "민지")));
+
+    BuncheolMemberNameResolver.MemberNames result =
+        resolver.resolveNames(List.of(10L), Set.of());
+
+    assertThat(result.all().get(10L)).containsExactly("하니", "민지");
+    assertThat(result.available().get(10L)).containsExactly("하니");
   }
 
   private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {

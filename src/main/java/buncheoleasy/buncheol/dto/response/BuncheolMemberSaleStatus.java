@@ -17,7 +17,9 @@ public enum BuncheolMemberSaleStatus {
   // 입금 확인까지 끝나 판매가 완료된 상태.
   SOLD("판매 완료"),
   // 분철이 더 이상 신규 참여를 받지 않아(진행확정·취소) 닫힌 공석. 점유한 참여는 없지만 신청도 불가능하다 (docs/53 Q-14).
-  CLOSED("마감");
+  CLOSED("마감"),
+  // 코드 보유자에게 배정된 공석. CLOSED 로 뭉뚱그리면 오픈 직후부터 절반이 마감으로 보여 조작 의심을 부른다.
+  CODE_ONLY("서포터즈 배정");
 
   private final String description;
 }

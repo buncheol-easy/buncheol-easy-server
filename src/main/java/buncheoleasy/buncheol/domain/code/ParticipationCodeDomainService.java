@@ -94,6 +94,11 @@ public class ParticipationCodeDomainService {
     }
   }
 
+  /** 슬롯에 남은 미사용 코드를 모두 닫는다 (코드 참여 해제 등). */
+  public void revokeOutstandingBySlot(final Long buncheolMemberId, final Instant now) {
+    participationCodeRepository.revokeOutstandingByBuncheolMemberId(buncheolMemberId, now);
+  }
+
   public void revoke(final Long codeId, final Instant now) {
     ParticipationCode code =
         participationCodeRepository

@@ -6,9 +6,5 @@ public enum CodeRedeemability {
   SLOT_MISMATCH,
   REVOKED,
   ALREADY_USED,
-  EXPIRED;
-
-  public boolean isRedeemable() {
-    return this == REDEEMABLE;
-  }
+  EXPIRED
 }

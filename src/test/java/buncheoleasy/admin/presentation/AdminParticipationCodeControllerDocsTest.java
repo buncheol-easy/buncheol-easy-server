@@ -212,8 +212,8 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                             |------|------|------|
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 누락 등 요청 검증 실패 |
                             | 400 | `BCH-104` (`PARTICIPATION_CODE_EXPIRY_INVALID`) | 산정된 유효기한이 현재 시각 이전 |
-                            | 404 | `BCH-001` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
-                            | 404 | `BCH-064` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 그 멤버 슬롯이 없음 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
+                            | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 그 멤버 슬롯이 없음 |
                             | 409 | `BCH-102` (`PARTICIPATION_CODE_SLOT_ALREADY_ISSUED`) | 아직 쓸 수 있는 코드가 있는데 `reissue=false` |
                             | 409 | `BCH-103` (`PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY`) | 선착순 슬롯에 발급 시도 |
                             | 409 | `BCH-108` (`PARTICIPATION_CODE_SLOT_TAKEN`) | 이미 참여가 확정된 슬롯 (발급해도 쓸 수 없다) |

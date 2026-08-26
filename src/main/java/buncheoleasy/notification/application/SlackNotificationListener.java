@@ -68,9 +68,9 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    // 0원 참여는 환불계좌·입금 기한이 없어 같은 블록으로 조립하면 NPE 로 죽는다.
+    // 0원 참여는 환불계좌가 없어 같은 블록으로 조립하면 NPE 로 죽는다.
     if (view.participation().isFree()) {
-      sendCodeParticipation(view);
+      sendFreeParticipation(view);
       return;
     }
     RefundAccount refundAccount = view.participation().getRefundAccount();
@@ -117,17 +117,20 @@ public class SlackNotificationListener {
     slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, fallbackText, blocks);
   }
 
-  /** (운영자) 코드 참여 확정 알림. 할 일은 없지만 코드 사용 여부가 차순위 재발급 판단의 근거다. */
-  private void sendCodeParticipation(final ParticipationView view) {
+  /**
+   * (운영자) 0원 참여 확정 알림. 입금 확인이 필요 없어 할 일은 없지만, 배정 슬롯이 실제로 쓰였는지가 캠페인 운영의
+   * 신호라 별도로 알린다. 코드 사용 여부는 이 이벤트가 알지 못하므로 문구를 코드에 한정하지 않는다.
+   */
+  private void sendFreeParticipation(final ParticipationView view) {
     String fallbackText =
-        "🎟️ [코드 참여 확정] %s (분철 #%d) - %s"
+        "🎟️ [무료 참여 확정] %s (분철 #%d) - %s"
             .formatted(
                 view.buncheol().getTitle(), view.buncheol().getId(), formatParticipant(view));
     List<Map<String, Object>> blocks =
         List.of(
             Map.of(
                 "type", "header",
-                "text", Map.of("type", "plain_text", "text", "🎟️ 코드 참여가 확정됐어요!")),
+                "text", Map.of("type", "plain_text", "text", "🎟️ 무료 참여가 확정됐어요!")),
             Map.of(
                 "type",
                 "section",
@@ -138,7 +141,7 @@ public class SlackNotificationListener {
                         "*분철*\n%s (#%d)"
                             .formatted(view.buncheol().getTitle(), view.buncheol().getId())),
                     markdown("*멤버*\n%s".formatted(view.memberName())),
-                    markdown("*결제*\n0원 (코드 참여 — 입금 확인 불필요)"))),
+                    markdown("*결제*\n0원 (입금 확인 불필요)"))),
             Map.of(
                 "type",
                 "section",

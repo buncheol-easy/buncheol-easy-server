@@ -110,6 +110,13 @@ public class ParticipationService {
         code.isPresent() ? 0L : buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
     Instant dueAt = paymentDueAt(now, buncheol.getDeadline());
 
+    // 0원 참여는 아래에서 분철 조기 확정 CAS(X 락)까지 간다. 참여 INSERT 가 buncheols 에 공유 락을
+    // 걸므로 그대로 두면 한 트랜잭션 안에서 S→X 업그레이드가 생겨 동시 참여끼리 데드락이 난다.
+    // C2C 와 같은 방향(분철 → 참여)으로 X 를 선취해 업그레이드를 없앤다.
+    if (member.getPrice() == 0L && shippingFee == 0L) {
+      buncheolDomainService.getBuncheolForUpdate(buncheolId);
+    }
+
     Participation participation =
         Participation.create(
             buncheolId,
@@ -180,6 +187,10 @@ public class ParticipationService {
     // C2C 에는 코드 슬롯을 만들 수 없다(개최 가드) — 도달했다면 데이터 이상이다.
     if (member.requiresCode() || request.participationCode() != null) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
+    }
+    // 계좌 생략은 코드 참여 전용이다. C2C 는 0원 슬롯이어도 예금주를 개최자 통장 대조 키로 쓴다.
+    if (request.refundAccount() == null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
 
     Optional<Participation> existing =

@@ -94,10 +94,10 @@ public class AdminParticipationCodeService {
     if (codes.isEmpty()) {
       return List.of();
     }
-    Map<Long, String> memberNames =
-        resolveMemberNames(buncheolMemberDomainService.findAllByBuncheolId(buncheolId));
+    List<BuncheolMember> members = buncheolMemberDomainService.findAllByBuncheolId(buncheolId);
+    Map<Long, String> memberNames = resolveMemberNames(members);
     Map<Long, Long> groupMemberIdBySlot =
-        buncheolMemberDomainService.findAllByBuncheolId(buncheolId).stream()
+        members.stream()
             .collect(Collectors.toMap(BuncheolMember::getId, BuncheolMember::getMemberId));
 
     final Instant now = Instant.now(clock);
@@ -150,6 +150,11 @@ public class AdminParticipationCodeService {
       }
     }
     buncheolMemberDomainService.changeAccessType(buncheolMemberId, buncheolId, accessType);
+    if (accessType == SlotAccessType.OPEN) {
+      // 선착순으로 되돌린 슬롯의 코드가 살아 있으면, 다시 코드 참여로 바꿨을 때 폐기한 줄 알았던
+      // 옛 코드가 되살아나 의도하지 않은 사람이 슬롯을 가져간다.
+      participationCodeDomainService.revokeOutstandingBySlot(buncheolMemberId, Instant.now(clock));
+    }
   }
 
   /** 코드 폐기 (유출 신고 등). 이미 사용된 코드는 폐기할 수 없다. */

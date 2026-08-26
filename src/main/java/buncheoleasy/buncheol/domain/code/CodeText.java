@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain.code;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.util.Locale;
 
 /**
  * 참여 코드 문자열의 정규화본. 알파벳은 Crockford base32 (혼동 쌍 {@code I L O U} 제외) — DM 으로 받아 손으로 옮겨 적는
@@ -30,7 +31,7 @@ public record CodeText(String value) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_INVALID);
     }
     StringBuilder normalized = new StringBuilder(LENGTH);
-    for (char c : raw.toUpperCase().toCharArray()) {
+    for (char c : raw.toUpperCase(Locale.ROOT).toCharArray()) {
       if (c == '-' || Character.isWhitespace(c)) {
         continue;
       }

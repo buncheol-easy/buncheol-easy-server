@@ -116,7 +116,11 @@ class ParticipationCodeTest {
 
     @Test
     void 만료돼도_폐기_전이면_미사용_코드로_남는다() {
-      assertThat(code().isOutstanding()).isTrue();
+      ParticipationCode expired = code();
+      setField(expired, "expiresAt", NOW.minusSeconds(1));
+
+      assertThat(expired.isUsable(NOW)).isFalse();
+      assertThat(expired.isOutstanding()).isTrue();
     }
 
     @Test

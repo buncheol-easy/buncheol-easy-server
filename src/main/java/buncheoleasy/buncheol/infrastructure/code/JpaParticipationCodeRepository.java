@@ -20,7 +20,7 @@ interface JpaParticipationCodeRepository extends JpaRepository<ParticipationCode
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
-      "UPDATE ParticipationCode c SET c.revokedAt = :now "
+      "UPDATE ParticipationCode c SET c.revokedAt = :now, c.updatedAt = :now "
           + "WHERE c.buncheolMemberId = :buncheolMemberId "
           + "AND c.usedAt IS NULL AND c.revokedAt IS NULL")
   int revokeOutstandingByBuncheolMemberId(
@@ -29,7 +29,7 @@ interface JpaParticipationCodeRepository extends JpaRepository<ParticipationCode
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE ParticipationCode c "
-          + "SET c.usedAt = :now, c.usedParticipationId = :participationId "
+          + "SET c.usedAt = :now, c.usedParticipationId = :participationId, c.updatedAt = :now "
           + "WHERE c.id = :id AND c.usedAt IS NULL AND c.revokedAt IS NULL AND c.expiresAt > :now")
   int markUsedIfRedeemable(
       @Param("id") Long id,
@@ -38,7 +38,7 @@ interface JpaParticipationCodeRepository extends JpaRepository<ParticipationCode
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
-      "UPDATE ParticipationCode c SET c.revokedAt = :now "
+      "UPDATE ParticipationCode c SET c.revokedAt = :now, c.updatedAt = :now "
           + "WHERE c.id = :id AND c.usedAt IS NULL AND c.revokedAt IS NULL")
   int revokeIfActive(@Param("id") Long id, @Param("now") Instant now);
 }

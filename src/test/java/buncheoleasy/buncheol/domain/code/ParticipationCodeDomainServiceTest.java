@@ -233,6 +233,9 @@ class ParticipationCodeDomainServiceTest {
           member(SlotAccessType.CODE_ONLY), "@next", afterExpiry.plusSeconds(60), afterExpiry);
 
       then(participationCodeRepository).should().save(any());
+      then(participationCodeRepository)
+          .should(never())
+          .revokeOutstandingByBuncheolMemberId(any(), any());
     }
 
     // 순서가 뒤집히면 방금 발급한 코드까지 폐기된다.

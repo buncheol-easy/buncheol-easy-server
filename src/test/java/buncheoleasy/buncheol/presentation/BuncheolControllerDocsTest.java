@@ -176,6 +176,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
                             | 409 | `BCH-103` (`PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
+                            | 409 | `BCH-109` (`PARTICIPATION_CODE_SLOT_NOT_FREE`) | `accessType: "CODE_ONLY"` 슬롯의 `price` 가 0이 아님 (코드 참여는 무상 제공 전제) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
                             | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 카카오 로그인 재동의(연령대 제공)로 해소 가능 |

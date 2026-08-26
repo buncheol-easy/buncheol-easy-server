@@ -296,6 +296,7 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
                             | 409 | `BCH-103` (`PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY`) | C2C 분철을 코드 참여로 전환 시도 |
                             | 409 | `BCH-107` (`BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED`) | 참여자가 있는 슬롯이거나 슬롯 없음 |
+                            | 409 | `BCH-109` (`PARTICIPATION_CODE_SLOT_NOT_FREE`) | 유료 슬롯을 코드 참여로 전환 시도 (코드 참여는 0원 전제) |
                             """)
                         .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(

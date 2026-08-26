@@ -80,6 +80,7 @@ public class BuncheolService {
     List<BuncheolMemberParams> memberParams =
         request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();
     validateCodeOnlySlotsAllowed(flowType, memberParams);
+    validateCodeOnlySlotsAreFree(memberParams);
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), memberParams);
 
     if (!images.isEmpty()) {
@@ -98,6 +99,14 @@ public class BuncheolService {
     }
     if (memberParams.stream().anyMatch(param -> param.accessType().requiresCode())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+    }
+  }
+
+  /** 코드 참여는 무상 제공이 전제라 0원 슬롯에만 붙일 수 있다. */
+  private void validateCodeOnlySlotsAreFree(final List<BuncheolMemberParams> memberParams) {
+    if (memberParams.stream()
+        .anyMatch(param -> param.accessType().requiresCode() && param.price() > 0L)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_FREE);
     }
   }
 

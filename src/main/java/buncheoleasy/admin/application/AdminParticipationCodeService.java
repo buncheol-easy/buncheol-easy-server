@@ -141,8 +141,13 @@ public class AdminParticipationCodeService {
   public void changeSlotAccessType(
       final Long buncheolId, final Long buncheolMemberId, final SlotAccessType accessType) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    if (accessType == SlotAccessType.CODE_ONLY && buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+    if (accessType == SlotAccessType.CODE_ONLY) {
+      if (buncheol.isC2c()) {
+        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+      }
+      if (!buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId).isFree()) {
+        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_FREE);
+      }
     }
     buncheolMemberDomainService.changeAccessType(buncheolMemberId, buncheolId, accessType);
   }

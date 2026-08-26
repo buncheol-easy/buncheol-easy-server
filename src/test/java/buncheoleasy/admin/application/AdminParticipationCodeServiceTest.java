@@ -106,6 +106,28 @@ class AdminParticipationCodeServiceTest {
     then(participationCodeDomainService).should(never()).reissue(any(), any(), any(), any());
   }
 
+  // 유료 슬롯을 코드 참여로 바꾸면 화면은 "0원" 을 안내하는데 서버는 유상 참여로 처리해 참여가 실패한다.
+  @Test
+  void 유료_슬롯은_코드_참여로_전환할_수_없다() {
+    Buncheol buncheol = newInstance(Buncheol.class);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+    BuncheolMember paidSlot = codeSlot();
+    setField(paidSlot, "price", 20_700L);
+    setField(paidSlot, "accessType", SlotAccessType.OPEN);
+    given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
+        .willReturn(paidSlot);
+
+    assertThatThrownBy(
+            () ->
+                adminParticipationCodeService.changeSlotAccessType(
+                    BUNCHEOL_ID, SLOT_ID, SlotAccessType.CODE_ONLY))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_FREE);
+
+    then(buncheolMemberDomainService).should(never()).changeAccessType(any(), any(), any());
+  }
+
   @Test
   void 다른_슬롯의_참여는_발급을_막지_않는다() {
     given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(newInstance(Buncheol.class));

@@ -209,6 +209,10 @@ public enum ErrorCode {
       "BCH-107", "참여자가 있는 슬롯의 접근 정책은 바꿀 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_CODE_SLOT_TAKEN(
       "BCH-108", "이미 참여자가 확정된 슬롯입니다. 발급해도 사용할 수 없어요.", HttpStatus.CONFLICT),
+  // 코드 참여는 무상 제공(0원 + 배송비 면제)이 전제다. 유료 슬롯을 코드 참여로 만들면 화면은 "0원" 을
+  // 안내하는데 서버는 유상 참여로 처리해 환불 계좌 누락(BCH-062)으로 실패한다.
+  PARTICIPATION_CODE_SLOT_NOT_FREE(
+      "BCH-109", "코드 참여 슬롯은 0원이어야 합니다.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

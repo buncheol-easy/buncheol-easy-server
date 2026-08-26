@@ -72,6 +72,10 @@ public class BuncheolMember extends TimestampedEntity {
     return accessType.requiresCode();
   }
 
+  public boolean isFree() {
+    return price == 0L;
+  }
+
   public void updatePrice(final long newPrice) {
     validatePrice(newPrice);
     this.price = newPrice;

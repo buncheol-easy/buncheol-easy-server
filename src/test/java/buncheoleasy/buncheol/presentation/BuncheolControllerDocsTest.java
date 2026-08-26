@@ -846,12 +846,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "유진팬",
             101L,
             "안유진",
+            "유진팬",
             93_000L,
             3_000L,
             ParticipationStatus.CONFIRMED,
             Instant.parse("2026-05-28T00:00:00Z"),
             Instant.parse("2026-05-27T10:00:00Z"),
-            new RefundAccountResponse("국민은행", "12345678", "유진팬"),
+            null,
             new ManagementDeliveryResponse(
                 5001L,
                 ShippingMethod.GS25_HALF,
@@ -866,12 +867,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "레이팬",
             102L,
             "레이",
+            "레이팬",
             53_000L,
             3_000L,
             ParticipationStatus.AWAITING_PAYMENT,
             Instant.parse("2026-05-26T00:30:00Z"),
             null,
-            new RefundAccountResponse("신한은행", "87654321", "레이팬"),
+            null,
             null, null);
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
@@ -879,6 +881,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "가을팬",
             103L,
             "가을",
+            "가을팬",
             53_000L,
             3_000L,
             ParticipationStatus.CANCELLED,
@@ -925,12 +928,15 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `memberCount` = 분철에 등록된 멤버 슬롯 수
                             - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
-                            - `participants[].refundAccount` = 참여자가 입력한 환불 계좌 (분철 취소 시 운영자가 환불)
+                            - `participants[].depositorName` = **입금자명**(= 참여자가 입력한 환불 계좌 예금주). 개최자의 통장 대조 키
+                            - `participants[].refundAccount` = **평시에는 항상 null.** 계좌번호는 개최자가 실제로 환불해야 하는 건, 즉
+                              **취소분 중 입금 흔적(마킹·입금확인)이 있는 건**에만 채운다
                             - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
                             - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
                             - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
                               개최자 계좌로 직접 입금되는 직거래라 개최자가 환불 주체). 환불이 실제로 필요한지는 개최자가 판단한다.
                               필드 구조는 `participants[]` 와 같고 `status` 는 항상 `CANCELLED`, `delivery` 는 취소 시 정리되어 항상 null.
+                              `refundAccount` 는 **입금 흔적이 있는 건에만** 채워진다(흔적 없는 취소는 환불할 돈이 없다).
                               슬롯을 점유하지 않으므로 참여 수·정원 집계에 넣지 않는다
 
                             **응답 예시**
@@ -951,11 +957,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                   "participantNickname": "유진팬",
                                   "buncheolMemberId": 101,
                                   "memberName": "안유진",
+                                  "depositorName": "유진팬",
                                   "amount": 93000,
                                   "status": "CONFIRMED",
                                   "dueAt": "2026-05-28T00:00:00Z",
                                   "confirmedAt": "2026-05-27T10:00:00Z",
-                                  "refundAccount": {"bank": "국민은행", "account": "12345678", "holder": "유진팬"},
+                                  "refundAccount": null,
                                   "delivery": {
                                     "deliveryId": 5001,
                                     "shippingMethod": "GS25_HALF",
@@ -973,6 +980,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                   "participantNickname": "가을팬",
                                   "buncheolMemberId": 103,
                                   "memberName": "가을",
+                                  "depositorName": "가을팬",
                                   "amount": 53000,
                                   "status": "CANCELLED",
                                   "confirmedAt": "2026-05-26T00:10:00Z",
@@ -1016,6 +1024,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("participants[].memberName")
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
+                            fieldWithPath("participants[].depositorName")
+                                .description("입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키"),
                             fieldWithPath("participants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("participants[].shippingFee")
@@ -1030,13 +1040,21 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("입금확인 시각. 미확인 시 null")
                                 .optional(),
                             fieldWithPath("participants[].refundAccount")
-                                .description("참여자가 입력한 환불 계좌 (분철 취소 시 환불에 사용)"),
+                                .description("환불 계좌. 활성 참여는 항상 null — 입금자명은 depositorName 을 쓴다")
+                                .type(JsonFieldType.OBJECT)
+                                .optional(),
                             fieldWithPath("participants[].refundAccount.bank")
-                                .description("환불 은행명"),
+                                .description("환불 은행명")
+                                .type(JsonFieldType.STRING)
+                                .optional(),
                             fieldWithPath("participants[].refundAccount.account")
-                                .description("환불 계좌번호"),
+                                .description("환불 계좌번호")
+                                .type(JsonFieldType.STRING)
+                                .optional(),
                             fieldWithPath("participants[].refundAccount.holder")
-                                .description("환불 예금주"),
+                                .description("환불 예금주")
+                                .type(JsonFieldType.STRING)
+                                .optional(),
                             fieldWithPath("participants[].delivery")
                                 .description("배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전에는 null")
                                 .optional(),
@@ -1078,6 +1096,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("cancelledParticipants[].memberName")
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
+                            fieldWithPath("cancelledParticipants[].depositorName")
+                                .description("입금자명 (= 환불 계좌 예금주)"),
                             fieldWithPath("cancelledParticipants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("cancelledParticipants[].shippingFee")
@@ -1091,13 +1111,20 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("입금확인 시각. 입금확인 전에 취소됐으면 null")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount")
-                                .description("참여자가 입력한 환불 계좌 — 이 목록의 존재 이유"),
+                                .description("환불 계좌. 입금 흔적(paymentSentAt·confirmedAt)이 있는 건에만 채워진다")
+                                .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount.bank")
-                                .description("환불 은행명"),
+                                .description("환불 은행명")
+                                .type(JsonFieldType.STRING)
+                                .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount.account")
-                                .description("환불 계좌번호"),
+                                .description("환불 계좌번호")
+                                .type(JsonFieldType.STRING)
+                                .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount.holder")
-                                .description("환불 예금주"),
+                                .description("환불 예금주")
+                                .type(JsonFieldType.STRING)
+                                .optional(),
                             fieldWithPath("cancelledParticipants[].delivery")
                                 .description("취소 시 배송 스냅샷이 정리되므로 항상 null")
                                 .optional(),

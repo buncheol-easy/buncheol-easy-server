@@ -145,13 +145,32 @@ public class BuncheolManagementQueryService {
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
+        participation.getRefundAccount().holder(),
         participation.getTotalAmount(),
         participation.getShippingFee(),
         participation.getStatus(),
         participation.getDueAt(),
         participation.getConfirmedAt(),
-        RefundAccountResponse.from(participation.getRefundAccount()),
+        refundAccountFor(participation),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
         participation.getPaymentSentAt());
+  }
+
+  /**
+   * 개최자에게 내려줄 환불 계좌 (docs/70 결정 21). 통장 대조에 필요한 것은 입금자명뿐이라 평시에는 계좌를 내리지 않는다. 계좌번호가 필요한
+   * 유일한 상황은 <b>개최자가 직접 환불해야 하는 건</b>이고, 그건 취소분 중 입금 흔적이 남은 건뿐이다.
+   *
+   * <p>판정 키({@code paymentSentAt} 또는 {@code confirmedAt})는 개최 관리 화면의 "환불이 필요한 참여" 목록 필터와 같은
+   * 기준이다 — 둘이 갈리면 목록에는 뜨는데 계좌가 비는 행이 생긴다.
+   */
+  private static RefundAccountResponse refundAccountFor(final Participation participation) {
+    return needsHostRefund(participation)
+        ? RefundAccountResponse.from(participation.getRefundAccount())
+        : null;
+  }
+
+  private static boolean needsHostRefund(final Participation participation) {
+    return participation.getStatus() == ParticipationStatus.CANCELLED
+        && (participation.getPaymentSentAt() != null || participation.getConfirmedAt() != null);
   }
 }

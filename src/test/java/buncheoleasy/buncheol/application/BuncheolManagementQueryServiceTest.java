@@ -141,7 +141,7 @@ class BuncheolManagementQueryServiceTest {
     }
 
     @Test
-    void 입금확인중_참여는_환불계좌와_dueAt이_노출되고_배송은_null() {
+    void 입금확인중_참여는_입금자명과_dueAt이_노출되고_계좌와_배송은_null() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING);
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember(101L, 1001L)));
@@ -172,9 +172,9 @@ class BuncheolManagementQueryServiceTest {
       assertThat(participant.status()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(participant.dueAt()).isEqualTo(DUE_AT);
       assertThat(participant.confirmedAt()).isNull();
-      assertThat(participant.refundAccount().bank()).isEqualTo("국민");
-      assertThat(participant.refundAccount().account()).isEqualTo("12345678");
-      assertThat(participant.refundAccount().holder()).isEqualTo("홍길동");
+      // 활성 참여는 통장 대조 키(입금자명)만 내리고 계좌번호는 감춘다 (docs/70 결정 21).
+      assertThat(participant.depositorName()).isEqualTo("홍길동");
+      assertThat(participant.refundAccount()).isNull();
       assertThat(participant.delivery()).isNull();
     }
 

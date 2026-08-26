@@ -68,6 +68,11 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    // 0원 참여는 환불계좌·입금 기한이 없어 같은 블록으로 조립하면 NPE 로 죽는다.
+    if (view.participation().isFree()) {
+      sendCodeParticipation(view);
+      return;
+    }
     RefundAccount refundAccount = view.participation().getRefundAccount();
 
     String fallbackText =
@@ -109,6 +114,38 @@ public class SlackNotificationListener {
                     "<%s/products/%d|분철 상세 보기> · <%s|어드민에서 처리>"
                         .formatted(
                             frontendBaseUrl, view.buncheol().getId(), adminBaseUrl))));
+    slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, fallbackText, blocks);
+  }
+
+  /** (운영자) 코드 참여 확정 알림. 할 일은 없지만 코드 사용 여부가 차순위 재발급 판단의 근거다. */
+  private void sendCodeParticipation(final ParticipationView view) {
+    String fallbackText =
+        "🎟️ [코드 참여 확정] %s (분철 #%d) - %s"
+            .formatted(
+                view.buncheol().getTitle(), view.buncheol().getId(), formatParticipant(view));
+    List<Map<String, Object>> blocks =
+        List.of(
+            Map.of(
+                "type", "header",
+                "text", Map.of("type", "plain_text", "text", "🎟️ 코드 참여가 확정됐어요!")),
+            Map.of(
+                "type",
+                "section",
+                "fields",
+                List.of(
+                    markdown("*참여자*\n%s".formatted(formatParticipant(view))),
+                    markdown(
+                        "*분철*\n%s (#%d)"
+                            .formatted(view.buncheol().getTitle(), view.buncheol().getId())),
+                    markdown("*멤버*\n%s".formatted(view.memberName())),
+                    markdown("*결제*\n0원 (코드 참여 — 입금 확인 불필요)"))),
+            Map.of(
+                "type",
+                "section",
+                "text",
+                markdown(
+                    "<%s/products/%d|분철 상세 보기>"
+                        .formatted(frontendBaseUrl, view.buncheol().getId()))));
     slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, fallbackText, blocks);
   }
 

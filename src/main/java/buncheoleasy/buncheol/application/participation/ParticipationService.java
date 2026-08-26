@@ -6,6 +6,8 @@ import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.code.ParticipationCode;
+import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -44,6 +46,7 @@ public class ParticipationService {
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationCodeDomainService participationCodeDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
@@ -94,10 +97,17 @@ public class ParticipationService {
     BuncheolMember member =
         buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheolId);
 
+    Optional<ParticipationCode> code =
+        participationCodeDomainService.validateForParticipation(
+            member, request.participationCode(), now);
+
     ShippingAddress shippingAddress =
         participationShippingAddressResolver.resolve(
             participantId, buncheol, request.shippingAddressId());
-    long shippingFee = buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
+    // 0으로 눌러 두지 않으면 "0원 슬롯 + 배송비 있음" 이 되어 배송비 환급 이벤트 대상으로 잡힌다
+    // (ShippingFeePaybackPolicy) — 서포터즈 참여내역에 없는 환급 CTA 가 붙는다.
+    long shippingFee =
+        code.isPresent() ? 0L : buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
     Instant dueAt = paymentDueAt(now, buncheol.getDeadline());
 
     Participation participation =
@@ -116,12 +126,30 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
+    // 참여 INSERT 이후여야 코드에 참여 id 를 남길 수 있고, 슬롯 점유 실패 시 코드도 함께 롤백된다.
+    code.ifPresent(it -> participationCodeDomainService.consume(it, participation.getId(), now));
+
     // 개최자(MVP 운영자)가 입금 기한 내에 확인·입금확인할 수 있도록 커밋 후 운영자 슬랙 채널로 신규 참여를 알린다.
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.LEGACY));
+
+    if (participation.isFree()) {
+      return confirmFreeParticipation(participation, buncheol, now);
+    }
 
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
     return new ParticipateResult(
         participation.getId(), participation.getTotalAmount(), dueAt, hostAccount);
+  }
+
+  /**
+   * 0원 참여는 참여 즉시 입금확인까지 진행한다 — 아무도 입금할 수 없는 참여를 입금 대기로 두면 30분 뒤 만료 스케줄러가 취소한다.
+   * 수동 입금확인과 같은 CAS·같은 부수효과를 그대로 태운다. 응답에 계좌·기한을 싣지 않아야 입금 안내 화면이 뜨지 않는다.
+   */
+  private ParticipateResult confirmFreeParticipation(
+      final Participation participation, final Buncheol buncheol, final Instant now) {
+    participationDomainService.confirmPayment(participation.getId(), now);
+    applyPaymentConfirmed(participation, buncheol, now);
+    return new ParticipateResult(participation.getId(), 0L, null, null);
   }
 
   /**
@@ -149,6 +177,10 @@ public class ParticipationService {
     }
     BuncheolMember member =
         buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheol.getId());
+    // C2C 에는 코드 슬롯을 만들 수 없다(개최 가드) — 도달했다면 데이터 이상이다.
+    if (member.requiresCode() || request.participationCode() != null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
+    }
 
     Optional<Participation> existing =
         participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId);

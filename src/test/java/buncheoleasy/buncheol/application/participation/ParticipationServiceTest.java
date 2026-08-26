@@ -18,8 +18,11 @@ import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.code.ParticipationCode;
+import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
+import buncheoleasy.buncheol.domain.member.SlotAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -40,14 +43,17 @@ import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -72,6 +78,7 @@ class ParticipationServiceTest {
   @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationCodeDomainService participationCodeDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
   @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
@@ -87,6 +94,11 @@ class ParticipationServiceTest {
         BUNCHEOL_MEMBER_ID,
         SHIPPING_ADDRESS_ID,
         new RefundAccountRequest("국민", "12345678", "홍길동"));
+  }
+
+  private void givenOpenSlot() {
+    given(participationCodeDomainService.validateForParticipation(any(), any(), any()))
+        .willReturn(Optional.empty());
   }
 
   private ShippingAddress shippingAddress() {
@@ -122,6 +134,7 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
+      givenOpenSlot();
       given(
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
@@ -217,6 +230,7 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
+      givenOpenSlot();
       given(
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
@@ -247,6 +261,7 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
+      givenOpenSlot();
       given(
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
@@ -308,6 +323,7 @@ class ParticipationServiceTest {
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
+      givenOpenSlot();
       willThrow(new BusinessException(ErrorCode.SHIPPING_ADDRESS_FORBIDDEN))
           .given(participationShippingAddressResolver)
           .resolve(PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID);
@@ -334,6 +350,7 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
+      givenOpenSlot();
       given(
               participationShippingAddressResolver.resolve(
                   PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
@@ -933,6 +950,122 @@ class ParticipationServiceTest {
       participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
 
       then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+    }
+  }
+
+  @Nested
+  @DisplayName("참여 코드(서포터즈 배정 슬롯) 테스트")
+  class CodeParticipationTest {
+
+    private BuncheolMember codeSlotMember() {
+      BuncheolMember member = buncheolMember(BUNCHEOL_MEMBER_ID, 0L);
+      setField(member, "accessType", SlotAccessType.CODE_ONLY);
+      return member;
+    }
+
+    private ParticipationCode participationCode() {
+      ParticipationCode code =
+          ParticipationCode.issue(
+              "ABCD2345",
+              BUNCHEOL_ID,
+              BUNCHEOL_MEMBER_ID,
+              "@supporter",
+              NOW.plus(Duration.ofHours(48)),
+              NOW);
+      setField(code, "id", 7L);
+      return code;
+    }
+
+    private ParticipateRequest codeRequest() {
+      return new ParticipateRequest(BUNCHEOL_MEMBER_ID, SHIPPING_ADDRESS_ID, null, "ABCD2345");
+    }
+
+    private ParticipationCode givenCodeParticipation() {
+      Buncheol buncheol = mock(Buncheol.class);
+      ParticipationCode code = participationCode();
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getDeadline()).willReturn(NOW.plus(Duration.ofDays(30)));
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(codeSlotMember());
+      given(participationCodeDomainService.validateForParticipation(any(), eq("ABCD2345"), eq(NOW)))
+          .willReturn(Optional.of(code));
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(codeSlotMember()));
+      return code;
+    }
+
+    // 배송비가 남으면 배송비 환급 이벤트 대상으로 잡혀 없는 환급 CTA 가 붙는다.
+    @Test
+    void 코드_참여는_배송비를_부과하지_않는다() {
+      givenCodeParticipation();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      then(participationDomainService)
+          .should()
+          .createParticipationIfRecruiting(participationCaptor.capture());
+      Participation saved = participationCaptor.getValue();
+      assertThat(saved.getAmount()).isZero();
+      assertThat(saved.getShippingFee()).isZero();
+      assertThat(saved.getRefundAccount()).isNull();
+    }
+
+    @Test
+    void 코드_참여는_결제_구간을_건너뛰고_즉시_확정된다() {
+      givenCodeParticipation();
+
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      then(deliverySnapshotCreator).should().create(any());
+      assertThat(result.totalAmount()).isZero();
+      assertThat(result.dueAt()).isNull();
+      assertThat(result.hostAccount()).isNull();
+      then(userDomainService).should(never()).getUser(anyLong());
+    }
+
+    @Test
+    void 코드는_참여_생성_이후에_소모된다() {
+      ParticipationCode code = givenCodeParticipation();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      InOrder inOrder = Mockito.inOrder(participationDomainService, participationCodeDomainService);
+      inOrder.verify(participationDomainService).createParticipationIfRecruiting(any());
+      inOrder.verify(participationCodeDomainService).consume(code, PARTICIPATION_ID, NOW);
+    }
+
+    @Test
+    void 코드_검증이_실패하면_참여를_생성하지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(codeSlotMember());
+      willThrow(new BusinessException(ErrorCode.PARTICIPATION_CODE_EXPIRED))
+          .given(participationCodeDomainService)
+          .validateForParticipation(any(), any(), any());
+
+      assertThatThrownBy(
+              () -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CODE_EXPIRED);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
   }
 }

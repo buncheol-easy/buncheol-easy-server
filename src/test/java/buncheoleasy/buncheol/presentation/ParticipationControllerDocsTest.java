@@ -40,6 +40,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.restdocs.payload.JsonFieldType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("Participation 관련 컨트롤러 문서화 테스트")
@@ -101,6 +102,21 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             `amount` 는 (멤버 가격 + 배송비)다. 참여와 동시에 분철 취소 시 환불받을 본인
                             계좌(`refundAccount`)를 입력한다.
 
+                            **참여 코드 슬롯 (`saleStatus: "CODE_ONLY"`)**
+
+                            상세 조회의 슬롯이 `CODE_ONLY` 면 `participationCode` 가 **필수**다. 반대로 선착순
+                            슬롯에 코드를 보내면 거부한다(`BCH-096`) — 조용히 무시하면 오배정 문의를 사후에
+                            재현할 수 없기 때문이다. 코드는 슬롯 1개에만 유효한 1회용이며 대소문자·하이픈·공백을
+                            무시하고, 혼동 문자(`I`·`L`→`1`, `O`→`0`)를 교정해 대조한다.
+
+                            코드 참여는 **결제 구간이 통째로 없다**:
+
+                            - 슬롯 금액과 배송비가 모두 0원으로 처리되어 참여 즉시 확정(CONFIRMED)된다
+                            - 응답의 `amount` 는 `0`, `dueAt`·`hostAccount` 는 `null` 이다 — **입금 안내 화면을 띄우면 안 된다**
+                            - `refundAccount` 를 **생략해야 한다**. 환불할 금액이 없어 계좌를 받지 않으며,
+                              입력란을 노출하면 존재하지 않는 보증금 조건이 있는 것처럼 보인다
+                            - 이후 공유하는 것은 배송지·운송장 등 배송 기능뿐이다
+
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
@@ -115,6 +131,12 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님 |
                             | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |
+                            | 400 | `BCH-095` (`PARTICIPATION_CODE_REQUIRED`) | `CODE_ONLY` 슬롯인데 `participationCode` 누락 |
+                            | 400 | `BCH-096` (`PARTICIPATION_CODE_NOT_APPLICABLE`) | 선착순 슬롯에 `participationCode` 를 보냄 |
+                            | 400 | `BCH-097` (`PARTICIPATION_CODE_INVALID`) | 코드 형식 오류·미존재·**다른 슬롯에 발급된 코드**. 셋을 구분하지 않는다 — 타 슬롯임을 알리면 남의 코드를 받은 사람이 그 슬롯을 찾아가 점유한다 |
+                            | 409 | `BCH-098` (`PARTICIPATION_CODE_EXPIRED`) | 유효기한이 지난 코드 |
+                            | 409 | `BCH-099` (`PARTICIPATION_CODE_ALREADY_USED`) | 이미 사용된 코드 |
+                            | 409 | `BCH-100` (`PARTICIPATION_CODE_REVOKED`) | 운영자가 폐기한 코드 (재발급으로 대체됨) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
@@ -123,18 +145,31 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("buncheolMemberId")
                                 .description("참여할 분철 멤버 슬롯 ID (단일 선택 정책)"),
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
-                            fieldWithPath("refundAccount").description("분철 취소 시 환불받을 본인 계좌"),
+                            fieldWithPath("refundAccount")
+                                .description(
+                                    "분철 취소 시 환불받을 본인 계좌. **코드 참여(0원)에서는 생략** — 환불할 금액이 없다")
+                                .optional(),
                             fieldWithPath("refundAccount.bank").description("은행명"),
                             fieldWithPath("refundAccount.account")
                                 .description(
                                     "계좌번호 (숫자·하이픈). **하이픈을 제외한 숫자 8자리 이상** — 미만이면 `400 USR-034`"),
-                            fieldWithPath("refundAccount.holder").description("예금주"))
+                            fieldWithPath("refundAccount.holder").description("예금주"),
+                            fieldWithPath("participationCode")
+                                .description(
+                                    "참여 코드. `CODE_ONLY` 슬롯에서만 필수이고 선착순 슬롯에 보내면 `400 BCH-096`."
+                                        + " 대소문자·하이픈·공백 무시")
+                                .type(JsonFieldType.STRING)
+                                .optional())
                         .responseSchema(Schema.schema("ParticipateResponse"))
                         .responseFields(
                             fieldWithPath("participationId").description("생성된 참여 ID"),
                             fieldWithPath("amount").description("입금할 총액 (멤버 가격 + 배송비, 원)"),
-                            fieldWithPath("dueAt").description("입금 만료 시각 (UTC ISO-8601)"),
-                            fieldWithPath("hostAccount").description("참여자가 입금할 개최자 계좌"),
+                            fieldWithPath("dueAt")
+                                .description("입금 만료 시각 (UTC ISO-8601). 코드 참여는 결제가 없어 null")
+                                .optional(),
+                            fieldWithPath("hostAccount")
+                                .description("참여자가 입금할 개최자 계좌. 코드 참여는 null")
+                                .optional(),
                             fieldWithPath("hostAccount.bank").description("개최자 은행명"),
                             fieldWithPath("hostAccount.account").description("개최자 계좌번호"),
                             fieldWithPath("hostAccount.holder").description("개최자 예금주"))

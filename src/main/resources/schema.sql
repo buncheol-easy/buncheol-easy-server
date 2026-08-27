@@ -320,9 +320,12 @@ CREATE TABLE IF NOT EXISTS participation_bundles
     participant_id      BIGINT      NOT NULL COMMENT '참여자',
     shipping_address_id BIGINT      NULL COMMENT '배송지 — 묶음당 1개(택배 1개)',
     shipping_fee        BIGINT      NOT NULL DEFAULT 0 COMMENT '배송비 — 묶음이 소유하며 묶음당 1회. 슬롯이 취소돼도 불변',
-    refund_bank         VARCHAR(50) NOT NULL DEFAULT '' COMMENT '환불 은행',
-    refund_account      VARCHAR(50) NOT NULL DEFAULT '' COMMENT '환불 계좌번호',
-    refund_holder       VARCHAR(50) NOT NULL DEFAULT '' COMMENT '환불 예금주 = 개최자 통장 대조 키(입금자명)',
+    -- ⚠️ DEFAULT 를 두지 않는다. RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
+    -- (BankAccount javadoc 참조) 그 생성자가 빈 값을 거부한다 — 빈 값으로 채워진 묶음은 영원히 읽을 수 없다.
+    -- DEFAULT 가 없으면 값을 빠뜨린 INSERT 가 그 자리에서 실패하므로, 읽기 불가 행이 만들어지지 않는다.
+    refund_bank         VARCHAR(50) NOT NULL COMMENT '환불 은행',
+    refund_account      VARCHAR(50) NOT NULL COMMENT '환불 계좌번호',
+    refund_holder       VARCHAR(50) NOT NULL COMMENT '환불 예금주 = 개최자 통장 대조 키(입금자명)',
     due_at              DATETIME    NULL COMMENT '입금 기한. C2C 는 자동 취소하지 않는다 — 이 시각부터 개최자 「제외」가 열린다 (docs/71 §8-1)',
     payment_sent_at     DATETIME    NULL COMMENT '참여자 「보냈어요」 마킹 시각 (묶음 1회)',
     closed_at           DATETIME    NULL COMMENT '묶음 종료(활성 슬롯 0) 시각. NULL = 활성',
@@ -363,11 +366,16 @@ CREATE TABLE IF NOT EXISTS participations
     shipping_address_id   BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
     amount                BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
     shipping_fee          BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
-    -- DEFAULT '' 는 P2 대비 완화다 (docs/70 §10-9). 정본이 묶음으로 옮겨가면 이 컬럼들은 INSERT 목록에서
-    -- 빠지는데, NOT NULL 인데 DEFAULT 가 없으면 MySQL strict mode 가 ERROR 1364 로 전 신청을 거부한다.
-    refund_bank           VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '환불 은행 (정본은 participation_bundles)',
-    refund_account        VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '환불 계좌번호 (정본은 participation_bundles)',
-    refund_holder         VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '환불 예금주 (정본은 participation_bundles)',
+    -- NULL 허용은 P2 대비 완화다. 정본이 묶음으로 옮겨가면 이 컬럼들은 INSERT 목록에서 빠지는데,
+    -- NOT NULL 인데 DEFAULT 가 없으면 MySQL strict mode 가 ERROR 1364 로 전 신청을 거부한다.
+    -- ⚠️ DEFAULT '' 로 완화해서는 안 된다 — RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
+    -- 그 생성자가 빈 값을 거부해(BankAccount javadoc) 그 행을 읽는 것 자체가 깨진다. 즉시 실패가 지연 실패로
+    -- 바뀌어 더 나쁘다. 세 컬럼이 모두 NULL 이면 Hibernate 는 embeddable 을 null 로 두고 생성자를 타지 않는다.
+    -- 🔴 P2 에서 값을 빼기 시작하면 getRefundAccount() 가 null 을 돌려주므로, 그때 읽기 경로를 함께 고쳐야 한다.
+    --    P1 시점에는 모든 행이 값을 갖고 있어 영향이 없다.
+    refund_bank           VARCHAR(50)  NULL COMMENT '환불 은행 (정본은 participation_bundles)',
+    refund_account        VARCHAR(50)  NULL COMMENT '환불 계좌번호 (정본은 participation_bundles)',
+    refund_holder         VARCHAR(50)  NULL COMMENT '환불 예금주 (정본은 participation_bundles)',
     due_at                DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
     confirmed_at          DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at          DATETIME     NULL COMMENT '참여 취소 시각',
@@ -430,9 +438,12 @@ CREATE TABLE IF NOT EXISTS participations
     -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용.
     INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC),
 
+    -- ⚠️ CASCADE 가 아니라 SET NULL 이다. 묶음은 슬롯에서 파생된 것이지 슬롯의 소유자가 아니다.
+    -- CASCADE 면 백필을 다시 돌리려고 DELETE FROM participation_bundles 하는 순간 참여 전 행이,
+    -- 이어서 deliveries 까지 연쇄 삭제된다. bundle_id 를 NOT NULL 로 조이는 P2 에서 RESTRICT 로 승격한다.
     CONSTRAINT fk_participations_bundle
         FOREIGN KEY (bundle_id)
-            REFERENCES participation_bundles (id) ON DELETE CASCADE,
+            REFERENCES participation_bundles (id) ON DELETE SET NULL,
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)
             REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -483,7 +494,7 @@ CREATE TABLE IF NOT EXISTS deliveries
 
     CONSTRAINT fk_deliveries_bundle
         FOREIGN KEY (bundle_id)
-            REFERENCES participation_bundles (id) ON DELETE CASCADE,
+            REFERENCES participation_bundles (id) ON DELETE SET NULL,
     CONSTRAINT fk_deliveries_participation
         FOREIGN KEY (participation_id)
             REFERENCES participations (id) ON DELETE CASCADE

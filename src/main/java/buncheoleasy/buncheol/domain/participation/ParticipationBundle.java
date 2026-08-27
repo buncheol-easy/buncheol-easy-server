@@ -72,6 +72,27 @@ public class ParticipationBundle extends TimestampedEntity {
   @Column(name = "closed_at")
   private Instant closedAt;
 
+  /**
+   * 새 묶음을 연다. 배송지·배송비·환불계좌는 <b>참여 시점 스냅샷</b>이라 생성 후 바뀌지 않는다({@code
+   * updatable = false}).
+   *
+   * <p>{@code dueAt} 은 성사 확정 시점에 정해지므로 생성 시점에는 비어 있다 — 신청 구간에는 입금 기한이라는 개념이 없다.
+   */
+  public static ParticipationBundle open(
+      final Long buncheolId,
+      final Long participantId,
+      final Long shippingAddressId,
+      final long shippingFee,
+      final RefundAccount refundAccount) {
+    ParticipationBundle bundle = new ParticipationBundle();
+    bundle.buncheolId = buncheolId;
+    bundle.participantId = participantId;
+    bundle.shippingAddressId = shippingAddressId;
+    bundle.shippingFee = shippingFee;
+    bundle.refundAccount = refundAccount;
+    return bundle;
+  }
+
   public boolean isActive() {
     return closedAt == null;
   }

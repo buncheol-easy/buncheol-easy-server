@@ -49,7 +49,10 @@ public class BuncheolDomainService {
     buncheol.updateOpenChatUrl(openChatUrl);
   }
 
-  /** 링크 전용 수정 — null·공백을 제거로 본다 ({@link Buncheol#replaceOpenChatUrl}). */
+  /**
+   * 링크 전용 수정 — 공백을 제거로 본다. null 은 요청 DTO 의 {@code @NotNull} 이 웹에서 차단하고 도메인은 방어적으로만 받는다
+   * ({@link Buncheol#replaceOpenChatUrl}).
+   */
   public void replaceBuncheolOpenChatUrl(final Buncheol buncheol, final String openChatUrl) {
     buncheol.replaceOpenChatUrl(openChatUrl);
   }

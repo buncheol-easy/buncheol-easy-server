@@ -871,17 +871,17 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
 
                             취소(`CANCELLED`·`HOST_CANCELLED`)된 분철에서만 막힌다.
 
-                            `openChatUrl` 을 생략하거나 빈 문자열·공백으로 보내면 **링크가 제거된다**. 전체 수정에서
-                            null 이 "기존 값 유지" 인 것과 다르다 — 이 요청은 링크 하나만 담으므로 null 을 유지로
-                            해석하면 비우기를 표현할 방법이 없어진다.
+                            `openChatUrl` 은 **필수 필드다** — 필드를 생략하거나 `null` 로 보내면 `400 C-001` 이다.
+                            **링크 제거는 빈 문자열(`""`)·공백으로만** 표현한다. 전체 수정에서 null 이 "기존 값 유지"
+                            인 것과 다르다 — 이 요청은 링크 하나만 담으므로 유지할 다른 값이 없다.
 
                             **권한**: 해당 분철의 **개최자 본인만** 호출 가능.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 공백·제어문자 포함 |
-                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | 200자 초과 |
+                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 값 내부에 공백·제어문자 포함 (전부 공백인 값은 오류가 아니라 링크 제거) |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `openChatUrl` 누락(필드 생략·`null`) 또는 200자 초과 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-094` (`BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE`) | 취소된 분철이라 수정 불가 |
@@ -891,9 +891,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .requestSchema(Schema.schema("OpenChatUrlUpdateRequest"))
                         .requestFields(
                             fieldWithPath("openChatUrl")
-                                .optional()
                                 .description(
-                                    "카카오 오픈채팅 링크 (최대 200자). 생략·빈 문자열·공백이면 링크를 제거한다."))
+                                    "카카오 오픈채팅 링크 (필수, 최대 200자). 빈 문자열·공백이면 링크를 제거한다."))
                         .build())));
   }
 

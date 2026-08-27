@@ -32,8 +32,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 운영자(개최자) 분철 관리 화면 조회 서비스. 호스트 본인 권한을 검증한 뒤, 분철 정보와 활성 참여자(입금확인 대상·확정 참여) 목록을 환불계좌·배송 스냅샷과 함께 단일
- * 응답으로 조립한다. 입금확인·환불은 운영자가 이 화면을 보고 처리한다. 취소된 참여는 슬롯을 점유하지 않아 참여자 목록과 분리해 담는다.
+ * 운영자(개최자) 분철 관리 화면 조회 서비스. 호스트 본인 권한을 검증한 뒤, 분철 정보와 활성 참여자(입금확인 대상·확정 참여) 목록을 입금자명·배송 스냅샷과 함께
+ * 단일 응답으로 조립한다. 입금확인·환불은 운영자가 이 화면을 보고 처리한다. 취소된 참여는 슬롯을 점유하지 않아 참여자 목록과 분리해 담는다.
+ *
+ * <p><b>계좌는 평시에 내려가지 않는다</b> — 통장 대조에 필요한 것은 입금자명뿐이라 활성 참여에는 {@code depositorName} 만 붙고,
+ * 계좌번호는 개최자가 실제로 환불해야 하는 건(취소분 중 입금 흔적이 있는 것)에만 채운다 ({@link #refundAccountFor}).
  */
 @Service
 @RequiredArgsConstructor
@@ -146,13 +149,32 @@ public class BuncheolManagementQueryService {
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
+        participation.getRefundAccount().holder(),
         participation.getTotalAmount(),
         participation.getShippingFee(),
         participation.getStatus(),
         participation.getDueAt(),
         participation.getConfirmedAt(),
-        RefundAccountResponse.from(participation.getRefundAccount()),
+        refundAccountFor(participation),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
         participation.getPaymentSentAt());
+  }
+
+  /**
+   * 개최자에게 내려줄 환불 계좌 (docs/70 결정 21). 통장 대조에 필요한 것은 입금자명뿐이라 평시에는 계좌를 내리지 않는다. 계좌번호가 필요한
+   * 유일한 상황은 <b>개최자가 직접 환불해야 하는 건</b>이고, 그건 취소분 중 입금 흔적이 남은 건뿐이다.
+   *
+   * <p>판정 키({@code paymentSentAt} 또는 {@code confirmedAt})는 개최 관리 화면의 "환불이 필요한 참여" 목록 필터와 같은
+   * 기준이다 — 둘이 갈리면 목록에는 뜨는데 계좌가 비는 행이 생긴다.
+   */
+  private static RefundAccountResponse refundAccountFor(final Participation participation) {
+    return needsHostRefund(participation)
+        ? RefundAccountResponse.from(participation.getRefundAccount())
+        : null;
+  }
+
+  private static boolean needsHostRefund(final Participation participation) {
+    return participation.getStatus() == ParticipationStatus.CANCELLED
+        && (participation.getPaymentSentAt() != null || participation.getConfirmedAt() != null);
   }
 }

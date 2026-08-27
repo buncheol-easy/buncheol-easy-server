@@ -983,7 +983,7 @@ class BuncheolControllerTest {
   class GetBuncheolManagementTest {
 
     @Test
-    void 호스트_본인이_조회하면_참여자_환불계좌_배송_정보까지_200으로_반환한다() throws Exception {
+    void 호스트_본인이_조회하면_참여자_입금자명_배송_정보까지_200으로_반환한다() throws Exception {
       Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
       BuncheolManagementParticipantResponse confirmed =
           new BuncheolManagementParticipantResponse(
@@ -991,12 +991,13 @@ class BuncheolControllerTest {
               "유진팬",
               101L,
               "안유진",
+              "유진팬",
               93_000L,
               3_000L,
               ParticipationStatus.CONFIRMED,
               Instant.parse("2026-05-28T00:00:00Z"),
               Instant.parse("2026-05-27T10:00:00Z"),
-              new RefundAccountResponse("국민은행", "12345678", "유진팬"),
+              null,
               new ManagementDeliveryResponse(
                   5001L,
                   ShippingMethod.GS25_HALF,
@@ -1011,12 +1012,13 @@ class BuncheolControllerTest {
               "레이팬",
               102L,
               "레이",
+              "레이팬",
               53_000L,
               3_000L,
               ParticipationStatus.AWAITING_PAYMENT,
               Instant.parse("2026-05-26T00:30:00Z"),
               null,
-              new RefundAccountResponse("신한은행", "87654321", "레이팬"),
+              null,
               null, null);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
@@ -1048,13 +1050,15 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.participants[0].memberName").value("안유진"))
           .andExpect(jsonPath("$.participants[0].amount").value(93000))
           .andExpect(jsonPath("$.participants[0].status").value("CONFIRMED"))
-          .andExpect(jsonPath("$.participants[0].refundAccount.bank").value("국민은행"))
+          .andExpect(jsonPath("$.participants[0].depositorName").value("유진팬"))
+          .andExpect(jsonPath("$.participants[0].refundAccount").doesNotExist())
           .andExpect(jsonPath("$.participants[0].delivery.deliveryId").value(5001))
           .andExpect(jsonPath("$.participants[0].delivery.shippingMethod").value("GS25_HALF"))
           .andExpect(jsonPath("$.participants[0].delivery.trackingNumber").value("1234567890"))
           .andExpect(jsonPath("$.participants[0].delivery.status").value("SHIPPING"))
           .andExpect(jsonPath("$.participants[1].status").value("AWAITING_PAYMENT"))
-          .andExpect(jsonPath("$.participants[1].refundAccount.bank").value("신한은행"))
+          .andExpect(jsonPath("$.participants[1].depositorName").value("레이팬"))
+          .andExpect(jsonPath("$.participants[1].refundAccount").doesNotExist())
           .andExpect(jsonPath("$.participants[1].delivery").doesNotExist());
     }
 

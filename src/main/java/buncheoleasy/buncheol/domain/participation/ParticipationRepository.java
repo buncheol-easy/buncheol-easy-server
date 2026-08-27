@@ -72,7 +72,7 @@ public interface ParticipationRepository {
 
   /**
    * 단일 분철의 취소된 참여 전체 — 개최자 관리 화면에서 환불 계좌를 보여주기 위한 목록. 취소되면 활성 참여 조회에서 빠져 환불 계좌에 닿을 길이 없어지는데,
-   * C2C 는 대금이 개최자 계좌로 직접 가는 직거래라 개최자가 환불 주체다. 환불이 실제로 필요한지는 개최자가 판단한다.
+   * C2C 는 대금이 개최자 계좌로 직접 가는 직거래라 개최자가 환불 주체다. 응답 조립 단계에서 **입금 흔적이 있는 건에만** 계좌를 붙이고, 그중 실제 환불이 필요한지는 개최자가 판단한다.
    */
   List<Participation> findCancelledByBuncheolId(Long buncheolId);
 

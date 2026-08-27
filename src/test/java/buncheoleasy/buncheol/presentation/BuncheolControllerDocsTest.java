@@ -936,6 +936,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
                               개최자 계좌로 직접 입금되는 직거래라 개최자가 환불 주체). 환불이 실제로 필요한지는 개최자가 판단한다.
                               필드 구조는 `participants[]` 와 같고 `status` 는 항상 `CANCELLED`, `delivery` 는 취소 시 정리되어 항상 null.
+                              서버가 **입금 흔적이 있는 건만** 계좌를 내리고, 그중 실제 환불이 필요한지는 개최자가 판단한다.
                               `refundAccount` 는 **입금 흔적이 있는 건에만** 채워진다(흔적 없는 취소는 환불할 돈이 없다).
                               슬롯을 점유하지 않으므로 참여 수·정원 집계에 넣지 않는다
 
@@ -1085,7 +1086,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "C2C '보냈어요' 마킹 시각 — 개최자 통장 대조 우선순위 근거. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
                             fieldWithPath("cancelledParticipants")
-                                .description("취소된 참여 배열 (환불 계좌 확인용). 참여 수·정원 집계에 포함되지 않는다"),
+                                .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
                                 .description("참여 ID"),
                             fieldWithPath("cancelledParticipants[].participantNickname")
@@ -1112,6 +1113,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount")
                                 .description("환불 계좌. 입금 흔적(paymentSentAt·confirmedAt)이 있는 건에만 채워진다")
+                                .type(JsonFieldType.OBJECT)
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount.bank")
                                 .description("환불 은행명")

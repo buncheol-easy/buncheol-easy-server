@@ -185,6 +185,32 @@ public class BuncheolService {
   }
 
   /**
+   * 오픈채팅 링크만 수정한다. 전체 수정({@link #modifyBuncheol})은 모집중·마감 전으로 묶여 있는데, 링크는 참여자가 입금하며 문의하는
+   * 구간에서 오히려 더 필요하다. 그 구간을 열어 주되 가격·멤버 보호 가드는 전체 수정 경로에 그대로 둔다.
+   *
+   * <p>공백 해석은 {@link Buncheol#replaceOpenChatUrl} 이 쥔다 — 제거다.
+   *
+   * <p>⚠️ <b>이 가드는 안내용이며 원자성을 보장하지 않는다.</b> 로드 시점 {@code status} 스냅샷을 보고 쓰기는 커밋 시점 flush 라, 그
+   * 사이 취소 CAS 가 커밋되면 취소된 분철에 링크가 쓰인다. 취소된 분철의 링크를 읽는 화면이 없어 무해하다고 보고 수용했다 — <b>다른 필드를 이
+   * 패턴으로 얹지 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
+   *
+   * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(성사 확정·진행
+   * 확정)만 {@code isC2c()} 로 막는다.
+   *
+   * <p><b>참여자 알림은 보내지 않는다</b>(이번 범위 밖). 링크가 바뀌어도 참여자는 상세·내 참여를 다시 열어야 새 링크를 본다 — 이미 링크를
+   * 복사해 간 사람에게는 안내가 닿지 않는다. 수신함 기록은 별도로 다룬다.
+   */
+  @Transactional
+  public void updateOpenChatUrl(
+      final Long hostId, final Long buncheolId, final String openChatUrl) {
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    buncheol.validateOwner(hostId);
+    buncheol.validateOpenChatUrlEditable();
+
+    buncheolDomainService.replaceBuncheolOpenChatUrl(buncheol, openChatUrl);
+  }
+
+  /**
    * C2C 개최자 성사 확정 (RECRUITING → PAYMENT_COLLECTING, docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금
    * 대기로 전이하고, 확정 시점 개최자 계좌를 분철에 스냅샷한다(§4.7-B1). 정원 미달이어도 개최자 재량으로 확정할 수 있고(§7.1-2), deadline
    * 전 조기 확정도 허용한다(§4.7-E2) — 미달 경고·재확인은 FE 가 담당한다.

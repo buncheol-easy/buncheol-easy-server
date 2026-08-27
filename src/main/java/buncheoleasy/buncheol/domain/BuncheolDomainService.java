@@ -49,6 +49,11 @@ public class BuncheolDomainService {
     buncheol.updateOpenChatUrl(openChatUrl);
   }
 
+  /** 링크 전용 수정 — null·공백을 제거로 본다 ({@link Buncheol#replaceOpenChatUrl}). */
+  public void replaceBuncheolOpenChatUrl(final Buncheol buncheol, final String openChatUrl) {
+    buncheol.replaceOpenChatUrl(openChatUrl);
+  }
+
   /**
    * 마감 판정(진행확정/취소)을 단일 CAS 로 원자 전이한다. 입금확인 인원이 최소 인원 이상이면 CONFIRMED, 미만이면 CANCELLED. 카운트·비교·전이를 한
    * UPDATE 로 묶어, 카운트 조회와 전이 사이에 입금확인이 커밋돼 발생하는 오판(stale count)을 방지한다.

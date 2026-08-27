@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -57,6 +58,16 @@ class BuncheolTest {
       assertThat(buncheol.getOpenChatUrl()).isNull();
     }
 
+    // 링크 전용 경로는 공백만 제거로 본다. null 은 DTO @NotNull 이 막아 정상 경로에 오지 않지만 방어적으로 같게 처리한다.
+    @Test
+    void 링크_전용_교체는_공백을_제거로_본다() {
+      Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
+
+      buncheol.replaceOpenChatUrl("   ");
+
+      assertThat(buncheol.getOpenChatUrl()).isNull();
+    }
+
     @Test
     void 유효한_값은_검증_후_교체된다() {
       Buncheol buncheol = withOpenChatUrl("https://open.kakao.com/o/gAbCdEf");
@@ -75,6 +86,55 @@ class BuncheolTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_INVALID);
       assertThat(buncheol.getOpenChatUrl()).isEqualTo("https://open.kakao.com/o/gAbCdEf");
+    }
+  }
+
+  @Nested
+  @DisplayName("오픈채팅 링크 수정 가능 구간 테스트")
+  class ValidateOpenChatUrlEditableTest {
+
+    private Buncheol withStatus(final BuncheolStatus status) {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+      setStatus(buncheol, status);
+      return buncheol;
+    }
+
+    // 링크는 소통 수단이라 전체 수정(모집중 전용)보다 넓게 연다 — 입금 구간에서 오히려 더 필요하다.
+    // ⚠️ EXCLUDE 로 두지 마라 — 새 상태가 "수정 가능" 쪽으로 자동 편입돼 아무 결정 없이 그린이 된다.
+    // 새 상태를 강제하는 것은 이 목록이 아니라 validateOpenChatUrlEditable 의 exhaustive switch(컴파일 에러)다.
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CONFIRMED"})
+    void 진행_중인_구간에서는_수정할_수_있다(final BuncheolStatus status) {
+      Buncheol buncheol = withStatus(status);
+
+      assertThatCode(buncheol::validateOpenChatUrlEditable).doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"CANCELLED", "HOST_CANCELLED"})
+    void 취소된_분철은_수정할_수_없다(final BuncheolStatus status) {
+      Buncheol buncheol = withStatus(status);
+
+      assertThatThrownBy(buncheol::validateOpenChatUrlEditable)
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE);
+    }
+
+    // 전체 수정은 마감이 지나면 막히지만(validateRecruiting), 링크는 상태만 본다 — 마감 후
+    // 성사 확정을 기다리는 구간이야말로 참여자 문의가 몰리는 때다.
+    @Test
+    void 마감이_지난_모집중에서도_수정할_수_있다() {
+      Buncheol buncheol = withStatus(BuncheolStatus.RECRUITING);
+      Instant afterDeadline = FUTURE_DEADLINE.plus(1, ChronoUnit.DAYS);
+
+      assertThatThrownBy(() -> buncheol.validateRecruiting(afterDeadline))
+          .isInstanceOf(BusinessException.class);
+      assertThatCode(buncheol::validateOpenChatUrlEditable).doesNotThrowAnyException();
     }
   }
 

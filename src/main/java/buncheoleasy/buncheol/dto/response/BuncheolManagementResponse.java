@@ -10,6 +10,7 @@ import java.util.List;
  *
  * @param cancelledParticipants 취소된 참여(환불 계좌 확인용). {@code participants} 와 분리해 내려 참여 수 집계에 섞이지 않게
  *     한다 — 슬롯을 점유하지 않는다.
+ * @param openChatUrl 참여자 소통용 오픈채팅 링크(없으면 null). 개최자가 이 화면에서 바로 등록·수정하므로 현재 값이 필요하다.
  */
 public record BuncheolManagementResponse(
     Long id,
@@ -24,4 +25,5 @@ public record BuncheolManagementResponse(
     List<BuncheolManagementParticipantResponse> participants,
     List<BuncheolManagementParticipantResponse> cancelledParticipants,
     FlowType flowType,
-    Instant paymentDueAt) {}
+    Instant paymentDueAt,
+    String openChatUrl) {}

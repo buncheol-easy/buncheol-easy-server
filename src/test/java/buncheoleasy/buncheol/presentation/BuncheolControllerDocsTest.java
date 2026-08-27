@@ -880,7 +880,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 공백·제어문자 포함 |
+                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 값 내부에 공백·제어문자 포함 (전부 공백인 값은 오류가 아니라 링크 제거) |
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `openChatUrl` 누락(필드 생략·`null`) 또는 200자 초과 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
@@ -892,7 +892,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .requestFields(
                             fieldWithPath("openChatUrl")
                                 .description(
-                                    "카카오 오픈채팅 링크 (최대 200자, 필수). 빈 문자열·공백이면 링크를 제거한다."))
+                                    "카카오 오픈채팅 링크 (필수, 최대 200자). 빈 문자열·공백이면 링크를 제거한다."))
                         .build())));
   }
 

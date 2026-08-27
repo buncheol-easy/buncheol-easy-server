@@ -75,12 +75,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                     """
                     {
                       "buncheolMemberId": 200,
-                      "shippingAddressId": 1,
-                      "refundAccount": {
-                        "bank": "국민은행",
-                        "account": "12345678",
-                        "holder": "홍길동"
-                      }
+                      "shippingAddressId": 1
                     }
                     """))
         .andExpect(status().isCreated())
@@ -99,8 +94,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             있다. `buncheolMemberId` 로 슬롯 하나를 지정하고, 점유에 성공하면
                             입금확인중(AWAITING_PAYMENT) 상태로 등록되며 응답으로 생성된 참여
                             ID(`participationId`)·개최자 계좌·입금 총액·입금 만료 시각(`dueAt`)을 받는다.
-                            `amount` 는 (멤버 가격 + 배송비)다. 참여와 동시에 분철 취소 시 환불받을 본인
-                            계좌(`refundAccount`)를 입력한다.
+                            `amount` 는 (멤버 가격 + 배송비)다. 분철 취소 시 환불받을 계좌는 **요청으로 보내지 않는다** —
+                            서버가 참여 시점의 마이페이지 정산 계좌를 읽어 스냅샷으로 저장한다. 계좌가 등록돼 있지
+                            않으면 `409 USR-025` 로 거부되므로, 참여 전에 계좌 등록을 유도한다.
 
                             **참여 코드 슬롯 (`saleStatus: "CODE_ONLY"`)**
 
@@ -113,8 +109,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
 
                             - 슬롯 금액과 배송비가 모두 0원으로 처리되어 참여 즉시 확정(CONFIRMED)된다
                             - 응답의 `amount` 는 `0`, `dueAt`·`hostAccount` 는 `null` 이다 — **입금 안내 화면을 띄우면 안 된다**
-                            - `refundAccount` 를 **생략해야 한다**. 환불할 금액이 없어 계좌를 받지 않으며,
-                              입력란을 노출하면 존재하지 않는 보증금 조건이 있는 것처럼 보인다
+                            - 환불 계좌를 아예 남기지 않는다 — 정산 계좌가 없어도 참여할 수 있다
                             - 이후 공유하는 것은 배송지·운송장 등 배송 기능뿐이다
 
                             **발생 가능한 에러**
@@ -123,8 +118,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
                             | 400 | `BCH-062` (`PARTICIPATION_REQUIRED_FIELD_MISSING`) | 참여 필수 항목 누락 (도메인 방어 검증 — 정상 HTTP 요청에서는 `C-001` 이 먼저 잡는다) |
                             | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 선택한 수령지의 배송방법을 이 분철이 지원하지 않음 |
-                            | 400 | `USR-026` (`USER_BANK_ACCOUNT_FORMAT_INVALID`) | `refundAccount.account` 가 숫자·하이픈 형식이 아님 |
-                            | 400 | `USR-034` (`USER_BANK_ACCOUNT_TOO_SHORT`) | `refundAccount.account` 가 하이픈 제외 8자리 미만 |
+                            | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 유상 참여인데 마이페이지 정산 계좌 미등록 |
                             | 403 | `BCH-066` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
@@ -145,15 +139,6 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("buncheolMemberId")
                                 .description("참여할 분철 멤버 슬롯 ID (단일 선택 정책)"),
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
-                            fieldWithPath("refundAccount")
-                                .description(
-                                    "분철 취소 시 환불받을 본인 계좌. **코드 참여(0원)에서는 생략** — 환불할 금액이 없다")
-                                .optional(),
-                            fieldWithPath("refundAccount.bank").description("은행명"),
-                            fieldWithPath("refundAccount.account")
-                                .description(
-                                    "계좌번호 (숫자·하이픈). **하이픈을 제외한 숫자 8자리 이상** — 미만이면 `400 USR-034`"),
-                            fieldWithPath("refundAccount.holder").description("예금주"),
                             fieldWithPath("participationCode")
                                 .description(
                                     "참여 코드. `CODE_ONLY` 슬롯에서만 필수이고 선착순 슬롯에 보내면 `400 BCH-096`."

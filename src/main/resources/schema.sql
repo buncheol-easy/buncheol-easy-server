@@ -297,20 +297,77 @@ CREATE TABLE IF NOT EXISTS buncheol_images
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- participation_bundles 테이블 생성 (참여 묶음 — docs/70 §3)
+--
+-- 현실의 돈은 묶음 단위다: 이체 1회 · 배송비 1회 · 택배 1개. 그런데 모델이 슬롯 단위라
+-- 배송비·배송지·환불계좌·기한이 슬롯 행에 흩어져 있었고, 그 행이 취소되면 값도 같이 죽었다
+-- (docs/62 M-01 — prod 에서 실제로 확인됨). 이 테이블이 그것들의 정본이 된다.
+--
+-- ⛔ 활성 묶음 유니크는 만들지 않는다 (docs/71 §8-3). 추가 모집·재신청이 "새 묶음" 이어야 하므로
+--    한 사람이 한 분철에 활성 묶음을 2개 가질 수 있어야 한다. 중복 방지는 앱 가드가 하고,
+--    LEGACY 1인 1슬롯 보호는 participations.uq_participations_legacy_active_participant 가 그대로 계속한다.
+--    (그래서 active_participant_id 같은 생성 컬럼도 필요 없다.)
+CREATE TABLE IF NOT EXISTS participation_bundles
+(
+    id                  BIGINT      NOT NULL AUTO_INCREMENT,
+    buncheol_id         BIGINT      NOT NULL COMMENT '대상 분철',
+    participant_id      BIGINT      NOT NULL COMMENT '참여자',
+    shipping_address_id BIGINT      NULL COMMENT '배송지 — 묶음당 1개(택배 1개)',
+    shipping_fee        BIGINT      NOT NULL DEFAULT 0 COMMENT '배송비 — 묶음이 소유하며 묶음당 1회. 슬롯이 취소돼도 불변',
+    -- ⚠️ DEFAULT 를 두지 않는다. RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
+    -- (BankAccount javadoc 참조) 그 생성자가 빈 값을 거부한다 — 빈 값으로 채워진 묶음은 영원히 읽을 수 없다.
+    -- DEFAULT 가 없으면 값을 빠뜨린 INSERT 가 그 자리에서 실패하므로, 읽기 불가 행이 만들어지지 않는다.
+    refund_bank         VARCHAR(50) NOT NULL COMMENT '환불 은행',
+    refund_account      VARCHAR(50) NOT NULL COMMENT '환불 계좌번호',
+    refund_holder       VARCHAR(50) NOT NULL COMMENT '환불 예금주 = 개최자 통장 대조 키(입금자명)',
+    due_at              DATETIME    NULL COMMENT '입금 기한. C2C 는 자동 취소하지 않는다 — 이 시각부터 개최자 「제외」가 열린다 (docs/71 §8-1)',
+    payment_sent_at     DATETIME    NULL COMMENT '참여자 「보냈어요」 마킹 시각 (묶음 1회)',
+    closed_at           DATETIME    NULL COMMENT '묶음 종료(활성 슬롯 0) 시각. NULL = 활성',
+    created_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    -- 슬롯이 자기 묶음과 (분철, 사람)에서 어긋나지 않도록 하는 복합 FK 의 참조 대상. 지금은 참조하지 않지만
+    -- 나중에 붙일 수 있게 열어 둔다 — 나중에 만들면 기존 행을 전부 재검증해야 한다.
+    UNIQUE INDEX uk_participation_bundles_id_keys (id, buncheol_id, participant_id),
+    -- "이 사람의 이 분철 활성 묶음" 조회용. 활성 유니크를 두지 않기로 해 이 조회를 받쳐 줄 인덱스가 따로 필요하다.
+    INDEX idx_participation_bundles_buncheol_participant (buncheol_id, participant_id),
+    -- 내 참여 목록(참여자별 최신순)용
+    INDEX idx_participation_bundles_participant_created (participant_id, created_at DESC),
+
+    CONSTRAINT fk_participation_bundles_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE,
+    CONSTRAINT fk_participation_bundles_user
+        FOREIGN KEY (participant_id)
+            REFERENCES users (id),
+    CONSTRAINT fk_participation_bundles_shipping_address
+        FOREIGN KEY (shipping_address_id)
+            REFERENCES shipping_addresses (id) ON DELETE SET NULL
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS participations
 (
     id                           BIGINT       NOT NULL AUTO_INCREMENT,
     buncheol_id                  BIGINT       NOT NULL,
     buncheol_member_id           BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
     participant_id               BIGINT       NOT NULL COMMENT '참여자',
+    -- 소속 묶음 (docs/70 §3). P1 은 추가만 — 아직 아무도 읽지 않는다. 백필 후 NOT NULL 로 조인다.
+    bundle_id                    BIGINT       NULL COMMENT '소속 묶음',
     shipping_address_id          BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
     amount                       BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
     shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
-    -- 0원(코드) 참여는 환불할 돈이 없어 계좌를 받지 않는다.
-    -- 기존 배포 DB 에는 NOT NULL 해제 ALTER 필요.
-    refund_bank                  VARCHAR(50)  NULL COMMENT '환불 은행 (0원 참여는 NULL)',
-    refund_account               VARCHAR(50)  NULL COMMENT '환불 계좌번호 (0원 참여는 NULL)',
-    refund_holder                VARCHAR(50)  NULL COMMENT '환불 예금주 (0원 참여는 NULL)',
+    -- NULL 인 경우: 0원(코드) 참여는 환불할 돈이 없어 계좌를 받지 않고, P2 에서 정본이 묶음으로 옮겨가면
+    -- 이 컬럼들이 INSERT 목록에서 빠진다. 기존 배포 DB 에는 NOT NULL 해제 ALTER 필요.
+    -- ⚠️ DEFAULT '' 로 완화해서는 안 된다 — RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
+    -- 그 생성자가 빈 값을 거부해(BankAccount javadoc) 그 행을 읽는 것 자체가 깨진다. 세 컬럼이 모두 NULL
+    -- 이면 Hibernate 는 embeddable 을 null 로 두고 생성자를 타지 않는다.
+    refund_bank                  VARCHAR(50)  NULL COMMENT '환불 은행 (0원 참여는 NULL, 정본은 participation_bundles)',
+    refund_account               VARCHAR(50)  NULL COMMENT '환불 계좌번호 (0원 참여는 NULL, 정본은 participation_bundles)',
+    refund_holder                VARCHAR(50)  NULL COMMENT '환불 예금주 (0원 참여는 NULL, 정본은 participation_bundles)',
     due_at                       DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',
@@ -362,6 +419,8 @@ CREATE TABLE IF NOT EXISTS participations
     INDEX idx_participations_status_due (status, due_at),
     -- 내 참여 목록(참여자별 최신순)용
     INDEX idx_participations_participant_created (participant_id, created_at DESC),
+    -- 묶음의 활성 슬롯 조회·집계용 (묶음 확인·제외·종료 판정)
+    INDEX idx_participations_bundle_status (bundle_id, status),
     -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요.
     INDEX idx_participations_created (created_at DESC, id DESC),
     -- 같은 후기 트윗의 타 참여 중복 신청 방지용 (check-then-update 갭을 DB 가 최종 차단).
@@ -370,6 +429,12 @@ CREATE TABLE IF NOT EXISTS participations
     -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용
     INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC),
 
+    -- ⚠️ CASCADE 가 아니라 SET NULL 이다. 묶음은 슬롯에서 파생된 것이지 슬롯의 소유자가 아니다.
+    -- CASCADE 면 백필을 다시 돌리려고 DELETE FROM participation_bundles 하는 순간 참여 전 행이,
+    -- 이어서 deliveries 까지 연쇄 삭제된다. bundle_id 를 NOT NULL 로 조이는 P2 에서 RESTRICT 로 승격한다.
+    CONSTRAINT fk_participations_bundle
+        FOREIGN KEY (bundle_id)
+            REFERENCES participation_bundles (id) ON DELETE SET NULL,
     CONSTRAINT fk_participations_buncheol
         FOREIGN KEY (buncheol_id)
             REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -423,7 +488,9 @@ CREATE TABLE IF NOT EXISTS participation_codes
 CREATE TABLE IF NOT EXISTS deliveries
 (
     id                      BIGINT       NOT NULL AUTO_INCREMENT,
-    participation_id        BIGINT       NOT NULL COMMENT '참여 ID',
+    participation_id        BIGINT       NOT NULL COMMENT '참여 ID (P4 에서 DROP — 정본은 bundle_id)',
+    -- 1묶음 = 1택배 = 배송 1행 (docs/70 결정 4). 백필 후 NOT NULL + UNIQUE 로 조인다.
+    bundle_id               BIGINT       NULL COMMENT '소속 묶음',
     shipping_method         VARCHAR(20)  NOT NULL COMMENT '배송 방식 스냅샷',
     store_name              VARCHAR(100) NOT NULL COMMENT '편의점 지점명 스냅샷',
     receiver_nickname       VARCHAR(20)  NOT NULL COMMENT '닉네임 스냅샷',
@@ -441,11 +508,16 @@ CREATE TABLE IF NOT EXISTS deliveries
     PRIMARY KEY (id),
 
     UNIQUE INDEX uq_deliveries_participation_id (participation_id),
+    -- 백필 전이라 아직 유니크가 아니다. 백필·검증 후 uq_deliveries_bundle 로 승격한다.
+    INDEX idx_deliveries_bundle (bundle_id),
     INDEX idx_deliveries_status (status),
     -- 배송 추적 콜백의 운송장 조회용 (관리자 벌크 등록으로 한 운송장에 다건 매핑).
     -- 기존 배포 DB 에는 수동 ALTER 필요.
     INDEX idx_deliveries_tracking (tracking_number, shipping_method),
 
+    CONSTRAINT fk_deliveries_bundle
+        FOREIGN KEY (bundle_id)
+            REFERENCES participation_bundles (id) ON DELETE SET NULL,
     CONSTRAINT fk_deliveries_participation
         FOREIGN KEY (participation_id)
             REFERENCES participations (id) ON DELETE CASCADE

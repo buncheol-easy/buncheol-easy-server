@@ -6,6 +6,8 @@ DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS deliveries;
 DROP TABLE IF EXISTS participation_codes;
 DROP TABLE IF EXISTS participations;
+-- participation_bundles 는 participations·deliveries 가 참조하므로 그 뒤, buncheols·users 보다는 앞
+DROP TABLE IF EXISTS participation_bundles;
 DROP TABLE IF EXISTS buncheol_images;
 DROP TABLE IF EXISTS buncheol_members;
 DROP TABLE IF EXISTS buncheol_bookmarks;
@@ -223,16 +225,45 @@ CREATE TABLE buncheol_images
 
 CREATE INDEX idx_buncheol_images_buncheol_id ON buncheol_images (buncheol_id);
 
+-- participation_bundles (schema.sql 과 동일 구성 — 참여 묶음)
+-- ⚠️ 활성 묶음 유니크 없음 · refund_* 는 DEFAULT 없이 NOT NULL (schema.sql 주석 참조)
+CREATE TABLE participation_bundles
+(
+    id                  BIGINT      NOT NULL AUTO_INCREMENT,
+    buncheol_id         BIGINT      NOT NULL,
+    participant_id      BIGINT      NOT NULL,
+    shipping_address_id BIGINT      NULL,
+    shipping_fee        BIGINT      NOT NULL DEFAULT 0,
+    refund_bank         VARCHAR(50) NOT NULL,
+    refund_account      VARCHAR(50) NOT NULL,
+    refund_holder       VARCHAR(50) NOT NULL,
+    due_at              TIMESTAMP   NULL,
+    payment_sent_at     TIMESTAMP   NULL,
+    closed_at           TIMESTAMP   NULL,
+    created_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_participation_bundles_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
+    CONSTRAINT fk_participation_bundles_user FOREIGN KEY (participant_id) REFERENCES users (id),
+    CONSTRAINT fk_participation_bundles_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX uk_participation_bundles_id_keys ON participation_bundles (id, buncheol_id, participant_id);
+CREATE INDEX idx_participation_bundles_buncheol_participant ON participation_bundles (buncheol_id, participant_id);
+CREATE INDEX idx_participation_bundles_participant_created ON participation_bundles (participant_id, created_at DESC);
+
 CREATE TABLE participations
 (
     id                  BIGINT       NOT NULL AUTO_INCREMENT,
     buncheol_id         BIGINT       NOT NULL,
     buncheol_member_id  BIGINT       NOT NULL,
     participant_id      BIGINT       NOT NULL,
+    bundle_id           BIGINT       NULL,
     shipping_address_id BIGINT       NULL,
     amount              BIGINT       NOT NULL,
     shipping_fee        BIGINT       NOT NULL DEFAULT 0,
-    -- 0원(코드) 참여는 환불 계좌를 받지 않는다 (schema.sql 과 동일 — NULL 허용)
+    -- NULL 허용 (schema.sql 과 동일 — 0원 참여는 계좌가 없고, DEFAULT '' 를 쓰면 record VO 조회가 깨진다)
     refund_bank         VARCHAR(50)  NULL,
     refund_account      VARCHAR(50)  NULL,
     refund_holder       VARCHAR(50)  NULL,
@@ -265,7 +296,8 @@ CREATE TABLE participations
     CONSTRAINT fk_participations_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
     CONSTRAINT fk_participations_buncheol_member FOREIGN KEY (buncheol_member_id) REFERENCES buncheol_members (id),
     CONSTRAINT fk_participations_user FOREIGN KEY (participant_id) REFERENCES users (id) ON DELETE CASCADE,
-    CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE SET NULL
+    CONSTRAINT fk_participations_shipping_address FOREIGN KEY (shipping_address_id) REFERENCES shipping_addresses (id) ON DELETE SET NULL,
+    CONSTRAINT fk_participations_bundle FOREIGN KEY (bundle_id) REFERENCES participation_bundles (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_member_id);
@@ -274,6 +306,7 @@ CREATE UNIQUE INDEX uq_participations_legacy_active_participant ON participation
 CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
 CREATE INDEX idx_participations_status_due ON participations (status, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);
+CREATE INDEX idx_participations_bundle_status ON participations (bundle_id, status);
 CREATE INDEX idx_participations_created ON participations (created_at DESC, id DESC);
 CREATE UNIQUE INDEX uq_participations_payback_tweet_url ON participations (payback_tweet_url);
 CREATE INDEX idx_participations_payback_requested ON participations (payback_status, payback_requested_at DESC, id DESC);
@@ -319,6 +352,7 @@ CREATE TABLE deliveries
 (
     id                     BIGINT       NOT NULL AUTO_INCREMENT,
     participation_id       BIGINT       NOT NULL,
+    bundle_id              BIGINT       NULL,
     shipping_method        VARCHAR(20)  NOT NULL,
     store_name             VARCHAR(100) NOT NULL,
     receiver_nickname      VARCHAR(20)  NOT NULL,
@@ -333,11 +367,13 @@ CREATE TABLE deliveries
     updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
-    CONSTRAINT fk_deliveries_participation FOREIGN KEY (participation_id) REFERENCES participations (id) ON DELETE CASCADE
+    CONSTRAINT fk_deliveries_participation FOREIGN KEY (participation_id) REFERENCES participations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_deliveries_bundle FOREIGN KEY (bundle_id) REFERENCES participation_bundles (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX uq_deliveries_participation_id ON deliveries (participation_id);
 CREATE INDEX idx_deliveries_status ON deliveries (status);
+CREATE INDEX idx_deliveries_bundle ON deliveries (bundle_id);
 CREATE INDEX idx_deliveries_tracking ON deliveries (tracking_number, shipping_method);
 
 CREATE TABLE buncheol_bookmarks

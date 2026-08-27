@@ -14,6 +14,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -323,6 +324,27 @@ class BuncheolDetailQueryServiceTest {
     }
 
     @Test
+    void 코드_참여_슬롯의_공석은_CODE_ONLY_로_내려간다() {
+      stubEmptyCodeOnlySlot(BuncheolStatus.RECRUITING, DEADLINE);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CODE_ONLY);
+    }
+
+    // 닫힌 분철에선 코드가 있어도 참여 INSERT 가 막힌다.
+    @Test
+    void 닫힌_분철에서는_코드_참여_슬롯도_CLOSED_로_내려간다() {
+      stubEmptyCodeOnlySlot(BuncheolStatus.CONFIRMED, DEADLINE);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+    }
+
+    @Test
     void 마감_시각_직전의_모집중_분철의_빈_슬롯은_AVAILABLE_이다() {
       stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C, NOW.plusSeconds(1));
 
@@ -572,6 +594,18 @@ class BuncheolDetailQueryServiceTest {
   /** 활성 참여가 하나도 없는(= 전 슬롯 공석) 분철 스텁 — 공석 판매 상태 판정 전용. */
   private void stubEmptySlot(final BuncheolStatus status, final FlowType flowType) {
     stubEmptySlot(status, flowType, DEADLINE);
+  }
+
+  private void stubEmptyCodeOnlySlot(final BuncheolStatus status, final Instant deadline) {
+    stubBasicBuncheol(status, ShippingFeePolicy.of(2300, null), FlowType.LEGACY, deadline);
+    given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID)).willReturn(List.of());
+    BuncheolMember codeSlot = buncheolMember(101L, BUNCHEOL_ID, 1001L, 0L);
+    setField(codeSlot, "accessType", BuncheolMemberAccessType.CODE_ONLY);
+    given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+        .willReturn(List.of(codeSlot));
+    given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+    given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
   }
 
   private void stubEmptySlot(

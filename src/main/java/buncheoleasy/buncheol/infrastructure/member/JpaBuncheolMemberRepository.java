@@ -1,6 +1,9 @@
 package buncheoleasy.buncheol.infrastructure.member;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -28,4 +31,16 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM BuncheolMember m WHERE m.buncheolId = :buncheolId")
   void deleteAllByBuncheolId(@Param("buncheolId") Long buncheolId);
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE BuncheolMember m SET m.accessType = :accessType "
+          + "WHERE m.id = :id AND m.buncheolId = :buncheolId "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.buncheolMemberId = m.id AND p.status IN :activeStatuses)")
+  int changeAccessTypeIfUnoccupied(
+      @Param("id") Long id,
+      @Param("buncheolId") Long buncheolId,
+      @Param("accessType") BuncheolMemberAccessType accessType,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
 }

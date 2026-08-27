@@ -49,6 +49,9 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   boolean existsByShippingAddressIdAndStatusIn(
       Long shippingAddressId, Collection<ParticipationStatus> statuses);
 
+  boolean existsByBuncheolMemberIdAndStatusIn(
+      Long buncheolMemberId, Collection<ParticipationStatus> statuses);
+
   @Query(
       "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount("
           + "p.buncheolId, COUNT(p)) "

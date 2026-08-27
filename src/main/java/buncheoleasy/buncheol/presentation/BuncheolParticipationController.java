@@ -22,10 +22,7 @@ public class BuncheolParticipationController {
 
   private final ParticipationService participationService;
 
-  /**
-   * 분철 참여(멤버 슬롯 선착순 점유) API. 점유에 성공하면 입금확인중(AWAITING_PAYMENT) 상태로 등록되고, 응답으로 개최자 계좌·입금 총액·입금 만료
-   * 시각을 받는다. 참여와 동시에 환불 계좌를 입력한다.
-   */
+  /** 분철 참여 API */
   @PostMapping
   public ResponseEntity<ParticipateResponse> participate(
       @AuthenticationPrincipal final Long participantId,

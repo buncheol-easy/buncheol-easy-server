@@ -97,12 +97,7 @@ class ParticipationControllerTest {
       """
       {
         "buncheolMemberId": 10,
-        "shippingAddressId": 200,
-        "refundAccount": {
-          "bank": "국민은행",
-          "account": "12345678",
-          "holder": "홍길동"
-        }
+        "shippingAddressId": 200
       }
       """;
 
@@ -142,12 +137,7 @@ class ParticipationControllerTest {
       String missingMemberJson =
           """
           {
-            "shippingAddressId": 200,
-            "refundAccount": {
-              "bank": "국민은행",
-              "account": "12345678",
-              "holder": "홍길동"
-            }
+            "shippingAddressId": 200
           }
           """;
 

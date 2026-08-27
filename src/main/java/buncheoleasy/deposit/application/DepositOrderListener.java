@@ -47,6 +47,10 @@ public class DepositOrderListener {
     try {
       Participation participation =
           participationDomainService.getParticipation(event.participationId());
+      // 0원 참여는 매칭할 입금도, 입금자명으로 쓸 환불계좌도 없다.
+      if (participation.isFree()) {
+        return;
+      }
       payActionClient.registerOrder(
           participation.getId(),
           participation.getTotalAmount(),

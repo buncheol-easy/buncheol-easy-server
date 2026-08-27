@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -118,9 +119,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(4, participation.getShippingAddressId());
                 ps.setLong(5, participation.getAmount());
                 ps.setLong(6, participation.getShippingFee());
-                ps.setString(7, participation.getRefundAccount().bank());
-                ps.setString(8, participation.getRefundAccount().account());
-                ps.setString(9, participation.getRefundAccount().holder());
+                // 0원 참여는 환불 계좌가 없다 (세 컬럼 모두 NULL — 조회 시 임베더블이 null 로 온다).
+                RefundAccount refundAccount = participation.getRefundAccount();
+                ps.setString(7, refundAccount == null ? null : refundAccount.bank());
+                ps.setString(8, refundAccount == null ? null : refundAccount.account());
+                ps.setString(9, refundAccount == null ? null : refundAccount.holder());
                 // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
                 ps.setTimestamp(
                     10,
@@ -196,6 +199,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public boolean existsActiveByShippingAddressId(final Long shippingAddressId) {
     return jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
         shippingAddressId, ParticipationStatus.active());
+  }
+
+  @Override
+  public boolean existsActiveByBuncheolMemberId(final Long buncheolMemberId) {
+    return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
+        buncheolMemberId, ParticipationStatus.active());
   }
 
   @Override

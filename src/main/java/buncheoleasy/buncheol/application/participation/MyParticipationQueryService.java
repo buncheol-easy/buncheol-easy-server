@@ -159,7 +159,10 @@ public class MyParticipationQueryService {
                 ? HostAccountResponse.from(buncheol.getPaymentAccount())
                 : hostAccountByHostId.get(buncheol.getHostId());
     // 입금자명 안내용. 참여 시점 예금주명이라 프로필의 현재 계좌와 다를 수 있고, 자동 입금확인은 이 값으로 매칭한다.
-    String refundHolder = paymentPending ? participation.getRefundAccount().holder() : null;
+    String refundHolder =
+        paymentPending && participation.getRefundAccount() != null
+            ? participation.getRefundAccount().holder()
+            : null;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),

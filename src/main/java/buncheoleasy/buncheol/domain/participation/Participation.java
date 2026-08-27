@@ -78,7 +78,7 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
-  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 참여와 동시에 입력받는다.
+  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 0원 참여는 환불할 돈이 없어 null 이다.
   @Embedded private RefundAccount refundAccount;
 
   // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
@@ -216,7 +216,7 @@ public class Participation extends TimestampedEntity {
       final RefundAccount refundAccount,
       final Instant dueAt,
       final ParticipationStatus status) {
-    validate(refundAccount);
+    validate(refundAccount, amount + shippingFee);
     this.buncheolId = buncheolId;
     this.buncheolMemberId = buncheolMemberId;
     this.participantId = participantId;
@@ -247,6 +247,11 @@ public class Participation extends TimestampedEntity {
     return amount + shippingFee;
   }
 
+  /** 결제 전 구간(입금 대기·기한·계좌 안내·페이액션 주문)을 건너뛰는 판정의 단일 기준. */
+  public boolean isFree() {
+    return getTotalAmount() == 0;
+  }
+
   /**
    * 배송비 환급 신청 (NONE/REJECTED/REQUESTED → REQUESTED). 반려 후 재신청이면 이전 반려 사유를 지우고, 검수 전(REQUESTED)
    * 재제출은 잘못 올린 트윗 링크 수정으로 동작한다. 환급액은 신청 시점의 배송비를 스냅샷해 이후 배송비 정책 변경에 영향받지 않는다. 신청
@@ -272,8 +277,8 @@ public class Participation extends TimestampedEntity {
     }
   }
 
-  private void validate(final RefundAccount refundAccount) {
-    if (refundAccount == null) {
+  private void validate(final RefundAccount refundAccount, final long totalAmount) {
+    if (refundAccount == null && totalAmount > 0) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
   }

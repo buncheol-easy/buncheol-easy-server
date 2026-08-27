@@ -165,7 +165,8 @@ public class BuncheolDetailQueryService {
       final Long userId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     Participation active = activeByMemberId.get(buncheolMember.getId());
-    BuncheolMemberSaleStatus saleStatus = toSaleStatus(active, openForNewParticipation);
+    BuncheolMemberSaleStatus saleStatus =
+        toSaleStatus(active, openForNewParticipation, buncheolMember.requiresCode());
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
@@ -188,9 +189,11 @@ public class BuncheolDetailQueryService {
 
   // exhaustive switch: ParticipationStatus 에 상태가 추가되면 컴파일 에러로 매핑 누락을 잡는다.
   private BuncheolMemberSaleStatus toSaleStatus(
-      final Participation active, final boolean openForNewParticipation) {
+      final Participation active,
+      final boolean openForNewParticipation,
+      final boolean requiresCode) {
     if (active == null) {
-      return emptySlotStatus(openForNewParticipation);
+      return emptySlotStatus(openForNewParticipation, requiresCode);
     }
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
@@ -199,15 +202,22 @@ public class BuncheolDetailQueryService {
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
-      case CANCELLED -> emptySlotStatus(openForNewParticipation);
+      case CANCELLED -> emptySlotStatus(openForNewParticipation, requiresCode);
     };
   }
 
-  // 공석의 판매 상태 — 신규 참여를 받지 않는 분철에서는 신청 가능한 것처럼 보이면 안 된다 (docs/53 Q-14).
-  private BuncheolMemberSaleStatus emptySlotStatus(final boolean openForNewParticipation) {
-    return openForNewParticipation
-        ? BuncheolMemberSaleStatus.AVAILABLE
-        : BuncheolMemberSaleStatus.CLOSED;
+  /**
+   * 공석의 판매 상태 — 신규 참여를 받지 않는 분철에서는 신청 가능한 것처럼 보이면 안 된다 (docs/53 Q-14). 마감을 코드 배정보다
+   * 먼저 보는 이유는, 닫힌 분철에서는 코드가 있어도 참여 INSERT 가 막히기 때문이다.
+   */
+  private BuncheolMemberSaleStatus emptySlotStatus(
+      final boolean openForNewParticipation, final boolean requiresCode) {
+    if (!openForNewParticipation) {
+      return BuncheolMemberSaleStatus.CLOSED;
+    }
+    return requiresCode
+        ? BuncheolMemberSaleStatus.CODE_ONLY
+        : BuncheolMemberSaleStatus.AVAILABLE;
   }
 
   private MyParticipationSummaryResponse toMyParticipation(

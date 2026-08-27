@@ -36,7 +36,7 @@ CREATE TABLE users
     marketing_agreed_at TIMESTAMP    NULL,
     age_range           VARCHAR(10)  NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP    NULL,
 
     -- 유니크 제약조건을 위한 가상 컬럼 (deleted_at이 NULL이면 값을 갖고, 유저가 탈퇴하면 NULL이 된다)
@@ -60,7 +60,7 @@ CREATE TABLE user_service_terms
     agreed     BOOLEAN      NOT NULL,
     agreed_at  TIMESTAMP    NULL,
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_user_service_terms_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -79,7 +79,7 @@ CREATE TABLE shipping_addresses
     alias           VARCHAR(10)  NULL,
     is_default      BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_shipping_addresses_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -100,7 +100,7 @@ CREATE TABLE `groups`
         name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )),
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id)
 );
@@ -119,7 +119,7 @@ CREATE TABLE group_members
         name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )),
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_group_members_group FOREIGN KEY (group_id) REFERENCES `groups` (id) ON DELETE CASCADE
@@ -140,7 +140,7 @@ CREATE TABLE group_aliases
         alias, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )),
     created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT ck_group_aliases_min_length CHECK (CHAR_LENGTH(search_alias) >= 2),
@@ -169,7 +169,7 @@ CREATE TABLE buncheols
     status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING',
     finalized_at      TIMESTAMP    NULL,
     created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- C2C 플로우 병존 컬럼 (schema.sql buncheols 와 동일 구성)
     flow_type         VARCHAR(10)  NOT NULL DEFAULT 'LEGACY',
     payment_due_at    TIMESTAMP    NULL,
@@ -198,7 +198,7 @@ CREATE TABLE buncheol_members
     price       BIGINT      NOT NULL,
     access_type VARCHAR(20) NOT NULL DEFAULT 'OPEN',
     created_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheol_members_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -253,7 +253,7 @@ CREATE TABLE participations
     -- 활성 참여자 가상 컬럼. 유니크는 제거됨(C2C 다슬롯 허용 — schema.sql 과 동일).
     active_participant_id BIGINT AS (CASE WHEN status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED') THEN participant_id END),
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- C2C 컬럼 (schema.sql participations 와 동일 구성)
     payment_sent_at     TIMESTAMP    NULL,
     payment_rejected_at TIMESTAMP    NULL,
@@ -290,7 +290,7 @@ CREATE TABLE participation_codes
     used_at               TIMESTAMP   NULL,
     used_participation_id BIGINT      NULL,
     created_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_participation_codes_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE,
@@ -308,7 +308,7 @@ CREATE TABLE admins
     login_id   VARCHAR(50)  NOT NULL,
     password   VARCHAR(100) NOT NULL,
     created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id)
 );
@@ -330,7 +330,7 @@ CREATE TABLE deliveries
     pickup_reminder_sent_at TIMESTAMP NULL,
     status                 VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED',
     created_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_deliveries_participation FOREIGN KEY (participation_id) REFERENCES participations (id) ON DELETE CASCADE
@@ -397,7 +397,7 @@ CREATE TABLE inbox_messages
     banner_title     VARCHAR(200) NULL,
     banner_image_url VARCHAR(500) NULL,
     created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_inbox_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users (id) ON DELETE CASCADE
@@ -422,7 +422,7 @@ CREATE TABLE cvs_stores
     receive_yn BOOLEAN        NOT NULL,
     pickup_yn  BOOLEAN        NOT NULL,
     created_at TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id)
 );

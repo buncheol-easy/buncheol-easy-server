@@ -8,6 +8,13 @@
 -- ② contract(제거·rename·NOT NULL 강제)는 그걸 안 쓰는 코드가 완전히 내려간 다음 릴리스에서.
 -- ③ rename 은 "새 컬럼 추가 → 양쪽 쓰기 → 구 컬럼 제거" 3단계로 쪼갠다.
 
+-- ⚠️ updated_at 은 전부 ON UPDATE CURRENT_TIMESTAMP 를 단다 (새 테이블도 예외 없이 —
+-- SchemaTimestampConventionTest 가 강제한다). 상태 전이가 대부분 @Modifying bulk UPDATE 라
+-- TimestampedEntity 의 @PreUpdate 를 경유하지 않고, 운영 수동 SQL 도 마찬가지이기 때문이다.
+-- 앱이 updated_at 을 명시 대입하면 그 값이 이기므로 기존 CAS 쿼리와 충돌하지 않는다.
+-- 이 컬럼들은 앱이 UTC 벽시계를 넣는 tz 없는 DATETIME 이라, DB 세션 time_zone 이 UTC 가
+-- 아니면 CURRENT_TIMESTAMP 가 다른 시각을 쓴다 — 운영 DB 의 UTC 고정이 이 규약의 전제다.
+
 -- users 테이블 생성
 CREATE TABLE IF NOT EXISTS users
 (
@@ -34,7 +41,7 @@ CREATE TABLE IF NOT EXISTS users
     -- 기존 배포 DB 에는 수동 ALTER 필요 (docs/50).
     age_range           VARCHAR(10)  NULL COMMENT '카카오 연령대 (예: 20~29)',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at          DATETIME     NULL COMMENT '회원탈퇴 soft delete',
 
     -- 유니크 제약조건을 위한 가상 컬럼 (deleted_at이 NULL이면 값을 갖고, 유저가 탈퇴하면 NULL이 된다)
@@ -60,7 +67,7 @@ CREATE TABLE IF NOT EXISTS user_service_terms
     agreed     TINYINT(1)   NOT NULL COMMENT '동의 여부',
     agreed_at  DATETIME     NULL COMMENT '동의 일시 (카카오 동의창 기준)',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -84,7 +91,7 @@ CREATE TABLE IF NOT EXISTS admins
     login_id   VARCHAR(50)  NOT NULL COMMENT '관리자 로그인 ID',
     password   VARCHAR(100) NOT NULL COMMENT 'BCrypt 해시',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -104,7 +111,7 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
     alias           VARCHAR(10)  NULL COMMENT '사용자 지정 별칭',
     is_default      BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '배송방법별 기본 배송지 여부',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -131,7 +138,7 @@ CREATE TABLE IF NOT EXISTS `groups`
         name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )) STORED COMMENT '검색용 정규화 그룹명',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -154,7 +161,7 @@ CREATE TABLE IF NOT EXISTS group_members
         name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )) STORED COMMENT '검색용 정규화 멤버명',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -184,7 +191,7 @@ CREATE TABLE IF NOT EXISTS group_aliases
         alias, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )) STORED COMMENT '검색용 정규화 별칭',
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -224,7 +231,7 @@ CREATE TABLE IF NOT EXISTS buncheols
     status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | PAYMENT_COLLECTING(C2C 입금 수집중) | CONFIRMED | CANCELLED(인원미달/미성사 자동취소) | HOST_CANCELLED(개최자 취소, 목록·상세 비노출)',
     finalized_at      DATETIME     NULL COMMENT '마감 판정(진행확정/취소) 시각. C2C 는 개최자 성사 확정 시각',
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- C2C 플로우 병존(그랜드파더링) 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
     flow_type         VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY(즉시 입금+페이액션) | C2C(신청→확정→입금 직거래)',
     payment_due_at    DATETIME     NULL COMMENT 'C2C: 개최자 성사 확정 시 산정한 일괄 입금 기한',
@@ -267,7 +274,7 @@ CREATE TABLE IF NOT EXISTS buncheol_members
     -- 코드 수명과 무관한 슬롯 접근 정책. 기존 배포 DB 에는 수동 ALTER 필요.
     access_type VARCHAR(20) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN=선착순 | CODE_ONLY=참여 코드 보유자만',
     created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -342,7 +349,7 @@ CREATE TABLE IF NOT EXISTS participations
                                  participant_id, NULL)
                               ) STORED COMMENT '활성 상태일 때만 participant_id 값 (LEGACY 중복 참여 가드 보조)',
     created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
     payment_sent_at       DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
     payment_rejected_at   DATETIME     NULL COMMENT 'C2C: 개최자 "입금 못 찾음" 반려 시각 — 재마킹 시 NULL 초기화(최근 상태가 반려인지 판정). 셀프 철회는 NULL 유지',
@@ -404,12 +411,12 @@ CREATE TABLE IF NOT EXISTS participation_codes
     buncheol_id           BIGINT      NOT NULL,
     buncheol_member_id    BIGINT      NULL COMMENT '바인딩된 멤버 슬롯 (NULL=분철 단위 코드)',
     issued_to             VARCHAR(50) NULL COMMENT '발급 대상 운영 메모 (X 핸들 등) — 재발급 이력 추적용',
-    expires_at            DATETIME    NOT NULL COMMENT '만료 시각 (발급 시 지정, 기본 48시간)',
+    expires_at            DATETIME    NOT NULL COMMENT '만료 시각 (발급 시 필수 지정)',
     revoked_at            DATETIME    NULL COMMENT '운영자 폐기 시각 (재발급 시 이전 코드를 여기서 닫는다)',
     used_at               DATETIME    NULL COMMENT '참여에 사용된 시각 (1회용)',
     used_participation_id BIGINT      NULL COMMENT '이 코드로 생성된 참여',
     created_at            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -444,7 +451,7 @@ CREATE TABLE IF NOT EXISTS deliveries
     pickup_reminder_sent_at DATETIME     NULL COMMENT '미수령 독촉 알림 발송 시각',
     status                  VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED' COMMENT 'SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED',
     created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -544,7 +551,7 @@ CREATE TABLE IF NOT EXISTS inbox_messages
     banner_title     VARCHAR(200) NULL COMMENT '홈 배너 제목 (공지만 사용)',
     banner_image_url VARCHAR(500) NULL COMMENT '홈 배너 이미지 URL (공지만 사용)',
     created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -579,7 +586,6 @@ CREATE TABLE IF NOT EXISTS cvs_stores
     receive_yn TINYINT(1)     NOT NULL COMMENT '택배 접수(보내기) 가능',
     pickup_yn  TINYINT(1)     NOT NULL COMMENT '택배 픽업(수령) 가능',
     created_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- 갱신은 JPA(동기화 배치)가 하지만, 로컬 적재 스크립트 등 JPA 밖 쓰기도 갱신 시각이 남게 DB 레벨로 보강
     updated_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),

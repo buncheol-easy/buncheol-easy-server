@@ -14,6 +14,7 @@ import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -140,6 +141,31 @@ class JpaBuncheolMemberRepositoryAdapterTest {
               buncheolMemberRepository.changeAccessTypeIfUnoccupied(
                   slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
           .isTrue();
+    }
+
+    /**
+     * 이 CAS 는 {@code updated_at} 을 명시 대입하지 않는다 — bulk UPDATE 라 {@code @PreUpdate} 도 타지 않으므로,
+     * 갱신 시각은 오직 컬럼의 {@code ON UPDATE CURRENT_TIMESTAMP} 로만 남는다. 시계 해상도에 의존하지 않도록
+     * 과거 시각을 심어 두고 그 값이 밀려났는지로 판정한다.
+     */
+    @Test
+    void 명시_대입이_없어도_DB_가_updated_at_을_갱신한다() {
+      Long slotId = saveSlot();
+      Timestamp sentinel = Timestamp.valueOf("2000-01-01 00:00:00");
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET updated_at = ? WHERE id = ?", sentinel, slotId);
+
+      buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+          slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY);
+
+      assertThat(readUpdatedAt(slotId))
+          .as("updated_at 에 ON UPDATE CURRENT_TIMESTAMP 가 빠졌다 — CAS 로 바꾼 행의 갱신 시각이 멈춘다")
+          .isAfter(sentinel);
+    }
+
+    private Timestamp readUpdatedAt(final Long slotId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT updated_at FROM buncheol_members WHERE id = ?", Timestamp.class, slotId);
     }
 
     @Test

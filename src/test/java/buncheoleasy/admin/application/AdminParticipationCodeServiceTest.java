@@ -13,7 +13,6 @@ import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
-import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -76,22 +75,13 @@ class AdminParticipationCodeServiceTest {
     return member;
   }
 
-  private Participation participationOn(final Long slotId) {
-    Participation participation = newInstance(Participation.class);
-    setField(participation, "id", 25L);
-    setField(participation, "buncheolId", BUNCHEOL_ID);
-    setField(participation, "buncheolMemberId", slotId);
-    return participation;
-  }
-
   // 발급해도 참여 시점에 BCH-070 으로 막히는 헛 코드를 운영자가 차순위에게 보내는 것을 끊는다.
   @Test
   void 이미_참여가_확정된_슬롯에는_코드를_발급하지_않는다() {
     given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(newInstance(Buncheol.class));
     given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
         .willReturn(codeSlot());
-    given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
-        .willReturn(List.of(participationOn(SLOT_ID)));
+    given(participationRepository.existsActiveByBuncheolMemberId(SLOT_ID)).willReturn(true);
 
     assertThatThrownBy(
             () ->
@@ -133,8 +123,7 @@ class AdminParticipationCodeServiceTest {
     given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(newInstance(Buncheol.class));
     given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
         .willReturn(codeSlot());
-    given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
-        .willReturn(List.of(participationOn(99L)));
+    given(participationRepository.existsActiveByBuncheolMemberId(SLOT_ID)).willReturn(false);
     given(participationCodeDomainService.issue(any(), any(), any(), any()))
         .willThrow(new BusinessException(ErrorCode.PARTICIPATION_CODE_INVALID));
 

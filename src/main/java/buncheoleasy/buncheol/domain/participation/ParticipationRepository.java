@@ -52,6 +52,9 @@ public interface ParticipationRepository {
    */
   boolean existsActiveByShippingAddressId(Long shippingAddressId);
 
+  /** 멤버 슬롯이 활성 참여로 점유됐는지. */
+  boolean existsActiveByBuncheolMemberId(Long buncheolMemberId);
+
   /** 여러 분철의 활성 참여 수 집계 (공개 목록의 참여자 수 표시용). */
   List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(List<Long> buncheolIds);
 

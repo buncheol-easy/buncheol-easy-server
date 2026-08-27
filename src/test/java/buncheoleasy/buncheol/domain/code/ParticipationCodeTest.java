@@ -17,12 +17,13 @@ import org.springframework.util.ReflectionUtils;
 class ParticipationCodeTest {
 
   private static final Instant NOW = Instant.parse("2026-08-24T12:00:00Z");
+  private static final Long BUNCHEOL_ID = 10L;
   private static final Long SLOT_ID = 101L;
   private static final Long OTHER_SLOT_ID = 102L;
 
   private ParticipationCode code() {
     return ParticipationCode.issue(
-        "ABCD2345", 10L, SLOT_ID, "@supporter", NOW.plus(Duration.ofHours(48)), NOW);
+        "ABCD2345", BUNCHEOL_ID, SLOT_ID, "@supporter", NOW.plus(Duration.ofHours(48)), NOW);
   }
 
   private static void setField(final Object target, final String name, final Object value) {
@@ -40,7 +41,7 @@ class ParticipationCodeTest {
       assertThatThrownBy(
               () ->
                   ParticipationCode.issue(
-                      "ABCD2345", 10L, SLOT_ID, null, NOW.minusSeconds(1), NOW))
+                      "ABCD2345", BUNCHEOL_ID, SLOT_ID, null, NOW.minusSeconds(1), NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_EXPIRY_INVALID);
@@ -51,7 +52,7 @@ class ParticipationCodeTest {
       assertThatThrownBy(
               () ->
                   ParticipationCode.issue(
-                      " ", 10L, SLOT_ID, null, NOW.plus(Duration.ofHours(1)), NOW))
+                      " ", BUNCHEOL_ID, SLOT_ID, null, NOW.plus(Duration.ofHours(1)), NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_REQUIRED_FIELD_MISSING);
@@ -64,12 +65,18 @@ class ParticipationCodeTest {
 
     @Test
     void 바인딩된_슬롯이고_기한_내면_사용_가능하다() {
-      assertThat(code().redeemability(SLOT_ID, NOW)).isEqualTo(CodeRedeemability.REDEEMABLE);
+      assertThat(code().redeemability(BUNCHEOL_ID, SLOT_ID, NOW)).isEqualTo(CodeRedeemability.REDEEMABLE);
+    }
+
+    @Test
+    void 다른_분철이면_슬롯_불일치다() {
+      assertThat(code().redeemability(BUNCHEOL_ID + 1, SLOT_ID, NOW))
+          .isEqualTo(CodeRedeemability.SLOT_MISMATCH);
     }
 
     @Test
     void 다른_슬롯이면_슬롯_불일치다() {
-      assertThat(code().redeemability(OTHER_SLOT_ID, NOW))
+      assertThat(code().redeemability(BUNCHEOL_ID, OTHER_SLOT_ID, NOW))
           .isEqualTo(CodeRedeemability.SLOT_MISMATCH);
     }
 
@@ -78,13 +85,13 @@ class ParticipationCodeTest {
       ParticipationCode expired = code();
       Instant afterExpiry = NOW.plus(Duration.ofHours(49));
 
-      assertThat(expired.redeemability(OTHER_SLOT_ID, afterExpiry))
+      assertThat(expired.redeemability(BUNCHEOL_ID, OTHER_SLOT_ID, afterExpiry))
           .isEqualTo(CodeRedeemability.SLOT_MISMATCH);
     }
 
     @Test
     void 기한이_지나면_만료다() {
-      assertThat(code().redeemability(SLOT_ID, NOW.plus(Duration.ofHours(48))))
+      assertThat(code().redeemability(BUNCHEOL_ID, SLOT_ID, NOW.plus(Duration.ofHours(48))))
           .isEqualTo(CodeRedeemability.EXPIRED);
     }
 
@@ -93,7 +100,7 @@ class ParticipationCodeTest {
       ParticipationCode revoked = code();
       setField(revoked, "revokedAt", NOW);
 
-      assertThat(revoked.redeemability(SLOT_ID, NOW)).isEqualTo(CodeRedeemability.REVOKED);
+      assertThat(revoked.redeemability(BUNCHEOL_ID, SLOT_ID, NOW)).isEqualTo(CodeRedeemability.REVOKED);
     }
 
     @Test
@@ -101,7 +108,7 @@ class ParticipationCodeTest {
       ParticipationCode used = code();
       setField(used, "usedAt", NOW);
 
-      assertThat(used.redeemability(SLOT_ID, NOW)).isEqualTo(CodeRedeemability.ALREADY_USED);
+      assertThat(used.redeemability(BUNCHEOL_ID, SLOT_ID, NOW)).isEqualTo(CodeRedeemability.ALREADY_USED);
     }
 
     @Test

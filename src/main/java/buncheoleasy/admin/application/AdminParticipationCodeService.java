@@ -19,7 +19,6 @@ import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,7 +44,8 @@ public class AdminParticipationCodeService {
   @Transactional(readOnly = true)
   public List<AdminBuncheolMemberResponse> getBuncheolMembers(final Long buncheolId) {
     buncheolDomainService.getBuncheol(buncheolId);
-    List<BuncheolMember> members = buncheolMemberDomainService.findAllByBuncheolId(buncheolId);
+    List<BuncheolMember> members =
+        buncheolMemberDomainService.findAllByBuncheolIdOrderByIdAsc(buncheolId);
     if (members.isEmpty()) {
       return List.of();
     }
@@ -68,7 +68,6 @@ public class AdminParticipationCodeService {
 
     final Instant now = Instant.now(clock);
     return members.stream()
-        .sorted(Comparator.comparing(BuncheolMember::getId))
         .map(
             member -> {
               ParticipationCode activeCode = activeCodeBySlot.get(member.getId());
@@ -119,7 +118,7 @@ public class AdminParticipationCodeService {
         buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheolId);
 
     // 이미 점유된 슬롯에 발급하면 코드를 받은 사람이 참여 시점에 BCH-070 으로 막힌다 — 헛 코드를 보내기 전에 끊는다.
-    if (isSlotTaken(buncheolId, member.getId())) {
+    if (participationRepository.existsActiveByBuncheolMemberId(member.getId())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_TAKEN);
     }
 
@@ -140,10 +139,11 @@ public class AdminParticipationCodeService {
   @Transactional
   public void changeBuncheolMemberAccessType(
       final Long buncheolId, final Long buncheolMemberId, final BuncheolMemberAccessType accessType) {
+    final Instant now = Instant.now(clock);
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     if (accessType == BuncheolMemberAccessType.CODE_ONLY) {
       if (buncheol.isC2c()) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY);
+        throw new BusinessException(ErrorCode.BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED);
       }
       if (!buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId).isFree()) {
         throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
@@ -153,7 +153,7 @@ public class AdminParticipationCodeService {
     if (accessType == BuncheolMemberAccessType.OPEN) {
       // 선착순으로 되돌린 슬롯의 코드가 살아 있으면, 다시 코드 참여로 바꿨을 때 폐기한 줄 알았던
       // 옛 코드가 되살아나 의도하지 않은 사람이 슬롯을 가져간다.
-      participationCodeDomainService.revokeOutstandingByMember(buncheolMemberId, Instant.now(clock));
+      participationCodeDomainService.revokeOutstandingByMember(buncheolMemberId, now);
     }
   }
 
@@ -161,11 +161,6 @@ public class AdminParticipationCodeService {
   @Transactional
   public void revoke(final Long codeId) {
     participationCodeDomainService.revoke(codeId, Instant.now(clock));
-  }
-
-  private boolean isSlotTaken(final Long buncheolId, final Long buncheolMemberId) {
-    return participationRepository.findActiveByBuncheolId(buncheolId).stream()
-        .anyMatch(participation -> buncheolMemberId.equals(participation.getBuncheolMemberId()));
   }
 
   private Map<Long, String> resolveMemberNames(final List<BuncheolMember> members) {

@@ -1117,6 +1117,17 @@ class ParticipationServiceTest {
     }
 
     @Test
+    void _0원_참여는_분철_X_락을_먼저_잡는다() {
+      givenCodeParticipation();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      InOrder inOrder = Mockito.inOrder(buncheolDomainService, participationDomainService);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(participationDomainService).createParticipationIfRecruiting(any());
+    }
+
+    @Test
     void 코드는_참여_생성_이후에_소모된다() {
       ParticipationCode code = givenCodeParticipation();
 

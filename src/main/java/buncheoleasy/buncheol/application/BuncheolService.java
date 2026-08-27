@@ -98,7 +98,7 @@ public class BuncheolService {
       return;
     }
     if (memberParams.stream().anyMatch(param -> param.accessType().requiresCode())) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY);
+      throw new BusinessException(ErrorCode.BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED);
     }
   }
 

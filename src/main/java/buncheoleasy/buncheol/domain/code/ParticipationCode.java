@@ -86,8 +86,12 @@ public class ParticipationCode extends TimestampedEntity {
     this.expiresAt = expiresAt;
   }
 
-  /** 슬롯 불일치를 먼저 본다 — 만료로 응답하면 애초에 자기 것이 아닌 코드로 재발급을 요청하게 된다. */
-  public CodeRedeemability redeemability(final Long buncheolMemberId, final Instant now) {
+  /** 대상 불일치를 먼저 본다 — 만료로 응답하면 애초에 자기 것이 아닌 코드로 재발급을 요청하게 된다. */
+  public CodeRedeemability redeemability(
+      final Long buncheolId, final Long buncheolMemberId, final Instant now) {
+    if (!this.buncheolId.equals(buncheolId)) {
+      return CodeRedeemability.SLOT_MISMATCH;
+    }
     if (this.buncheolMemberId != null && !this.buncheolMemberId.equals(buncheolMemberId)) {
       return CodeRedeemability.SLOT_MISMATCH;
     }

@@ -21,9 +21,13 @@ public class ParticipationCodeDomainService {
    * 슬롯 정책과 제출된 코드를 <b>양방향</b>으로 대조해 소모할 코드를 돌려준다 — 필요 없는데 보낸 코드도 거부한다. 조용히 무시하면
    * "코드를 넣었는데 다른 슬롯에 참여됐다" 는 문의를 사후에 재현할 수 없다.
    */
+  public static boolean submitted(final String rawCode) {
+    return rawCode != null && !rawCode.isBlank();
+  }
+
   public Optional<ParticipationCode> validateForParticipation(
       final BuncheolMember member, final String rawCode, final Instant now) {
-    boolean submitted = rawCode != null && !rawCode.isBlank();
+    boolean submitted = submitted(rawCode);
 
     if (!member.requiresCode()) {
       if (submitted) {
@@ -41,7 +45,7 @@ public class ParticipationCodeDomainService {
             .findByCode(normalized.value())
             .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPATION_CODE_INVALID));
 
-    requireRedeemable(code.redeemability(member.getId(), now));
+    requireRedeemable(code.redeemability(member.getBuncheolId(), member.getId(), now));
     return Optional.of(code);
   }
 

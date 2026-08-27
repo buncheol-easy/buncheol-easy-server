@@ -43,6 +43,10 @@ public class BuncheolMemberDomainService {
     return buncheolMemberRepository.findAllByBuncheolId(buncheolId);
   }
 
+  public List<BuncheolMember> findAllByBuncheolIdOrderByIdAsc(final Long buncheolId) {
+    return buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+  }
+
   public void deleteById(final Long id) {
     buncheolMemberRepository.deleteById(id);
   }

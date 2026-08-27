@@ -182,7 +182,8 @@ public class ParticipationService {
     BuncheolMember member =
         buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheol.getId());
     // C2C 에는 코드 슬롯을 만들 수 없다(개최 가드) — 도달했다면 데이터 이상이다.
-    if (member.requiresCode() || request.participationCode() != null) {
+    if (member.requiresCode()
+        || ParticipationCodeDomainService.submitted(request.participationCode())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
     }
     Optional<Participation> existing =

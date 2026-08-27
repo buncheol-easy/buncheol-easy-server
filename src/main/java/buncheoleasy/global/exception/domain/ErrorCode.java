@@ -221,6 +221,8 @@ public enum ErrorCode {
   // 안내하는데 서버는 유상 참여로 처리해 환불 계좌 누락(BCH-062)으로 실패한다.
   PARTICIPATION_CODE_MEMBER_NOT_FREE(
       "BCH-109", "코드 참여 슬롯은 0원이어야 합니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED(
+      "BCH-110", "회원 개최(C2C) 분철에는 코드 참여 멤버를 만들 수 없습니다.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

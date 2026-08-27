@@ -202,6 +202,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public boolean existsActiveByBuncheolMemberId(final Long buncheolMemberId) {
+    return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
+        buncheolMemberId, ParticipationStatus.active());
+  }
+
+  @Override
   public List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(
       final List<Long> buncheolIds) {
     if (buncheolIds.isEmpty()) {

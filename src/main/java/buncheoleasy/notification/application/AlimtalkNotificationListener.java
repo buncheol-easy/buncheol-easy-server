@@ -68,11 +68,16 @@ public class AlimtalkNotificationListener {
   /**
    * (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. LEGACY 는 다음 관문이 최소 인원 충족이지만 C2C 는 인원이 이미 채워진 뒤라 함께 참여한 사람들의
    * 입금이 남은 조건이어서, 다음 안내 문구가 갈린다.
+   *
+   * <p>0원 참여는 두 템플릿 모두 알리고 등록 문안이 "입금이 확인되었어요 · 입금 금액" 이라 발송하지 않는다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentConfirmed(final PaymentConfirmedEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    if (view.participation().isFree()) {
+      return;
+    }
     AlimtalkTemplate template =
         view.buncheol().isC2c()
             ? AlimtalkTemplate.C2C_PAYMENT_CONFIRMED

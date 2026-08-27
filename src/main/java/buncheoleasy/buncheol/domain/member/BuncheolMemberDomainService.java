@@ -49,7 +49,7 @@ public class BuncheolMemberDomainService {
 
   /** 활성 참여가 있는 슬롯은 바꾸지 않는다 — 판정과 전이를 한 UPDATE 로 원자화한다. */
   public void changeAccessType(
-      final Long buncheolMemberId, final Long buncheolId, final SlotAccessType accessType) {
+      final Long buncheolMemberId, final Long buncheolId, final BuncheolMemberAccessType accessType) {
     if (!buncheolMemberRepository.changeAccessTypeIfUnoccupied(
         buncheolMemberId, buncheolId, accessType)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED);

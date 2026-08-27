@@ -69,7 +69,7 @@ public class ParticipationCodeDomainService {
         participationCodeRepository.findOutstandingByBuncheolMemberId(member.getId()).stream()
             .anyMatch(code -> code.isUsable(now));
     if (hasUsableCode) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_ALREADY_ISSUED);
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_ALREADY_ISSUED);
     }
     return saveWithFreshCode(member, issuedTo, expiresAt, now);
   }
@@ -90,12 +90,12 @@ public class ParticipationCodeDomainService {
 
   private static void requireCodeSlot(final BuncheolMember member) {
     if (!member.requiresCode()) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY);
     }
   }
 
   /** 슬롯에 남은 미사용 코드를 모두 닫는다 (코드 참여 해제 등). */
-  public void revokeOutstandingBySlot(final Long buncheolMemberId, final Instant now) {
+  public void revokeOutstandingByMember(final Long buncheolMemberId, final Instant now) {
     participationCodeRepository.revokeOutstandingByBuncheolMemberId(buncheolMemberId, now);
   }
 

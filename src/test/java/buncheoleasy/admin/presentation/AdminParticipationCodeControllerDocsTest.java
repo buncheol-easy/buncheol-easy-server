@@ -17,9 +17,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.admin.application.AdminParticipationCodeService;
 import buncheoleasy.admin.dto.request.AdminParticipationCodeIssueRequest;
-import buncheoleasy.admin.dto.response.AdminBuncheolSlotResponse;
+import buncheoleasy.admin.dto.response.AdminBuncheolMemberResponse;
 import buncheoleasy.admin.dto.response.AdminParticipationCodeResponse;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.global.docs.DocsTestSupport;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
 import com.epages.restdocs.apispec.Schema;
@@ -58,25 +58,25 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
-  void 관리자_분철_슬롯_목록_조회() throws Exception {
-    given(adminParticipationCodeService.getSlots(10L))
+  void 관리자_분철_멤버_목록_조회() throws Exception {
+    given(adminParticipationCodeService.getBuncheolMembers(10L))
         .willReturn(
             List.of(
-                new AdminBuncheolSlotResponse(
-                    101L, "정원", 0L, SlotAccessType.CODE_ONLY, false, code()),
-                new AdminBuncheolSlotResponse(
-                    102L, "제이", 20_700L, SlotAccessType.OPEN, true, null)));
+                new AdminBuncheolMemberResponse(
+                    101L, "정원", 0L, BuncheolMemberAccessType.CODE_ONLY, false, code()),
+                new AdminBuncheolMemberResponse(
+                    102L, "제이", 20_700L, BuncheolMemberAccessType.OPEN, true, null)));
 
     mockMvc
-        .perform(get("/v1/admin/buncheols/{buncheolId}/slots", 10L).with(adminAuth()))
+        .perform(get("/v1/admin/buncheols/{buncheolId}/members", 10L).with(adminAuth()))
         .andExpect(status().isOk())
         .andDo(
             document(
-                "admin-buncheol-slots",
+                "admin-buncheol-members",
                 resource(
                     ResourceSnippetParameters.builder()
                         .tag("Admin")
-                        .summary("관리자 분철 슬롯 목록 조회")
+                        .summary("관리자 분철 멤버 목록 조회")
                         .description(
                             """
                             코드 발급 화면용 슬롯 목록을 등록 순으로 조회한다 (ROLE_ADMIN 전용).
@@ -86,7 +86,7 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                             사용·폐기된 코드는 제외된다.""")
                         .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
-                        .responseSchema(Schema.schema("AdminBuncheolSlotListResponse"))
+                        .responseSchema(Schema.schema("AdminBuncheolMemberListResponse"))
                         .responseFields(
                             fieldWithPath("[].buncheolMemberId").description("멤버 슬롯 ID (코드 발급 대상)"),
                             fieldWithPath("[].memberName").description("멤버 이름").optional(),
@@ -214,9 +214,9 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-104` (`PARTICIPATION_CODE_EXPIRY_INVALID`) | 산정된 유효기한이 현재 시각 이전 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 그 멤버 슬롯이 없음 |
-                            | 409 | `BCH-102` (`PARTICIPATION_CODE_SLOT_ALREADY_ISSUED`) | 아직 쓸 수 있는 코드가 있는데 `reissue=false` |
-                            | 409 | `BCH-103` (`PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY`) | 선착순 슬롯에 발급 시도 |
-                            | 409 | `BCH-108` (`PARTICIPATION_CODE_SLOT_TAKEN`) | 이미 참여가 확정된 슬롯 (발급해도 쓸 수 없다) |
+                            | 409 | `BCH-102` (`PARTICIPATION_CODE_MEMBER_ALREADY_ISSUED`) | 아직 쓸 수 있는 코드가 있는데 `reissue=false` |
+                            | 409 | `BCH-103` (`PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY`) | 선착순 슬롯에 발급 시도 |
+                            | 409 | `BCH-108` (`PARTICIPATION_CODE_MEMBER_TAKEN`) | 이미 참여가 확정된 슬롯 (발급해도 쓸 수 없다) |
                             """)
                         .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(parameterWithName("buncheolId").description("분철 ID"))
@@ -263,11 +263,11 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
-  void 관리자_슬롯_접근_정책_전환() throws Exception {
+  void 관리자_멤버_접근_정책_전환() throws Exception {
     mockMvc
         .perform(
             patch(
-                    "/v1/admin/buncheols/{buncheolId}/slots/{buncheolMemberId}",
+                    "/v1/admin/buncheols/{buncheolId}/members/{buncheolMemberId}",
                     10L,
                     101L)
                 .with(adminAuth())
@@ -276,11 +276,11 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
         .andExpect(status().isNoContent())
         .andDo(
             document(
-                "admin-buncheol-slot-access-type",
+                "admin-buncheol-member-access-type",
                 resource(
                     ResourceSnippetParameters.builder()
                         .tag("Admin")
-                        .summary("관리자 슬롯 접근 정책 전환")
+                        .summary("관리자 멤버 접근 정책 전환")
                         .description(
                             """
                             멤버 슬롯을 선착순(`OPEN`) ↔ 코드 참여(`CODE_ONLY`)로 전환한다 (ROLE_ADMIN 전용).
@@ -294,15 +294,15 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                             | 상태 | 코드 | 의미 |
                             |------|------|------|
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
-                            | 409 | `BCH-103` (`PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY`) | C2C 분철을 코드 참여로 전환 시도 |
+                            | 409 | `BCH-103` (`PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY`) | C2C 분철을 코드 참여로 전환 시도 |
                             | 409 | `BCH-107` (`BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED`) | 참여자가 있는 슬롯이거나 슬롯 없음 |
-                            | 409 | `BCH-109` (`PARTICIPATION_CODE_SLOT_NOT_FREE`) | 유료 슬롯을 코드 참여로 전환 시도 (코드 참여는 0원 전제) |
+                            | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | 유료 슬롯을 코드 참여로 전환 시도 (코드 참여는 0원 전제) |
                             """)
                         .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(
                             parameterWithName("buncheolId").description("분철 ID"),
                             parameterWithName("buncheolMemberId").description("멤버 슬롯 ID"))
-                        .requestSchema(Schema.schema("AdminSlotAccessTypeRequest"))
+                        .requestSchema(Schema.schema("AdminMemberAccessTypeRequest"))
                         .requestFields(
                             fieldWithPath("accessType")
                                 .description("OPEN=선착순 | CODE_ONLY=참여 코드 보유자 전용"))
@@ -310,7 +310,7 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
 
     then(adminParticipationCodeService)
         .should()
-        .changeSlotAccessType(10L, 101L, SlotAccessType.CODE_ONLY);
+        .changeBuncheolMemberAccessType(10L, 101L, BuncheolMemberAccessType.CODE_ONLY);
   }
 
   @Test

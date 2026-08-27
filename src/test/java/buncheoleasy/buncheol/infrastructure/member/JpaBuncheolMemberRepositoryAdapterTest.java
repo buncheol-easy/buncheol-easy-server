@@ -9,7 +9,7 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
@@ -108,7 +108,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
       assertThat(
               buncheolMemberRepository.changeAccessTypeIfUnoccupied(
-                  slotId, buncheolId, SlotAccessType.CODE_ONLY))
+                  slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
           .isTrue();
 
       em.clear();
@@ -117,7 +117,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
                   .findByIdAndBuncheolId(slotId, buncheolId)
                   .orElseThrow()
                   .getAccessType())
-          .isEqualTo(SlotAccessType.CODE_ONLY);
+          .isEqualTo(BuncheolMemberAccessType.CODE_ONLY);
     }
 
     @Test
@@ -127,7 +127,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
       assertThat(
               buncheolMemberRepository.changeAccessTypeIfUnoccupied(
-                  slotId, buncheolId, SlotAccessType.CODE_ONLY))
+                  slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
           .isFalse();
     }
 
@@ -138,7 +138,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
       assertThat(
               buncheolMemberRepository.changeAccessTypeIfUnoccupied(
-                  slotId, buncheolId, SlotAccessType.CODE_ONLY))
+                  slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
           .isTrue();
     }
 
@@ -148,7 +148,7 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
       assertThat(
               buncheolMemberRepository.changeAccessTypeIfUnoccupied(
-                  slotId, buncheolId + 9_999L, SlotAccessType.CODE_ONLY))
+                  slotId, buncheolId + 9_999L, BuncheolMemberAccessType.CODE_ONLY))
           .isFalse();
     }
 

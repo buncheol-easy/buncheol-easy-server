@@ -22,7 +22,7 @@ import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -959,7 +959,7 @@ class ParticipationServiceTest {
 
     private BuncheolMember codeSlotMember() {
       BuncheolMember member = buncheolMember(BUNCHEOL_MEMBER_ID, 0L);
-      setField(member, "accessType", SlotAccessType.CODE_ONLY);
+      setField(member, "accessType", BuncheolMemberAccessType.CODE_ONLY);
       return member;
     }
 

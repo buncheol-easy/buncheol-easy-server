@@ -27,7 +27,7 @@ public interface BuncheolMemberRepository {
    * @return 실제로 전환했으면 true (false = 이미 점유됐거나 슬롯 없음)
    */
   boolean changeAccessTypeIfUnoccupied(
-      Long buncheolMemberId, Long buncheolId, SlotAccessType accessType);
+      Long buncheolMemberId, Long buncheolId, BuncheolMemberAccessType accessType);
 
   void deleteById(Long id);
 }

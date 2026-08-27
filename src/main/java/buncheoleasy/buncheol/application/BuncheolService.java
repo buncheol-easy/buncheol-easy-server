@@ -98,7 +98,7 @@ public class BuncheolService {
       return;
     }
     if (memberParams.stream().anyMatch(param -> param.accessType().requiresCode())) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY);
     }
   }
 
@@ -106,7 +106,7 @@ public class BuncheolService {
   private void validateCodeOnlySlotsAreFree(final List<BuncheolMemberParams> memberParams) {
     if (memberParams.stream()
         .anyMatch(param -> param.accessType().requiresCode() && param.price() > 0L)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_FREE);
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
     }
   }
 

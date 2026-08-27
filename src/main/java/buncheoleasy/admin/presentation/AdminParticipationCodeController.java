@@ -2,8 +2,8 @@ package buncheoleasy.admin.presentation;
 
 import buncheoleasy.admin.application.AdminParticipationCodeService;
 import buncheoleasy.admin.dto.request.AdminParticipationCodeIssueRequest;
-import buncheoleasy.admin.dto.request.AdminSlotAccessTypeRequest;
-import buncheoleasy.admin.dto.response.AdminBuncheolSlotResponse;
+import buncheoleasy.admin.dto.request.AdminMemberAccessTypeRequest;
+import buncheoleasy.admin.dto.response.AdminBuncheolMemberResponse;
 import buncheoleasy.admin.dto.response.AdminParticipationCodeResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -27,11 +27,11 @@ public class AdminParticipationCodeController {
 
   private final AdminParticipationCodeService adminParticipationCodeService;
 
-  /** 발급 화면용 슬롯 목록. */
-  @GetMapping("/buncheols/{buncheolId}/slots")
-  public ResponseEntity<List<AdminBuncheolSlotResponse>> getSlots(
+  /** 발급 화면용 멤버 목록 (코드 발급 대상 슬롯). */
+  @GetMapping("/buncheols/{buncheolId}/members")
+  public ResponseEntity<List<AdminBuncheolMemberResponse>> getBuncheolMembers(
       @PathVariable final Long buncheolId) {
-    return ResponseEntity.ok(adminParticipationCodeService.getSlots(buncheolId));
+    return ResponseEntity.ok(adminParticipationCodeService.getBuncheolMembers(buncheolId));
   }
 
   /** 발급 이력 전체 (최신순). */
@@ -50,13 +50,13 @@ public class AdminParticipationCodeController {
         .body(adminParticipationCodeService.issue(buncheolId, request));
   }
 
-  /** 슬롯 접근 정책 전환. 활성 참여가 있는 슬롯은 바꿀 수 없다. */
-  @PatchMapping("/buncheols/{buncheolId}/slots/{buncheolMemberId}")
-  public ResponseEntity<Void> changeSlotAccessType(
+  /** 멤버 접근 정책 전환. 활성 참여가 있으면 바꿀 수 없다. */
+  @PatchMapping("/buncheols/{buncheolId}/members/{buncheolMemberId}")
+  public ResponseEntity<Void> changeBuncheolMemberAccessType(
       @PathVariable final Long buncheolId,
       @PathVariable final Long buncheolMemberId,
-      @Valid @RequestBody final AdminSlotAccessTypeRequest request) {
-    adminParticipationCodeService.changeSlotAccessType(
+      @Valid @RequestBody final AdminMemberAccessTypeRequest request) {
+    adminParticipationCodeService.changeBuncheolMemberAccessType(
         buncheolId, buncheolMemberId, request.accessType());
     return ResponseEntity.noContent().build();
   }

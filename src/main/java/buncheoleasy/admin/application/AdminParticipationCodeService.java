@@ -1,7 +1,7 @@
 package buncheoleasy.admin.application;
 
 import buncheoleasy.admin.dto.request.AdminParticipationCodeIssueRequest;
-import buncheoleasy.admin.dto.response.AdminBuncheolSlotResponse;
+import buncheoleasy.admin.dto.response.AdminBuncheolMemberResponse;
 import buncheoleasy.admin.dto.response.AdminParticipationCodeResponse;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
@@ -9,7 +9,7 @@ import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -43,7 +43,7 @@ public class AdminParticipationCodeService {
 
   /** 발급 화면용 슬롯 목록 (등록 순). */
   @Transactional(readOnly = true)
-  public List<AdminBuncheolSlotResponse> getSlots(final Long buncheolId) {
+  public List<AdminBuncheolMemberResponse> getBuncheolMembers(final Long buncheolId) {
     buncheolDomainService.getBuncheol(buncheolId);
     List<BuncheolMember> members = buncheolMemberDomainService.findAllByBuncheolId(buncheolId);
     if (members.isEmpty()) {
@@ -72,7 +72,7 @@ public class AdminParticipationCodeService {
         .map(
             member -> {
               ParticipationCode activeCode = activeCodeBySlot.get(member.getId());
-              return new AdminBuncheolSlotResponse(
+              return new AdminBuncheolMemberResponse(
                   member.getId(),
                   memberNames.get(member.getMemberId()),
                   member.getPrice(),
@@ -120,7 +120,7 @@ public class AdminParticipationCodeService {
 
     // 이미 점유된 슬롯에 발급하면 코드를 받은 사람이 참여 시점에 BCH-070 으로 막힌다 — 헛 코드를 보내기 전에 끊는다.
     if (isSlotTaken(buncheolId, member.getId())) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_TAKEN);
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_TAKEN);
     }
 
     Instant expiresAt = now.plus(validity(request.validHours()));
@@ -138,22 +138,22 @@ public class AdminParticipationCodeService {
    * 노출하지 않기 위함이다.
    */
   @Transactional
-  public void changeSlotAccessType(
-      final Long buncheolId, final Long buncheolMemberId, final SlotAccessType accessType) {
+  public void changeBuncheolMemberAccessType(
+      final Long buncheolId, final Long buncheolMemberId, final BuncheolMemberAccessType accessType) {
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    if (accessType == SlotAccessType.CODE_ONLY) {
+    if (accessType == BuncheolMemberAccessType.CODE_ONLY) {
       if (buncheol.isC2c()) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY);
       }
       if (!buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId).isFree()) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_FREE);
+        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
       }
     }
     buncheolMemberDomainService.changeAccessType(buncheolMemberId, buncheolId, accessType);
-    if (accessType == SlotAccessType.OPEN) {
+    if (accessType == BuncheolMemberAccessType.OPEN) {
       // 선착순으로 되돌린 슬롯의 코드가 살아 있으면, 다시 코드 참여로 바꿨을 때 폐기한 줄 알았던
       // 옛 코드가 되살아나 의도하지 않은 사람이 슬롯을 가져간다.
-      participationCodeDomainService.revokeOutstandingBySlot(buncheolMemberId, Instant.now(clock));
+      participationCodeDomainService.revokeOutstandingByMember(buncheolMemberId, Instant.now(clock));
     }
   }
 

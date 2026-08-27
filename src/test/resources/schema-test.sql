@@ -298,7 +298,7 @@ CREATE TABLE participation_codes
 );
 
 CREATE UNIQUE INDEX uq_participation_codes_code ON participation_codes (code);
-CREATE INDEX idx_participation_codes_slot ON participation_codes (buncheol_member_id, id DESC);
+CREATE INDEX idx_participation_codes_member ON participation_codes (buncheol_member_id, id DESC);
 CREATE INDEX idx_participation_codes_buncheol ON participation_codes (buncheol_id, id DESC);
 
 -- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)

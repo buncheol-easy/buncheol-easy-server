@@ -41,18 +41,18 @@ public class BuncheolMember extends TimestampedEntity {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "access_type", nullable = false, length = 20)
-  private SlotAccessType accessType = SlotAccessType.OPEN;
+  private BuncheolMemberAccessType accessType = BuncheolMemberAccessType.OPEN;
 
   public static BuncheolMember create(
       final Long buncheolId, final Long memberId, final long price) {
-    return new BuncheolMember(buncheolId, memberId, price, SlotAccessType.OPEN);
+    return new BuncheolMember(buncheolId, memberId, price, BuncheolMemberAccessType.OPEN);
   }
 
   public static BuncheolMember create(
       final Long buncheolId,
       final Long memberId,
       final long price,
-      final SlotAccessType accessType) {
+      final BuncheolMemberAccessType accessType) {
     return new BuncheolMember(buncheolId, memberId, price, accessType);
   }
 
@@ -60,7 +60,7 @@ public class BuncheolMember extends TimestampedEntity {
       final Long buncheolId,
       final Long memberId,
       final long price,
-      final SlotAccessType accessType) {
+      final BuncheolMemberAccessType accessType) {
     validate(buncheolId, memberId, price, accessType);
     this.buncheolId = buncheolId;
     this.memberId = memberId;
@@ -85,14 +85,14 @@ public class BuncheolMember extends TimestampedEntity {
       final Long buncheolId,
       final Long memberId,
       final long price,
-      final SlotAccessType accessType) {
+      final BuncheolMemberAccessType accessType) {
     validateBuncheolId(buncheolId);
     validateMemberId(memberId);
     validatePrice(price);
     validateAccessType(accessType);
   }
 
-  private void validateAccessType(final SlotAccessType value) {
+  private void validateAccessType(final BuncheolMemberAccessType value) {
     if (value == null) {
       throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
     }

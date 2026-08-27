@@ -6,7 +6,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.lang.reflect.Field;
@@ -103,7 +103,7 @@ class BuncheolMemberNameResolverTest {
   @Test
   void 코드_참여_슬롯은_비어_있어도_잔여에서_제외된다() {
     BuncheolMember codeSlot = buncheolMember(802L, 10L, 2002L);
-    setField(codeSlot, "accessType", SlotAccessType.CODE_ONLY);
+    setField(codeSlot, "accessType", BuncheolMemberAccessType.CODE_ONLY);
     given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
         .willReturn(List.of(buncheolMember(801L, 10L, 2001L), codeSlot));
     given(groupMemberRepository.findAllByIds(List.of(2001L, 2002L)))

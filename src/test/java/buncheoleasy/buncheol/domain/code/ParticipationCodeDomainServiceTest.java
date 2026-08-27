@@ -9,7 +9,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
@@ -43,7 +43,7 @@ class ParticipationCodeDomainServiceTest {
   @Mock private ParticipationCodeRepository participationCodeRepository;
   @Mock private CodeGenerator codeGenerator;
 
-  private BuncheolMember member(final SlotAccessType accessType) {
+  private BuncheolMember member(final BuncheolMemberAccessType accessType) {
     BuncheolMember member = newInstance();
     setField(member, "id", SLOT_ID);
     setField(member, "buncheolId", BUNCHEOL_ID);
@@ -85,7 +85,7 @@ class ParticipationCodeDomainServiceTest {
     void 선착순_슬롯에_코드가_없으면_소모할_코드_없이_통과한다() {
       assertThat(
               participationCodeDomainService.validateForParticipation(
-                  member(SlotAccessType.OPEN), null, NOW))
+                  member(BuncheolMemberAccessType.OPEN), null, NOW))
           .isEmpty();
     }
 
@@ -94,7 +94,7 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.validateForParticipation(
-                      member(SlotAccessType.OPEN), RAW_CODE, NOW))
+                      member(BuncheolMemberAccessType.OPEN), RAW_CODE, NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
@@ -105,7 +105,7 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.validateForParticipation(
-                      member(SlotAccessType.CODE_ONLY), "  ", NOW))
+                      member(BuncheolMemberAccessType.CODE_ONLY), "  ", NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_REQUIRED);
@@ -118,7 +118,7 @@ class ParticipationCodeDomainServiceTest {
 
       assertThat(
               participationCodeDomainService.validateForParticipation(
-                  member(SlotAccessType.CODE_ONLY), RAW_CODE, NOW))
+                  member(BuncheolMemberAccessType.CODE_ONLY), RAW_CODE, NOW))
           .isPresent();
     }
 
@@ -129,7 +129,7 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.validateForParticipation(
-                      member(SlotAccessType.CODE_ONLY), RAW_CODE, NOW))
+                      member(BuncheolMemberAccessType.CODE_ONLY), RAW_CODE, NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_INVALID);
@@ -144,7 +144,7 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.validateForParticipation(
-                      member(SlotAccessType.CODE_ONLY), RAW_CODE, NOW))
+                      member(BuncheolMemberAccessType.CODE_ONLY), RAW_CODE, NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_INVALID);
@@ -158,7 +158,7 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.validateForParticipation(
-                      member(SlotAccessType.CODE_ONLY),
+                      member(BuncheolMemberAccessType.CODE_ONLY),
                       RAW_CODE,
                       NOW.plus(Duration.ofHours(48))))
           .isInstanceOf(BusinessException.class)
@@ -193,10 +193,10 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.issue(
-                      member(SlotAccessType.OPEN), null, NOW.plus(Duration.ofHours(48)), NOW))
+                      member(BuncheolMemberAccessType.OPEN), null, NOW.plus(Duration.ofHours(48)), NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY);
+          .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY);
 
       then(participationCodeRepository).should(never()).save(any());
     }
@@ -210,13 +210,13 @@ class ParticipationCodeDomainServiceTest {
       assertThatThrownBy(
               () ->
                   participationCodeDomainService.issue(
-                      member(SlotAccessType.CODE_ONLY),
+                      member(BuncheolMemberAccessType.CODE_ONLY),
                       "@next",
                       NOW.plus(Duration.ofHours(48)),
                       NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_CODE_SLOT_ALREADY_ISSUED);
+          .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_ALREADY_ISSUED);
 
       then(participationCodeRepository).should(never()).save(any());
     }
@@ -230,7 +230,7 @@ class ParticipationCodeDomainServiceTest {
 
       Instant afterExpiry = NOW.plus(Duration.ofHours(49));
       participationCodeDomainService.issue(
-          member(SlotAccessType.CODE_ONLY), "@next", afterExpiry.plusSeconds(60), afterExpiry);
+          member(BuncheolMemberAccessType.CODE_ONLY), "@next", afterExpiry.plusSeconds(60), afterExpiry);
 
       then(participationCodeRepository).should().save(any());
       then(participationCodeRepository)
@@ -245,7 +245,7 @@ class ParticipationCodeDomainServiceTest {
       given(participationCodeRepository.save(any())).willAnswer(it -> it.getArgument(0));
 
       participationCodeDomainService.reissue(
-          member(SlotAccessType.CODE_ONLY), "@next", NOW.plus(Duration.ofHours(48)), NOW);
+          member(BuncheolMemberAccessType.CODE_ONLY), "@next", NOW.plus(Duration.ofHours(48)), NOW);
 
       InOrder inOrder = Mockito.inOrder(participationCodeRepository);
       inOrder.verify(participationCodeRepository).revokeOutstandingByBuncheolMemberId(SLOT_ID, NOW);

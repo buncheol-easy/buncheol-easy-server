@@ -1,7 +1,7 @@
 package buncheoleasy.buncheol.dto.request;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
@@ -11,7 +11,7 @@ import jakarta.validation.constraints.PositiveOrZero;
  * @param accessType 슬롯 접근 정책. 생략(null)하면 선착순(OPEN)
  */
 public record BuncheolMemberRequest(
-    @NotNull Long memberId, @NotNull @PositiveOrZero Long price, SlotAccessType accessType) {
+    @NotNull Long memberId, @NotNull @PositiveOrZero Long price, BuncheolMemberAccessType accessType) {
 
   public BuncheolMemberRequest(final Long memberId, final Long price) {
     this(memberId, price, null);

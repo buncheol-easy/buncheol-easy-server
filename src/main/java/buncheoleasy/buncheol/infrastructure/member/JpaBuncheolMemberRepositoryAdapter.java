@@ -2,7 +2,7 @@ package buncheoleasy.buncheol.infrastructure.member;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.util.List;
 import java.util.Optional;
@@ -30,7 +30,7 @@ public class JpaBuncheolMemberRepositoryAdapter implements BuncheolMemberReposit
 
   @Override
   public boolean changeAccessTypeIfUnoccupied(
-      final Long buncheolMemberId, final Long buncheolId, final SlotAccessType accessType) {
+      final Long buncheolMemberId, final Long buncheolId, final BuncheolMemberAccessType accessType) {
     return jpaBuncheolMemberRepository.changeAccessTypeIfUnoccupied(
             buncheolMemberId, buncheolId, accessType, ParticipationStatus.active())
         > 0;

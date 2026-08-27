@@ -1,7 +1,7 @@
 package buncheoleasy.buncheol.infrastructure.member;
 
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.util.Collection;
 import java.util.List;
@@ -41,6 +41,6 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
   int changeAccessTypeIfUnoccupied(
       @Param("id") Long id,
       @Param("buncheolId") Long buncheolId,
-      @Param("accessType") SlotAccessType accessType,
+      @Param("accessType") BuncheolMemberAccessType accessType,
       @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
 }

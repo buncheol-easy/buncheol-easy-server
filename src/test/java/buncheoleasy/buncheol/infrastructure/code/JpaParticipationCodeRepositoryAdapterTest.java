@@ -10,7 +10,7 @@ import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
@@ -66,9 +66,9 @@ class JpaParticipationCodeRepositoryAdapterTest {
     buncheolId = buncheol.getId();
 
     BuncheolMember slot =
-        BuncheolMember.create(buncheolId, groupMemberId, 0L, SlotAccessType.CODE_ONLY);
+        BuncheolMember.create(buncheolId, groupMemberId, 0L, BuncheolMemberAccessType.CODE_ONLY);
     BuncheolMember otherSlot =
-        BuncheolMember.create(buncheolId, groupMemberId2, 0L, SlotAccessType.CODE_ONLY);
+        BuncheolMember.create(buncheolId, groupMemberId2, 0L, BuncheolMemberAccessType.CODE_ONLY);
     buncheolMemberRepository.saveAll(List.of(slot, otherSlot));
     em.flush();
     em.clear();

@@ -415,7 +415,7 @@ CREATE TABLE IF NOT EXISTS participation_codes
 
     UNIQUE INDEX uq_participation_codes_code (code),
     -- 슬롯당 유효 코드 1개는 유니크가 아니라 앱 가드로 지킨다 (ParticipationCode javadoc).
-    INDEX idx_participation_codes_slot (buncheol_member_id, id DESC),
+    INDEX idx_participation_codes_member (buncheol_member_id, id DESC),
     INDEX idx_participation_codes_buncheol (buncheol_id, id DESC),
 
     CONSTRAINT fk_participation_codes_buncheol

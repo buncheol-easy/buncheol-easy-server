@@ -206,20 +206,20 @@ public enum ErrorCode {
   PARTICIPATION_CODE_REVOKED("BCH-100", "더 이상 사용할 수 없는 코드예요.", HttpStatus.CONFLICT),
   // 이하 운영자(어드민) 발급 경로 전용.
   PARTICIPATION_CODE_NOT_FOUND("BCH-101", "존재하지 않는 참여 코드입니다.", HttpStatus.NOT_FOUND),
-  PARTICIPATION_CODE_SLOT_ALREADY_ISSUED(
+  PARTICIPATION_CODE_MEMBER_ALREADY_ISSUED(
       "BCH-102", "이 슬롯에 아직 쓸 수 있는 코드가 있습니다. 재발급으로 이전 코드를 폐기하고 새로 발급하세요.", HttpStatus.CONFLICT),
-  PARTICIPATION_CODE_SLOT_NOT_CODE_ONLY("BCH-103", "코드 참여 슬롯이 아닙니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY("BCH-103", "코드 참여 슬롯이 아닙니다.", HttpStatus.CONFLICT),
   PARTICIPATION_CODE_EXPIRY_INVALID("BCH-104", "코드 유효기한은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_CODE_REQUIRED_FIELD_MISSING(
       "BCH-105", "참여 코드 발급에 필요한 값이 누락되었습니다.", HttpStatus.BAD_REQUEST),
   PARTICIPATION_CODE_REVOKE_NOT_ALLOWED("BCH-106", "이미 사용되었거나 폐기된 코드입니다.", HttpStatus.CONFLICT),
   BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED(
       "BCH-107", "참여자가 있는 슬롯의 접근 정책은 바꿀 수 없습니다.", HttpStatus.CONFLICT),
-  PARTICIPATION_CODE_SLOT_TAKEN(
+  PARTICIPATION_CODE_MEMBER_TAKEN(
       "BCH-108", "이미 참여자가 확정된 슬롯입니다. 발급해도 사용할 수 없어요.", HttpStatus.CONFLICT),
   // 코드 참여는 무상 제공(0원 + 배송비 면제)이 전제다. 유료 슬롯을 코드 참여로 만들면 화면은 "0원" 을
   // 안내하는데 서버는 유상 참여로 처리해 환불 계좌 누락(BCH-062)으로 실패한다.
-  PARTICIPATION_CODE_SLOT_NOT_FREE(
+  PARTICIPATION_CODE_MEMBER_NOT_FREE(
       "BCH-109", "코드 참여 슬롯은 0원이어야 합니다.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */

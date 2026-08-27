@@ -12,7 +12,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -72,7 +72,7 @@ class AdminParticipationCodeServiceTest {
     setField(member, "buncheolId", BUNCHEOL_ID);
     setField(member, "memberId", 1001L);
     setField(member, "price", 0L);
-    setField(member, "accessType", SlotAccessType.CODE_ONLY);
+    setField(member, "accessType", BuncheolMemberAccessType.CODE_ONLY);
     return member;
   }
 
@@ -100,7 +100,7 @@ class AdminParticipationCodeServiceTest {
                     new AdminParticipationCodeIssueRequest(SLOT_ID, "@next", 48, false)))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode")
-        .isEqualTo(ErrorCode.PARTICIPATION_CODE_SLOT_TAKEN);
+        .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_TAKEN);
 
     then(participationCodeDomainService).should(never()).issue(any(), any(), any(), any());
     then(participationCodeDomainService).should(never()).reissue(any(), any(), any(), any());
@@ -113,17 +113,17 @@ class AdminParticipationCodeServiceTest {
     given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
     BuncheolMember paidSlot = codeSlot();
     setField(paidSlot, "price", 20_700L);
-    setField(paidSlot, "accessType", SlotAccessType.OPEN);
+    setField(paidSlot, "accessType", BuncheolMemberAccessType.OPEN);
     given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
         .willReturn(paidSlot);
 
     assertThatThrownBy(
             () ->
-                adminParticipationCodeService.changeSlotAccessType(
-                    BUNCHEOL_ID, SLOT_ID, SlotAccessType.CODE_ONLY))
+                adminParticipationCodeService.changeBuncheolMemberAccessType(
+                    BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.CODE_ONLY))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode")
-        .isEqualTo(ErrorCode.PARTICIPATION_CODE_SLOT_NOT_FREE);
+        .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
 
     then(buncheolMemberDomainService).should(never()).changeAccessType(any(), any(), any());
   }

@@ -14,7 +14,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.domain.member.SlotAccessType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -600,7 +600,7 @@ class BuncheolDetailQueryServiceTest {
     stubBasicBuncheol(status, ShippingFeePolicy.of(2300, null), FlowType.LEGACY, deadline);
     given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID)).willReturn(List.of());
     BuncheolMember codeSlot = buncheolMember(101L, BUNCHEOL_ID, 1001L, 0L);
-    setField(codeSlot, "accessType", SlotAccessType.CODE_ONLY);
+    setField(codeSlot, "accessType", BuncheolMemberAccessType.CODE_ONLY);
     given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
         .willReturn(List.of(codeSlot));
     given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))

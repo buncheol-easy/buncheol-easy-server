@@ -3,7 +3,6 @@ package buncheoleasy.buncheol.domain.code;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -14,9 +13,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class ParticipationCodeDomainService {
-
-  /** 발급 시 기한을 지정하지 않으면 적용하는 기본 유효기간. */
-  public static final Duration DEFAULT_VALIDITY = Duration.ofHours(48);
 
   private final ParticipationCodeRepository participationCodeRepository;
   private final CodeGenerator codeGenerator;

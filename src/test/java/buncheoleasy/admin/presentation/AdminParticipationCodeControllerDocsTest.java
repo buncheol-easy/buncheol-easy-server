@@ -210,7 +210,7 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
 
                             | 상태 | 코드 | 의미 |
                             |------|------|------|
-                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 누락 등 요청 검증 실패 |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId`·`validHours` 누락 등 요청 검증 실패 |
                             | 400 | `BCH-104` (`PARTICIPATION_CODE_EXPIRY_INVALID`) | 산정된 유효기한이 현재 시각 이전 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 그 멤버 슬롯이 없음 |
@@ -230,8 +230,7 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                                         + " 운영 메모이며 인증에는 쓰지 않는다")
                                 .optional(),
                             fieldWithPath("validHours")
-                                .description("유효기간(시간). 생략 시 48시간, 최대 720시간")
-                                .optional(),
+                                .description("유효기간(시간). **필수** — 기본값이 없다. 1 이상 720 이하"),
                             fieldWithPath("reissue")
                                 .description("재발급 여부. true 면 이전 코드를 폐기한 뒤 발급")
                                 .optional())

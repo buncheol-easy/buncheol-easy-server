@@ -123,7 +123,7 @@ public class AdminParticipationCodeService {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_TAKEN);
     }
 
-    Instant expiresAt = now.plus(validity(request.validHours()));
+    Instant expiresAt = now.plus(Duration.ofHours(request.validHours()));
     ParticipationCode code =
         request.reissue()
             ? participationCodeDomainService.reissue(member, request.issuedTo(), expiresAt, now)
@@ -166,12 +166,6 @@ public class AdminParticipationCodeService {
   private boolean isSlotTaken(final Long buncheolId, final Long buncheolMemberId) {
     return participationRepository.findActiveByBuncheolId(buncheolId).stream()
         .anyMatch(participation -> buncheolMemberId.equals(participation.getBuncheolMemberId()));
-  }
-
-  private Duration validity(final Integer validHours) {
-    return validHours == null
-        ? ParticipationCodeDomainService.DEFAULT_VALIDITY
-        : Duration.ofHours(validHours);
   }
 
   private Map<Long, String> resolveMemberNames(final List<BuncheolMember> members) {

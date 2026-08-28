@@ -200,16 +200,25 @@ public class ParticipationService {
         || ParticipationCodeDomainService.submitted(request.participationCode())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
     }
-    Optional<Participation> existing =
-        participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId);
+    // 상태는 한 번만 읽고 여기서 먼저 거른다. 스냅샷 계산 뒤로 미루면 모집이 끝난 분철에 재참여할 때
+    // BUNCHEOL_NOT_RECRUITING 대신 배송지·계좌 예외가 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다.
+    final BuncheolStatus status = buncheol.getStatus();
+    if (status != BuncheolStatus.RECRUITING && status != BuncheolStatus.PAYMENT_COLLECTING) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
     // 🔴 상속은 <b>모집중 재참여에만</b> 적용된다. 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라
-    // 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6).
+    // 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6). 그래서 조회 자체를
+    // 모집중에만 한다 — 추가 모집에서는 이 값이 쓰이지 않아 헛쿼리가 된다.
     //
-    // ⚠️ 이 조건이 아래 묶음 재사용 판정과 <b>같은 하나</b>여야 한다. 둘로 나누면 "배송비는 상속했는데
-    // 묶음은 새로" 같은 어긋남이 생긴다 — 그러면 새 택배에 배송비가 0원으로 굳고, shipping_fee 와
-    // shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
-    boolean inheritsFromExisting =
-        existing.isPresent() && buncheol.getStatus() == BuncheolStatus.RECRUITING;
+    // ⚠️ 이 하나가 배송지·배송비·입금자명·묶음 재사용 넷을 함께 지배해야 한다. 조건을 두 벌 세우면
+    // "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기고, 그러면 새 택배에 배송비가 0원으로 굳는다
+    // — shipping_fee 와 shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
+    Optional<Participation> existing =
+        status == BuncheolStatus.RECRUITING
+            ? participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId)
+            : Optional.empty();
+    boolean inheritsFromExisting = existing.isPresent();
     final Long shippingAddressId;
     final long shippingFee;
     final RefundAccount refundAccount;
@@ -240,7 +249,7 @@ public class ParticipationService {
     // 나와야 "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기지 않는다.
     // ⚠️ 그 참여의 bundle_id 가 비어 있으면(배포선 창에서 생긴 행) 새로 연다. 이때 배송비는 반드시 위에서
     // 정해진 상속분(0)을 그대로 쓴다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
-    return switch (buncheol.getStatus()) {
+    return switch (status) {
       case RECRUITING ->
           applyC2c(
               buncheol,
@@ -361,9 +370,10 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 추가 모집은 별도 이체·별도 택배라 항상 새 묶음이다(재사용 후보를 넘기지 않는다).
-    // ⚠️ 배송비·배송지는 아직 상속분을 그대로 복사한다 — P2-b 는 "동작 무변경, 추가만" 이다. 새 묶음에 맞게
-    // 다시 부과·재선택하는 것은 ⑤(배송비 재부과)이고, 서버·클라가 같은 릴리스로 나가야 화면과 청구가 안 갈린다.
+    // 추가 모집은 별도 이체·별도 택배라 항상 새 묶음이다(재사용 후보를 넘기지 않는다). 배송지·배송비도
+    // 이 회차 것이다 — 호출부(participateC2c)가 상속을 모집중으로 한정해 여기로는 새 값이 넘어온다.
+    // ⚠️ 같은 회차에 슬롯을 여러 개 잡으면 그때마다 새 묶음이라 배송비도 그때마다 붙는다(수용된 한계 —
+    // ParticipationBundle javadoc 의 경계 문단).
     participationBundleDomainService.attach(
         participation, null, shippingAddressId, shippingFee, refundAccount, dueAt, now);
 

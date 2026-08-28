@@ -64,7 +64,7 @@ class TrackingWebhookRegistrarTest {
 
   private Delivery createShippingDelivery(
       final ShippingMethod method, final String trackingNumber) {
-    Delivery delivery = Delivery.createSnapshot(20L, method, "GS25 강남점", "테스트유저", "01012345678");
+    Delivery delivery = Delivery.createSnapshot(20L, null, method, "GS25 강남점", "테스트유저", "01012345678");
     setField(delivery, "trackingNumber", trackingNumber);
     return delivery;
   }

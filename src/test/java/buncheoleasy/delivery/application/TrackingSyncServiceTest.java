@@ -53,7 +53,7 @@ class TrackingSyncServiceTest {
 
   private Delivery deliveryWithId(final Long id) {
     Delivery delivery =
-        Delivery.createSnapshot(id, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
+        Delivery.createSnapshot(id, null, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
     setField(delivery, "id", id);
     return delivery;
   }

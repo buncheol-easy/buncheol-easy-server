@@ -58,7 +58,7 @@ class DeliveryServiceTest {
   private Delivery createSnapshotDelivery() {
     Delivery delivery =
         Delivery.createSnapshot(
-            PARTICIPATION_ID, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
+            PARTICIPATION_ID, null, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
     setField(delivery, "id", DELIVERY_ID);
     return delivery;
   }

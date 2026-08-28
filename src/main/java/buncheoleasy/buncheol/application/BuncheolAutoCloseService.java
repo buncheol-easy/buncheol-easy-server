@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import java.time.Duration;
@@ -28,6 +29,7 @@ public class BuncheolAutoCloseService {
   private final BuncheolRepository buncheolRepository;
   private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   private final DeliveryDomainService deliveryDomainService;
   private final ApplicationEventPublisher eventPublisher;
@@ -122,6 +124,8 @@ public class BuncheolAutoCloseService {
   private void finalizeAsCancelled(
       final Long buncheolId, final Instant now, final BuncheolCancelReason reason) {
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
+    // 취소된 참여의 묶음도 함께 닫는다 (개최자 취소 경로와 같은 이유 — BuncheolService#cancelBuncheol).
+    participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
     // 스냅샷이 아니라 cascade 로 실제 전이된 참여만 재조회해 발행 — 그 사이 자발취소·만료된 참여에 중복 알림이 가지 않도록.
     List<Participation> cancelled =
         participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);

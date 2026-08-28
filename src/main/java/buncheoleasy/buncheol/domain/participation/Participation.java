@@ -58,6 +58,16 @@ public class Participation extends TimestampedEntity {
   @Column(name = "buncheol_member_id", nullable = false, updatable = false)
   private Long buncheolMemberId;
 
+  // 소속 묶음 (participation_bundles.id). 이체 1회·배송비 1회·택배 1개의 단위다.
+  //
+  // ⚠️ 참여 INSERT 는 이 컬럼을 싣지 않는다 — 그 INSERT 는 조건부 원시 SQL(JpaParticipationRepositoryAdapter)
+  // 이고 H2 에 없는 UTC_TIMESTAMP() 를 써서 테스트가 한 줄도 실행하지 못한다. 바인딩을 늘리면 인덱스가
+  // 밀려도 잡아 줄 것이 없다. 그래서 INSERT 직후 별도 CAS(linkBundle)로 채운다 (docs/80 ④).
+  //
+  // 계좌 강제 이전 행과 P2-b 배포선 창에서 생긴 행은 NULL 이다. P4 에서 NOT NULL 로 조인다.
+  @Column(name = "bundle_id")
+  private Long bundleId;
+
   // 참여한 유저 (users.id).
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
@@ -271,6 +281,17 @@ public class Participation extends TimestampedEntity {
 
   // 운영진의 환급 완료/반려 전이는 동시 검수 시 중복 알림을 막기 위해 CAS
   // (completePaybackIfRequested/rejectPaybackIfRequested)로만 한다 — 엔티티 전이 메서드를 두지 않는다.
+
+  /**
+   * 묶음 연결을 <b>메모리에도</b> 반영한다. 영속화는 {@code ParticipationRepository#linkBundle} CAS 가 한다 — 이 객체는
+   * 원시 INSERT 로 저장돼 영속성 컨텍스트가 관리하지 않으므로 여기서 값을 바꿔도 UPDATE 가 나가지 않는다.
+   *
+   * <p>둘을 같이 하는 이유는 같은 트랜잭션의 뒤 코드(배송 스냅샷 등)가 이 값을 읽기 때문이다. CAS 가 실패했으면
+   * 호출부가 예외를 던지므로 여기까지 오지 않는다.
+   */
+  public void linkBundle(final Long bundleId) {
+    this.bundleId = bundleId;
+  }
 
   public void validateOwnedBy(final Long participantId) {
     if (!this.participantId.equals(participantId)) {

@@ -1,6 +1,8 @@
 package buncheoleasy.buncheol.domain.participation;
 
 import buncheoleasy.global.domain.TimestampedEntity;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -24,11 +26,21 @@ import lombok.NoArgsConstructor;
  * <p><b>경계</b> — 묶음은 {@code (분철, 사람, 결제 사이클)} 단위다. 추가 모집분은 <b>새 묶음</b>이라 기존 묶음에 섞이지 않는다 (docs/70
  * 결정 2). 그래서 한 묶음 안의 슬롯은 상태가 갈리지 않고, 「보냈어요」·입금확인·「제외」가 전부 묶음 단위로 성립한다 (docs/71 §1).
  *
+ * <p>⚠️ <b>"사이클" 이 추가 모집끼리를 묶는다는 뜻은 아니다 — 추가 모집은 슬롯마다 새 묶음이다.</b> 같은 입금 수집중 창에서 같은 사람이
+ * 두 번 신청하면 묶음이 2개 생기고, 배송비 재부과가 붙으면 배송비도 2회다. 각 추가 모집 슬롯이 <b>개별 24h 기한</b>으로 따로 진입하고
+ * 이체도 따로 하기 때문이다. 데이터만으로는 "한 번에 신청했는지" 를 알 수 없어 <b>쪼개는 쪽이 보수적</b>이다(합쳐 놓으면 서로 다른 두
+ * 이체가 한 묶음에 섞여 되돌릴 수 없다 — 백필 STEP 3 도 같은 이유로 행별 1:1이다). 실측 prod 0건 · staging 1건이고, 화면과 청구가
+ * 일치하므로 수용한다 (docs/80 §3-6 알려진 한계). 자동 병합은 규칙이 훨씬 복잡해져 기각됐다.
+ *
+ * <p>📌 {@code findById}·{@code findActiveByBuncheolIdAndParticipantId}·{@code findAllByBuncheolId}·{@link
+ * #isActive()} 는 P2-b 시점에도 <b>프로덕션 미사용</b>이다 — 읽기 전환(P2-c)이 쓸 자리라 남겨 둔다.
+ *
  * <p><b>활성 묶음 유니크는 없다</b> (docs/71 §8-3). 추가 모집·재신청이 새 묶음이어야 해서 한 사람이 한 분철에 활성 묶음 2개를 가질 수 있어야
  * 하기 때문이다. 중복 방지는 앱 가드가 하고, LEGACY 1인 1슬롯 보호는 {@code
  * participations.uq_participations_legacy_active_participant} 가 그대로 계속한다.
  *
- * <p><b>P1 범위</b> — 이 엔티티는 아직 어떤 읽기·쓰기 경로에도 연결돼 있지 않다. 정본 이전은 P2 다.
+ * <p><b>P2-b 범위</b> — 참여 생성 경로가 이 엔티티를 <b>쓰기 시작했다</b>(묶음 생성·연결·닫기). 다만 <b>읽는 코드는 아직 0줄</b>
+ * 이다 — 응답·알림은 여전히 {@code participations} 의 스냅샷을 본다. 정본 이전(읽기 전환)은 P2-c 다.
  */
 @Entity
 @Table(name = "participation_bundles")
@@ -76,24 +88,41 @@ public class ParticipationBundle extends TimestampedEntity {
    * 새 묶음을 연다. 배송지·배송비·환불계좌는 <b>참여 시점 스냅샷</b>이라 생성 후 바뀌지 않는다({@code
    * updatable = false}).
    *
-   * <p>{@code dueAt} 은 성사 확정 시점에 정해지므로 생성 시점에는 비어 있다 — 신청 구간에는 입금 기한이라는 개념이 없다.
+   * <p>{@code dueAt} 은 <b>즉시 입금 경로(LEGACY·C2C 추가 모집)에서만</b> 값이 있다. C2C 신청(APPLIED)은 성사 확정
+   * 시점에 기한이 정해지므로 {@code null} 로 열고, 나중에 {@code
+ * ParticipationBundleRepository#assignDueAtByBuncheolId} 가 분철 범위로 채운다 — 신청 구간에는 입금 기한이라는
+   * 개념이 없다.
+   *
+   * <p>⚠️ 검증을 여기서 하는 이유: 이 필드들은 DB 가 {@code NOT NULL} 이라, 없는 채로 저장하면
+   * {@code BusinessException} 이 아니라 {@code Column 'refund_bank' cannot be null} <b>500</b> 이 난다.
    */
   public static ParticipationBundle open(
       final Long buncheolId,
       final Long participantId,
       final Long shippingAddressId,
       final long shippingFee,
-      final RefundAccount refundAccount) {
+      final RefundAccount refundAccount,
+      final Instant dueAt) {
+    if (buncheolId == null || participantId == null || refundAccount == null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+    }
     ParticipationBundle bundle = new ParticipationBundle();
     bundle.buncheolId = buncheolId;
     bundle.participantId = participantId;
     bundle.shippingAddressId = shippingAddressId;
     bundle.shippingFee = shippingFee;
     bundle.refundAccount = refundAccount;
+    bundle.dueAt = dueAt;
     return bundle;
   }
 
   public boolean isActive() {
     return closedAt == null;
   }
+
+  // ⚠️ 이 엔티티에는 상태 변경 setter 를 두지 않는다 — closed_at·payment_sent_at·due_at 은 전부 경쟁이
+  // 있거나 범위 일괄이라 CAS·벌크 UPDATE 로만 쓴다(ParticipationBundleRepository). setter 를 두면
+  // "읽고 판단하고 쓰는" 코드가 생기고, 그 순간 같은 묶음의 두 슬롯이 동시에 취소될 때 양쪽 다
+  // "아직 하나 남았다" 를 보고 둘 다 안 닫는다. 게다가 이 엔티티는 clearAutomatically 벌크 UPDATE 로만
+  // 갱신되므로 dirty checking 이 섞이면 그 갱신과 충돌한다.
 }

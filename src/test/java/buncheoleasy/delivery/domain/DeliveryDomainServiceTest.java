@@ -30,7 +30,7 @@ class DeliveryDomainServiceTest {
 
   private Delivery createDelivery() {
     return Delivery.createSnapshot(
-        1L, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
+        1L, null, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
   }
 
   @Nested

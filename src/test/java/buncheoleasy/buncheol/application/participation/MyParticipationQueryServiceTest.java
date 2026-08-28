@@ -388,7 +388,7 @@ class MyParticipationQueryServiceTest {
   private Delivery delivery(
       Long id, Long participationId, String trackingNumber, DeliveryStatus status) {
     Delivery delivery =
-        Delivery.createSnapshot(participationId, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
+        Delivery.createSnapshot(participationId, null, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
     setField(delivery, "id", id);
     setField(delivery, "trackingNumber", trackingNumber);
     setField(delivery, "status", status);

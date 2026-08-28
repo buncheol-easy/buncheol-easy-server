@@ -11,6 +11,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
@@ -1158,7 +1159,10 @@ class ParticipationServiceTest {
       assertThat(result.totalAmount()).isZero();
       assertThat(result.dueAt()).isNull();
       assertThat(result.hostAccount()).isNull();
-      // 참여자 계좌는 스냅샷하지만(docs/80 결정 1) 개최자 계좌는 안내할 일이 없어 조회하지 않는다.
+      // 참여자 계좌 스냅샷 1회뿐 — 개최자 계좌는 안내할 일이 없어 조회하지 않는다 (docs/80 결정 1).
+      // getUser(HOST_ID) never 만으로는 부족하다: 이 테스트의 buncheol 은 getHostId() 를 스텁하지 않아
+      // 개최자 조회가 되살아나도 인자가 null 이라 그 어서션은 공허하게 통과한다.
+      then(userDomainService).should(times(1)).getUser(PARTICIPANT_ID);
       then(userDomainService).should(never()).getUser(HOST_ID);
     }
 

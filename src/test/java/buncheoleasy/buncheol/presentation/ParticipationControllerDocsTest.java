@@ -110,7 +110,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             - 슬롯 금액과 배송비가 모두 0원으로 처리되어 참여 즉시 확정(CONFIRMED)된다
                             - 응답의 `amount` 는 `0`, `dueAt`·`hostAccount` 는 `null` 이다 — **입금 안내 화면을 띄우면 안 된다**
                             - 다만 **정산 계좌는 0원 참여에도 필요하다** — 미등록이면 다른 참여와 똑같이 `409 USR-025` 로
-                              거부되므로 코드 참여 화면에서도 계좌 등록을 유도해야 한다 (2026-08-28 변경)
+                              거부되므로 코드 참여 화면에서도 계좌 등록을 유도해야 한다
                             - 이후 공유하는 것은 배송지·운송장 등 배송 기능뿐이다
 
                             **발생 가능한 에러**
@@ -119,7 +119,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
                             | 400 | `BCH-062` (`PARTICIPATION_REQUIRED_FIELD_MISSING`) | 참여 필수 항목 누락 (도메인 방어 검증 — 정상 HTTP 요청에서는 `C-001` 이 먼저 잡는다) |
                             | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 선택한 수령지의 배송방법을 이 분철이 지원하지 않음 |
-                            | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 마이페이지 정산 계좌 미등록 (**0원 코드 참여 포함** — 2026-08-28 변경) |
+                            | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 마이페이지 정산 계좌 미등록 (**0원 코드 참여 포함**) |
                             | 403 | `BCH-066` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |

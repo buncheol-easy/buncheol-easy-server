@@ -162,16 +162,27 @@ public class BuncheolManagementQueryService {
   }
 
   /**
-   * 통장 대조 키(입금자명). 계좌가 없으면 {@code null} 을 내리고 클라가 닉네임으로 폴백한다
-   * ({@code HostedBuncheolManage.tsx}).
+   * 통장 대조 키(입금자명). 값이 없으면 {@code null} 을 내리고 클라가 닉네임으로 폴백한다 ({@code
+   * HostedBuncheolManage.tsx}).
    *
-   * <p>참여 생성은 금액과 무관하게 계좌를 요구하므로(docs/80 결정 1) 이 분기는 <b>2026-08-28 이전에 만들어진 0원 참여</b>
-   * 전용이다. 그 시절엔 계좌를 NULL 로 남겼고, 여기서 조건 없이 역참조해 개최 관리 화면 전체가 500 이 났다 —
-   * 계좌를 강제한 뒤에도 옛 행은 그대로 남아 있어 가드가 필요하다.
+   * <p><b>null 이 되는 경우가 둘이고 이유가 다르다.</b>
+   *
+   * <ul>
+   *   <li><b>계좌가 없는 행</b> — 참여 계좌 강제(PR #151) 이전의 0원 참여. 여기서 조건 없이 역참조해 개최 관리 화면 전체가
+   *       500 이 났다. 계좌를 강제한 뒤에도 옛 행은 P4 컬럼 삭제까지 남으므로 가드를 유지한다.
+   *   <li><b>0원 참여</b> — 계좌를 갖게 된 뒤에도 <b>대조할 입금이 없어</b> 예금주(실명)를 내리지 않는다. 이 필드의 존재
+   *       이유가 통장 대조이므로({@link BuncheolManagementParticipantResponse}), 대조할 것이 없으면 노출 근거도 없다.
+   * </ul>
+   *
+   * <p>⚠️ 판정은 <b>금액</b>으로 한다 — 계좌 유무로 바꾸면 안 된다. {@code DepositOrderListener}·{@code
+   * SlackNotificationListener} 도 같은 기준이다.
    */
   private static String depositorNameOf(final Participation participation) {
     RefundAccount refundAccount = participation.getRefundAccount();
-    return refundAccount == null ? null : refundAccount.holder();
+    if (refundAccount == null || participation.isFree()) {
+      return null;
+    }
+    return refundAccount.holder();
   }
 
   /**
@@ -188,6 +199,12 @@ public class BuncheolManagementQueryService {
   }
 
   private static boolean needsHostRefund(final Participation participation) {
+    // 0원 참여는 돌려줄 돈이 없다. 참여 계좌 강제(PR #151) 전에는 계좌가 NULL 이라 자동으로 걸러졌지만, 이제는
+    // 계좌가 채워져 있어 이 조건이 없으면 취소 시 개최자에게 계좌번호까지 내려간다 — 0원 코드 참여는 생성 즉시
+    // CONFIRMED 라 취소되면 아래 뒷 조건을 항상 만족한다.
+    if (participation.isFree()) {
+      return false;
+    }
     return participation.getStatus() == ParticipationStatus.CANCELLED
         && (participation.getPaymentSentAt() != null || participation.getConfirmedAt() != null);
   }

@@ -47,8 +47,8 @@ public class DepositOrderListener {
     try {
       Participation participation =
           participationDomainService.getParticipation(event.participationId());
-      // 0원 참여는 매칭할 입금이 없다. 판정은 금액(isFree)으로 한다 — 2026-08-28 부터 0원 참여도 계좌를 가지므로
-      // 계좌 유무로 바꾸면 0원 참여가 페이액션에 등록되어 금액만으로 오매칭될 수 있다(docs/80 §6-4).
+      // 0원 참여는 매칭할 입금이 없다. 판정은 금액(isFree)으로 한다 — 참여 계좌 강제(PR #151) 이후 0원 참여도 계좌를
+      // 가지므로, 계좌 유무로 바꾸면 0원 참여가 페이액션에 등록되어 금액만으로 오매칭될 수 있다(docs/80 §6-4).
       if (participation.isFree()) {
         return;
       }

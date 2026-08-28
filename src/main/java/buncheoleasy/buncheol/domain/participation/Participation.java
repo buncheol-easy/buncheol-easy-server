@@ -277,6 +277,9 @@ public class Participation extends TimestampedEntity {
     }
   }
 
+  // 애플리케이션 서비스는 금액과 무관하게 계좌를 요구하지만(ParticipationService, PR #151) 이 불변식은 아직
+  // 조건부다 — P2-c 가 이 필드를 엔티티에서 제거하며 불변식을 묶음 쪽으로 옮긴다(묶음은 이미 NOT NULL).
+  // 지금 조건을 떼면 몇 시간 뒤 같은 줄을 지우게 되고, 픽스처 8곳(ParticipationTest 등)만 흔들린다.
   private void validate(final RefundAccount refundAccount, final long totalAmount) {
     if (refundAccount == null && totalAmount > 0) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);

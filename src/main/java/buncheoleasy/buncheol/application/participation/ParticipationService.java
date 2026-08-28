@@ -202,6 +202,13 @@ public class ParticipationService {
     }
     // 상태는 한 번만 읽고 여기서 먼저 거른다. 스냅샷 계산 뒤로 미루면 모집이 끝난 분철에 재참여할 때
     // BUNCHEOL_NOT_RECRUITING 대신 배송지·계좌 예외가 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다.
+    //
+    // ⚠️ 이 값이 <b>최신이라는 보장은 락이 주지 않는다</b>. 위 getBuncheolForUpdate 는 SELECT ... FOR UPDATE 를
+    // 내보내지만, 같은 트랜잭션에서 getBuncheol 이 이미 올려 둔 인스턴스가 영속성 컨텍스트에 있으면 Hibernate 는
+    // 그 인스턴스를 그대로 돌려주고 필드를 덮지 않는다 — 즉 락 이전에 읽은 값일 수 있다.
+    // 그래도 안전한 이유는 <b>INSERT CAS</b> 다: 상태를 낡게 봐 RECRUITING 으로 오판하면 상속 분기를 타지만
+    // createParticipationIfRecruiting 의 조건부 INSERT 가 0행을 돌려 전부 롤백된다. 0원 배송비가 커밋되는
+    // 경로는 없다. 돈 판정을 이 값에 매달았으므로 그 근거를 여기 남긴다.
     final BuncheolStatus status = buncheol.getStatus();
     if (status != BuncheolStatus.RECRUITING && status != BuncheolStatus.PAYMENT_COLLECTING) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
@@ -211,18 +218,17 @@ public class ParticipationService {
     // 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6). 그래서 조회 자체를
     // 모집중에만 한다 — 추가 모집에서는 이 값이 쓰이지 않아 헛쿼리가 된다.
     //
-    // ⚠️ 이 하나가 배송지·배송비·입금자명·묶음 재사용 넷을 함께 지배해야 한다. 조건을 두 벌 세우면
+    // ⚠️ 배송지·배송비·입금자명·묶음 재사용 넷이 <b>이 existing 하나</b>에서 나와야 한다. 조건을 두 벌 세우면
     // "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기고, 그러면 새 택배에 배송비가 0원으로 굳는다
     // — shipping_fee 와 shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
     Optional<Participation> existing =
         status == BuncheolStatus.RECRUITING
             ? participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId)
             : Optional.empty();
-    boolean inheritsFromExisting = existing.isPresent();
     final Long shippingAddressId;
     final long shippingFee;
     final RefundAccount refundAccount;
-    if (inheritsFromExisting) {
+    if (existing.isPresent()) {
       shippingAddressId = existing.get().getShippingAddressId();
       shippingFee = 0L;
       refundAccount = existing.get().getRefundAccount();
@@ -258,8 +264,8 @@ public class ParticipationService {
               shippingAddressId,
               shippingFee,
               refundAccount,
-              // 상속 판정과 같은 조건에서 나온다 — 둘이 갈리면 배송비와 묶음이 어긋난다.
-              inheritsFromExisting ? existing.get().getBundleId() : null,
+              // 위 상속 분기와 같은 existing 에서 나온다 — 둘이 갈리면 배송비와 묶음이 어긋난다.
+              existing.map(Participation::getBundleId).orElse(null),
               now);
       case PAYMENT_COLLECTING ->
           joinCollectingC2c(
@@ -270,6 +276,7 @@ public class ParticipationService {
               shippingFee,
               refundAccount,
               now);
+      // 위 가드가 이미 걸렀다 — 여기 도달하면 가드가 깨진 것이다. switch 식 exhaustiveness 때문에 남는다.
       default -> throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     };
   }

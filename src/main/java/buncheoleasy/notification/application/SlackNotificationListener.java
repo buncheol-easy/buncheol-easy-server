@@ -68,7 +68,15 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    RefundAccount refundAccount = view.participation().getRefundAccount();
+    // 0원 참여는 안내할 입금액도 기한도 없어 같은 블록으로 조립할 수 없다. 판정은 반드시 금액(isFree)으로 한다 —
+    // 계좌 유무로 바꾸면 안 된다. 참여 계좌 강제(PR #151) 이후로는 0원 참여도 계좌를 갖는다(docs/80 결정 1).
+    if (view.participation().isFree()) {
+      sendFreeParticipation(view);
+      return;
+    }
+    // 정본은 묶음이다 (P2-c). 배포선 창의 미연결 참여는 비어 있을 수 있어 대체 문자열로 낸다 —
+    // ⚠️ 발송 자체를 스킵하면 안 된다. 이 알림이 LEGACY 수동 입금확인의 출발점이고 페이액션 실패 시 백업이다.
+    RefundAccount refundAccount = view.bundle() == null ? null : view.bundle().getRefundAccount();
 
     String fallbackText =
         "🔔 [신규 참여] %s (분철 #%d) - %s"
@@ -92,12 +100,7 @@ public class SlackNotificationListener {
                     markdown(
                         "*입금 예정 금액*\n%s원"
                             .formatted(AlimtalkFormats.amount(view.paymentAmount()))),
-                    markdown(
-                        "*환불계좌*\n%s %s (예금주 %s)"
-                            .formatted(
-                                refundAccount.bank(),
-                                refundAccount.account(),
-                                refundAccount.holder())),
+                    markdown(refundAccountText(refundAccount)),
                     markdown(
                         "*입금 기한*\n%s (기한 내 입금확인 필요)"
                             .formatted(DUE_AT_FORMAT.format(view.participation().getDueAt()))))),
@@ -113,6 +116,41 @@ public class SlackNotificationListener {
   }
 
   /**
+   * (운영자) 0원 참여 확정 알림. 입금 확인이 필요 없어 할 일은 없지만, 배정 슬롯이 실제로 쓰였는지가 캠페인 운영의
+   * 신호라 별도로 알린다. 코드 사용 여부는 이 이벤트가 알지 못하므로 문구를 코드에 한정하지 않는다.
+   */
+  private void sendFreeParticipation(final ParticipationView view) {
+    String fallbackText =
+        "🎟️ [무료 참여 확정] %s (분철 #%d) - %s"
+            .formatted(
+                view.buncheol().getTitle(), view.buncheol().getId(), formatParticipant(view));
+    List<Map<String, Object>> blocks =
+        List.of(
+            Map.of(
+                "type", "header",
+                "text", Map.of("type", "plain_text", "text", "🎟️ 무료 참여가 확정됐어요!")),
+            Map.of(
+                "type",
+                "section",
+                "fields",
+                List.of(
+                    markdown("*참여자*\n%s".formatted(formatParticipant(view))),
+                    markdown(
+                        "*분철*\n%s (#%d)"
+                            .formatted(view.buncheol().getTitle(), view.buncheol().getId())),
+                    markdown("*멤버*\n%s".formatted(view.memberName())),
+                    markdown("*결제*\n0원 (입금 확인 불필요)"))),
+            Map.of(
+                "type",
+                "section",
+                "text",
+                markdown(
+                    "<%s/products/%d|분철 상세 보기>"
+                        .formatted(frontendBaseUrl, view.buncheol().getId()))));
+    slackWebhookClient.send(SlackChannel.NEW_PARTICIPATION, fallbackText, blocks);
+  }
+
+  /**
    * (운영자) 배송비 환급(배송비 돌려받기) 신청 접수. 재신청도 같은 이벤트로 들어와 다시 알린다. 검수에 필요한 정보(신청자·분철·환급액·환불계좌·후기
    * 트윗 링크)를 Block Kit 으로 조립한다.
    */
@@ -123,7 +161,7 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    RefundAccount refundAccount = view.participation().getRefundAccount();
+    RefundAccount refundAccount = view.bundle() == null ? null : view.bundle().getRefundAccount();
     Long paybackAmount = view.participation().getPaybackAmount();
     String tweetUrl = view.participation().getPaybackTweetUrl();
 
@@ -151,12 +189,7 @@ public class SlackNotificationListener {
                             .formatted(
                                 AlimtalkFormats.amount(
                                     paybackAmount == null ? 0L : paybackAmount))),
-                    markdown(
-                        "*환불계좌*\n%s %s (예금주 %s)"
-                            .formatted(
-                                refundAccount.bank(),
-                                refundAccount.account(),
-                                refundAccount.holder())))),
+                    markdown(refundAccountText(refundAccount)))),
             Map.of(
                 "type",
                 "section",
@@ -201,6 +234,24 @@ public class SlackNotificationListener {
             Map.of("type", "section", "text", plainText(event.content())),
             Map.of("type", "context", "elements", List.of(plainText(meta))));
     slackWebhookClient.send(SlackChannel.FEEDBACK, fallbackText, blocks);
+  }
+
+  /**
+   * 슬랙 블록의 환불계좌 줄. 🔴 <b>계좌가 없어도 발송은 살린다</b> — 조건 없이 역참조하면 NPE 가 나고, {@code @Async}
+   * 라 예외가 워커 스레드 로그로만 끝나 <b>메시지가 통째로 안 나간다</b>.
+   *
+   * <p>그게 특히 나쁜 이유는 같은 조건에서 {@code DepositOrderListener} 가 페이액션 등록을 스킵하기 때문이다 —
+   * 그 스킵의 근거가 "운영자가 이 슬랙 알림을 보고 수동 확인한다" 인데, 그 알림까지 죽으면 <b>자동확인도 안 되고
+   * 운영자도 모르는 참여</b>가 된다.
+   *
+   * <p>📌 배송비 환급 블록도 같은 헬퍼를 쓰지만 그쪽은 <b>도달 불가</b>다 — {@code ShippingFeePaybackService} 가
+   * 묶음 없는 신청을 접수 단계에서 막는다. 순수 방어 코드이므로 다시 추적하지 말 것.
+   */
+  private static String refundAccountText(final RefundAccount refundAccount) {
+    return refundAccount == null
+        ? "*환불계좌*\n묶음 미연결 — 계좌 확인 필요"
+        : "*환불계좌*\n%s %s (예금주 %s)"
+            .formatted(refundAccount.bank(), refundAccount.account(), refundAccount.holder());
   }
 
   private static Map<String, Object> markdown(final String text) {

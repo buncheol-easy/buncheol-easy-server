@@ -49,6 +49,9 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   boolean existsByShippingAddressIdAndStatusIn(
       Long shippingAddressId, Collection<ParticipationStatus> statuses);
 
+  boolean existsByBuncheolMemberIdAndStatusIn(
+      Long buncheolMemberId, Collection<ParticipationStatus> statuses);
+
   @Query(
       "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount("
           + "p.buncheolId, COUNT(p)) "
@@ -208,6 +211,27 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("dueAt") Instant dueAt,
       @Param("rejectedAt") Instant rejectedAt,
       @Param("now") Instant now);
+
+  /**
+   * 참여 → 묶음 연결 CAS. 조건부 원시 INSERT 를 건드리지 않으려고 INSERT 직후 별도로 채운다 (docs/80 ④).
+   *
+   * <p>{@code bundleId IS NULL} 조건은 재실행·경쟁에서 이미 붙은 묶음을 덮어쓰지 않게 한다 — 덮어쓰면 그 사람의 이체가
+   * 엉뚱한 묶음으로 옮겨간다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p SET p.bundleId = :bundleId, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.bundleId IS NULL "
+          // 🔴 대상 묶음의 생존을 같은 UPDATE 안에서(current read) 건다. 재사용 후보는 비잠금 조회로
+          // 뽑히는데(findFirstActiveInBuncheol), 참여 생성은 분철 행 X 락을 잡고 자발 취소는 안 잡아
+          // 둘이 직렬화되지 않는다. 그 사이 마지막 슬롯이 취소돼 묶음이 닫히면, 스냅샷을 믿고 그대로
+          // 붙일 경우 「닫혔는데 활성 슬롯을 가진 묶음」이 생긴다 — closeIfNoActiveSlots 가
+          // closed_at IS NULL 을 요구하므로 그 묶음은 두 번 다시 닫히지 않는다.
+          // 새로 연 묶음은 방금 INSERT 한 행이라 이 조건이 항상 참이다 — 분기 없이 두 경로를 함께 덮는다.
+          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
+          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL)")
+  int linkBundleIfUnlinked(
+      @Param("id") Long id, @Param("bundleId") Long bundleId, @Param("now") Instant now);
 
   /** C2C 참여자 자발 취소 CAS — 신청(APPLIED)·입금 대기(AWAITING_PAYMENT)에서만 (docs/46 §5 구간 ①·②). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

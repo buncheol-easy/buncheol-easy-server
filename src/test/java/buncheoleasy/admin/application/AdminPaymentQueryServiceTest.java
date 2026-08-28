@@ -1,5 +1,10 @@
 package buncheoleasy.admin.application;
 
+import org.junit.jupiter.api.BeforeEach;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -45,6 +50,7 @@ class AdminPaymentQueryServiceTest {
   @InjectMocks private AdminPaymentQueryService adminPaymentQueryService;
 
   @Mock private AdminPaymentQueryRepository adminPaymentQueryRepository;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   private AdminPaymentView view(
       final long participationId, final long buncheolId, final Instant createdAt) {
@@ -56,7 +62,6 @@ class AdminPaymentQueryServiceTest {
             3L,
             10000L,
             0L,
-            RefundAccount.of("국민", "12345678", "홍길동"),
             BASE_TIME.plus(30, ChronoUnit.MINUTES));
     ReflectionTestUtils.setField(participation, "id", participationId);
     ReflectionTestUtils.setField(participation, "createdAt", createdAt);
@@ -71,6 +76,30 @@ class AdminPaymentQueryServiceTest {
 
     return new AdminPaymentView(
         participation, buncheol, new Group(1L, "그룹", null), null, null, null, null);
+  }
+
+
+  /** 계좌의 정본은 묶음이다 (P2-c) — bundleId 가 있는 참여에는 계좌 있는 묶음을 돌려준다. */
+  @BeforeEach
+  void stubBundles() {
+    lenient()
+        .when(participationBundleDomainService.findAllByParticipations(any()))
+        .thenAnswer(
+            invocation -> {
+              java.util.Collection<Participation> participations = invocation.getArgument(0);
+              java.util.Map<Long, ParticipationBundle> byId = new java.util.HashMap<>();
+              for (Participation participation : participations) {
+                if (participation.getBundleId() == null) {
+                  continue;
+                }
+                ParticipationBundle bundle = mock(ParticipationBundle.class);
+                lenient()
+                    .when(bundle.getRefundAccount())
+                    .thenReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+                byId.put(participation.getBundleId(), bundle);
+              }
+              return byId;
+            });
   }
 
   @Nested

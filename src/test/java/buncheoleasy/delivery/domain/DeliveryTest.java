@@ -29,7 +29,7 @@ class DeliveryTest {
     void 배송_스냅샷이_정상_생성된다() {
       Delivery delivery =
           Delivery.createSnapshot(
-              PARTICIPATION_ID, SHIPPING_METHOD, STORE_NAME, RECEIVER_NICKNAME, RECEIVER_PHONE);
+              PARTICIPATION_ID, null, SHIPPING_METHOD, STORE_NAME, RECEIVER_NICKNAME, RECEIVER_PHONE);
 
       assertThat(delivery.getParticipationId()).isEqualTo(PARTICIPATION_ID);
       assertThat(delivery.getShippingMethod()).isEqualTo(SHIPPING_METHOD);
@@ -45,7 +45,7 @@ class DeliveryTest {
       assertThatThrownBy(
               () ->
                   Delivery.createSnapshot(
-                      PARTICIPATION_ID, null, STORE_NAME, RECEIVER_NICKNAME, RECEIVER_PHONE))
+                      PARTICIPATION_ID, null, null, STORE_NAME, RECEIVER_NICKNAME, RECEIVER_PHONE))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_SHIPPING_METHOD_REQUIRED);
@@ -56,7 +56,7 @@ class DeliveryTest {
       assertThatThrownBy(
               () ->
                   Delivery.createSnapshot(
-                      PARTICIPATION_ID, SHIPPING_METHOD, "", RECEIVER_NICKNAME, RECEIVER_PHONE))
+                      PARTICIPATION_ID, null, SHIPPING_METHOD, "", RECEIVER_NICKNAME, RECEIVER_PHONE))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_STORE_NAME_REQUIRED);
@@ -67,7 +67,7 @@ class DeliveryTest {
       assertThatThrownBy(
               () ->
                   Delivery.createSnapshot(
-                      PARTICIPATION_ID, SHIPPING_METHOD, STORE_NAME, null, RECEIVER_PHONE))
+                      PARTICIPATION_ID, null, SHIPPING_METHOD, STORE_NAME, null, RECEIVER_PHONE))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_RECEIVER_NICKNAME_REQUIRED);
@@ -78,7 +78,7 @@ class DeliveryTest {
       assertThatThrownBy(
               () ->
                   Delivery.createSnapshot(
-                      PARTICIPATION_ID, SHIPPING_METHOD, STORE_NAME, RECEIVER_NICKNAME, null))
+                      PARTICIPATION_ID, null, SHIPPING_METHOD, STORE_NAME, RECEIVER_NICKNAME, null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.DELIVERY_RECEIVER_PHONE_REQUIRED);

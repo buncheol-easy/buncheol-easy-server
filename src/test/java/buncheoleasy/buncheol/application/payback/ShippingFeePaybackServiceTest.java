@@ -5,10 +5,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
@@ -47,6 +50,7 @@ class ShippingFeePaybackServiceTest {
   @Mock private buncheoleasy.buncheol.domain.BuncheolDomainService buncheolDomainService;
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private DeliveryRepository deliveryRepository;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ShippingFeePaybackPolicy policy;
   @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -61,6 +65,7 @@ class ShippingFeePaybackServiceTest {
         new ShippingFeePaybackService(
             buncheolDomainService,
             participationDomainService,
+            participationBundleDomainService,
             deliveryRepository,
             policy,
             eventPublisher,
@@ -72,8 +77,9 @@ class ShippingFeePaybackServiceTest {
     given(buncheol.getFlowType()).willReturn(FlowType.LEGACY);
     given(participation.getBuncheolId()).willReturn(1L);
     given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
-    given(participation.getRefundAccount())
-        .willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+    // 환급 입금 계좌의 정본은 묶음이다 (P2-c).
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(mock(ParticipationBundle.class)));
     given(deliveryRepository.findByParticipationId(PARTICIPATION_ID))
         .willReturn(Optional.of(delivery));
     given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
@@ -187,8 +193,10 @@ class ShippingFeePaybackServiceTest {
   }
 
   @Test
-  void 환불계좌가_없으면_예외가_발생한다() {
-    given(participation.getRefundAccount()).willReturn(null);
+  void 묶음이_없으면_예외가_발생한다() {
+    // 배포선 창에서 생긴 미연결 참여 — 돈 보낼 곳이 없으므로 접수를 막는다.
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
         .isInstanceOf(BusinessException.class)

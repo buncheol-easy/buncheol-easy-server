@@ -1,18 +1,7 @@
 package buncheoleasy.buncheol.dto.request;
 
-import buncheoleasy.buncheol.domain.participation.RefundAccount;
-import buncheoleasy.user.domain.BankAccount;
-import jakarta.validation.constraints.NotBlank;
-
 /**
- * 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 형식 검증은 {@link RefundAccount} 생성 시 수행하고, 신규 입력 경로라 계좌번호 최소
- * 자릿수까지 여기서 함께 본다 (docs/53 Q-02).
+ * 구버전 클라이언트가 참여 요청에 실어 보내던 환불 계좌. 서버는 이 값을 쓰지 않고 마이페이지 정산 계좌를 읽는다 — {@link
+ * ParticipateRequest#refundAccount()} 참고. 클라이언트 배포 후 필드와 함께 제거한다.
  */
-public record RefundAccountRequest(
-    @NotBlank String bank, @NotBlank String account, @NotBlank String holder) {
-
-  public RefundAccount toRefundAccount() {
-    BankAccount.validateForRegistration(bank, account, holder);
-    return RefundAccount.of(bank, account, holder);
-  }
-}
+public record RefundAccountRequest(String bank, String account, String holder) {}

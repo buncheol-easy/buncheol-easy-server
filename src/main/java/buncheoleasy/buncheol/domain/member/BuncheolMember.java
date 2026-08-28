@@ -5,6 +5,8 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -37,16 +39,41 @@ public class BuncheolMember extends TimestampedEntity {
   @Column(nullable = false)
   private long price;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "access_type", nullable = false, length = 20)
+  private BuncheolMemberAccessType accessType = BuncheolMemberAccessType.OPEN;
+
   public static BuncheolMember create(
       final Long buncheolId, final Long memberId, final long price) {
-    return new BuncheolMember(buncheolId, memberId, price);
+    return new BuncheolMember(buncheolId, memberId, price, BuncheolMemberAccessType.OPEN);
   }
 
-  private BuncheolMember(final Long buncheolId, final Long memberId, final long price) {
-    validate(buncheolId, memberId, price);
+  public static BuncheolMember create(
+      final Long buncheolId,
+      final Long memberId,
+      final long price,
+      final BuncheolMemberAccessType accessType) {
+    return new BuncheolMember(buncheolId, memberId, price, accessType);
+  }
+
+  private BuncheolMember(
+      final Long buncheolId,
+      final Long memberId,
+      final long price,
+      final BuncheolMemberAccessType accessType) {
+    validate(buncheolId, memberId, price, accessType);
     this.buncheolId = buncheolId;
     this.memberId = memberId;
     this.price = price;
+    this.accessType = accessType;
+  }
+
+  public boolean requiresCode() {
+    return accessType.requiresCode();
+  }
+
+  public boolean isFree() {
+    return price == 0L;
   }
 
   public void updatePrice(final long newPrice) {
@@ -54,10 +81,21 @@ public class BuncheolMember extends TimestampedEntity {
     this.price = newPrice;
   }
 
-  private void validate(final Long buncheolId, final Long memberId, final long price) {
+  private void validate(
+      final Long buncheolId,
+      final Long memberId,
+      final long price,
+      final BuncheolMemberAccessType accessType) {
     validateBuncheolId(buncheolId);
     validateMemberId(memberId);
     validatePrice(price);
+    validateAccessType(accessType);
+  }
+
+  private void validateAccessType(final BuncheolMemberAccessType value) {
+    if (value == null) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+    }
   }
 
   private void validateBuncheolId(final Long buncheolId) {

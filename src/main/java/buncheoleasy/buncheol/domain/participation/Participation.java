@@ -4,7 +4,6 @@ import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -58,6 +57,16 @@ public class Participation extends TimestampedEntity {
   @Column(name = "buncheol_member_id", nullable = false, updatable = false)
   private Long buncheolMemberId;
 
+  // 소속 묶음 (participation_bundles.id). 이체 1회·배송비 1회·택배 1개의 단위다.
+  //
+  // ⚠️ 참여 INSERT 는 이 컬럼을 싣지 않는다 — 그 INSERT 는 조건부 원시 SQL(JpaParticipationRepositoryAdapter)
+  // 이고 H2 에 없는 UTC_TIMESTAMP() 를 써서 테스트가 한 줄도 실행하지 못한다. 바인딩을 늘리면 인덱스가
+  // 밀려도 잡아 줄 것이 없다. 그래서 INSERT 직후 별도 CAS(linkBundle)로 채운다 (docs/80 ④).
+  //
+  // 계좌 강제 이전 행과 P2-b 배포선 창에서 생긴 행은 NULL 이다. P4 에서 NOT NULL 로 조인다.
+  @Column(name = "bundle_id")
+  private Long bundleId;
+
   // 참여한 유저 (users.id).
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
@@ -78,8 +87,9 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
-  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 참여와 동시에 입력받는다.
-  @Embedded private RefundAccount refundAccount;
+  // ⚠️ 환불 계좌(refund_*)는 이제 이 엔티티가 갖지 않는다 — 정본은 participation_bundles 다 (P2-c).
+  // 컬럼은 P4 에서 삭제될 때까지 DB 에 남지만 매핑을 지웠으므로 읽지도 쓰지도 않는다. 새 행의 세 칸은
+  // NULL 이고, 그래도 되는 이유는 묶음이 NOT NULL 로 같은 값을 갖기 때문이다.
 
   // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
   // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변.
@@ -148,7 +158,6 @@ public class Participation extends TimestampedEntity {
       final Long shippingAddressId,
       final long amount,
       final long shippingFee,
-      final RefundAccount refundAccount,
       final Instant dueAt) {
     return new Participation(
         buncheolId,
@@ -157,13 +166,13 @@ public class Participation extends TimestampedEntity {
         shippingAddressId,
         amount,
         shippingFee,
-        refundAccount,
         dueAt);
   }
 
   /**
-   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 개최자 성사 확정 시 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다. 환불
-   * 계좌(입금자명)는 신청 시점에 스냅샷한다 — 개최자 통장 대조 키 + 입금 후 취소 시 환불 계좌.
+   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 개최자 성사 확정 시 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다.
+   *
+   * <p>환불 계좌(입금자명)는 <b>묶음</b>이 갖는다 (P2-c) — 개최자 통장 대조 키 + 입금 후 취소 시 환불 계좌.
    */
   public static Participation createApplied(
       final Long buncheolId,
@@ -171,8 +180,7 @@ public class Participation extends TimestampedEntity {
       final Long participantId,
       final Long shippingAddressId,
       final long amount,
-      final long shippingFee,
-      final RefundAccount refundAccount) {
+      final long shippingFee) {
     return new Participation(
         buncheolId,
         buncheolMemberId,
@@ -180,7 +188,6 @@ public class Participation extends TimestampedEntity {
         shippingAddressId,
         amount,
         shippingFee,
-        refundAccount,
         null,
         ParticipationStatus.APPLIED);
   }
@@ -192,7 +199,6 @@ public class Participation extends TimestampedEntity {
       final Long shippingAddressId,
       final long amount,
       final long shippingFee,
-      final RefundAccount refundAccount,
       final Instant dueAt) {
     this(
         buncheolId,
@@ -201,7 +207,6 @@ public class Participation extends TimestampedEntity {
         shippingAddressId,
         amount,
         shippingFee,
-        refundAccount,
         requireDueAt(dueAt),
         ParticipationStatus.AWAITING_PAYMENT);
   }
@@ -213,17 +218,14 @@ public class Participation extends TimestampedEntity {
       final Long shippingAddressId,
       final long amount,
       final long shippingFee,
-      final RefundAccount refundAccount,
       final Instant dueAt,
       final ParticipationStatus status) {
-    validate(refundAccount);
     this.buncheolId = buncheolId;
     this.buncheolMemberId = buncheolMemberId;
     this.participantId = participantId;
     this.shippingAddressId = shippingAddressId;
     this.amount = amount;
     this.shippingFee = shippingFee;
-    this.refundAccount = refundAccount;
     this.dueAt = dueAt;
     this.status = status;
   }
@@ -247,6 +249,11 @@ public class Participation extends TimestampedEntity {
     return amount + shippingFee;
   }
 
+  /** 결제 전 구간(입금 대기·기한·계좌 안내·페이액션 주문)을 건너뛰는 판정의 단일 기준. */
+  public boolean isFree() {
+    return getTotalAmount() == 0;
+  }
+
   /**
    * 배송비 환급 신청 (NONE/REJECTED/REQUESTED → REQUESTED). 반려 후 재신청이면 이전 반려 사유를 지우고, 검수 전(REQUESTED)
    * 재제출은 잘못 올린 트윗 링크 수정으로 동작한다. 환급액은 신청 시점의 배송비를 스냅샷해 이후 배송비 정책 변경에 영향받지 않는다. 신청
@@ -266,15 +273,20 @@ public class Participation extends TimestampedEntity {
   // 운영진의 환급 완료/반려 전이는 동시 검수 시 중복 알림을 막기 위해 CAS
   // (completePaybackIfRequested/rejectPaybackIfRequested)로만 한다 — 엔티티 전이 메서드를 두지 않는다.
 
+  /**
+   * 묶음 연결을 <b>메모리에도</b> 반영한다. 영속화는 {@code ParticipationRepository#linkBundle} CAS 가 한다 — 이 객체는
+   * 원시 INSERT 로 저장돼 영속성 컨텍스트가 관리하지 않으므로 여기서 값을 바꿔도 UPDATE 가 나가지 않는다.
+   *
+   * <p>둘을 같이 하는 이유는 같은 트랜잭션의 뒤 코드(배송 스냅샷 등)가 이 값을 읽기 때문이다. CAS 가 실패했으면
+   * 호출부가 예외를 던지므로 여기까지 오지 않는다.
+   */
+  public void linkBundle(final Long bundleId) {
+    this.bundleId = bundleId;
+  }
+
   public void validateOwnedBy(final Long participantId) {
     if (!this.participantId.equals(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
-    }
-  }
-
-  private void validate(final RefundAccount refundAccount) {
-    if (refundAccount == null) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
   }
 

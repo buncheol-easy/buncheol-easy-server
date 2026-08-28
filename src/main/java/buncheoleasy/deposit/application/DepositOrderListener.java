@@ -6,7 +6,10 @@ import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,7 @@ public class DepositOrderListener {
 
   private final PayActionClient payActionClient;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final BuncheolDomainService buncheolDomainService;
 
   /**
@@ -47,10 +51,28 @@ public class DepositOrderListener {
     try {
       Participation participation =
           participationDomainService.getParticipation(event.participationId());
+      // 0원 참여는 매칭할 입금이 없다. 판정은 금액(isFree)으로 한다 — 참여 계좌 강제(PR #151) 이후 0원 참여도 계좌를
+      // 가지므로, 계좌 유무로 바꾸면 0원 참여가 페이액션에 등록되어 금액만으로 오매칭될 수 있다(docs/80 §6-4).
+      if (participation.isFree()) {
+        return;
+      }
+      // 입금자명의 정본은 묶음이다 (P2-c). 🔴 없으면 등록을 스킵한다 — 빈 입금자명으로 등록하면 금액만으로
+      // 오매칭되어 남의 입금이 남의 참여를 확정시킬 수 있다(docs/80 §6-4). 자동확인만 못 하고 운영자가
+      // 슬랙 신규 참여 알림을 보고 수동 확인한다.
+      RefundAccount refundAccount =
+          participationBundleDomainService
+              .findByParticipation(participation)
+              .map(ParticipationBundle::getRefundAccount)
+              .orElse(null);
+      if (refundAccount == null) {
+        log.warn(
+            "묶음 계좌가 없어 페이액션 주문 등록을 건너뛴다 - participationId={}", participation.getId());
+        return;
+      }
       payActionClient.registerOrder(
           participation.getId(),
           participation.getTotalAmount(),
-          participation.getRefundAccount().holder(),
+          refundAccount.holder(),
           participation.getCreatedAt(),
           participation.getDueAt());
     } catch (RuntimeException e) {

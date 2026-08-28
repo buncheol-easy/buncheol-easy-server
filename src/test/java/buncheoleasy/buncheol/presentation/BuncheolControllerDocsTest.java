@@ -150,7 +150,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "buncheolMembers": [
                                 {
                                   "memberId": Long,
-                                  "price": Long               // 0 이상, 100원 단위. 호스트 고정 금액 (0원은 오픈 이벤트 무료 분철 용도)
+                                  "price": Long,              // 0 이상, 100원 단위. 호스트 고정 금액 (0원은 오픈 이벤트 무료 분철 용도)
+                                  "accessType": String?       // 선택 ("OPEN"|"CODE_ONLY") — 생략 시 OPEN(선착순). CODE_ONLY 는 참여 코드 보유자 전용 배정 슬롯이며 운영진(LEGACY) 개최에서만 지정할 수 있다
                                 }
                               ]
                             }
@@ -174,6 +175,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
+                            | 409 | `BCH-103` (`PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
+                            | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | `accessType: "CODE_ONLY"` 슬롯의 `price` 가 0이 아님 (코드 참여는 무상 제공 전제) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
                             | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 카카오 로그인 재동의(연령대 제공)로 해소 가능 |
@@ -573,7 +576,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, **0 이상·100원 단위** — 0원 슬롯은 오픈 이벤트 무료 분철 용도)
                             - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) / `APPLIED`(C2C 무입금 신청으로 선점) /
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료) /
-                              `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가)
+                              `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가) /
+                              `CODE_ONLY`(참여 코드 보유자에게 배정된 공석 — 선착순으로는 참여 불가. "마감"이 아니라
+                              "배정된 자리"로 표시할 것)
                             - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
                               내려가며, 이 시각이 지나면 슬롯이 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용.
                               단 그 시점에 분철이 신규 참여를 받지 않는 상태면 슬롯은 `AVAILABLE` 이 아니라 `CLOSED` 가 되므로,
@@ -681,7 +686,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("members[].saleStatus")
                                 .description(
                                     "판매 상태 (AVAILABLE=공석 | APPLIED=C2C 신청 선점 | AWAITING_PAYMENT=입금 확인 대기 중"
-                                        + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석)"),
+                                        + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석"
+                                        + " | CODE_ONLY=참여 코드 보유자에게 배정된 공석)"),
                             fieldWithPath("members[].paymentDueAt")
                                 .description(
                                     "선점한 참여의 입금 기한 (UTC ISO-8601). AWAITING_PAYMENT 일 때만 값이 있고,"
@@ -871,17 +877,17 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
 
                             취소(`CANCELLED`·`HOST_CANCELLED`)된 분철에서만 막힌다.
 
-                            `openChatUrl` 을 생략하거나 빈 문자열·공백으로 보내면 **링크가 제거된다**. 전체 수정에서
-                            null 이 "기존 값 유지" 인 것과 다르다 — 이 요청은 링크 하나만 담으므로 null 을 유지로
-                            해석하면 비우기를 표현할 방법이 없어진다.
+                            `openChatUrl` 은 **필수 필드다** — 필드를 생략하거나 `null` 로 보내면 `400 C-001` 이다.
+                            **링크 제거는 빈 문자열(`""`)·공백으로만** 표현한다. 전체 수정에서 null 이 "기존 값 유지"
+                            인 것과 다르다 — 이 요청은 링크 하나만 담으므로 유지할 다른 값이 없다.
 
                             **권한**: 해당 분철의 **개최자 본인만** 호출 가능.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 공백·제어문자 포함 |
-                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | 200자 초과 |
+                            | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `https://open.kakao.com/` 으로 시작하지 않거나 값 내부에 공백·제어문자 포함 (전부 공백인 값은 오류가 아니라 링크 제거) |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `openChatUrl` 누락(필드 생략·`null`) 또는 200자 초과 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-094` (`BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE`) | 취소된 분철이라 수정 불가 |
@@ -891,9 +897,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .requestSchema(Schema.schema("OpenChatUrlUpdateRequest"))
                         .requestFields(
                             fieldWithPath("openChatUrl")
-                                .optional()
                                 .description(
-                                    "카카오 오픈채팅 링크 (최대 200자). 생략·빈 문자열·공백이면 링크를 제거한다."))
+                                    "카카오 오픈채팅 링크 (필수, 최대 200자). 빈 문자열·공백이면 링크를 제거한다."))
                         .build())));
   }
 
@@ -989,16 +994,21 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `memberCount` = 분철에 등록된 멤버 슬롯 수
                             - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
-                            - `participants[].depositorName` = **입금자명**(= 참여자가 입력한 환불 계좌 예금주). 개최자의 통장 대조 키
+                            - `participants[].depositorName` = **입금자명**(= 참여 시점 참여자의 정산 계좌 예금주 스냅샷). 개최자의 통장 대조 키.
+                              **null 일 수 있다** — ⑴ LEGACY 0원(코드) 참여는 대조할 입금이 없어 내리지 않고 ⑵ 참여 계좌 강제 이전에
+                              만들어진 0원 참여는 계좌 자체가 없다. **참여자 닉네임으로 폴백해 표시할 것.**
+                              C2C 는 0원 슬롯이어도 내려간다 — 대조 단위가 슬롯이 아니라 묶음(같은 사람)이라, 배송비가 첫 슬롯에만
+                              붙어 생긴 0원 슬롯의 예금주를 지우면 이체 1건에 대조 키가 갈린다
                             - `participants[].refundAccount` = **평시에는 항상 null.** 계좌번호는 개최자가 실제로 환불해야 하는 건, 즉
-                              **취소분 중 입금 흔적(마킹·입금확인)이 있는 건**에만 채운다
+                              **취소분 중 입금 흔적(마킹·입금확인)이 있고 0원이 아닌 건**에만 채운다
                             - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
                             - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
                             - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
                               개최자 계좌로 직접 입금되는 직거래라 개최자가 환불 주체). 환불이 실제로 필요한지는 개최자가 판단한다.
                               필드 구조는 `participants[]` 와 같고 `status` 는 항상 `CANCELLED`, `delivery` 는 취소 시 정리되어 항상 null.
                               서버가 **입금 흔적이 있는 건만** 계좌를 내리고, 그중 실제 환불이 필요한지는 개최자가 판단한다.
-                              `refundAccount` 는 **입금 흔적이 있는 건에만** 채워진다(흔적 없는 취소는 환불할 돈이 없다).
+                              `refundAccount` 는 **입금 흔적이 있고 0원이 아닌 건에만** 채워진다(흔적 없는 취소·LEGACY 0원 참여는
+                              환불할 돈이 없다).
                               슬롯을 점유하지 않으므로 참여 수·정원 집계에 넣지 않는다
 
                             **응답 예시**
@@ -1087,12 +1097,14 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
                             fieldWithPath("participants[].depositorName")
-                                .description("입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키"),
+                                .description(
+                                    "입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키. LEGACY 0원(코드) 참여와 계좌 강제 이전 잔여 행은 null — 닉네임 폴백")
+                                .optional(),
                             fieldWithPath("participants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("participants[].shippingFee")
                                 .description(
-                                    "amount 에 포함된 배송비(원). 다슬롯은 묶음 첫 슬롯에만 부과되므로 같은 분철의 두 번째 슬롯은 0 이다"),
+                                    "amount 에 포함된 배송비(원). 배송비는 묶음당 1회다 — 같은 묶음의 두 번째 슬롯은 0 이지만, 성사 확정 후 추가 모집은 새 묶음이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다"),
                             fieldWithPath("participants[].status")
                                 .description("참여 상태 (AWAITING_PAYMENT / CONFIRMED)"),
                             fieldWithPath("participants[].dueAt")
@@ -1159,7 +1171,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].depositorName")
-                                .description("입금자명 (= 환불 계좌 예금주)"),
+                                .description(
+                                    "입금자명 (= 환불 계좌 예금주). LEGACY 0원(코드) 참여와 계좌 강제 이전 잔여 행은 null — 닉네임 폴백")
+                                .optional(),
                             fieldWithPath("cancelledParticipants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("cancelledParticipants[].shippingFee")
@@ -1173,7 +1187,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("입금확인 시각. 입금확인 전에 취소됐으면 null")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount")
-                                .description("환불 계좌. 입금 흔적(paymentSentAt·confirmedAt)이 있는 건에만 채워진다")
+                                .description(
+                                    "환불 계좌. 입금 흔적(paymentSentAt·confirmedAt)이 있고 0원이 아닌 건에만 채워진다 — LEGACY 0원(코드) 참여는 돌려줄 돈이 없다")
                                 .type(JsonFieldType.OBJECT)
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount.bank")

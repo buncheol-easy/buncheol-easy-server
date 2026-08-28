@@ -1,5 +1,11 @@
 package buncheoleasy.buncheol.application.participation;
 
+import org.junit.jupiter.api.BeforeEach;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
@@ -59,6 +65,7 @@ class MyParticipationQueryServiceTest {
   @Mock private DeliveryRepository deliveryRepository;
   @Mock private UserRepository userRepository;
   @Mock private ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   // Instant.now(clock) 가 실제 시각을 돌려주도록 고정 Clock 을 @Spy 로 주입한다 (mock Clock 은 NPE).
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
@@ -67,6 +74,30 @@ class MyParticipationQueryServiceTest {
   private static final Long HOST_ID = 900L;
   private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
   private static final Instant DUE_AT = Instant.parse("2026-05-14T12:30:00Z");
+
+
+  /** 계좌의 정본은 묶음이다 (P2-c) — bundleId 가 있는 참여에는 계좌 있는 묶음을 돌려준다. */
+  @BeforeEach
+  void stubBundles() {
+    lenient()
+        .when(participationBundleDomainService.findAllByParticipations(any()))
+        .thenAnswer(
+            invocation -> {
+              java.util.Collection<Participation> participations = invocation.getArgument(0);
+              java.util.Map<Long, ParticipationBundle> byId = new java.util.HashMap<>();
+              for (Participation participation : participations) {
+                if (participation.getBundleId() == null) {
+                  continue;
+                }
+                ParticipationBundle bundle = mock(ParticipationBundle.class);
+                lenient()
+                    .when(bundle.getRefundAccount())
+                    .thenReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+                byId.put(participation.getBundleId(), bundle);
+              }
+              return byId;
+            });
+  }
 
   @Nested
   @DisplayName("내 참여 목록 조회 테스트")
@@ -388,7 +419,7 @@ class MyParticipationQueryServiceTest {
   private Delivery delivery(
       Long id, Long participationId, String trackingNumber, DeliveryStatus status) {
     Delivery delivery =
-        Delivery.createSnapshot(participationId, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
+        Delivery.createSnapshot(participationId, null, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
     setField(delivery, "id", id);
     setField(delivery, "trackingNumber", trackingNumber);
     setField(delivery, "status", status);
@@ -418,7 +449,7 @@ class MyParticipationQueryServiceTest {
       ParticipationCancelReason cancelReason) {
     Participation participation =
         Participation.create(
-            buncheolId, buncheolMemberId, PARTICIPANT_ID, 1L, amount, 0L, REFUND_ACCOUNT, dueAt);
+            buncheolId, buncheolMemberId, PARTICIPANT_ID, 1L, amount, 0L, dueAt);
     setField(participation, "id", id);
     setField(participation, "status", status);
     setField(participation, "confirmedAt", confirmedAt);

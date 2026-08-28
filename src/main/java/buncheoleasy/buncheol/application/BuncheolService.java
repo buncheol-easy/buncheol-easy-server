@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
@@ -42,6 +43,7 @@ public class BuncheolService {
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final DeliveryDomainService deliveryDomainService;
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
@@ -79,6 +81,8 @@ public class BuncheolService {
 
     List<BuncheolMemberParams> memberParams =
         request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();
+    validateCodeOnlySlotsAllowed(flowType, memberParams);
+    validateCodeOnlySlotsAreFree(memberParams);
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), memberParams);
 
     if (!images.isEmpty()) {
@@ -87,6 +91,25 @@ public class BuncheolService {
     }
 
     return buncheol.getId();
+  }
+
+  /** 코드 발급 API 가 관리자 전용이라, C2C 에 코드 슬롯을 만들면 아무도 발급할 수 없는 영구 잠긴 슬롯이 된다. */
+  private void validateCodeOnlySlotsAllowed(
+      final FlowType flowType, final List<BuncheolMemberParams> memberParams) {
+    if (flowType == FlowType.LEGACY) {
+      return;
+    }
+    if (memberParams.stream().anyMatch(param -> param.accessType().requiresCode())) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED);
+    }
+  }
+
+  /** 코드 참여는 무상 제공이 전제라 0원 슬롯에만 붙일 수 있다. */
+  private void validateCodeOnlySlotsAreFree(final List<BuncheolMemberParams> memberParams) {
+    if (memberParams.stream()
+        .anyMatch(param -> param.accessType().requiresCode() && param.price() > 0L)) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
+    }
   }
 
   /**
@@ -191,8 +214,14 @@ public class BuncheolService {
    * <p>공백 해석은 {@link Buncheol#replaceOpenChatUrl} 이 쥔다 — 제거다.
    *
    * <p>⚠️ <b>이 가드는 안내용이며 원자성을 보장하지 않는다.</b> 로드 시점 {@code status} 스냅샷을 보고 쓰기는 커밋 시점 flush 라, 그
-   * 사이 취소 CAS 가 커밋되면 취소된 분철에 링크가 쓰인다. 취소된 분철의 링크를 읽는 화면이 없어 무해하다고 보고 수용했다 — <b>다른 필드를 이
-   * 패턴으로 얹지 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
+   * 사이 취소 CAS 가 커밋되면 취소된 분철에 링크가 쓰인다. <b>취소된 분철의 링크를 읽는 경로는 있다</b> — {@code
+   * MyParticipationQueryService}·{@code ParticipationDetailQueryService} 는 분철 상태를 보지 않는다. 그런데도 수용한 것은
+   * <b>노출 대상이 넓어지지 않기 때문</b>이다: ① 두 경로 모두 <b>참여자 본인</b>에게만 열려 있고, 개최자가 저장을 누른 시점에 이미 그들에게
+   * 보여줄 작정이던 값이다(기존 값이 있던 건이면 경합이 없어도 같은 참여자가 같은 자리에서 계속 본다) ② 이 경로는 이벤트를 발행하지 않아 잘못
+   * 쓰인 값이 능동적으로 퍼지지 않는다. ⚠️ 다만 화면이 취소 건을 전부 가려 주지는 않는다 — 클라 {@code BidHistoryContent} 의 카드
+   * 경로는 숨기지만 결제 시트 경로에는 취소 게이트가 없다. ⚠️ 그리고 취소 뒤에는 개최자가 스스로 되돌릴 수 없다({@link
+   * Buncheol#validateOpenChatUrlEditable} 이 CANCELLED·HOST_CANCELLED 를 막는다). <b>다른 필드를 이 패턴으로 얹지
+   * 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
    *
    * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(성사 확정·진행
    * 확정)만 {@code isC2c()} 로 막는다.
@@ -248,6 +277,9 @@ public class BuncheolService {
       // 신청자가 전부 취소된 직후 — 확정이 무의미하므로 롤백해 RECRUITING 을 유지한다.
       throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
+    // 신청 구간의 묶음은 기한 없이 열려 있다 — 참여 행과 같은 기한을 묶음에도 채운다. 비워 두면 나중에 붙을
+    // 개최자 「제외」 기한 가드가 fail-open 된다(기한 안인데도 참여자를 뺄 수 있게 된다 — docs/71 §8-1).
+    participationBundleDomainService.assignDueAtByBuncheolId(buncheolId, paymentDueAt, now);
 
     // 커밋 후 성사 확정·입금 안내 알림톡(신청자 전원, 유저 단위 합산 — docs/46 §4.7-A3)과 수신함 기록을 트리거한다.
     eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId, appliedIds));
@@ -325,6 +357,9 @@ public class BuncheolService {
     // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이
     // 자발취소·만료된 참여에 중복 알림이 가지 않도록).
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
+    // cascade 는 참여를 한 번의 UPDATE 로 전이시켜 어느 묶음이 비었는지 개별로 알 수 없다 — 같은 CAS 조건을
+    // 분철 범위로 넓혀 일괄 판정한다. 안 닫으면 취소된 분철에 활성 묶음이 영구히 남는다.
+    participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
     List<Participation> cancelled =
         participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
     // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.

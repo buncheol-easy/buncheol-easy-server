@@ -20,7 +20,10 @@ public class BuncheolMemberDomainService {
 
     List<BuncheolMember> newBuncheolMembers =
         params.stream()
-            .map(param -> BuncheolMember.create(buncheolId, param.memberId(), param.price()))
+            .map(
+                param ->
+                    BuncheolMember.create(
+                        buncheolId, param.memberId(), param.price(), param.accessType()))
             .toList();
 
     buncheolMemberRepository.saveAll(newBuncheolMembers);
@@ -40,7 +43,20 @@ public class BuncheolMemberDomainService {
     return buncheolMemberRepository.findAllByBuncheolId(buncheolId);
   }
 
+  public List<BuncheolMember> findAllByBuncheolIdOrderByIdAsc(final Long buncheolId) {
+    return buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+  }
+
   public void deleteById(final Long id) {
     buncheolMemberRepository.deleteById(id);
+  }
+
+  /** 활성 참여가 있는 슬롯은 바꾸지 않는다 — 판정과 전이를 한 UPDATE 로 원자화한다. */
+  public void changeAccessType(
+      final Long buncheolMemberId, final Long buncheolId, final BuncheolMemberAccessType accessType) {
+    if (!buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+        buncheolMemberId, buncheolId, accessType)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED);
+    }
   }
 }

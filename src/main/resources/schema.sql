@@ -1,14 +1,12 @@
--- ⚠️ 스키마 변경 운영 규칙 — expand-contract (루트 docs/39):
--- 블루-그린 배포는 구·신 버전이 같은 DB 를 수십 초 동시에 본다. 컬럼 삭제·rename·NOT NULL 추가
--- 같은 파괴적 변경(contract)을 코드 배포와 한 릴리스에 묶으면 전환 창에서 구버전이 죽는다.
--- 절차: ① expand(컬럼/테이블 추가)는 "배포 전에 수동 ALTER 로" 먼저 반영한다 — 이 파일은
---   전부 CREATE TABLE IF NOT EXISTS 라 기존 운영 DB 의 테이블에 컬럼을 추가해 주지 않는다
---   (아래 곳곳의 "기존 배포 DB 에는 수동 ALTER 필요" 주석이 그 얘기다). 수동 ALTER 없이
---   배포하면 신버전이 헬스는 통과하고(그 컬럼을 안 건드리므로) 전환 직후부터 500 이 난다.
--- ② contract(제거·rename·NOT NULL 강제)는 그걸 안 쓰는 코드가 완전히 내려간 다음 릴리스에서.
+-- ⚠️ 스키마 변경 운영 규칙 — expand-contract (루트 docs/39)
+-- 블루-그린 배포는 구·신 버전이 같은 DB 를 수십 초 동시에 본다. 파괴적 변경을 코드 배포와 한 릴리스에
+-- 묶으면 전환 창에서 구버전이 죽는다.
+-- ① expand(컬럼·테이블 추가)는 배포 전에 수동 ALTER 로 먼저 반영한다. 이 파일은 전부 CREATE TABLE
+--   IF NOT EXISTS 라 기존 테이블에 컬럼·인덱스를 추가해 주지 않는다 — 아래 "기존 배포 DB 에는 수동
+--   ALTER 필요" 주석이 그 지점이다. 빠뜨리면 헬스는 통과하고 전환 직후부터 500 이 난다.
+-- ② contract(제거·rename·NOT NULL 강제)는 그걸 안 쓰는 코드가 완전히 내려간 다음 릴리스에서 한다.
 -- ③ rename 은 "새 컬럼 추가 → 양쪽 쓰기 → 구 컬럼 제거" 3단계로 쪼갠다.
 
--- users 테이블 생성
 CREATE TABLE IF NOT EXISTS users
 (
     id                  BIGINT       NOT NULL AUTO_INCREMENT,
@@ -16,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users
     provider_id         VARCHAR(100) NOT NULL COMMENT '소셜 제공자 고유 ID',
     email               VARCHAR(320) NOT NULL COMMENT '소셜 계정 이메일',
     nickname            VARCHAR(20)  NOT NULL COMMENT '닉네임',
-    -- NULL 허용: 기존 회원은 값이 없고 마이페이지에서 수시 입력한다 (신규 가입은 FE 에서 필수 강제).
+    -- 기존 회원은 값이 없고 마이페이지에서 수시 입력한다 (신규 가입은 FE 에서 필수 강제).
     -- 기존 배포 DB 에는 수동 ALTER 필요.
     name                VARCHAR(30)  NULL COMMENT '실명 (입금 대조·배송 연락 참조)',
     phone_number        VARCHAR(15)  NULL COMMENT '연락처',
@@ -24,20 +22,20 @@ CREATE TABLE IF NOT EXISTS users
     settlement_account  VARCHAR(50)  NULL COMMENT '정산 계좌번호',
     settlement_holder   VARCHAR(50)  NULL COMMENT '정산 예금주',
     profile_completed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '프로필 설정 완료 여부',
-    -- 개최 오픈 전 운영 지정 계정만 true. 부여는 DB 직접 UPDATE. 기존 배포 DB 에는 수동 ALTER 필요
-    -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 컬럼을 추가하지 않는다).
+    -- 개최 오픈 전 운영 지정 계정만 true. 부여는 DB 직접 UPDATE 로 한다.
+    -- 기존 배포 DB 에는 수동 ALTER 필요.
     can_host            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '분철 개최 허용 여부',
-    -- NULL = 미동의/철회. 광고성 정보는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장.
+    -- NULL = 미동의/철회. 광고성 정보는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장한다.
     -- 기존 배포 DB 에는 수동 ALTER 필요.
     marketing_agreed_at DATETIME     NULL COMMENT '마케팅 정보 수신 동의 일시',
-    -- 카카오 연령대(선택 동의). 개최자 성인 확인 참조용 — 재로그인 시 최신값 갱신, NULL = 미동의/미수집.
+    -- 카카오 선택 동의 항목. 개최자 성인 확인 참조용이며 재로그인 시 최신값으로 갱신한다. NULL = 미동의/미수집.
     -- 기존 배포 DB 에는 수동 ALTER 필요 (docs/50).
     age_range           VARCHAR(10)  NULL COMMENT '카카오 연령대 (예: 20~29)',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at          DATETIME     NULL COMMENT '회원탈퇴 soft delete',
 
-    -- 유니크 제약조건을 위한 가상 컬럼 (deleted_at이 NULL이면 값을 갖고, 유저가 탈퇴하면 NULL이 된다)
+    -- 탈퇴 계정을 유니크 대상에서 빼는 가상 컬럼 — deleted_at 이 NULL 일 때만 값을 갖는다.
     _active_provider    VARCHAR(20) GENERATED ALWAYS AS (IF(deleted_at IS NULL, provider, NULL)) VIRTUAL,
     _active_provider_id VARCHAR(100) GENERATED ALWAYS AS (IF(deleted_at IS NULL, provider_id, NULL)) VIRTUAL,
     _active_nickname    VARCHAR(20) GENERATED ALWAYS AS (IF(deleted_at IS NULL, nickname, NULL)) VIRTUAL,
@@ -50,8 +48,8 @@ CREATE TABLE IF NOT EXISTS users
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- user_service_terms 테이블 생성 (카카오 간편가입 약관 동의 내역 — (user_id, tag) 당 1행, 재로그인 시 갱신)
--- 기존 배포 DB 에는 수동 CREATE 필요 (배포 체크리스트 참조).
+-- 카카오 간편가입 약관 동의 내역 — (user_id, tag) 당 1행이며 재로그인 시 갱신한다.
+-- 기존 배포 DB 에는 수동 CREATE 필요.
 CREATE TABLE IF NOT EXISTS user_service_terms
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
@@ -60,7 +58,7 @@ CREATE TABLE IF NOT EXISTS user_service_terms
     agreed     TINYINT(1)   NOT NULL COMMENT '동의 여부',
     agreed_at  DATETIME     NULL COMMENT '동의 일시 (카카오 동의창 기준)',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -73,18 +71,18 @@ CREATE TABLE IF NOT EXISTS user_service_terms
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- admins 테이블 생성 (관리자 계정 — 서비스 유저와 무관한 독립 ID/PW 계정)
--- 계정 생성은 배포 환경변수 부트스트랩(AdminAccountInitializer) 또는 운영자의 직접 INSERT(BCrypt 해시)로 한다.
--- 직접 INSERT 시 해시는 기본 cost(10)로 생성할 것 — cost 가 다르면 로그인 타이밍 방어가 약해진다 (Admin javadoc 참고).
--- 관리자 access token 은 role claim(ADMIN)으로 유저 토큰과 구분되며, 유저 API 는 hasRole(USER) 라 관리자
--- 토큰으로 접근할 수 없다 (admin.id 와 users.id 가 겹쳐도 위장 불가).
+-- 관리자 계정 — 서비스 유저와 무관한 독립 ID/PW 계정이다.
+-- 생성은 배포 환경변수 부트스트랩(AdminAccountInitializer) 또는 운영자 직접 INSERT 로 한다. 직접 INSERT 시
+-- BCrypt 해시는 기본 cost(10)로 만들 것 — cost 가 다르면 로그인 타이밍 방어가 약해진다 (Admin javadoc).
+-- 관리자 토큰은 role claim(ADMIN)으로 유저 토큰과 구분된다. 유저 API 는 hasRole(USER) 라 admins.id 와
+-- users.id 가 겹쳐도 위장할 수 없다.
 CREATE TABLE IF NOT EXISTS admins
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     login_id   VARCHAR(50)  NOT NULL COMMENT '관리자 로그인 ID',
     password   VARCHAR(100) NOT NULL COMMENT 'BCrypt 해시',
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -93,7 +91,6 @@ CREATE TABLE IF NOT EXISTS admins
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- shipping_addresses 테이블 생성
 CREATE TABLE IF NOT EXISTS shipping_addresses
 (
     id              BIGINT       NOT NULL AUTO_INCREMENT,
@@ -104,7 +101,7 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
     alias           VARCHAR(10)  NULL COMMENT '사용자 지정 별칭',
     is_default      BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '배송방법별 기본 배송지 여부',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -118,20 +115,19 @@ CREATE TABLE IF NOT EXISTS shipping_addresses
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- groups 테이블 생성
 CREATE TABLE IF NOT EXISTS `groups`
 (
     id          BIGINT       NOT NULL AUTO_INCREMENT,
     name        VARCHAR(100) NOT NULL COMMENT '그룹명',
     image       VARCHAR(500) NULL COMMENT '이미지 URL',
-    -- 공백·구두점 제거 + 소문자 정규화. 검색어 쪽 정규화는 SearchText.normalize 가 같은 규칙으로 수행한다.
-    -- 그룹은 SQL 로 직접 시드되므로(애플리케이션 쓰기 경로 없음) 값을 DB 가 계산하게 해 INSERT 누락을 원천 차단한다.
+    -- 공백·구두점 제거 + 소문자 정규화. 검색어 쪽은 SearchText.normalize 가 같은 규칙으로 수행한다.
+    -- 그룹은 SQL 로 직접 시드되므로(애플리케이션 쓰기 경로 없음) DB 가 계산하게 해 INSERT 누락을 원천 차단한다.
     search_name VARCHAR(100) GENERATED ALWAYS AS (LOWER(
         REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
         name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )) STORED COMMENT '검색용 정규화 그룹명',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -141,7 +137,6 @@ CREATE TABLE IF NOT EXISTS `groups`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- group_members 테이블 생성
 CREATE TABLE IF NOT EXISTS group_members
 (
     id          BIGINT       NOT NULL AUTO_INCREMENT,
@@ -154,7 +149,7 @@ CREATE TABLE IF NOT EXISTS group_members
         name, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )) STORED COMMENT '검색용 정규화 멤버명',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -169,10 +164,9 @@ CREATE TABLE IF NOT EXISTS group_members
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- group_aliases 테이블 생성
--- 그룹명은 공식 표기 하나만 저장되는데(188개 중 영문 128 / 한글 61) 사용자는 다른 표기로 검색한다.
--- "IVE"→"아이브", "프로미스나인"→"fromis_9" 같은 교차 표기는 로마자 변환으로 역산되지 않고
--- ("아이브"의 로마자는 "aibeu"이지 "ive"가 아니다) 팬덤 축약어는 더더욱 규칙이 없어, 데이터로만 풀 수 있다.
+-- 그룹명 교차 표기 검색용 별칭. 그룹명은 공식 표기 하나만 저장되는데(188개 중 영문 128 / 한글 61)
+-- 사용자는 다른 표기로 검색한다. "IVE"→"아이브" 같은 교차 표기는 로마자 변환으로 역산되지 않고
+-- ("아이브"의 로마자는 "aibeu"이지 "ive"가 아니다) 팬덤 축약어는 더더욱 규칙이 없어 데이터로만 풀 수 있다.
 CREATE TABLE IF NOT EXISTS group_aliases
 (
     id           BIGINT       NOT NULL AUTO_INCREMENT,
@@ -184,7 +178,7 @@ CREATE TABLE IF NOT EXISTS group_aliases
         alias, ' ', ''), '　', ''), '.', ''), '_', ''), '-', ''), '(', ''), ')', ''), '[', ''), ']', ''), '·', '')
     )) STORED COMMENT '검색용 정규화 별칭',
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -203,7 +197,6 @@ CREATE TABLE IF NOT EXISTS group_aliases
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- buncheols 테이블 생성
 CREATE TABLE IF NOT EXISTS buncheols
 (
     id                BIGINT       NOT NULL AUTO_INCREMENT,
@@ -224,8 +217,9 @@ CREATE TABLE IF NOT EXISTS buncheols
     status            VARCHAR(30)  NOT NULL DEFAULT 'RECRUITING' COMMENT 'RECRUITING | PAYMENT_COLLECTING(C2C 입금 수집중) | CONFIRMED | CANCELLED(인원미달/미성사 자동취소) | HOST_CANCELLED(개최자 취소, 목록·상세 비노출)',
     finalized_at      DATETIME     NULL COMMENT '마감 판정(진행확정/취소) 시각. C2C 는 개최자 성사 확정 시각',
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- C2C 플로우 병존(그랜드파더링) 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
+    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 이하 C2C 플로우 병존(그랜드파더링) 컬럼.
+    -- 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3).
     flow_type         VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY(즉시 입금+페이액션) | C2C(신청→확정→입금 직거래)',
     payment_due_at    DATETIME     NULL COMMENT 'C2C: 개최자 성사 확정 시 산정한 일괄 입금 기한',
     open_chat_url     VARCHAR(200) NULL COMMENT 'C2C: 개최자 오픈채팅 링크(선택) — 참여자 소통 채널',
@@ -238,14 +232,12 @@ CREATE TABLE IF NOT EXISTS buncheols
     INDEX idx_buncheols_group_id (group_id),
     INDEX idx_buncheols_title (title),
     INDEX idx_buncheols_host_created (host_id, created_at DESC),
-    -- 공개 목록 '모집중' 그룹 조회 (status='RECRUITING', createdAt DESC, id DESC) 의 커서 페이지네이션용
+    -- 공개 목록 '모집중' 그룹 조회(status='RECRUITING', createdAt DESC, id DESC) 커서 페이지네이션용
     INDEX idx_buncheols_status_created (status, created_at DESC, id DESC),
     -- groupId 필터 + 커서 조합용 (idx_buncheols_group_id 만으로는 정렬을 인덱스로 커버 불가)
     INDEX idx_buncheols_group_created (group_id, created_at DESC, id DESC),
-    -- 두 용도 겸용: (1) 자동 마감 스케줄러 폴링 (status='RECRUITING' AND deadline <= now, 앞 두 컬럼 prefix),
-    -- (2) 공개 목록 '마감' 그룹 조회 (status='CONFIRMED', deadline DESC, id DESC) 의 커서 페이지네이션 — 역방향 인덱스 스캔으로 정렬 커버.
-    -- 단 groupId 필터 + '마감' 그룹 조합은 (group_id, deadline, id) 인덱스가 없어 정렬이 filesort 로 떨어진다 (그룹별 마감분이 적어 현재는 수용,
-    -- 특정 그룹 마감분이 많아지면 (group_id, deadline DESC, id DESC) 추가 검토).
+    -- 자동 마감 스케줄러 폴링(status='RECRUITING' AND deadline <= now)과 공개 목록 '마감' 그룹 조회 겸용.
+    -- groupId 필터 + '마감' 조합만 filesort 로 떨어진다 (그룹별 마감분이 적어 수용).
     INDEX idx_buncheols_status_deadline (status, deadline, id),
 
     CONSTRAINT fk_buncheols_host
@@ -260,18 +252,20 @@ CREATE TABLE IF NOT EXISTS buncheols
 
 CREATE TABLE IF NOT EXISTS buncheol_members
 (
-    id          BIGINT   NOT NULL AUTO_INCREMENT,
-    buncheol_id BIGINT   NOT NULL,
-    member_id   BIGINT   NOT NULL COMMENT '대상 멤버',
-    price       BIGINT   NOT NULL COMMENT '멤버 1명당 고정 금액 (100원 단위)',
-    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id          BIGINT      NOT NULL AUTO_INCREMENT,
+    buncheol_id BIGINT      NOT NULL,
+    member_id   BIGINT      NOT NULL COMMENT '대상 멤버',
+    price       BIGINT      NOT NULL COMMENT '멤버 1명당 고정 금액 (100원 단위)',
+    -- 코드 수명과 무관한 슬롯 접근 정책. 기존 배포 DB 에는 수동 ALTER 필요.
+    access_type VARCHAR(20) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN=선착순 | CODE_ONLY=참여 코드 보유자만',
+    created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
     INDEX idx_buncheol_members_buncheol_id (buncheol_id),
     UNIQUE INDEX uq_buncheol_members_buncheol_member (buncheol_id, member_id),
-    -- memberId 단독 검색 (분철 목록의 memberId 서브쿼리) 인덱스. uq_(buncheol_id, member_id) 는 member_id 단독 검색에 무용.
+    -- memberId 단독 검색(분철 목록의 memberId 서브쿼리)용. uq_(buncheol_id, member_id) 는 여기에 쓸 수 없다.
     INDEX idx_buncheol_members_member (member_id, buncheol_id),
 
     CONSTRAINT fk_buncheol_members_buncheol
@@ -330,7 +324,7 @@ CREATE TABLE IF NOT EXISTS participation_bundles
     payment_sent_at     DATETIME    NULL COMMENT '참여자 「보냈어요」 마킹 시각 (묶음 1회)',
     closed_at           DATETIME    NULL COMMENT '묶음 종료(활성 슬롯 0) 시각. NULL = 활성',
     created_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -357,69 +351,70 @@ CREATE TABLE IF NOT EXISTS participation_bundles
 
 CREATE TABLE IF NOT EXISTS participations
 (
-    id                    BIGINT       NOT NULL AUTO_INCREMENT,
-    buncheol_id           BIGINT       NOT NULL,
-    buncheol_member_id    BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
-    participant_id        BIGINT       NOT NULL COMMENT '참여자',
+    id                           BIGINT       NOT NULL AUTO_INCREMENT,
+    buncheol_id                  BIGINT       NOT NULL,
+    buncheol_member_id           BIGINT       NOT NULL COMMENT '참여한 멤버 슬롯',
+    participant_id               BIGINT       NOT NULL COMMENT '참여자',
     -- 소속 묶음 (docs/70 §3). P1 은 추가만 — 아직 아무도 읽지 않는다. 백필 후 NOT NULL 로 조인다.
-    bundle_id             BIGINT       NULL COMMENT '소속 묶음',
-    shipping_address_id   BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
-    amount                BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
-    shipping_fee          BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
-    -- NULL 허용은 P2 대비 완화다. 정본이 묶음으로 옮겨가면 이 컬럼들은 INSERT 목록에서 빠지는데,
-    -- NOT NULL 인데 DEFAULT 가 없으면 MySQL strict mode 가 ERROR 1364 로 전 신청을 거부한다.
+    bundle_id                    BIGINT       NULL COMMENT '소속 묶음',
+    shipping_address_id          BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
+    amount                       BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
+    shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회. 같은 사람이라도 묶음이 다르면 각각 >0 — 추가 모집은 새 묶음이다). 입금 총액 = amount + shipping_fee',
+    -- 🔴 P2-c 이후 이 세 칸은 죽은 컬럼이다 — 정본이 participation_bundles 로 옮겨갔고 INSERT 목록에서 빠졌다.
+    -- **신규 행은 전부 NULL 이다.** 값이 있는 것은 P2-c 배포 이전에 만들어진 행뿐이다.
+    -- ⚠️ 그러므로 "NULL = 이상" 이라는 판정을 여기에 세우지 말 것. 계좌를 확인하려면 묶음을 봐야 한다.
+    -- 컬럼 자체는 P4 에서 삭제한다 — 단, 블루-그린 전환 창에서 구 색이 아직 읽으므로 P2-c 와 같은 릴리스에
+    -- 넣으면 안 된다(docs/39).
     -- ⚠️ DEFAULT '' 로 완화해서는 안 된다 — RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
-    -- 그 생성자가 빈 값을 거부해(BankAccount javadoc) 그 행을 읽는 것 자체가 깨진다. 즉시 실패가 지연 실패로
-    -- 바뀌어 더 나쁘다. 세 컬럼이 모두 NULL 이면 Hibernate 는 embeddable 을 null 로 두고 생성자를 타지 않는다.
-    -- 🔴 P2 에서 값을 빼기 시작하면 getRefundAccount() 가 null 을 돌려주므로, 그때 읽기 경로를 함께 고쳐야 한다.
-    --    P1 시점에는 모든 행이 값을 갖고 있어 영향이 없다.
-    refund_bank           VARCHAR(50)  NULL COMMENT '환불 은행 (정본은 participation_bundles)',
-    refund_account        VARCHAR(50)  NULL COMMENT '환불 계좌번호 (정본은 participation_bundles)',
-    refund_holder         VARCHAR(50)  NULL COMMENT '환불 예금주 (정본은 participation_bundles)',
-    due_at                DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
-    confirmed_at          DATETIME     NULL COMMENT '개최자 입금확인 시각',
-    cancelled_at          DATETIME     NULL COMMENT '참여 취소 시각',
-    cancel_reason         VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED | USER_CANCELLED(C2C 자발 취소)',
-    status                VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED | APPLIED(C2C 신청) | PAYMENT_SENT(C2C 보냈어요)',
-    -- 오픈 이벤트 배송비 환급(배송비 돌려받기). ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc 참고).
-    payback_status        VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
-    payback_tweet_url     VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
-    payback_requested_at  DATETIME     NULL COMMENT '환급 신청(재신청 포함) 시각',
-    payback_completed_at  DATETIME     NULL COMMENT '환급 입금 완료 시각',
-    payback_reject_reason VARCHAR(200) NULL COMMENT '환급 반려 사유 (재신청 시 초기화)',
-    payback_amount        BIGINT       NULL COMMENT '신청 시점 배송비 스냅샷 (환급액 고정)',
-    -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용 가상 컬럼: 활성 상태일 때만 멤버 슬롯 id 값을 갖고, 취소/만료되면 NULL 이 되어 슬롯이 다시 열린다.
-    active_member_id      BIGINT GENERATED ALWAYS AS (
-                              IF(status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED'),
-                                 buncheol_member_id, NULL)
-                              ) STORED COMMENT '활성 상태일 때만 buncheol_member_id 값 (선착순 유니크용)',
-    -- 활성 참여자 가상 컬럼. 과거 (buncheol_id, active_participant_id) 유니크로 분철당 1인 1참여를 강제했으나,
-    -- C2C 다슬롯 허용(docs/46 §7.1-11)으로 유니크는 제거 — LEGACY 의 1인 1슬롯은 앱 가드(BCH-075)가 담당한다.
-    active_participant_id BIGINT GENERATED ALWAYS AS (
-                              IF(status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED'),
-                                 participant_id, NULL)
-                              ) STORED COMMENT '활성 상태일 때만 participant_id 값 (LEGACY 중복 참여 가드 보조)',
-    created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3 — 배포 전 선행).
-    payment_sent_at       DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
-    payment_rejected_at   DATETIME     NULL COMMENT 'C2C: 개최자 "입금 못 찾음" 반려 시각 — 재마킹 시 NULL 초기화(최근 상태가 반려인지 판정). 셀프 철회는 NULL 유지',
-    -- 분철 flow_type 비정규화 (조건부 INSERT 가 buncheols 에서 복사). generated column 은 타 테이블을 참조할 수
-    -- 없어, LEGACY 전용 1인 1참여 유니크를 위해 참여 행에 내려받는다.
-    flow_type             VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT '분철 flow_type 비정규화 — LEGACY 1인 1참여 유니크용',
-    -- LEGACY 분철당 참여자 1명 보장용 가상 컬럼. C2C 는 다슬롯 허용(docs/46 §7.1-11)이라 LEGACY 조건이 붙는다.
+    -- 그 생성자가 빈 값을 거부해(BankAccount javadoc) 그 행을 읽는 것 자체가 깨진다. 세 컬럼이 모두 NULL
+    -- 이면 Hibernate 는 embeddable 을 null 로 두고 생성자를 타지 않는다.
+    refund_bank                  VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 은행 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
+    refund_account               VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 계좌번호 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
+    refund_holder                VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 예금주 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
+    due_at                       DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
+    confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
+    cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',
+    cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED | USER_CANCELLED(C2C 자발 취소)',
+    status                       VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED | APPLIED(C2C 신청) | PAYMENT_SENT(C2C 보냈어요)',
+    -- 오픈 이벤트 배송비 환급. ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc).
+    payback_status               VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
+    payback_tweet_url            VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
+    payback_requested_at         DATETIME     NULL COMMENT '환급 신청(재신청 포함) 시각',
+    payback_completed_at         DATETIME     NULL COMMENT '환급 입금 완료 시각',
+    payback_reject_reason        VARCHAR(200) NULL COMMENT '환급 반려 사유 (재신청 시 초기화)',
+    payback_amount               BIGINT       NULL COMMENT '신청 시점 배송비 스냅샷 (환급액 고정)',
+    -- 멤버 슬롯당 활성 참여 1건(선착순) 보장용. 취소·만료되면 NULL 이 되어 슬롯이 다시 열린다.
+    active_member_id             BIGINT GENERATED ALWAYS AS (
+                                     IF(status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED'),
+                                        buncheol_member_id, NULL)
+                                     ) STORED COMMENT '활성 상태일 때만 buncheol_member_id 값 (선착순 유니크용)',
+    -- 과거 (buncheol_id, active_participant_id) 유니크로 분철당 1인 1참여를 강제했으나, C2C 다슬롯
+    -- 허용(docs/46 §7.1-11)으로 유니크는 제거했다 — LEGACY 의 1인 1슬롯은 앱 가드(BCH-075)가 담당한다.
+    active_participant_id        BIGINT GENERATED ALWAYS AS (
+                                     IF(status IN ('APPLIED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'CONFIRMED'),
+                                        participant_id, NULL)
+                                     ) STORED COMMENT '활성 상태일 때만 participant_id 값 (LEGACY 중복 참여 가드 보조)',
+    created_at                   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 이하 C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3).
+    payment_sent_at              DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
+    payment_rejected_at          DATETIME     NULL COMMENT 'C2C: 개최자 "입금 못 찾음" 반려 시각 — 재마킹 시 NULL 초기화(최근 상태가 반려인지 판정). 셀프 철회는 NULL 유지',
+    -- 분철 flow_type 비정규화 (조건부 INSERT 가 buncheols 에서 복사). generated column 은 타 테이블을
+    -- 참조할 수 없어, LEGACY 전용 1인 1참여 유니크를 위해 참여 행에 내려받는다.
+    flow_type                    VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT '분철 flow_type 비정규화 — LEGACY 1인 1참여 유니크용',
+    -- LEGACY 분철당 참여자 1명 보장용. C2C 는 다슬롯 허용(docs/46 §7.1-11)이라 LEGACY 조건이 붙는다.
     legacy_active_participant_id BIGINT GENERATED ALWAYS AS (
-                              IF(flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED'),
-                                 participant_id, NULL)
-                              ) STORED COMMENT 'LEGACY 활성 참여일 때만 participant_id 값 (분철당 중복 참여 방지용)',
+                                     IF(flow_type = 'LEGACY' AND status IN ('AWAITING_PAYMENT', 'CONFIRMED'),
+                                        participant_id, NULL)
+                                     ) STORED COMMENT 'LEGACY 활성 참여일 때만 participant_id 값 (분철당 중복 참여 방지용)',
 
     PRIMARY KEY (id),
 
-    -- 멤버 슬롯당 활성 참여 1건 (선착순). 동시 참여 시 두 번째 INSERT 가 이 제약에 막혀 DuplicateKey 로 떨어진다.
+    -- 멤버 슬롯당 활성 참여 1건(선착순). 동시 참여 시 두 번째 INSERT 가 여기 막혀 DuplicateKey 로 떨어진다.
     UNIQUE INDEX uq_participations_active_member (active_member_id),
     -- (제거됨) uq_participations_active_participant — C2C 다슬롯 허용으로 DROP (docs/46 §2.3-4).
-    -- LEGACY 분철당 참여자 1명 (중복 참여 금지). 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
-    -- C2C 참여는 legacy_active_participant_id 가 NULL 이라 이 유니크의 영향을 받지 않는다.
+    -- LEGACY 분철당 참여자 1명. 서비스 사전 체크의 check-then-insert 갭을 DB 가 최종 차단한다.
+    -- C2C 참여는 legacy_active_participant_id 가 NULL 이라 영향을 받지 않는다.
     UNIQUE INDEX uq_participations_legacy_active_participant (buncheol_id, legacy_active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
@@ -429,13 +424,12 @@ CREATE TABLE IF NOT EXISTS participations
     INDEX idx_participations_participant_created (participant_id, created_at DESC),
     -- 묶음의 활성 슬롯 조회·집계용 (묶음 확인·제외·종료 판정)
     INDEX idx_participations_bundle_status (bundle_id, status),
-    -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요
-    -- (CREATE TABLE IF NOT EXISTS 는 기존 테이블에 인덱스를 추가하지 않는다).
+    -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요.
     INDEX idx_participations_created (created_at DESC, id DESC),
-    -- 같은 후기 트윗의 타 참여 중복 신청 방지 (서비스 사전 체크의 check-then-update 갭을 DB 가 최종 차단).
+    -- 같은 후기 트윗의 타 참여 중복 신청 방지용 (check-then-update 갭을 DB 가 최종 차단).
     -- NULL(미신청)은 MySQL 유니크에서 중복 허용이라 문제없다.
     UNIQUE INDEX uq_participations_payback_tweet_url (payback_tweet_url),
-    -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용.
+    -- 어드민 환급 신청 목록(신청 최신순) 커서 페이지네이션용
     INDEX idx_participations_payback_requested (payback_status, payback_requested_at DESC, id DESC),
 
     -- ⚠️ CASCADE 가 아니라 SET NULL 이다. 묶음은 슬롯에서 파생된 것이지 슬롯의 소유자가 아니다.
@@ -463,6 +457,37 @@ CREATE TABLE IF NOT EXISTS participations
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS participation_codes
+(
+    id                    BIGINT      NOT NULL AUTO_INCREMENT,
+    code                  VARCHAR(16) NOT NULL COMMENT '참여 코드 (Crockford base32 대문자 정규화 저장)',
+    buncheol_id           BIGINT      NOT NULL,
+    buncheol_member_id    BIGINT      NULL COMMENT '바인딩된 멤버 슬롯 (NULL=분철 단위 코드)',
+    issued_to             VARCHAR(50) NULL COMMENT '발급 대상 운영 메모 (X 핸들 등) — 재발급 이력 추적용',
+    expires_at            DATETIME    NOT NULL COMMENT '만료 시각 (발급 시 필수 지정)',
+    revoked_at            DATETIME    NULL COMMENT '운영자 폐기 시각 (재발급 시 이전 코드를 여기서 닫는다)',
+    used_at               DATETIME    NULL COMMENT '참여에 사용된 시각 (1회용)',
+    used_participation_id BIGINT      NULL COMMENT '이 코드로 생성된 참여',
+    created_at            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE INDEX uq_participation_codes_code (code),
+    -- 슬롯당 유효 코드 1개는 유니크가 아니라 앱 가드로 지킨다 (ParticipationCode javadoc).
+    INDEX idx_participation_codes_member (buncheol_member_id, id DESC),
+    INDEX idx_participation_codes_buncheol (buncheol_id, id DESC),
+
+    CONSTRAINT fk_participation_codes_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE,
+    CONSTRAINT fk_participation_codes_member
+        FOREIGN KEY (buncheol_member_id)
+            REFERENCES buncheol_members (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS deliveries
 (
     id                      BIGINT       NOT NULL AUTO_INCREMENT,
@@ -481,7 +506,7 @@ CREATE TABLE IF NOT EXISTS deliveries
     pickup_reminder_sent_at DATETIME     NULL COMMENT '미수령 독촉 알림 발송 시각',
     status                  VARCHAR(20)  NOT NULL DEFAULT 'SNAPSHOTTED' COMMENT 'SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED',
     created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
@@ -489,7 +514,8 @@ CREATE TABLE IF NOT EXISTS deliveries
     -- 백필 전이라 아직 유니크가 아니다. 백필·검증 후 uq_deliveries_bundle 로 승격한다.
     INDEX idx_deliveries_bundle (bundle_id),
     INDEX idx_deliveries_status (status),
-    -- 배송 추적 콜백의 운송장 조회용 (관리자 벌크 등록으로 한 운송장에 다건 매핑). 기존 배포 DB 에는 수동 ALTER 필요.
+    -- 배송 추적 콜백의 운송장 조회용 (관리자 벌크 등록으로 한 운송장에 다건 매핑).
+    -- 기존 배포 DB 에는 수동 ALTER 필요.
     INDEX idx_deliveries_tracking (tracking_number, shipping_method),
 
     CONSTRAINT fk_deliveries_bundle
@@ -502,7 +528,6 @@ CREATE TABLE IF NOT EXISTS deliveries
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- buncheol_bookmarks 테이블 생성 (찜한 분철)
 CREATE TABLE IF NOT EXISTS buncheol_bookmarks
 (
     id          BIGINT   NOT NULL AUTO_INCREMENT,
@@ -525,7 +550,6 @@ CREATE TABLE IF NOT EXISTS buncheol_bookmarks
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- user_favorite_groups 테이블 생성 (유저 최애 그룹)
 CREATE TABLE IF NOT EXISTS user_favorite_groups
 (
     id         BIGINT   NOT NULL AUTO_INCREMENT,
@@ -548,9 +572,9 @@ CREATE TABLE IF NOT EXISTS user_favorite_groups
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- user_recent_searches 테이블 생성 (검색창 최근 검색어 — 사용자가 친 단어를 단일 컬럼에 보관)
+-- 검색창 최근 검색어 — 사용자가 친 단어를 단일 컬럼에 보관한다.
 -- 프론트가 그룹·멤버 name → id 변환을 책임지므로, 서버는 검색 요청의 (keyword|groupId|memberId)
--- 중 무엇이 와도 최종적으로 사용자가 입력한 텍스트 1개로 normalize 해 저장한다.
+-- 중 무엇이 와도 사용자가 입력한 텍스트 1개로 normalize 해 저장한다.
 CREATE TABLE IF NOT EXISTS user_recent_searches
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
@@ -560,7 +584,7 @@ CREATE TABLE IF NOT EXISTS user_recent_searches
 
     PRIMARY KEY (id),
 
-    -- 사용자별 최신순 조회 + 7개 초과 정리(offset) 쿼리 양쪽 모두 활용
+    -- 사용자별 최신순 조회 + 7개 초과 정리(offset) 쿼리 겸용
     INDEX idx_user_recent_searches_user_created (user_id, created_at DESC, id DESC),
 
     CONSTRAINT fk_user_recent_searches_user
@@ -570,8 +594,8 @@ CREATE TABLE IF NOT EXISTS user_recent_searches
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- inbox_messages 테이블 생성 (수신함 - 공지/알림 단일 관리)
--- 공지(NOTICE)는 전체 대상이라 recipient_id NULL, 알림(NOTIFICATION)은 수신자별 1:1 생성.
+-- 수신함 — 공지와 알림을 한 테이블로 관리한다.
+-- 공지(NOTICE)는 전체 대상이라 recipient_id 가 NULL, 알림(NOTIFICATION)은 수신자별 1:1 로 생성한다.
 CREATE TABLE IF NOT EXISTS inbox_messages
 (
     id               BIGINT       NOT NULL AUTO_INCREMENT,
@@ -586,13 +610,13 @@ CREATE TABLE IF NOT EXISTS inbox_messages
     banner_title     VARCHAR(200) NULL COMMENT '홈 배너 제목 (공지만 사용)',
     banner_image_url VARCHAR(500) NULL COMMENT '홈 배너 이미지 URL (공지만 사용)',
     created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
     -- 본인 알림 피드(recipient_id = userId, pinned = false) 커서 페이지네이션용
     INDEX idx_inbox_recipient_created (recipient_id, created_at DESC, id DESC),
-    -- 공지 피드(pinned = false) 및 상단 고정 공지(pinned = true) 조회용
+    -- 공지 피드(pinned = false)·상단 고정 공지(pinned = true) 조회용
     INDEX idx_inbox_type_pinned_created (type, pinned, created_at DESC, id DESC),
     -- 홈 배너 조회용 (배너 등록 공지 = banner_image_url IS NOT NULL 시크)
     INDEX idx_inbox_banner (banner_image_url),
@@ -604,7 +628,7 @@ CREATE TABLE IF NOT EXISTS inbox_messages
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- cvs_stores 테이블 생성 (편의점 택배 접수처 마스터 — 배송지 등록 화면의 지점 검색용)
+-- 편의점 택배 접수처 마스터 — 배송지 등록 화면의 지점 검색용.
 -- 크롤러(buncheoleasy-crawler)가 수집·정규화해 S3 에 게시한 스냅샷을 CvsStoreSyncScheduler 가 매주 반영한다.
 CREATE TABLE IF NOT EXISTS cvs_stores
 (
@@ -621,12 +645,11 @@ CREATE TABLE IF NOT EXISTS cvs_stores
     receive_yn TINYINT(1)     NOT NULL COMMENT '택배 접수(보내기) 가능',
     pickup_yn  TINYINT(1)     NOT NULL COMMENT '택배 픽업(수령) 가능',
     created_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- 갱신은 JPA(동기화 배치)가 하지만, 로컬 적재 스크립트 등 JPA 밖 쓰기도 갱신 시각이 남게 DB 레벨로 보강
     updated_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
-    -- 동기화 배치의 (brand, store_code) upsert 기준 — 행의 id 는 재발급되지 않으며 검색 keyset 커서가 이에 의존한다
+    -- 동기화 배치의 upsert 기준 — 행의 id 는 재발급되지 않으며 검색 keyset 커서가 이에 의존한다.
     UNIQUE KEY uk_cvs_stores_brand_code (brand, store_code),
     -- 접수처 검색 쿼리(WHERE pickup_yn AND brand ORDER BY id) 커버용
     INDEX idx_cvs_stores_pickup_brand (pickup_yn, brand, id),

@@ -68,11 +68,16 @@ public class AlimtalkNotificationListener {
   /**
    * (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. LEGACY 는 다음 관문이 최소 인원 충족이지만 C2C 는 인원이 이미 채워진 뒤라 함께 참여한 사람들의
    * 입금이 남은 조건이어서, 다음 안내 문구가 갈린다.
+   *
+   * <p>0원 참여는 두 템플릿 모두 알리고 등록 문안이 "입금이 확인되었어요 · 입금 금액" 이라 발송하지 않는다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentConfirmed(final PaymentConfirmedEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
+    if (view.participation().isFree()) {
+      return;
+    }
     AlimtalkTemplate template =
         view.buncheol().isC2c()
             ? AlimtalkTemplate.C2C_PAYMENT_CONFIRMED
@@ -258,7 +263,9 @@ public class AlimtalkNotificationListener {
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "참여자닉네임", view.participant().getNickname().value(),
-            "입금자명", view.participation().getRefundAccount().holder(),
+            // ⚠️ Map.of 는 null 에 NPE 를 던진다. 정본(묶음)이 비어 있어도 대체 문자열로 채워 발송을 살린다 —
+            // 스킵하면 「보냈어요」 알림이 개최자에게 영영 안 간다.
+            "입금자명", depositorNameOf(view),
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
             "분철ID", String.valueOf(view.buncheol().getId()));
     recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
@@ -513,5 +520,15 @@ public class AlimtalkNotificationListener {
     } catch (final RuntimeException e) {
       log.error("수신함 알림 기록 실패 - template={}, recipientId={}", template, recipientId, e);
     }
+  }
+
+  /** 입금자명(묶음의 예금주). 미연결 참여는 참여자 닉네임으로 대신한다 — 개최자가 누구인지는 알아야 한다. */
+  private static String depositorNameOf(final ParticipationView view) {
+    if (view.bundle() != null && view.bundle().getRefundAccount() != null) {
+      return view.bundle().getRefundAccount().holder();
+    }
+    // 값이 실명이 아님을 드러낸다 — 그냥 닉네임만 내보내면 개최자가 통장에 없는 이름으로 대조하다
+    // 정상 입금을 반려로 처리할 수 있다(같은 메시지의 「참여자닉네임」과 값이 정확히 같아진다).
+    return "%s(닉네임)".formatted(view.participant().getNickname().value());
   }
 }

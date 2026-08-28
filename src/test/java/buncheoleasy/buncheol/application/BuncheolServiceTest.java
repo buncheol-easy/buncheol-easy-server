@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.buncheol.application.participation.ParticipationService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,6 +25,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
@@ -35,6 +37,8 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.C2cHostQualification;
+import buncheoleasy.user.domain.BankAccount;
+import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
@@ -76,6 +80,7 @@ class BuncheolServiceTest {
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   @Mock private DeliveryDomainService deliveryDomainService;
 
@@ -938,6 +943,8 @@ class BuncheolServiceTest {
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // cascade 는 어느 묶음이 비었는지 개별로 알 수 없어 분철 범위로 일괄 판정한다.
+      then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
       // 취소된 참여의 배송 스냅샷을 정리한다.
       then(deliveryDomainService).should().deleteByParticipationIds(List.of(50L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
@@ -1110,6 +1117,58 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 성사 확정 — 묶음 기한 채우기 (P2-b)")
+  class ConfirmRecruitmentBundleDueAtTest {
+
+    // 🔴 신청 구간의 묶음은 기한 없이 열린다. 성사 확정에서 안 채우면 bundles.due_at 이 영구 NULL 이고,
+    // 나중에 붙을 개최자 「제외」 기한 가드가 fail-open 된다 — 기한 안인데도 참여자를 뺄 수 있게 된다.
+    @Test
+    void 성사_확정은_참여와_같은_기한을_묶음에도_채운다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      User host = mock(User.class);
+      given(host.getBankAccount()).willReturn(BankAccount.of("국민", "98765432", "개최자"));
+      given(userDomainService.getUser(HOST_ID)).willReturn(host);
+      given(buncheolDomainService.startCollecting(eq(BUNCHEOL_ID), any(), any(), eq(NOW)))
+          .willReturn(true);
+      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationDomainService.startPaymentCollecting(eq(BUNCHEOL_ID), any(), eq(NOW)))
+          .willReturn(1);
+
+      buncheolService.confirmRecruitment(HOST_ID, BUNCHEOL_ID);
+
+      Instant expectedDueAt = NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW);
+      then(participationBundleDomainService)
+          .should()
+          .assignDueAtByBuncheolId(BUNCHEOL_ID, expectedDueAt, NOW);
+    }
+
+    // 신청자가 전부 취소돼 전이가 0건이면 확정 자체가 롤백된다 — 묶음 기한도 채우면 안 된다.
+    @Test
+    void 전이된_참여가_없으면_묶음_기한도_채우지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      User host = mock(User.class);
+      given(host.getBankAccount()).willReturn(BankAccount.of("국민", "98765432", "개최자"));
+      given(userDomainService.getUser(HOST_ID)).willReturn(host);
+      given(buncheolDomainService.startCollecting(eq(BUNCHEOL_ID), any(), any(), eq(NOW)))
+          .willReturn(true);
+      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationDomainService.startPaymentCollecting(eq(BUNCHEOL_ID), any(), eq(NOW)))
+          .willReturn(0);
+
+      assertThatThrownBy(() -> buncheolService.confirmRecruitment(HOST_ID, BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class);
+
+      then(participationBundleDomainService)
+          .should(never())
+          .assignDueAtByBuncheolId(anyLong(), any(), any());
     }
   }
 }

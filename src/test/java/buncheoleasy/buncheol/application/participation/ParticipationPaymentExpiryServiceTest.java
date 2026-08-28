@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import java.time.Instant;
 import java.util.List;
@@ -30,8 +31,18 @@ class ParticipationPaymentExpiryServiceTest {
   @InjectMocks private ParticipationPaymentExpiryService participationPaymentExpiryService;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   @Mock private ApplicationEventPublisher eventPublisher;
+
+  private static final Long BUNDLE_ID = 900L;
+
+  /** 만료 성공 뒤 묶음 종료 판정은 스냅샷이 아니라 <b>다시 읽은</b> 행의 bundleId 로 한다. */
+  private void givenExpiredParticipation() {
+    Participation participation = mock(Participation.class);
+    given(participation.getBundleId()).willReturn(BUNDLE_ID);
+    given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
+  }
 
   @Nested
   @DisplayName("입금 만료 대상 조회 테스트")
@@ -56,6 +67,7 @@ class ParticipationPaymentExpiryServiceTest {
 
     @Test
     void 만료_처리를_도메인_서비스에_위임하고_성공하면_자동취소_이벤트를_발행하며_true를_반환한다() {
+      givenExpiredParticipation();
       given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW))
           .willReturn(true);
 
@@ -64,6 +76,17 @@ class ParticipationPaymentExpiryServiceTest {
       assertThat(result).isTrue();
       then(participationDomainService).should().expirePayment(PARTICIPATION_ID, NOW);
       then(eventPublisher).should().publishEvent(new PaymentExpiredEvent(PARTICIPATION_ID));
+    }
+
+    // 만료로 마지막 슬롯이 빠지면 묶음도 끝난다. 안 닫으면 「죽었는데 활성」 묶음이 남고 재참여가 그 시체를 재사용한다.
+    @Test
+    void 만료에_성공하면_묶음_종료를_판정한다() {
+      givenExpiredParticipation();
+      given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW)).willReturn(true);
+
+      participationPaymentExpiryService.expire(PARTICIPATION_ID, NOW);
+
+      then(participationBundleDomainService).should().closeIfEmpty(BUNDLE_ID, NOW);
     }
 
     @Test
@@ -75,6 +98,8 @@ class ParticipationPaymentExpiryServiceTest {
 
       assertThat(result).isFalse();
       then(eventPublisher).should(never()).publishEvent(any());
+      // CAS 에 막혔으면 이 슬롯은 여전히 살아 있다 — 묶음을 건드리면 안 된다.
+      then(participationBundleDomainService).should(never()).closeIfEmpty(any(), any());
     }
   }
 }

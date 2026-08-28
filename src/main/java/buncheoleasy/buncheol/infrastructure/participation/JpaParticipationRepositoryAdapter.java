@@ -69,10 +69,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   // flow_type 은 buncheols 에서 복사해 비정규화한다 — LEGACY 전용 1인 1참여 유니크
   // (uq_participations_legacy_active_participant)의 generated column 이 참조하기 위함.
   private static final String INSERT_COLUMNS_SQL =
+      // refund_* 는 더 이상 싣지 않는다 — 정본이 participation_bundles 로 옮겨갔다 (P2-c).
+      // 컬럼은 P4 에서 삭제될 때까지 남고 그 사이 새 행은 NULL 이다(세 칸 모두 NULL 이라 조회도 안전하다).
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-          + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account, refund_holder,"
+          + " shipping_address_id, amount, shipping_fee,"
           + " due_at, status, flow_type, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
 
   /**
    * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
@@ -118,16 +120,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(4, participation.getShippingAddressId());
                 ps.setLong(5, participation.getAmount());
                 ps.setLong(6, participation.getShippingFee());
-                ps.setString(7, participation.getRefundAccount().bank());
-                ps.setString(8, participation.getRefundAccount().account());
-                ps.setString(9, participation.getRefundAccount().holder());
                 // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
                 ps.setTimestamp(
-                    10,
+                    7,
                     participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
                     UTC);
-                ps.setString(11, participation.getStatus().name());
-                ps.setLong(12, participation.getBuncheolId()); // WHERE id = ?
+                ps.setString(8, participation.getStatus().name());
+                ps.setLong(9, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
               },
               keyHolder);
@@ -196,6 +195,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public boolean existsActiveByShippingAddressId(final Long shippingAddressId) {
     return jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
         shippingAddressId, ParticipationStatus.active());
+  }
+
+  @Override
+  public boolean existsActiveByBuncheolMemberId(final Long buncheolMemberId) {
+    return jpaParticipationRepository.existsByBuncheolMemberIdAndStatusIn(
+        buncheolMemberId, ParticipationStatus.active());
   }
 
   @Override
@@ -320,6 +325,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
             rejectedAt,
             now)
         > 0;
+  }
+
+  @Override
+  public boolean linkBundle(
+      final Long participationId, final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.linkBundleIfUnlinked(participationId, bundleId, now) > 0;
   }
 
   @Override

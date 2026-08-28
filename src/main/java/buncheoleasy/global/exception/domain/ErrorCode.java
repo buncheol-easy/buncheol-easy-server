@@ -192,6 +192,38 @@ public enum ErrorCode {
   BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE(
       "BCH-094", "취소된 분철은 오픈채팅 링크를 수정할 수 없습니다.", HttpStatus.CONFLICT),
 
+  // 참여 코드 — 사유별로 코드를 나눈다. 사용자가 해야 할 일이 다르기 때문이다(재발급 요청 / 문의 / 재입력).
+  PARTICIPATION_CODE_REQUIRED("BCH-095", "이 슬롯은 참여 코드가 있어야 참여할 수 있어요.", HttpStatus.BAD_REQUEST),
+  // 선착순 슬롯에 코드를 보내면 조용히 무시하지 않고 거부한다 — 무시하면 "코드를 넣었는데 엉뚱한 슬롯에 참여됐다" 를
+  // 사후에 추적할 수 없다.
+  PARTICIPATION_CODE_NOT_APPLICABLE("BCH-096", "이 슬롯은 코드 없이 참여할 수 있어요.", HttpStatus.BAD_REQUEST),
+  // 형식 오류·미존재·타 슬롯 코드를 같은 코드로 응답한다. 특히 타 슬롯을 구분해 알리면, 남의 코드를 받은 사람이
+  // "그 멤버로 가면 되는구나" 하고 실제로 그 슬롯을 점유해 버린다 — 발급 실수가 오배정으로 이어진다.
+  PARTICIPATION_CODE_INVALID("BCH-097", "참여 코드를 다시 확인해 주세요.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_CODE_EXPIRED(
+      "BCH-098", "참여 코드가 만료되었습니다. 코드를 보내드린 곳으로 문의해 주세요.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_ALREADY_USED("BCH-099", "이미 사용된 참여 코드예요.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_REVOKED("BCH-100", "더 이상 사용할 수 없는 코드예요.", HttpStatus.CONFLICT),
+  // 이하 운영자(어드민) 발급 경로 전용.
+  PARTICIPATION_CODE_NOT_FOUND("BCH-101", "존재하지 않는 참여 코드입니다.", HttpStatus.NOT_FOUND),
+  PARTICIPATION_CODE_MEMBER_ALREADY_ISSUED(
+      "BCH-102", "이 슬롯에 아직 쓸 수 있는 코드가 있습니다. 재발급으로 이전 코드를 폐기하고 새로 발급하세요.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY("BCH-103", "코드 참여 슬롯이 아닙니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_EXPIRY_INVALID("BCH-104", "코드 유효기한은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_CODE_REQUIRED_FIELD_MISSING(
+      "BCH-105", "참여 코드 발급에 필요한 값이 누락되었습니다.", HttpStatus.BAD_REQUEST),
+  PARTICIPATION_CODE_REVOKE_NOT_ALLOWED("BCH-106", "이미 사용되었거나 폐기된 코드입니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED(
+      "BCH-107", "참여자가 있는 슬롯의 접근 정책은 바꿀 수 없습니다.", HttpStatus.CONFLICT),
+  PARTICIPATION_CODE_MEMBER_TAKEN(
+      "BCH-108", "이미 참여자가 확정된 슬롯입니다. 발급해도 사용할 수 없어요.", HttpStatus.CONFLICT),
+  // 코드 참여는 무상 제공(0원 + 배송비 면제)이 전제다. 유료 슬롯을 코드 참여로 만들면 화면은 "0원" 을
+  // 안내하는데 서버는 유상 참여로 처리해 환불 계좌 누락(BCH-062)으로 실패한다.
+  PARTICIPATION_CODE_MEMBER_NOT_FREE(
+      "BCH-109", "코드 참여 슬롯은 0원이어야 합니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED(
+      "BCH-110", "회원 개최(C2C) 분철에는 코드 참여 멤버를 만들 수 없습니다.", HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

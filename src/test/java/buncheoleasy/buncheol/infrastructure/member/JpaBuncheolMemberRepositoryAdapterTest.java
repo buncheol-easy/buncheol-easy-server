@@ -9,10 +9,12 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -86,6 +88,114 @@ class JpaBuncheolMemberRepositoryAdapterTest {
               BuncheolMember.create(buncheolId, memberId3, 20_000L));
 
       assertThatCode(() -> buncheolMemberRepository.saveAll(members)).doesNotThrowAnyException();
+    }
+  }
+
+  @Nested
+  @DisplayName("슬롯 접근 정책 전환 CAS 테스트")
+  class ChangeAccessTypeTest {
+
+    private Long saveSlot() {
+      BuncheolMember member = BuncheolMember.create(buncheolId, memberId, 0L);
+      buncheolMemberRepository.saveAll(List.of(member));
+      em.flush();
+      em.clear();
+      return member.getId();
+    }
+
+    @Test
+    void 참여가_없는_슬롯은_코드_참여로_전환된다() {
+      Long slotId = saveSlot();
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
+          .isTrue();
+
+      em.clear();
+      assertThat(
+              buncheolMemberRepository
+                  .findByIdAndBuncheolId(slotId, buncheolId)
+                  .orElseThrow()
+                  .getAccessType())
+          .isEqualTo(BuncheolMemberAccessType.CODE_ONLY);
+    }
+
+    @Test
+    void 활성_참여가_있는_슬롯은_전환되지_않는다() {
+      Long slotId = saveSlot();
+      insertActiveParticipation(slotId);
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
+          .isFalse();
+    }
+
+    @Test
+    void 취소된_참여만_있는_슬롯은_전환된다() {
+      Long slotId = saveSlot();
+      insertCancelledParticipation(slotId);
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY))
+          .isTrue();
+    }
+
+    /**
+     * 이 CAS 는 {@code updated_at} 을 명시 대입하지 않는다 — bulk UPDATE 라 {@code @PreUpdate} 도 타지 않으므로,
+     * 갱신 시각은 오직 컬럼의 {@code ON UPDATE CURRENT_TIMESTAMP} 로만 남는다. 시계 해상도에 의존하지 않도록
+     * 과거 시각을 심어 두고 그 값이 밀려났는지로 판정한다.
+     */
+    @Test
+    void 명시_대입이_없어도_DB_가_updated_at_을_갱신한다() {
+      Long slotId = saveSlot();
+      Timestamp sentinel = Timestamp.valueOf("2000-01-01 00:00:00");
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET updated_at = ? WHERE id = ?", sentinel, slotId);
+
+      buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+          slotId, buncheolId, BuncheolMemberAccessType.CODE_ONLY);
+
+      assertThat(readUpdatedAt(slotId))
+          .as("updated_at 에 ON UPDATE CURRENT_TIMESTAMP 가 빠졌다 — CAS 로 바꾼 행의 갱신 시각이 멈춘다")
+          .isAfter(sentinel);
+    }
+
+    private Timestamp readUpdatedAt(final Long slotId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT updated_at FROM buncheol_members WHERE id = ?", Timestamp.class, slotId);
+    }
+
+    @Test
+    void 다른_분철의_슬롯은_전환되지_않는다() {
+      Long slotId = saveSlot();
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId + 9_999L, BuncheolMemberAccessType.CODE_ONLY))
+          .isFalse();
+    }
+
+    private void insertActiveParticipation(final Long slotId) {
+      insertParticipation(slotId, "CONFIRMED");
+    }
+
+    private void insertCancelledParticipation(final Long slotId) {
+      insertParticipation(slotId, "CANCELLED");
+    }
+
+    private void insertParticipation(final Long slotId, final String status) {
+      Long participantId = TestUserFixture.insertUser(jdbcTemplate, status.substring(0, 4));
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, amount,"
+              + " shipping_fee, refund_bank, refund_account, refund_holder, status, flow_type)"
+              + " VALUES (?, ?, ?, 0, 0, NULL, NULL, NULL, ?, 'LEGACY')",
+          buncheolId,
+          slotId,
+          participantId,
+          status);
     }
   }
 

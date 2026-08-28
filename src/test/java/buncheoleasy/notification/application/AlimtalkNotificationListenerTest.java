@@ -21,6 +21,7 @@ import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEven
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.delivery.application.PickupReminderDueEvent;
@@ -77,7 +78,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "설윤", participant, mock(User.class), 20_000L));
+                  mock(Participation.class), null, buncheol, "설윤", participant, mock(User.class), 20_000L));
 
       listener.onPaymentConfirmed(new PaymentConfirmedEvent(PARTICIPATION_ID));
 
@@ -103,7 +104,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "호시", participant, mock(User.class), 25_000L));
+                  mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
 
       listener.onPaymentConfirmed(new PaymentConfirmedEvent(PARTICIPATION_ID));
 
@@ -131,7 +132,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "장원영", participant, mock(User.class), 32_000L));
+                  mock(Participation.class), null, buncheol, "장원영", participant, mock(User.class), 32_000L));
 
       listener.onPaymentExpired(new PaymentExpiredEvent(PARTICIPATION_ID));
 
@@ -158,7 +159,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "장원영", participant, mock(User.class), 32_000L));
+                  mock(Participation.class), null, buncheol, "장원영", participant, mock(User.class), 32_000L));
 
       listener.onBuncheolConfirmed(
           new BuncheolConfirmedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID)));
@@ -184,7 +185,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "호시", participant, mock(User.class), 25_000L));
+                  mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
 
       listener.onBuncheolConfirmed(
           new BuncheolConfirmedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID)));
@@ -207,11 +208,11 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "호시", participant, mock(User.class), 25_000L));
+                  mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
       given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "우지", participant, mock(User.class), 25_000L));
+                  mock(Participation.class), null, buncheol, "우지", participant, mock(User.class), 25_000L));
 
       listener.onBuncheolConfirmed(
           new BuncheolConfirmedEvent(
@@ -239,6 +240,7 @@ class AlimtalkNotificationListenerTest {
           .willReturn(
               new ParticipationView(
                   mock(Participation.class),
+                  null,
                   buncheol,
                   longName,
                   participant,
@@ -270,6 +272,7 @@ class AlimtalkNotificationListenerTest {
             .willReturn(
                 new ParticipationView(
                     mock(Participation.class),
+                    null,
                     buncheol,
                     "멤버%02d님".formatted(index),
                     participant,
@@ -301,6 +304,7 @@ class AlimtalkNotificationListenerTest {
           .willReturn(
               new ParticipationView(
                   mock(Participation.class),
+                  null,
                   buncheol,
                   "장원영",
                   participant,
@@ -310,6 +314,7 @@ class AlimtalkNotificationListenerTest {
           .willReturn(
               new ParticipationView(
                   mock(Participation.class),
+                  null,
                   buncheol,
                   "안유진",
                   otherParticipant,
@@ -341,6 +346,7 @@ class AlimtalkNotificationListenerTest {
           .willReturn(
               new ParticipationView(
                   mock(Participation.class),
+                  null,
                   buncheol,
                   "장원영",
                   participant,
@@ -350,6 +356,7 @@ class AlimtalkNotificationListenerTest {
           .willReturn(
               new ParticipationView(
                   mock(Participation.class),
+                  null,
                   buncheol,
                   "안유진",
                   otherParticipant,
@@ -380,6 +387,7 @@ class AlimtalkNotificationListenerTest {
           .willReturn(
               new ParticipationView(
                   mock(Participation.class),
+                  null,
                   buncheol,
                   "장원영",
                   participant,
@@ -432,6 +440,7 @@ class AlimtalkNotificationListenerTest {
       ParticipationView view =
           new ParticipationView(
               cancelled,
+              null,
               mock(Buncheol.class),
               "호시",
               mock(User.class),
@@ -461,7 +470,7 @@ class AlimtalkNotificationListenerTest {
       Participation participation = mock(Participation.class);
       given(participation.getStatus()).willReturn(ParticipationStatus.AWAITING_PAYMENT);
       return new ParticipationView(
-          participation, buncheol, memberName, participant, mock(User.class), amount);
+          participation, null, buncheol, memberName, participant, mock(User.class), amount);
     }
   }
 
@@ -479,7 +488,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "카즈하", participant, mock(User.class), 0L));
+                  mock(Participation.class), null, buncheol, "카즈하", participant, mock(User.class), 0L));
 
       listener.onBuncheolCancelled(
           new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
@@ -507,7 +516,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "호시", participant, mock(User.class), 25_000L));
+                  mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
 
       listener.onBuncheolCancelled(
           new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.HOST_CANCELLED));
@@ -532,7 +541,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "호시", participant, mock(User.class), 25_000L));
+                  mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
 
       listener.onBuncheolCancelled(
           new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.NOT_FINALIZED));
@@ -576,7 +585,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "카즈하", participant, mock(User.class), 0L));
+                  mock(Participation.class), null, buncheol, "카즈하", participant, mock(User.class), 0L));
 
       listener.onTrackingRegistered(new TrackingRegisteredEvent(DELIVERY_ID));
 
@@ -622,7 +631,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  mock(Participation.class), buncheol, "카즈하", participant, mock(User.class), 0L));
+                  mock(Participation.class), null, buncheol, "카즈하", participant, mock(User.class), 0L));
 
       listener.onPickupReminderDue(new PickupReminderDueEvent(DELIVERY_ID));
 
@@ -653,7 +662,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  participation, buncheol, "설윤", participant, mock(User.class), 20_000L));
+                  participation, null, buncheol, "설윤", participant, mock(User.class), 20_000L));
 
       listener.onShippingFeePaybackCompleted(new ShippingFeePaybackCompletedEvent(PARTICIPATION_ID));
 
@@ -685,7 +694,7 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  participation, buncheol, "안유진", participant, mock(User.class), 20_000L));
+                  participation, null, buncheol, "안유진", participant, mock(User.class), 20_000L));
 
       listener.onShippingFeePaybackRejected(
           new ShippingFeePaybackRejectedEvent(PARTICIPATION_ID, "비공개 계정이라 확인 불가"));
@@ -774,14 +783,16 @@ class AlimtalkNotificationListenerTest {
       given(buncheol.getId()).willReturn(77L);
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
       Participation participation = mock(Participation.class);
-      given(participation.getRefundAccount())
-          .willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+      ParticipationBundle bundle = mock(ParticipationBundle.class);
+      given(bundle.getRefundAccount()).willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
       User participant = mock(User.class);
       given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
       User host = mockUser("개최자닉", HOST_PHONE);
       given(host.getId()).willReturn(3L);
       given(assembler.loadByParticipation(PARTICIPATION_ID))
-          .willReturn(new ParticipationView(participation, buncheol, "호시", participant, host, 25_000L));
+          .willReturn(
+              new ParticipationView(
+                  participation, bundle, buncheol, "호시", participant, host, 25_000L));
 
       listener.onPaymentSent(new PaymentSentEvent(PARTICIPATION_ID));
 

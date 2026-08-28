@@ -2,6 +2,10 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.Objects;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -38,7 +42,33 @@ public class JpaParticipationBundleRepositoryAdapter implements ParticipationBun
   }
 
   @Override
+  public List<ParticipationBundle> findAllByIds(final Collection<Long> ids) {
+    // null 이 섞여 오면(배포선 창의 미연결 참여) IN 절에서 걸러 낸다 — 호출부가 매번 필터링하지 않게.
+    List<Long> targets = ids.stream().filter(Objects::nonNull).distinct().toList();
+    return targets.isEmpty() ? List.of() : jpaParticipationBundleRepository.findAllById(targets);
+  }
+
+  @Override
   public List<ParticipationBundle> findAllByBuncheolId(final Long buncheolId) {
     return jpaParticipationBundleRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+  }
+
+  @Override
+  public boolean closeIfNoActiveSlots(final Long bundleId, final Instant now) {
+    return jpaParticipationBundleRepository.closeIfNoActiveSlots(
+            bundleId, ParticipationStatus.active(), now)
+        > 0;
+  }
+
+  @Override
+  public int closeEmptyByBuncheolId(final Long buncheolId, final Instant now) {
+    return jpaParticipationBundleRepository.closeEmptyByBuncheolId(
+        buncheolId, ParticipationStatus.active(), now);
+  }
+
+  @Override
+  public int assignDueAtByBuncheolId(
+      final Long buncheolId, final Instant dueAt, final Instant now) {
+    return jpaParticipationBundleRepository.assignDueAtByBuncheolId(buncheolId, dueAt, now);
   }
 }

@@ -52,6 +52,9 @@ public interface ParticipationRepository {
    */
   boolean existsActiveByShippingAddressId(Long shippingAddressId);
 
+  /** 멤버 슬롯이 활성 참여로 점유됐는지. */
+  boolean existsActiveByBuncheolMemberId(Long buncheolMemberId);
+
   /** 여러 분철의 활성 참여 수 집계 (공개 목록의 참여자 수 표시용). */
   List<BuncheolActiveParticipationCount> countActiveByBuncheolIds(List<Long> buncheolIds);
 
@@ -128,6 +131,15 @@ public interface ParticipationRepository {
    * 막는다 — 남는 경합 창은 {@link ParticipationCancellability} javadoc 참고.
    */
   boolean cancelByUserIfCancellable(Long participationId, Instant now);
+
+  /**
+   * 참여를 묶음에 연결한다 (CAS — 아직 연결되지 않은 행만). 이미 연결돼 있으면 {@code false}.
+   *
+   * <p>참여 INSERT 에 컬럼을 더하지 않고 별도 UPDATE 로 채우는 이유는 그 INSERT 가 조건부 원시 SQL 이고 H2 에 없는
+   * {@code UTC_TIMESTAMP()} 를 써서 <b>테스트가 한 줄도 실행하지 못하기</b> 때문이다 — 바인딩 인덱스가 밀려도 잡아 줄
+   * 것이 없다 (docs/80 ④).
+   */
+  boolean linkBundle(Long participationId, Long bundleId, Instant now);
 
   /** C2C 개최자 수동 입금확인 CAS — AWAITING_PAYMENT·PAYMENT_SENT 에서 기한 경과와 무관하게 CONFIRMED 로 전이. */
   boolean confirmPaymentIfPayable(Long participationId, Instant now);

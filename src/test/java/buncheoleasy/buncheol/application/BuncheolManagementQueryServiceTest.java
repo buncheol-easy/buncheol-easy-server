@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.application;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,11 +12,14 @@ import static org.mockito.Mockito.verify;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -35,9 +40,13 @@ import buncheoleasy.user.domain.UserRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -59,6 +68,7 @@ class BuncheolManagementQueryServiceTest {
   @Mock private GroupRepository groupRepository;
   @Mock private GroupMemberRepository groupMemberRepository;
   @Mock private UserRepository userRepository;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
@@ -69,6 +79,31 @@ class BuncheolManagementQueryServiceTest {
   private static final Instant DUE_AT = Instant.parse("2026-06-02T12:00:00Z");
   private static final Instant CONFIRMED_AT = Instant.parse("2026-06-01T18:00:00Z");
   private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
+  private static final Long BUNDLE_ID_BASE = 9000L;
+
+  /**
+   * 계좌·입금자명의 정본은 묶음이다 (P2-c). 픽스처가 심은 {@code bundleId} 를 가진 참여에는 계좌 있는 묶음을 돌려주고,
+   * {@code bundleId} 가 없는 참여(배포선 창의 미연결 행)에는 아무것도 주지 않는다.
+   */
+  @BeforeEach
+  void stubBundles() {
+    lenient()
+        .when(participationBundleDomainService.findAllByParticipations(any()))
+        .thenAnswer(
+            invocation -> {
+              Collection<Participation> participations = invocation.getArgument(0);
+              Map<Long, ParticipationBundle> byId = new HashMap<>();
+              for (Participation participation : participations) {
+                if (participation.getBundleId() == null) {
+                  continue;
+                }
+                ParticipationBundle bundle = mock(ParticipationBundle.class);
+                lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+                byId.put(participation.getBundleId(), bundle);
+              }
+              return byId;
+            });
+  }
 
   @Nested
   @DisplayName("개최자 분철 관리 화면 조회")
@@ -356,6 +391,210 @@ class BuncheolManagementQueryServiceTest {
       assertThat(target.refundAccount().holder()).isEqualTo("홍길동");
     }
 
+    // 회귀 방지 — 2026-08-28 이전에 만들어진 0원 참여는 refund_* 가 NULL 이고, 이 화면이 그 값을 조건 없이
+    // 역참조해 개최 관리 전체가 500 이었다(staging 참여 #226). 신규 참여는 계좌를 강제하지만(docs/80 결정 1)
+    // 옛 행은 그대로 남으므로 이 케이스는 계속 200 이어야 한다.
+    @Test
+    void 계좌가_없는_0원_참여가_섞여도_500_없이_응답한다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L), buncheolMember(102L, 1002L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "레이")));
+      Participation free =
+          participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CONFIRMED);
+      setField(free, "bundleId", null);
+      setField(free, "confirmedAt", CONFIRMED_AT);
+      Participation paid =
+          participation(602L, 102L, OTHER_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(free, paid));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(601L, 602L)))
+          .willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER, OTHER_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영"), user(OTHER_USER, "안유진팬")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants()).hasSize(2);
+      BuncheolManagementParticipantResponse target = response.participants().get(0);
+      assertThat(target.participationId()).isEqualTo(601L);
+      // 입금자명이 비면 클라(HostedBuncheolManage.tsx)가 닉네임으로 폴백한다.
+      assertThat(target.depositorName()).isNull();
+      assertThat(target.participantNickname()).isEqualTo("장원영");
+      // 같은 목록의 유상 참여는 영향받지 않는다.
+      assertThat(response.participants().get(1).depositorName()).isEqualTo("홍길동");
+    }
+
+    // 참여 계좌 강제(PR #151) 이후의 0원 참여는 계좌를 갖는다. 그래도 대조할 입금이 없어 예금주(실명)를
+    // 내리지 않는다 — 이 필드의 존재 이유가 통장 대조이기 때문이다.
+    @Test
+    void 계좌가_있어도_0원_참여는_입금자명을_내리지_않는다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      // 계좌는 채워져 있고(REFUND_ACCOUNT) 금액만 0원이다.
+      Participation free =
+          participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CONFIRMED);
+      setField(free, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(free));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(601L))).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants().get(0).depositorName()).isNull();
+    }
+
+    // 0원 참여는 생성 즉시 CONFIRMED 라 취소되면 "환불 필요" 판정의 뒷 조건을 항상 만족한다. 계좌가 채워진
+    // 뒤에도 금액 판정이 없으면 돌려줄 돈이 없는 건의 계좌번호가 개최자에게 내려간다.
+    @Test
+    void 계좌가_있어도_0원_참여가_취소되면_계좌를_내리지_않는다() {
+      stubBasicBuncheol(BuncheolStatus.CANCELLED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation cancelled =
+          participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse target = response.cancelledParticipants().get(0);
+      assertThat(target.refundAccount()).isNull();
+      assertThat(target.depositorName()).isNull();
+    }
+
+    // C2C 회귀 방지 — isFree() 는 슬롯 판정인데 C2C 통장 대조는 묶음(같은 사람) 단위다. 배송비가 첫 슬롯에만
+    // 붙고 멤버 가격 0 도 허용돼 "0원 슬롯 + 유상 슬롯" 이 한 묶음이 될 수 있는데, 그 0원 행의 예금주를 지우면
+    // 이체 1건에 대조 키가 갈린다. C2C 가 0원 슬롯에도 계좌를 요구하는 이유가 그것이다.
+    @Test
+    void C2C는_0원_슬롯이어도_입금자명을_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L), buncheolMember(102L, 1002L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "레이")));
+      // 같은 사람의 다슬롯 — 배송비가 첫 슬롯에만 붙어 두 번째가 0원이 된다.
+      Participation paid =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      Participation freeSlot =
+          participation(602L, 102L, PARTICIPANT_USER, 0L, ParticipationStatus.CONFIRMED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(paid, freeSlot));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(601L, 602L)))
+          .willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      // 두 행의 대조 키가 갈리지 않아야 한다.
+      assertThat(response.participants().get(0).depositorName()).isEqualTo("홍길동");
+      assertThat(response.participants().get(1).depositorName()).isEqualTo("홍길동");
+    }
+
+    // FE 의 "환불이 필요한 참여" 목록 필터에는 금액 조건이 없다 (HostedBuncheolManage.tsx —
+    // confirmedAt||paymentSentAt). C2C 0원 취소분의 계좌를 서버가 지우면 목록에는 뜨는데 계좌가 비는 행이 된다.
+    @Test
+    void C2C는_0원_취소분이어도_계좌를_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CANCELLED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation cancelled =
+          participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse target = response.cancelledParticipants().get(0);
+      assertThat(target.refundAccount()).isNotNull();
+      assertThat(target.depositorName()).isEqualTo("홍길동");
+    }
+
+    // 계좌 강제 이후 "유상인데 계좌가 빈" 행은 계약상 존재할 수 없다. 그래도 null 가드를 남긴 이유가
+    // 이것뿐이라, 가드를 지웠을 때 깨지는 테스트가 없으면 다음 사람이 조용히 지운다 (docs/80 결정 5).
+    @Test
+    void 계약이_깨져_유상_참여의_계좌가_비어도_500이_나지_않는다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation broken =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      setField(broken, "bundleId", null);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(broken));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(601L))).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants()).hasSize(1);
+      assertThat(response.participants().get(0).depositorName()).isNull();
+    }
+
+    // 0원 참여는 생성 즉시 CONFIRMED 라, 취소되면 "환불 필요" 판정에 걸려 계좌 응답 조립까지 간다.
+    @Test
+    void 계좌가_없는_0원_참여가_취소되면_계좌를_null로_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CANCELLED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation cancelled =
+          participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "bundleId", null);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse target = response.cancelledParticipants().get(0);
+      assertThat(target.refundAccount()).isNull();
+      assertThat(target.depositorName()).isNull();
+    }
+
     @Test
     void 취소분은_참여자_목록과_확정_인원_집계에_섞이지_않는다() {
       stubBasicBuncheol(BuncheolStatus.CONFIRMED);
@@ -386,7 +625,12 @@ class BuncheolManagementQueryServiceTest {
   }
 
   private void stubBasicBuncheol(final BuncheolStatus status) {
+    stubBasicBuncheol(status, FlowType.LEGACY);
+  }
+
+  private void stubBasicBuncheol(final BuncheolStatus status, final FlowType flowType) {
     Buncheol buncheol = buncheol(status);
+    setField(buncheol, "flowType", flowType);
     given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(buncheol));
     given(groupRepository.findById(GROUP_ID)).willReturn(Optional.of(group(GROUP_ID, "IVE")));
   }
@@ -449,7 +693,7 @@ class BuncheolManagementQueryServiceTest {
     setField(p, "participantId", participantId);
     setField(p, "shippingAddressId", 200L);
     setField(p, "amount", amount);
-    setField(p, "refundAccount", REFUND_ACCOUNT);
+    setField(p, "bundleId", BUNDLE_ID_BASE + id);
     setField(p, "dueAt", DUE_AT);
     setField(p, "status", status);
     return p;

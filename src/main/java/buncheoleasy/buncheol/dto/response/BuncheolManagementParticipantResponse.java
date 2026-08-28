@@ -11,8 +11,9 @@ import java.time.Instant;
  * depositorName} 만 내리고 {@code refundAccount} 는 {@code null} 이다. 계좌번호는 <b>개최자가 실제로 환불해야 하는 건</b>, 즉
  * 취소분 중 입금 흔적(마킹·입금확인)이 있는 건에만 채운다 — 직거래라 환불 주체가 개최자다.
  *
- * <p>{@code amount} 는 <b>배송비를 포함한 입금 총액</b>이고 {@code shippingFee} 는 그중 배송비다. 다슬롯은 배송비가 묶음 첫 슬롯에만
- * 붙어(같은 분철의 두 번째 슬롯은 0) 참여자별 총액이 서로 다른데, 합계만 보면 개최자가 그 차이를 설명할 수 없다 (docs/53 Q-22).
+ * <p>{@code amount} 는 <b>배송비를 포함한 입금 총액</b>이고 {@code shippingFee} 는 그중 배송비다. 배송비는 <b>묶음당 1회</b>라
+ * 같은 묶음의 두 번째 슬롯은 0 이고, 참여자별 총액이 서로 달라진다 — 합계만 보면 개최자가 그 차이를 설명할 수 없다 (docs/53 Q-22).
+ * ⚠️ 성사 확정 후 추가 모집은 <b>새 묶음</b>이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다.
  */
 public record BuncheolManagementParticipantResponse(
     Long participationId,

@@ -34,6 +34,12 @@ public class Delivery extends TimestampedEntity {
   @Column(name = "participation_id", nullable = false, updatable = false)
   private Long participationId;
 
+  // 소속 묶음 (participation_bundles.id) = 택배 1개의 단위. 백필 이전 행과 P2-b 배포선 창에서 생긴 행은 NULL 이다.
+  // ⚠️ 다슬롯 묶음은 배송이 여러 건일 수 있다(참여당 1건씩 만들어졌으므로) — P4 에서 유니크로 승격하기 전에
+  // 사람이 병합해야 한다(03-verify.sql V8).
+  @Column(name = "bundle_id", updatable = false)
+  private Long bundleId;
+
   // 분철 마감 시점에 찍은 배송 방법 스냅샷 (이후 사용자가 배송지 변경해도 불변).
   @Enumerated(EnumType.STRING)
   @Column(name = "shipping_method", nullable = false, length = 20, updatable = false)
@@ -78,16 +84,18 @@ public class Delivery extends TimestampedEntity {
 
   public static Delivery createSnapshot(
       final Long participationId,
+      final Long bundleId,
       final ShippingMethod shippingMethod,
       final String storeName,
       final String receiverNickname,
       final String receiverPhoneNumber) {
     return new Delivery(
-        participationId, shippingMethod, storeName, receiverNickname, receiverPhoneNumber);
+        participationId, bundleId, shippingMethod, storeName, receiverNickname, receiverPhoneNumber);
   }
 
   private Delivery(
       final Long participationId,
+      final Long bundleId,
       final ShippingMethod shippingMethod,
       final String storeName,
       final String receiverNickname,
@@ -95,6 +103,7 @@ public class Delivery extends TimestampedEntity {
     validateSnapshot(
         participationId, shippingMethod, storeName, receiverNickname, receiverPhoneNumber);
     this.participationId = participationId;
+    this.bundleId = bundleId;
     this.shippingMethod = shippingMethod;
     this.storeName = storeName;
     this.receiverNickname = receiverNickname;

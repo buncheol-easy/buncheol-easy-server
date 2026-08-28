@@ -8,6 +8,8 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
@@ -35,6 +37,7 @@ public class ParticipationDetailQueryService {
   private final UserDomainService userDomainService;
   private final DeliveryRepository deliveryRepository;
   private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -73,7 +76,11 @@ public class ParticipationDetailQueryService {
             shippingFeePaybackPolicy.deriveStatus(
                 participation, buncheol.getFlowType(), delivery, Instant.now(clock)),
             shippingFeePaybackPolicy.submitDeadline(
-                participation, buncheol.getFlowType(), delivery));
+                participation, buncheol.getFlowType(), delivery),
+            participationBundleDomainService
+                .findByParticipation(participation)
+                .map(ParticipationBundle::getRefundAccount)
+                .orElse(null));
 
     return new ParticipationDetailResponse(
         participation.getId(),

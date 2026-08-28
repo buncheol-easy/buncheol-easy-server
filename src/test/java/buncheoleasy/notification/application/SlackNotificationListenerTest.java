@@ -214,4 +214,27 @@ class SlackNotificationListenerTest {
       then(slackWebhookClient).should(never()).send(any(), anyString(), anyList());
     }
   }
+
+  // 🔴 묶음이 없으면(배포선 창의 미연결 참여) 조건 없이 역참조하다 NPE 가 나고, @Async 라 예외가 워커 스레드
+  // 로그로만 끝나 메시지가 통째로 안 나간다. 같은 조건에서 페이액션 등록도 스킵되므로(DepositOrderListener)
+  // 그 알림까지 죽으면 자동확인도 안 되고 운영자도 모르는 참여가 된다.
+  @Test
+  void 묶음이_없어도_신규_참여_알림은_발송된다() {
+    given(slackWebhookClient.isEnabled(SlackChannel.NEW_PARTICIPATION)).willReturn(true);
+    Buncheol buncheol = mock(Buncheol.class);
+    given(buncheol.getTitle()).willReturn("엔믹스 앨범");
+    given(buncheol.getId()).willReturn(7L);
+    User participant = mock(User.class);
+    given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
+    given(participant.getName()).willReturn("김실명");
+    Participation participation = mock(Participation.class);
+    given(participation.getDueAt()).willReturn(Instant.parse("2026-07-06T03:30:00Z"));
+    given(assembler.loadByParticipation(1L))
+        .willReturn(
+            new ParticipationView(participation, null, buncheol, "설윤", participant, null, 23_000L));
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
+
+    then(slackWebhookClient).should().send(eq(SlackChannel.NEW_PARTICIPATION), any(), any());
+  }
 }

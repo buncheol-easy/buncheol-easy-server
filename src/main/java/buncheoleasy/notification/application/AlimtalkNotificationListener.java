@@ -241,14 +241,6 @@ public class AlimtalkNotificationListener {
 
   // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).
   // 발송만 거르고 수신함 기록은 남긴다.
-  /** 입금자명(묶음의 예금주). 미연결 참여는 참여자 닉네임으로 대신한다 — 개최자가 누구인지는 알아야 한다. */
-  private static String depositorNameOf(final ParticipationView view) {
-    if (view.bundle() != null && view.bundle().getRefundAccount() != null) {
-      return view.bundle().getRefundAccount().holder();
-    }
-    return view.participant().getNickname().value();
-  }
-
   private String hostPhoneOrNull(final User host, final Long buncheolId) {
     if (host.getPhoneNumber() == null) {
       log.error("개최자 전화번호 미등록으로 알림톡 발송 건너뜀 - buncheolId={}", buncheolId);
@@ -528,5 +520,15 @@ public class AlimtalkNotificationListener {
     } catch (final RuntimeException e) {
       log.error("수신함 알림 기록 실패 - template={}, recipientId={}", template, recipientId, e);
     }
+  }
+
+  /** 입금자명(묶음의 예금주). 미연결 참여는 참여자 닉네임으로 대신한다 — 개최자가 누구인지는 알아야 한다. */
+  private static String depositorNameOf(final ParticipationView view) {
+    if (view.bundle() != null && view.bundle().getRefundAccount() != null) {
+      return view.bundle().getRefundAccount().holder();
+    }
+    // 값이 실명이 아님을 드러낸다 — 그냥 닉네임만 내보내면 개최자가 통장에 없는 이름으로 대조하다
+    // 정상 입금을 반려로 처리할 수 있다(같은 메시지의 「참여자닉네임」과 값이 정확히 같아진다).
+    return "%s(닉네임)".formatted(view.participant().getNickname().value());
   }
 }

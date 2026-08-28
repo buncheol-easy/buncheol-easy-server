@@ -5,10 +5,8 @@ import buncheoleasy.admin.domain.payment.AdminPaymentStatus;
 import buncheoleasy.admin.domain.payment.AdminPaymentView;
 import buncheoleasy.admin.domain.payment.BuncheolConfirmedCount;
 import buncheoleasy.admin.dto.response.AdminPaymentRecordResponse;
-import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
-import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
@@ -27,13 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AdminPaymentQueryService {
-
-  /** 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려간다. */
-  static RefundAccount refundAccountOf(
-      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
-    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
-    return bundle == null ? null : bundle.getRefundAccount();
-  }
 
   private static final int MIN_SIZE = 1;
   private static final int MAX_SIZE = 100;
@@ -71,7 +62,7 @@ public class AdminPaymentQueryService {
                     AdminPaymentRecordResponse.of(
                         view,
                         confirmedCountByBuncheolId.getOrDefault(view.buncheol().getId(), 0L),
-                        refundAccountOf(bundleById, view.participation())))
+                        ParticipationBundleDomainService.refundAccountOf(bundleById, view.participation())))
             .toList();
 
     final var lastParticipation = visible.getLast().participation();

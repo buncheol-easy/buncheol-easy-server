@@ -162,8 +162,8 @@ public class BuncheolManagementQueryService {
       final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
-    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
-    RefundAccount refundAccount = bundle == null ? null : bundle.getRefundAccount();
+    RefundAccount refundAccount =
+        ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
     return new BuncheolManagementParticipantResponse(
         participation.getId(),

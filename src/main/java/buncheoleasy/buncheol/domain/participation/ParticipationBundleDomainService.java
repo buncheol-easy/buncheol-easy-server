@@ -121,6 +121,18 @@ public class ParticipationBundleDomainService {
         .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
   }
 
+  /**
+   * 배치 조회 결과에서 이 참여의 계좌를 꺼낸다. 미연결 참여(배포선 창)는 {@code null}.
+   *
+   * <p>{@link #findAllByParticipations} 가 정의한 규약("{@code map.get(bundleId)} 가 null 일 수 있다")을 지키는
+   * 자리라 같은 클래스에 둔다 — 호출부마다 3항 연산을 흩뿌리면 한 곳만 빠뜨렸을 때 NPE 다.
+   */
+  public static RefundAccount refundAccountOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
+    return bundle == null ? null : bundle.getRefundAccount();
+  }
+
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */
   public int closeEmptyByBuncheolId(final Long buncheolId, final Instant now) {
     return participationBundleRepository.closeEmptyByBuncheolId(buncheolId, now);

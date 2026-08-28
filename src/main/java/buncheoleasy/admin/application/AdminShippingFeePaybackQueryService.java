@@ -49,7 +49,7 @@ public class AdminShippingFeePaybackQueryService {
                 view ->
                     AdminShippingFeePaybackResponse.from(
                         view,
-                        AdminPaymentQueryService.refundAccountOf(bundleById, view.participation())))
+                        ParticipationBundleDomainService.refundAccountOf(bundleById, view.participation())))
             .toList();
 
     final var lastParticipation = visible.getLast().participation();

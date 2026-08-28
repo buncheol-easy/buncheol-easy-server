@@ -154,8 +154,8 @@ public class MyParticipationQueryService {
       final Instant now) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려간다. 백필이 채우면 다음 조회부터 나온다.
-    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
-    RefundAccount refundAccount = bundle == null ? null : bundle.getRefundAccount();
+    RefundAccount refundAccount =
+        ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();

@@ -236,13 +236,20 @@ public class ParticipationService {
       shippingAddressId = shippingAddress.getId();
       shippingFee = buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
     }
+    // 재사용 후보를 여기서 한 번만 뽑는다 — 배송지·배송비·입금자명·묶음이 같은 existing 에서 나오게.
+    Long reusableBundleId = existing.map(Participation::getBundleId).orElse(null);
+
     // C2C 는 0원 슬롯이어도 예금주를 개최자 통장 대조 키로 쓰므로 금액과 무관하게 계좌를 요구한다.
     //
-    // 상속 분기에서도 그냥 다시 스냅샷한다 — 이 값은 <b>새 묶음을 열 때만</b> 쓰이기 때문이다. 모집중 재참여는
-    // 기존 묶음을 재사용하므로 그 묶음이 이미 가진 계좌가 그대로 남고, docs/46 §4.7-A2 의 "입금자명 1개" 보장은
-    // 이제 <b>값을 복사하는 것이 아니라 묶음을 공유하는 것</b>으로 성립한다 (P2-c).
-    // 재사용 후보의 bundle_id 가 비어 있으면(배포선 창) 새 묶음이 열리고, 그때는 새 스냅샷이 맞다.
-    RefundAccount refundAccount = refundAccountSnapshot(participantId);
+    // 🔴 단, <b>새 묶음을 열 때만</b> 필요하다. 모집중 재참여는 기존 묶음을 재사용하므로 그 묶음이 이미 가진
+    // 계좌가 정본이고, docs/46 §4.7-A2 의 "입금자명 1개" 보장은 이제 <b>값을 복사하는 것이 아니라 묶음을
+    // 공유하는 것</b>으로 성립한다 (P2-c).
+    //
+    // 재사용인데도 스냅샷을 뜨면 ① 유저 조회 헛쿼리가 다슬롯 재참여마다 1건 ② 계좌 강제(PR #151) 이전에
+    // 만들어진 활성 C2C 참여를 가진 사람의 재참여가 USER_BANK_ACCOUNT_NOT_REGISTERED 로 <b>새로 막힌다</b>
+    // — 묶음을 재사용하니 계좌가 실제로는 필요 없는 경우인데도.
+    RefundAccount refundAccount =
+        reusableBundleId == null ? refundAccountSnapshot(participantId) : null;
 
     // 🔴 묶음 경계 판정은 「분철 상태」다 (docs/80 결정 12) — 그리고 그 판정은 <b>아래 switch 자체</b>다.
     // RECRUITING(applyC2c)만 기존 묶음을 재사용하고, PAYMENT_COLLECTING(joinCollectingC2c)은 재사용 후보를
@@ -266,8 +273,7 @@ public class ParticipationService {
               shippingAddressId,
               shippingFee,
               refundAccount,
-              // 위 상속 분기와 같은 existing 에서 나온다 — 둘이 갈리면 배송비와 묶음이 어긋난다.
-              existing.map(Participation::getBundleId).orElse(null),
+              reusableBundleId,
               now);
       case PAYMENT_COLLECTING ->
           joinCollectingC2c(

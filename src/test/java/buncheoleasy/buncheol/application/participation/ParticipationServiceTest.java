@@ -906,8 +906,7 @@ class ParticipationServiceTest {
     void C2C_모집중_재참여는_기존_묶음을_재사용한다() {
       stubC2c(BuncheolStatus.RECRUITING);
       givenExistingActive(EXISTING_BUNDLE_ID);
-      // 상속 분기도 계좌를 스냅샷한다 — 재사용 후보의 묶음이 비어 있으면 새로 열어야 하기 때문이다 (P2-c).
-      givenParticipantAccount();
+      // 재사용이면 계좌 스냅샷을 뜨지 않는다 — 그 묶음이 이미 가진 계좌가 정본이다 (P2-c).
       givenAppliedInsert();
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
@@ -1103,7 +1102,6 @@ class ParticipationServiceTest {
     void 모집중_재참여는_배송지와_입금자명을_상속하고_배송비를_부과하지_않는다() {
       stubC2c(BuncheolStatus.RECRUITING);
       givenExistingActive();
-      givenParticipantAccount();
       given(participationDomainService.createParticipationIfRecruiting(any()))
           .willAnswer(
               invocation -> {

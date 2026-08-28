@@ -8,7 +8,6 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
-import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;

@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS participations
     bundle_id                    BIGINT       NULL COMMENT '소속 묶음',
     shipping_address_id          BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
     amount                       BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
-    shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
+    shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회. 같은 사람이라도 묶음이 다르면 각각 >0 — 추가 모집은 새 묶음이다). 입금 총액 = amount + shipping_fee',
     -- NULL 은 참여 계좌 강제(PR #151) 이전에 만들어진 0원(코드) 참여의 잔여 행뿐이다. 신규 참여는 금액과
     -- 무관하게 세 칸이 모두 채워진다 — participation_bundles.refund_* 가 NOT NULL 이라 계좌 없는 참여는
     -- 묶음을 만들 수 없기 때문이다. 컬럼 자체는 P2 에서 정본이 묶음으로 옮겨가며 INSERT 목록에서 빠지고

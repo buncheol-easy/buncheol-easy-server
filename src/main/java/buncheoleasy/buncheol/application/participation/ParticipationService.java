@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
@@ -168,8 +169,13 @@ public class ParticipationService {
    * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)엔 무입금 신청(APPLIED)으로 슬롯을 선점하고, 성사 확정 후 입금
    * 수집중(PAYMENT_COLLECTING)엔 빈 슬롯에 즉시입금(AWAITING_PAYMENT, 개별 24h)으로 진입한다(추가 모집 — §4.7-E1).
    *
-   * <p>다슬롯 일관성(§4.7-A1·A2): 같은 분철에 기존 활성 참여가 있으면 배송지·환불계좌(입금자명)를 강제로 재사용하고 배송비는 첫 참여에만 부과한다 — 개최자
-   * 통장 대조(입금자명 1개)와 배송 1묶음을 보장한다. 요청의 배송지 입력은 무시된다(FE 는 프리필+잠금).
+   * <p>다슬롯 일관성(§4.7-A1·A2)은 <b>모집중 구간에만</b> 적용된다: 그 구간의 재참여는 배송지·환불계좌(입금자명)를 강제로 재사용하고
+   * 배송비는 첫 참여에만 부과한다 — 한 번의 이체·한 개의 택배이므로 개최자 통장 대조(입금자명 1개)와 배송 1묶음이 성립한다. 요청의 배송지
+   * 입력은 무시된다(FE 는 프리필+잠금).
+   *
+   * <p><b>성사 확정 뒤 추가 모집은 별개 거래다</b> — 새 묶음·새 이체·새 택배라 배송지를 다시 고르고 배송비를 다시 부과하며 입금자명도 그
+   * 시점 프로필로 다시 스냅샷한다. A1·A2 의 근거는 무너지지 않는다: 묶음이 나뉘면 이체와 택배도 같이 나뉘므로 <b>이체별로 실제 입금자명이
+   * 맞아떨어지는 쪽이 오히려 정확하다</b>(옛 이름을 상속하면 통장에 안 찍힌 이름으로 대조하게 된다).
    */
   private ParticipateResult participateC2c(
       final Buncheol loaded,
@@ -196,10 +202,18 @@ public class ParticipationService {
     }
     Optional<Participation> existing =
         participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId);
+    // 🔴 상속은 <b>모집중 재참여에만</b> 적용된다. 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라
+    // 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6).
+    //
+    // ⚠️ 이 조건이 아래 묶음 재사용 판정과 <b>같은 하나</b>여야 한다. 둘로 나누면 "배송비는 상속했는데
+    // 묶음은 새로" 같은 어긋남이 생긴다 — 그러면 새 택배에 배송비가 0원으로 굳고, shipping_fee 와
+    // shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
+    boolean inheritsFromExisting =
+        existing.isPresent() && buncheol.getStatus() == BuncheolStatus.RECRUITING;
     final Long shippingAddressId;
     final long shippingFee;
     final RefundAccount refundAccount;
-    if (existing.isPresent()) {
+    if (inheritsFromExisting) {
       shippingAddressId = existing.get().getShippingAddressId();
       shippingFee = 0L;
       refundAccount = existing.get().getRefundAccount();
@@ -235,8 +249,8 @@ public class ParticipationService {
               shippingAddressId,
               shippingFee,
               refundAccount,
-              // 재사용 후보를 이 케이스 안에서만 계산해, "추가 모집은 넘겨받지 않는다" 를 구조로 드러낸다.
-              existing.map(Participation::getBundleId).orElse(null),
+              // 상속 판정과 같은 조건에서 나온다 — 둘이 갈리면 배송비와 묶음이 어긋난다.
+              inheritsFromExisting ? existing.get().getBundleId() : null,
               now);
       case PAYMENT_COLLECTING ->
           joinCollectingC2c(

@@ -214,8 +214,14 @@ public class BuncheolService {
    * <p>공백 해석은 {@link Buncheol#replaceOpenChatUrl} 이 쥔다 — 제거다.
    *
    * <p>⚠️ <b>이 가드는 안내용이며 원자성을 보장하지 않는다.</b> 로드 시점 {@code status} 스냅샷을 보고 쓰기는 커밋 시점 flush 라, 그
-   * 사이 취소 CAS 가 커밋되면 취소된 분철에 링크가 쓰인다. 취소된 분철의 링크를 읽는 화면이 없어 무해하다고 보고 수용했다 — <b>다른 필드를 이
-   * 패턴으로 얹지 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
+   * 사이 취소 CAS 가 커밋되면 취소된 분철에 링크가 쓰인다. <b>취소된 분철의 링크를 읽는 경로는 있다</b> — {@code
+   * MyParticipationQueryService}·{@code ParticipationDetailQueryService} 는 분철 상태를 보지 않는다. 그런데도 수용한 것은
+   * <b>노출 대상이 넓어지지 않기 때문</b>이다: ① 두 경로 모두 <b>참여자 본인</b>에게만 열려 있고, 개최자가 저장을 누른 시점에 이미 그들에게
+   * 보여줄 작정이던 값이다(기존 값이 있던 건이면 경합이 없어도 같은 참여자가 같은 자리에서 계속 본다) ② 이 경로는 이벤트를 발행하지 않아 잘못
+   * 쓰인 값이 능동적으로 퍼지지 않는다. ⚠️ 다만 화면이 취소 건을 전부 가려 주지는 않는다 — 클라 {@code BidHistoryContent} 의 카드
+   * 경로는 숨기지만 결제 시트 경로에는 취소 게이트가 없다. ⚠️ 그리고 취소 뒤에는 개최자가 스스로 되돌릴 수 없다({@link
+   * Buncheol#validateOpenChatUrlEditable} 이 CANCELLED·HOST_CANCELLED 를 막는다). <b>다른 필드를 이 패턴으로 얹지
+   * 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
    *
    * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(성사 확정·진행
    * 확정)만 {@code isC2c()} 로 막는다.

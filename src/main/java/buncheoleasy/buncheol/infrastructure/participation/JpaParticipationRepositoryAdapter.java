@@ -70,10 +70,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   // flow_type 은 buncheols 에서 복사해 비정규화한다 — LEGACY 전용 1인 1참여 유니크
   // (uq_participations_legacy_active_participant)의 generated column 이 참조하기 위함.
   private static final String INSERT_COLUMNS_SQL =
+      // refund_* 는 더 이상 싣지 않는다 — 정본이 participation_bundles 로 옮겨갔다 (P2-c).
+      // 컬럼은 P4 에서 삭제될 때까지 남고 그 사이 새 행은 NULL 이다(세 칸 모두 NULL 이라 조회도 안전하다).
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-          + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account, refund_holder,"
+          + " shipping_address_id, amount, shipping_fee,"
           + " due_at, status, flow_type, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
 
   /**
    * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
@@ -119,20 +121,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(4, participation.getShippingAddressId());
                 ps.setLong(5, participation.getAmount());
                 ps.setLong(6, participation.getShippingFee());
-                // 세 컬럼 모두 NULL 이면 조회 시 임베더블이 null 로 온다 (부분 NULL 은 RefundAccount 생성자가 거부).
-                // 신규 참여는 금액과 무관하게 계좌를 채우지만(ParticipationService), 도메인 불변식이 아직 null 을
-                // 허용하므로(Participation#validate) null 바인딩을 방어적으로 남긴다.
-                RefundAccount refundAccount = participation.getRefundAccount();
-                ps.setString(7, refundAccount == null ? null : refundAccount.bank());
-                ps.setString(8, refundAccount == null ? null : refundAccount.account());
-                ps.setString(9, refundAccount == null ? null : refundAccount.holder());
                 // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
                 ps.setTimestamp(
-                    10,
+                    7,
                     participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
                     UTC);
-                ps.setString(11, participation.getStatus().name());
-                ps.setLong(12, participation.getBuncheolId()); // WHERE id = ?
+                ps.setString(8, participation.getStatus().name());
+                ps.setLong(9, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
               },
               keyHolder);

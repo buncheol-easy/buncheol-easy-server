@@ -3,6 +3,11 @@ package buncheoleasy.buncheol.domain.participation;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -94,6 +99,26 @@ public class ParticipationBundleDomainService {
       return;
     }
     participationBundleRepository.closeIfNoActiveSlots(bundleId, now);
+  }
+
+  /** 참여 한 건의 묶음. 미연결 행(배포선 창)이면 비어 있다. */
+  public Optional<ParticipationBundle> findByParticipation(final Participation participation) {
+    return participation.getBundleId() == null
+        ? Optional.empty()
+        : participationBundleRepository.findById(participation.getBundleId());
+  }
+
+  /**
+   * 참여 목록의 묶음을 한 번에 읽어 {@code 묶음 id → 묶음} 으로 돌려준다 (목록 화면 N+1 방지).
+   *
+   * <p>미연결 참여는 결과에 없다 — 호출부는 {@code map.get(bundleId)} 가 {@code null} 일 수 있음을 전제할 것.
+   */
+  public Map<Long, ParticipationBundle> findAllByParticipations(
+      final Collection<Participation> participations) {
+    return participationBundleRepository
+        .findAllByIds(participations.stream().map(Participation::getBundleId).toList())
+        .stream()
+        .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
   }
 
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */

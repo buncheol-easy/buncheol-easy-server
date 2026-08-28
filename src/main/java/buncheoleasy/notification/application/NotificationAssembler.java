@@ -5,6 +5,8 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.Delivery;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Component;
 public class NotificationAssembler {
 
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final GroupDomainService groupDomainService;
@@ -37,9 +40,18 @@ public class NotificationAssembler {
     String memberName = resolveMemberName(buncheol.getGroupId(), buncheolMember.getMemberId());
     User participant = userDomainService.getUser(participation.getParticipantId());
     User host = userDomainService.getUser(buncheol.getHostId());
+    // 환불 계좌·입금자명의 정본은 묶음이다 (P2-c). 미연결 행이면 비어 있고, 그 경우 알림은 대체 문자열로 나간다.
+    ParticipationBundle bundle =
+        participationBundleDomainService.findByParticipation(participation).orElse(null);
     // 입금 총액(멤버 금액 + 배송비)은 참여 생성 시 산정·스냅샷된 값을 그대로 쓴다.
     return new ParticipationView(
-        participation, buncheol, memberName, participant, host, participation.getTotalAmount());
+        participation,
+        bundle,
+        buncheol,
+        memberName,
+        participant,
+        host,
+        participation.getTotalAmount());
   }
 
   public BuncheolHostView loadBuncheolHost(final Long buncheolId) {

@@ -1,5 +1,6 @@
 package buncheoleasy.notification.application;
 
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -31,6 +32,7 @@ class NotificationAssemblerTest {
   @InjectMocks private NotificationAssembler assembler;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
   @Mock private GroupDomainService groupDomainService;

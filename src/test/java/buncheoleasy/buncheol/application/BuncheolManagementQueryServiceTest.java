@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.application;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,6 +18,8 @@ import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -36,9 +40,13 @@ import buncheoleasy.user.domain.UserRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -60,6 +68,7 @@ class BuncheolManagementQueryServiceTest {
   @Mock private GroupRepository groupRepository;
   @Mock private GroupMemberRepository groupMemberRepository;
   @Mock private UserRepository userRepository;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
@@ -70,6 +79,31 @@ class BuncheolManagementQueryServiceTest {
   private static final Instant DUE_AT = Instant.parse("2026-06-02T12:00:00Z");
   private static final Instant CONFIRMED_AT = Instant.parse("2026-06-01T18:00:00Z");
   private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
+  private static final Long BUNDLE_ID_BASE = 9000L;
+
+  /**
+   * 계좌·입금자명의 정본은 묶음이다 (P2-c). 픽스처가 심은 {@code bundleId} 를 가진 참여에는 계좌 있는 묶음을 돌려주고,
+   * {@code bundleId} 가 없는 참여(배포선 창의 미연결 행)에는 아무것도 주지 않는다.
+   */
+  @BeforeEach
+  void stubBundles() {
+    lenient()
+        .when(participationBundleDomainService.findAllByParticipations(any()))
+        .thenAnswer(
+            invocation -> {
+              Collection<Participation> participations = invocation.getArgument(0);
+              Map<Long, ParticipationBundle> byId = new HashMap<>();
+              for (Participation participation : participations) {
+                if (participation.getBundleId() == null) {
+                  continue;
+                }
+                ParticipationBundle bundle = mock(ParticipationBundle.class);
+                lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+                byId.put(participation.getBundleId(), bundle);
+              }
+              return byId;
+            });
+  }
 
   @Nested
   @DisplayName("개최자 분철 관리 화면 조회")
@@ -369,7 +403,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "레이")));
       Participation free =
           participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CONFIRMED);
-      setField(free, "refundAccount", null);
+      setField(free, "bundleId", null);
       setField(free, "confirmedAt", CONFIRMED_AT);
       Participation paid =
           participation(602L, 102L, OTHER_USER, 53_000L, ParticipationStatus.CONFIRMED);
@@ -518,7 +552,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "안유진")));
       Participation broken =
           participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CONFIRMED);
-      setField(broken, "refundAccount", null);
+      setField(broken, "bundleId", null);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(broken));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
@@ -544,7 +578,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "안유진")));
       Participation cancelled =
           participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CANCELLED);
-      setField(cancelled, "refundAccount", null);
+      setField(cancelled, "bundleId", null);
       setField(cancelled, "confirmedAt", CONFIRMED_AT);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
@@ -659,7 +693,7 @@ class BuncheolManagementQueryServiceTest {
     setField(p, "participantId", participantId);
     setField(p, "shippingAddressId", 200L);
     setField(p, "amount", amount);
-    setField(p, "refundAccount", REFUND_ACCOUNT);
+    setField(p, "bundleId", BUNDLE_ID_BASE + id);
     setField(p, "dueAt", DUE_AT);
     setField(p, "status", status);
     return p;

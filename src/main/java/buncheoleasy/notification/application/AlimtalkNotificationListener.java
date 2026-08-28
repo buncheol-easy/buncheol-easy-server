@@ -241,6 +241,14 @@ public class AlimtalkNotificationListener {
 
   // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).
   // 발송만 거르고 수신함 기록은 남긴다.
+  /** 입금자명(묶음의 예금주). 미연결 참여는 참여자 닉네임으로 대신한다 — 개최자가 누구인지는 알아야 한다. */
+  private static String depositorNameOf(final ParticipationView view) {
+    if (view.bundle() != null && view.bundle().getRefundAccount() != null) {
+      return view.bundle().getRefundAccount().holder();
+    }
+    return view.participant().getNickname().value();
+  }
+
   private String hostPhoneOrNull(final User host, final Long buncheolId) {
     if (host.getPhoneNumber() == null) {
       log.error("개최자 전화번호 미등록으로 알림톡 발송 건너뜀 - buncheolId={}", buncheolId);
@@ -263,7 +271,9 @@ public class AlimtalkNotificationListener {
             "분철명", view.buncheol().getTitle(),
             "멤버명", view.memberName(),
             "참여자닉네임", view.participant().getNickname().value(),
-            "입금자명", view.participation().getRefundAccount().holder(),
+            // ⚠️ Map.of 는 null 에 NPE 를 던진다. 정본(묶음)이 비어 있어도 대체 문자열로 채워 발송을 살린다 —
+            // 스킵하면 「보냈어요」 알림이 개최자에게 영영 안 간다.
+            "입금자명", depositorNameOf(view),
             "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
             "분철ID", String.valueOf(view.buncheol().getId()));
     recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);

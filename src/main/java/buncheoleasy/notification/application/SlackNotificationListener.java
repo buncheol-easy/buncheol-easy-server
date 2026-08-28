@@ -74,7 +74,9 @@ public class SlackNotificationListener {
       sendFreeParticipation(view);
       return;
     }
-    RefundAccount refundAccount = view.participation().getRefundAccount();
+    // 정본은 묶음이다 (P2-c). 배포선 창의 미연결 참여는 비어 있을 수 있어 대체 문자열로 낸다 —
+    // ⚠️ 발송 자체를 스킵하면 안 된다. 이 알림이 LEGACY 수동 입금확인의 출발점이고 페이액션 실패 시 백업이다.
+    RefundAccount refundAccount = view.bundle() == null ? null : view.bundle().getRefundAccount();
 
     String fallbackText =
         "🔔 [신규 참여] %s (분철 #%d) - %s"
@@ -164,7 +166,7 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    RefundAccount refundAccount = view.participation().getRefundAccount();
+    RefundAccount refundAccount = view.bundle() == null ? null : view.bundle().getRefundAccount();
     Long paybackAmount = view.participation().getPaybackAmount();
     String tweetUrl = view.participation().getPaybackTweetUrl();
 

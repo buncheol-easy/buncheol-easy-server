@@ -5,6 +5,8 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -48,6 +50,7 @@ public class BuncheolManagementQueryService {
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final DeliveryRepository deliveryRepository;
   private final UserRepository userRepository;
   private final GroupRepository groupRepository;
@@ -94,6 +97,10 @@ public class BuncheolManagementQueryService {
             .stream()
             .collect(Collectors.toMap(User::getId, Function.identity()));
 
+    // 계좌·입금자명의 정본은 묶음이다 (P2-c). 참여마다 읽으면 N+1 이라 한 번에 채운다.
+    Map<Long, ParticipationBundle> bundleById =
+        participationBundleDomainService.findAllByParticipations(
+            Stream.concat(participations.stream(), cancelled.stream()).toList());
     // 0원 슬롯의 계좌 노출 판정이 플로우별로 다르다 ({@link #depositorNameOf}).
     boolean c2c = buncheol.isC2c();
     List<BuncheolManagementParticipantResponse> participants =
@@ -101,12 +108,13 @@ public class BuncheolManagementQueryService {
             .map(
                 p ->
                     toParticipant(
-                        p, memberNameBySlotId, userById, deliveryByParticipationId, c2c))
+                        p, memberNameBySlotId, userById, deliveryByParticipationId, bundleById,
+                        c2c))
             .toList();
     // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
     List<BuncheolManagementParticipantResponse> cancelledParticipants =
         cancelled.stream()
-            .map(p -> toParticipant(p, memberNameBySlotId, userById, Map.of(), c2c))
+            .map(p -> toParticipant(p, memberNameBySlotId, userById, Map.of(), bundleById, c2c))
             .toList();
 
     return new BuncheolManagementResponse(
@@ -150,21 +158,25 @@ public class BuncheolManagementQueryService {
       final Map<Long, String> memberNameBySlotId,
       final Map<Long, User> userById,
       final Map<Long, Delivery> deliveryByParticipationId,
+      final Map<Long, ParticipationBundle> bundleById,
       final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
+    // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
+    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
+    RefundAccount refundAccount = bundle == null ? null : bundle.getRefundAccount();
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
     return new BuncheolManagementParticipantResponse(
         participation.getId(),
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
-        depositorNameOf(participation, c2c),
+        depositorNameOf(participation, refundAccount, c2c),
         participation.getTotalAmount(),
         participation.getShippingFee(),
         participation.getStatus(),
         participation.getDueAt(),
         participation.getConfirmedAt(),
-        refundAccountFor(participation, c2c),
+        refundAccountFor(participation, refundAccount, c2c),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
         participation.getPaymentSentAt());
   }
@@ -193,13 +205,14 @@ public class BuncheolManagementQueryService {
    * <p>⚠️ 판정은 <b>금액</b>으로 한다 — 계좌 유무로 바꾸면 안 된다. {@code DepositOrderListener}·{@code
    * SlackNotificationListener} 도 같은 기준이다.
    */
-  private static String depositorNameOf(final Participation participation, final boolean c2c) {
-    RefundAccount refundAccount = participation.getRefundAccount();
+  private static String depositorNameOf(
+      final Participation participation, final RefundAccount refundAccount, final boolean c2c) {
     if (refundAccount == null) {
       if (!participation.isFree()) {
         log.warn(
-            "유상 참여에 환불 계좌가 없다 — 개최자가 통장 대조 키를 잃는다. participationId={}",
-            participation.getId());
+            "유상 참여의 묶음 계좌가 없다 — 개최자가 통장 대조 키를 잃는다. participationId={}, bundleId={}",
+            participation.getId(),
+            participation.getBundleId());
       }
       return null;
     }
@@ -217,10 +230,8 @@ public class BuncheolManagementQueryService {
    * 기준이다 — 둘이 갈리면 목록에는 뜨는데 계좌가 비는 행이 생긴다.
    */
   private static RefundAccountResponse refundAccountFor(
-      final Participation participation, final boolean c2c) {
-    return needsHostRefund(participation, c2c)
-        ? RefundAccountResponse.from(participation.getRefundAccount())
-        : null;
+      final Participation participation, final RefundAccount refundAccount, final boolean c2c) {
+    return needsHostRefund(participation, c2c) ? RefundAccountResponse.from(refundAccount) : null;
   }
 
   private static boolean needsHostRefund(final Participation participation, final boolean c2c) {

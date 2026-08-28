@@ -10,7 +10,10 @@ import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
@@ -45,6 +48,7 @@ public class MyParticipationQueryService {
   private final DeliveryRepository deliveryRepository;
   private final UserRepository userRepository;
   private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -95,6 +99,9 @@ public class MyParticipationQueryService {
 
     Map<Long, HostAccountResponse> hostAccountByHostId =
         findHostAccountsForAwaitingPayments(participations, buncheolById);
+    // 계좌·입금자명의 정본은 묶음이다 (P2-c). 건별로 읽으면 참여 수만큼 쿼리가 늘어난다(N+1).
+    Map<Long, ParticipationBundle> bundleById =
+        participationBundleDomainService.findAllByParticipations(participations);
 
     final Instant now = Instant.now(clock);
     return participations.stream()
@@ -109,6 +116,7 @@ public class MyParticipationQueryService {
                     thumbnailByBuncheolId,
                     deliveryByParticipationId,
                     hostAccountByHostId,
+                    bundleById,
                     now))
         .toList();
   }
@@ -142,8 +150,12 @@ public class MyParticipationQueryService {
       final Map<Long, String> thumbnailByBuncheolId,
       final Map<Long, Delivery> deliveryByParticipationId,
       final Map<Long, HostAccountResponse> hostAccountByHostId,
+      final Map<Long, ParticipationBundle> bundleById,
       final Instant now) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
+    // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려간다. 백필이 채우면 다음 조회부터 나온다.
+    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
+    RefundAccount refundAccount = bundle == null ? null : bundle.getRefundAccount();
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
@@ -160,9 +172,7 @@ public class MyParticipationQueryService {
                 : hostAccountByHostId.get(buncheol.getHostId());
     // 입금자명 안내용. 참여 시점 예금주명이라 프로필의 현재 계좌와 다를 수 있고, 자동 입금확인은 이 값으로 매칭한다.
     String refundHolder =
-        paymentPending && participation.getRefundAccount() != null
-            ? participation.getRefundAccount().holder()
-            : null;
+        paymentPending && refundAccount != null ? refundAccount.holder() : null;
     return new MyParticipationResponse(
         participation.getId(),
         participation.getBuncheolId(),
@@ -186,7 +196,8 @@ public class MyParticipationQueryService {
         ShippingFeePaybackResponse.of(
             participation,
             shippingFeePaybackPolicy.deriveStatus(participation, buncheol.getFlowType(), delivery, now),
-            shippingFeePaybackPolicy.submitDeadline(participation, buncheol.getFlowType(), delivery)),
+            shippingFeePaybackPolicy.submitDeadline(participation, buncheol.getFlowType(), delivery),
+            refundAccount),
         buncheol.getFlowType(),
         participation.getPaymentSentAt(),
         participation.getVisiblePaymentRejectedAt(),

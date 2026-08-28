@@ -188,12 +188,21 @@ class ParticipationServiceTest {
       assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
       assertThat(saved.getTotalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(saved.getDueAt()).isEqualTo(expectedDueAt);
-      assertThat(saved.getRefundAccount())
-          .isEqualTo(
-              RefundAccount.of(
-                  PARTICIPANT_ACCOUNT.bank(),
-                  PARTICIPANT_ACCOUNT.account(),
-                  PARTICIPANT_ACCOUNT.holder()));
+      // 계좌는 참여가 아니라 묶음이 갖는다 (P2-c) — 참여 행에는 더 이상 실리지 않는다.
+      then(participationBundleDomainService)
+          .should()
+          .attach(
+              any(),
+              isNull(),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(SHIPPING_FEE),
+              eq(
+                  RefundAccount.of(
+                      PARTICIPANT_ACCOUNT.bank(),
+                      PARTICIPANT_ACCOUNT.account(),
+                      PARTICIPANT_ACCOUNT.holder())),
+              eq(expectedDueAt),
+              eq(NOW));
       then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
     }
 
@@ -255,10 +264,17 @@ class ParticipationServiceTest {
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
-      then(participationDomainService)
+      then(participationDomainService).should().createParticipationIfRecruiting(any());
+      then(participationBundleDomainService)
           .should()
-          .createParticipationIfRecruiting(participationCaptor.capture());
-      assertThat(participationCaptor.getValue().getRefundAccount().account()).isEqualTo("111");
+          .attach(
+              any(),
+              isNull(),
+              any(),
+              eq(SHIPPING_FEE),
+              eq(RefundAccount.of("국민", "111", "홍길동")),
+              any(),
+              eq(NOW));
     }
 
     @Test
@@ -836,7 +852,6 @@ class ParticipationServiceTest {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
       setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
-      setField(existing, "refundAccount", INHERITED_REFUND_ACCOUNT);
       setField(existing, "bundleId", bundleId);
       lenient()
           .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
@@ -891,6 +906,8 @@ class ParticipationServiceTest {
     void C2C_모집중_재참여는_기존_묶음을_재사용한다() {
       stubC2c(BuncheolStatus.RECRUITING);
       givenExistingActive(EXISTING_BUNDLE_ID);
+      // 상속 분기도 계좌를 스냅샷한다 — 재사용 후보의 묶음이 비어 있으면 새로 열어야 하기 때문이다 (P2-c).
+      givenParticipantAccount();
       givenAppliedInsert();
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
@@ -948,6 +965,7 @@ class ParticipationServiceTest {
     void 재사용_후보의_묶음이_비어_있으면_새로_열되_배송비는_상속분을_쓴다() {
       stubC2c(BuncheolStatus.RECRUITING);
       givenExistingActive(null);
+      givenParticipantAccount();
       givenAppliedInsert();
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
@@ -990,7 +1008,6 @@ class ParticipationServiceTest {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
       setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
-      setField(existing, "refundAccount", INHERITED_REFUND_ACCOUNT);
       setField(existing, "bundleId", INHERITED_BUNDLE_ID);
       lenient()
           .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
@@ -1027,8 +1044,6 @@ class ParticipationServiceTest {
       assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
       // 상속한 옛 배송지가 아니라 요청한 배송지를 쓴다 — 새 택배라 소유·배송방법 검증도 여기서 처음 걸린다.
       assertThat(saved.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
-      // 입금자명도 그 시점 프로필로 다시 스냅샷한다 — 이체별로 통장에 찍히는 이름이 맞아야 한다.
-      assertThat(saved.getRefundAccount().holder()).isEqualTo(PARTICIPANT_ACCOUNT.holder());
       assertThat(saved.getShippingAddressId()).isNotEqualTo(INHERITED_ADDRESS_ID);
       // 🔴 정본은 묶음이다. 묶음의 배송지가 틀리면 updatable=false 라 코드로 못 되돌린다 —
       // 참여 행만 보는 검증으로는 상속분이 묶음에 흘러들어도 통과한다.
@@ -1039,7 +1054,12 @@ class ParticipationServiceTest {
               isNull(),
               eq(SHIPPING_ADDRESS_ID),
               eq(SHIPPING_FEE),
-              any(),
+              // 입금자명도 옛 이름이 아니라 그 시점 프로필로 다시 스냅샷한다 (P2-c: 계좌는 묶음이 갖는다).
+              eq(
+                  RefundAccount.of(
+                      PARTICIPANT_ACCOUNT.bank(),
+                      PARTICIPANT_ACCOUNT.account(),
+                      PARTICIPANT_ACCOUNT.holder())),
               eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
               eq(NOW));
       // 상속 조회 자체를 하지 않는다 — 추가 모집에서 상속은 구조적으로 불가능하다.
@@ -1083,6 +1103,7 @@ class ParticipationServiceTest {
     void 모집중_재참여는_배송지와_입금자명을_상속하고_배송비를_부과하지_않는다() {
       stubC2c(BuncheolStatus.RECRUITING);
       givenExistingActive();
+      givenParticipantAccount();
       given(participationDomainService.createParticipationIfRecruiting(any()))
           .willAnswer(
               invocation -> {
@@ -1100,7 +1121,12 @@ class ParticipationServiceTest {
       Participation saved = participationCaptor.getValue();
       assertThat(saved.getShippingFee()).isZero();
       assertThat(saved.getShippingAddressId()).isEqualTo(INHERITED_ADDRESS_ID);
-      assertThat(saved.getRefundAccount().holder()).isEqualTo("옛이름");
+      // 🔴 입금자명 상속은 이제 값을 복사하는 것이 아니라 <b>묶음을 공유하는 것</b>으로 성립한다 (P2-c).
+      // 기존 묶음을 재사용하므로 그 묶음이 이미 가진 예금주가 그대로 남는다 (docs/46 §4.7-A2).
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), eq(INHERITED_BUNDLE_ID), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(),
+              eq(NOW));
       // 상속 구간에서는 배송지 검증을 아예 타지 않는다(요청 입력을 무시한다).
       then(participationShippingAddressResolver).should(never()).resolve(any(), any(), any());
     }
@@ -1453,15 +1479,21 @@ class ParticipationServiceTest {
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
 
-      then(participationDomainService)
+      then(participationDomainService).should().createParticipationIfRecruiting(any());
+      then(participationBundleDomainService)
           .should()
-          .createParticipationIfRecruiting(participationCaptor.capture());
-      assertThat(participationCaptor.getValue().getRefundAccount())
-          .isEqualTo(
-              RefundAccount.of(
-                  PARTICIPANT_ACCOUNT.bank(),
-                  PARTICIPANT_ACCOUNT.account(),
-                  PARTICIPANT_ACCOUNT.holder()));
+          .attach(
+              any(),
+              isNull(),
+              any(),
+              eq(0L),
+              eq(
+                  RefundAccount.of(
+                      PARTICIPANT_ACCOUNT.bank(),
+                      PARTICIPANT_ACCOUNT.account(),
+                      PARTICIPANT_ACCOUNT.holder())),
+              any(),
+              eq(NOW));
     }
 
     @Test

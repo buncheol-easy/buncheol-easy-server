@@ -15,6 +15,7 @@ import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEven
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.notification.domain.SlackChannel;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
@@ -81,12 +82,13 @@ class SlackNotificationListenerTest {
       given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
       given(participant.getName()).willReturn("김실명");
       Participation participation = mock(Participation.class);
-      given(participation.getRefundAccount())
+      ParticipationBundle bundle = mock(ParticipationBundle.class);
+      given(bundle.getRefundAccount())
           .willReturn(RefundAccount.of("국민은행", "11012345678", "김참여"));
       given(participation.getDueAt()).willReturn(dueAt);
       given(assembler.loadByParticipation(1L))
           .willReturn(
-              new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
+              new ParticipationView(participation, bundle, buncheol, "설윤", participant, null, 23_000L));
 
       listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
 
@@ -122,12 +124,13 @@ class SlackNotificationListenerTest {
       given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
       given(participant.getName()).willReturn(null);
       Participation participation = mock(Participation.class);
-      given(participation.getRefundAccount())
+      ParticipationBundle bundle = mock(ParticipationBundle.class);
+      given(bundle.getRefundAccount())
           .willReturn(RefundAccount.of("국민은행", "11012345678", "김참여"));
       given(participation.getDueAt()).willReturn(Instant.parse("2026-07-06T03:30:00Z"));
       given(assembler.loadByParticipation(1L))
           .willReturn(
-              new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
+              new ParticipationView(participation, bundle, buncheol, "설윤", participant, null, 23_000L));
 
       listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
 
@@ -169,13 +172,14 @@ class SlackNotificationListenerTest {
       given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
       given(participant.getName()).willReturn("김실명");
       Participation participation = mock(Participation.class);
-      given(participation.getRefundAccount())
+      ParticipationBundle bundle = mock(ParticipationBundle.class);
+      given(bundle.getRefundAccount())
           .willReturn(RefundAccount.of("국민은행", "11012345678", "김참여"));
       given(participation.getPaybackAmount()).willReturn(3_000L);
       given(participation.getPaybackTweetUrl()).willReturn("https://x.com/fan/status/1234567890");
       given(assembler.loadByParticipation(1L))
           .willReturn(
-              new ParticipationView(participation, buncheol, "설윤", participant, null, 23_000L));
+              new ParticipationView(participation, bundle, buncheol, "설윤", participant, null, 23_000L));
 
       listener.onShippingFeePaybackRequested(new ShippingFeePaybackRequestedEvent(1L));
 

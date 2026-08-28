@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import java.time.Instant;
 
@@ -38,8 +39,14 @@ public record AdminPaymentRecordResponse(
     int minHeadcount,
     long confirmedCount) {
 
+  /**
+   * @param refundAccount 환불 계좌. <b>정본은 묶음</b>이라 호출부가 배치로 조회해 넘긴다 (P2-c). 미연결 참여는
+   *     {@code null} 일 수 있다
+   */
   public static AdminPaymentRecordResponse of(
-      final AdminPaymentView view, final long confirmedCount) {
+      final AdminPaymentView view,
+      final long confirmedCount,
+      final RefundAccount refundAccount) {
     return new AdminPaymentRecordResponse(
         view.participation().getId(),
         view.participant() == null ? null : view.participant().getNickname().value(),
@@ -51,7 +58,7 @@ public record AdminPaymentRecordResponse(
         view.participation().getCancelReason(),
         view.participation().getDueAt(),
         view.participation().getConfirmedAt(),
-        RefundAccountResponse.from(view.participation().getRefundAccount()),
+        RefundAccountResponse.from(refundAccount),
         view.delivery() == null ? null : ManagementDeliveryResponse.from(view.delivery()),
         view.shippingAddress() == null
             ? null

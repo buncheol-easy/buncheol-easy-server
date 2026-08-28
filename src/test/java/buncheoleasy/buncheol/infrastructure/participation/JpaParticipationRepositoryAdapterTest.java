@@ -1944,7 +1944,6 @@ class JpaParticipationRepositoryAdapterTest {
 
       Participation loaded = participationRepository.findById(participationId).orElseThrow();
 
-      assertThat(loaded.getRefundAccount()).isNull();
       assertThat(loaded.isFree()).isTrue();
     }
 

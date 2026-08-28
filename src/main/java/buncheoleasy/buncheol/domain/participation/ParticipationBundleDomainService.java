@@ -31,10 +31,14 @@ public class ParticipationBundleDomainService {
    * 컬럼을 더하기 위험하기 때문이다({@code ParticipationRepository#linkBundle} javadoc). 같은 트랜잭션이라 중간에
    * 실패하면 셋 다 롤백된다.
    *
+   * <p>호출 측 {@code @Transactional} 필수 — 세 쓰기가 한 단위여야 한다.
+   *
+   * <p>⚠️ {@code participation} 은 <b>영속성 컨텍스트가 관리하지 않는 인스턴스</b>여야 한다. 관리되는 인스턴스를 넘기면
+   * {@code linkBundle} 이 메모리 값을 바꾼 뒤 dirty checking 이 UPDATE 를 한 번 더 내보내 CAS 를 우회한다.
+   *
    * @param reusableBundleId 재사용할 묶음 id. {@code null} 이면 새로 연다
-   * @return 이 참여가 속한 묶음 id
    */
-  public Long attach(
+  public void attach(
       final Participation participation,
       final Long reusableBundleId,
       final Long shippingAddressId,
@@ -76,13 +80,14 @@ public class ParticipationBundleDomainService {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
     participation.linkBundle(bundleId);
-    return bundleId;
   }
 
   /**
    * 슬롯 하나가 종료됐을 때 그 묶음도 끝났는지 판정해 닫는다. 살아 있는 슬롯이 남아 있으면 아무것도 하지 않는다.
    *
    * <p>{@code bundleId} 가 {@code null} 이면(배포선 창에서 생긴 미연결 행) 조용히 넘어간다 — 그 행은 배포 직후 백필이 채운다.
+   *
+   * <p>호출 측 {@code @Transactional} 필수.
    */
   public void closeIfEmpty(final Long bundleId, final Instant now) {
     if (bundleId == null) {
@@ -91,12 +96,12 @@ public class ParticipationBundleDomainService {
     participationBundleRepository.closeIfNoActiveSlots(bundleId, now);
   }
 
-  /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. */
+  /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */
   public int closeEmptyByBuncheolId(final Long buncheolId, final Instant now) {
     return participationBundleRepository.closeEmptyByBuncheolId(buncheolId, now);
   }
 
-  /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다 (C2C 신청 구간은 기한 없이 열린다). */
+  /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */
   public int assignDueAtByBuncheolId(
       final Long buncheolId, final Instant dueAt, final Instant now) {
     return participationBundleRepository.assignDueAtByBuncheolId(buncheolId, dueAt, now);

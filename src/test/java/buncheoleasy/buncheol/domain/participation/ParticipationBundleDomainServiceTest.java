@@ -65,8 +65,8 @@ class ParticipationBundleDomainServiceTest {
             });
   }
 
-  private Long attach(final Participation participation, final Long reusableBundleId) {
-    return participationBundleDomainService.attach(
+  private void attach(final Participation participation, final Long reusableBundleId) {
+    participationBundleDomainService.attach(
         participation,
         reusableBundleId,
         SHIPPING_ADDRESS_ID,
@@ -83,9 +83,9 @@ class ParticipationBundleDomainServiceTest {
     given(participationRepository.linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW))
         .willReturn(true);
 
-    Long bundleId = attach(participation, null);
+    attach(participation, null);
 
-    assertThat(bundleId).isEqualTo(NEW_BUNDLE_ID);
+    assertThat(participation.getBundleId()).isEqualTo(NEW_BUNDLE_ID);
     // 열기가 연결보다 먼저다 — 반대면 연결할 id 가 없다.
     InOrder inOrder = Mockito.inOrder(participationBundleRepository, participationRepository);
     inOrder.verify(participationBundleRepository).save(any());
@@ -98,9 +98,9 @@ class ParticipationBundleDomainServiceTest {
     given(participationRepository.linkBundle(PARTICIPATION_ID, EXISTING_BUNDLE_ID, NOW))
         .willReturn(true);
 
-    Long bundleId = attach(participation, EXISTING_BUNDLE_ID);
+    attach(participation, EXISTING_BUNDLE_ID);
 
-    assertThat(bundleId).isEqualTo(EXISTING_BUNDLE_ID);
+    assertThat(participation.getBundleId()).isEqualTo(EXISTING_BUNDLE_ID);
     then(participationBundleRepository).should(never()).save(any());
   }
 

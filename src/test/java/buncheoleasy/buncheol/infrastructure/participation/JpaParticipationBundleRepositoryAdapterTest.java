@@ -337,6 +337,23 @@ class JpaParticipationBundleRepositoryAdapterTest {
     assertThat(participationRepository.linkBundle(orphanId, bundleId, Instant.now())).isTrue();
   }
 
+  // 덮어쓰면 그 사람의 이체가 엉뚱한 묶음으로 옮겨간다 — 재실행·경합에서 지켜야 하는 절반이다.
+  @Test
+  @DisplayName("이미 묶음에 붙은 참여는 다른 묶음으로 덮어쓰지 않는다")
+  void 이미_묶음에_붙은_참여는_덮어쓰지_않는다() {
+    Long firstBundleId = openBundle();
+    Long otherBundleId = openBundle();
+    entityManager.flush();
+    entityManager.clear();
+    Long participationId = insertUnlinkedParticipation();
+    assertThat(participationRepository.linkBundle(participationId, firstBundleId, Instant.now()))
+        .isTrue();
+    entityManager.clear();
+
+    assertThat(participationRepository.linkBundle(participationId, otherBundleId, Instant.now()))
+        .isFalse();
+  }
+
   /** 아직 묶음에 붙지 않은 참여 한 건. */
   private Long insertUnlinkedParticipation() {
     Long freshGroupMemberId =

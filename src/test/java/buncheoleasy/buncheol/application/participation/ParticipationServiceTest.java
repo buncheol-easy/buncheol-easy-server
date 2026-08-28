@@ -861,9 +861,18 @@ class ParticipationServiceTest {
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
+      // dueAt 을 any() 로 두면 null 로 바뀌어도 통과한다 — 그러면 bundles.due_at 이 영구 NULL 이 되어
+      // 「제외」 기한 가드가 fail-open 된다. 즉시 입금 경로는 값이 있어야 하므로 정확히 고정한다.
       then(participationBundleDomainService)
           .should()
-          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(SHIPPING_FEE), any(), any(), eq(NOW));
+          .attach(
+              any(),
+              isNull(),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(SHIPPING_FEE),
+              any(),
+              eq(NOW.plus(Duration.ofMinutes(30))),
+              eq(NOW));
     }
 
     // 모집중 재참여는 같은 이체·같은 택배다.
@@ -907,7 +916,14 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should()
-          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(0L), any(), any(), eq(NOW));
+          .attach(
+              any(),
+              isNull(),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(0L),
+              any(),
+              eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
+              eq(NOW));
     }
 
     // 배포선 창에서 생긴 미연결 행(bundle_id NULL)이 재사용 후보가 되는 경우. 새로 열되

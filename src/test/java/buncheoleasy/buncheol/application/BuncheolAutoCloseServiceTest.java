@@ -109,6 +109,8 @@ class BuncheolAutoCloseServiceTest {
 
       assertThat(result).isTrue();
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // 개최자 취소 경로와 대칭 — 안 닫으면 마감된 분철에 활성 묶음이 영구히 남는다.
+      then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
       // 취소된 참여의 배송 스냅샷을 정리한다(입금확인 시 생성된 고아 스냅샷 방지).
       then(deliveryDomainService).should().deleteByParticipationIds(List.of(701L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
@@ -161,6 +163,8 @@ class BuncheolAutoCloseServiceTest {
 
       assertThat(result).isTrue();
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // 개최자 취소 경로와 대칭 — 안 닫으면 마감된 분철에 활성 묶음이 영구히 남는다.
+      then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
     }

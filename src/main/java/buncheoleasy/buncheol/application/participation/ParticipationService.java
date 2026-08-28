@@ -303,6 +303,11 @@ public class ParticipationService {
    * 정합성은 지켜지고(롤백된 쪽은 취소 자체가 안 된다) 재시도하면 성공하지만, <b>실패 모드가 500 이라는 점</b>은 알고 있어야
    * 한다. 이 판정을 밖으로 빼면 데드락은 사라지지만 그 대신 두 슬롯이 서로의 취소를 못 봐 <b>묶음이 영영 안 닫힌다</b> —
    * 그쪽이 더 나쁘다(조용하고 되돌리기 어렵다).
+   *
+   * <p>같은 사이클의 쌍이 하나 더 있다 — <b>재참여 ↔ 자발 취소</b>. 재참여는 새 참여 행에 X 를 잡은 뒤 연결 CAS 의
+   * {@code EXISTS(묶음)} 로 묶음 행에 S 를 요청하고, 취소는 옛 참여 행에 X 를 잡은 뒤 종료 CAS 로 묶음 행에 X 를
+   * 잡고 그 서브쿼리가 새 참여 행에 S 를 요청한다. 원인은 같다 — <b>취소 경로가 분철 행 락을 잡지 않아</b> 두 경로가
+   * 직렬화되지 않는다. 레포에 데드락 재시도 핸들러가 없어 실패 모드는 500 이다.
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.application.payback;
 
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
@@ -24,6 +25,7 @@ public class ShippingFeePaybackService {
 
   private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final DeliveryRepository deliveryRepository;
   private final ShippingFeePaybackPolicy policy;
   private final ApplicationEventPublisher eventPublisher;
@@ -46,8 +48,9 @@ public class ShippingFeePaybackService {
 
     PaybackTweetUrl tweetUrl = PaybackTweetUrl.parse(request.tweetUrl());
 
-    // 환불계좌는 참여 시 필수 입력이라 사실상 항상 존재한다. 환급 입금 계좌가 없는 신청이 접수되는 사고를 막는 방어 가드.
-    if (participation.getRefundAccount() == null) {
+    // 환급 입금 계좌의 정본은 묶음이다 (P2-c). 묶음은 계좌를 NOT NULL 로 갖지만, 배포선 창에서 생긴
+    // 미연결 참여는 묶음 자체가 없다 — 그 신청이 접수되면 돈 보낼 곳이 없으므로 여기서 막는다.
+    if (participationBundleDomainService.findByParticipation(participation).isEmpty()) {
       throw new BusinessException(ErrorCode.PAYBACK_REFUND_ACCOUNT_MISSING);
     }
 

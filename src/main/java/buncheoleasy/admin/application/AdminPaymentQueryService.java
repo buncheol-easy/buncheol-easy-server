@@ -5,6 +5,8 @@ import buncheoleasy.admin.domain.payment.AdminPaymentStatus;
 import buncheoleasy.admin.domain.payment.AdminPaymentView;
 import buncheoleasy.admin.domain.payment.BuncheolConfirmedCount;
 import buncheoleasy.admin.dto.response.AdminPaymentRecordResponse;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
@@ -28,6 +30,7 @@ public class AdminPaymentQueryService {
   private static final int MAX_SIZE = 100;
 
   private final AdminPaymentQueryRepository adminPaymentQueryRepository;
+  private final ParticipationBundleDomainService participationBundleDomainService;
 
   @Transactional(readOnly = true)
   public CursorResponse<AdminPaymentRecordResponse> getPayments(
@@ -48,13 +51,18 @@ public class AdminPaymentQueryService {
     }
 
     final Map<Long, Long> confirmedCountByBuncheolId = resolveConfirmedCounts(visible);
+    // 계좌의 정본은 묶음이다 (P2-c). 건별로 읽으면 페이지 크기만큼 쿼리가 늘어난다(N+1).
+    final Map<Long, ParticipationBundle> bundleById =
+        participationBundleDomainService.findAllByParticipations(
+            visible.stream().map(AdminPaymentView::participation).toList());
     final List<AdminPaymentRecordResponse> items =
         visible.stream()
             .map(
                 view ->
                     AdminPaymentRecordResponse.of(
                         view,
-                        confirmedCountByBuncheolId.getOrDefault(view.buncheol().getId(), 0L)))
+                        confirmedCountByBuncheolId.getOrDefault(view.buncheol().getId(), 0L),
+                        ParticipationBundleDomainService.refundAccountOf(bundleById, view.participation())))
             .toList();
 
     final var lastParticipation = visible.getLast().participation();

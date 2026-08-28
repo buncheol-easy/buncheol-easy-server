@@ -32,15 +32,15 @@ import lombok.NoArgsConstructor;
  * 이체가 한 묶음에 섞여 되돌릴 수 없다 — 백필 STEP 3 도 같은 이유로 행별 1:1이다). 실측 prod 0건 · staging 1건이고, 화면과 청구가
  * 일치하므로 수용한다 (docs/80 §3-6 알려진 한계). 자동 병합은 규칙이 훨씬 복잡해져 기각됐다.
  *
- * <p>📌 {@code findById}·{@code findActiveByBuncheolIdAndParticipantId}·{@code findAllByBuncheolId}·{@link
- * #isActive()} 는 P2-b 시점에도 <b>프로덕션 미사용</b>이다 — 읽기 전환(P2-c)이 쓸 자리라 남겨 둔다.
+ * <p>📌 {@code findActiveByBuncheolIdAndParticipantId}·{@code findAllByBuncheolId}·{@link #isActive()} 는
+ * 아직 프로덕션 미사용이다(P3 화면이 쓸 자리). {@code findById} 는 P2-c 의 {@code findByParticipation} 이 쓴다.
  *
  * <p><b>활성 묶음 유니크는 없다</b> (docs/71 §8-3). 추가 모집·재신청이 새 묶음이어야 해서 한 사람이 한 분철에 활성 묶음 2개를 가질 수 있어야
  * 하기 때문이다. 중복 방지는 앱 가드가 하고, LEGACY 1인 1슬롯 보호는 {@code
  * participations.uq_participations_legacy_active_participant} 가 그대로 계속한다.
  *
- * <p><b>P2-b 범위</b> — 참여 생성 경로가 이 엔티티를 <b>쓰기 시작했다</b>(묶음 생성·연결·닫기). 다만 <b>읽는 코드는 아직 0줄</b>
- * 이다 — 응답·알림은 여전히 {@code participations} 의 스냅샷을 본다. 정본 이전(읽기 전환)은 P2-c 다.
+ * <p><b>P2-c 완료</b> — 이 엔티티가 환불 계좌·입금자명의 <b>정본</b>이다. 응답·알림·어드민이 전부 여기서 읽고,
+ * {@code participations.refund_*} 는 더 이상 쓰이지도 읽히지도 않는다(P4 에서 삭제).
  */
 @Entity
 @Table(name = "participation_bundles")

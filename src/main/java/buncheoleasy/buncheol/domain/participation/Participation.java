@@ -4,7 +4,6 @@ import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -88,9 +87,9 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
-  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌 + 개최자 통장 대조 키(입금자명).
-  // 금액과 무관하게 채워진다 — 경계·이유의 정본은 RefundAccount javadoc. (계좌 강제 이전 0원 참여만 null)
-  @Embedded private RefundAccount refundAccount;
+  // ⚠️ 환불 계좌(refund_*)는 이제 이 엔티티가 갖지 않는다 — 정본은 participation_bundles 다 (P2-c).
+  // 컬럼은 P4 에서 삭제될 때까지 DB 에 남지만 매핑을 지웠으므로 읽지도 쓰지도 않는다. 새 행의 세 칸은
+  // NULL 이고, 그래도 되는 이유는 묶음이 NOT NULL 로 같은 값을 갖기 때문이다.
 
   // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
   // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변.
@@ -159,7 +158,6 @@ public class Participation extends TimestampedEntity {
       final Long shippingAddressId,
       final long amount,
       final long shippingFee,
-      final RefundAccount refundAccount,
       final Instant dueAt) {
     return new Participation(
         buncheolId,
@@ -168,13 +166,13 @@ public class Participation extends TimestampedEntity {
         shippingAddressId,
         amount,
         shippingFee,
-        refundAccount,
         dueAt);
   }
 
   /**
-   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 개최자 성사 확정 시 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다. 환불
-   * 계좌(입금자명)는 신청 시점에 스냅샷한다 — 개최자 통장 대조 키 + 입금 후 취소 시 환불 계좌.
+   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 개최자 성사 확정 시 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다.
+   *
+   * <p>환불 계좌(입금자명)는 <b>묶음</b>이 갖는다 (P2-c) — 개최자 통장 대조 키 + 입금 후 취소 시 환불 계좌.
    */
   public static Participation createApplied(
       final Long buncheolId,
@@ -182,8 +180,7 @@ public class Participation extends TimestampedEntity {
       final Long participantId,
       final Long shippingAddressId,
       final long amount,
-      final long shippingFee,
-      final RefundAccount refundAccount) {
+      final long shippingFee) {
     return new Participation(
         buncheolId,
         buncheolMemberId,
@@ -191,7 +188,6 @@ public class Participation extends TimestampedEntity {
         shippingAddressId,
         amount,
         shippingFee,
-        refundAccount,
         null,
         ParticipationStatus.APPLIED);
   }
@@ -203,7 +199,6 @@ public class Participation extends TimestampedEntity {
       final Long shippingAddressId,
       final long amount,
       final long shippingFee,
-      final RefundAccount refundAccount,
       final Instant dueAt) {
     this(
         buncheolId,
@@ -212,7 +207,6 @@ public class Participation extends TimestampedEntity {
         shippingAddressId,
         amount,
         shippingFee,
-        refundAccount,
         requireDueAt(dueAt),
         ParticipationStatus.AWAITING_PAYMENT);
   }
@@ -224,17 +218,14 @@ public class Participation extends TimestampedEntity {
       final Long shippingAddressId,
       final long amount,
       final long shippingFee,
-      final RefundAccount refundAccount,
       final Instant dueAt,
       final ParticipationStatus status) {
-    validate(refundAccount, amount + shippingFee);
     this.buncheolId = buncheolId;
     this.buncheolMemberId = buncheolMemberId;
     this.participantId = participantId;
     this.shippingAddressId = shippingAddressId;
     this.amount = amount;
     this.shippingFee = shippingFee;
-    this.refundAccount = refundAccount;
     this.dueAt = dueAt;
     this.status = status;
   }
@@ -296,15 +287,6 @@ public class Participation extends TimestampedEntity {
   public void validateOwnedBy(final Long participantId) {
     if (!this.participantId.equals(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
-    }
-  }
-
-  // 애플리케이션 서비스는 금액과 무관하게 계좌를 요구하지만(ParticipationService, PR #151) 이 불변식은 아직
-  // 조건부다 — P2-c 가 이 필드를 엔티티에서 제거하며 불변식을 묶음 쪽으로 옮긴다(묶음은 이미 NOT NULL).
-  // 지금 조건을 떼면 몇 시간 뒤 같은 줄을 지우게 되고, 픽스처 8곳(ParticipationTest 등)만 흔들린다.
-  private void validate(final RefundAccount refundAccount, final long totalAmount) {
-    if (refundAccount == null && totalAmount > 0) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
   }
 

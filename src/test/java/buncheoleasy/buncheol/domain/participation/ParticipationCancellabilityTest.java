@@ -117,7 +117,6 @@ class ParticipationCancellabilityTest {
             1L,
             50_000L,
             0L,
-            RefundAccount.of("국민", "12345678", "홍길동"),
             FINALIZED_AT.plus(1, ChronoUnit.DAYS));
     setField(participation, "status", status);
     setField(participation, "createdAt", createdAt);

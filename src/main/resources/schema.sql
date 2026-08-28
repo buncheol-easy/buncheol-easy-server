@@ -360,16 +360,17 @@ CREATE TABLE IF NOT EXISTS participations
     shipping_address_id          BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
     amount                       BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
     shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회. 같은 사람이라도 묶음이 다르면 각각 >0 — 추가 모집은 새 묶음이다). 입금 총액 = amount + shipping_fee',
-    -- NULL 은 참여 계좌 강제(PR #151) 이전에 만들어진 0원(코드) 참여의 잔여 행뿐이다. 신규 참여는 금액과
-    -- 무관하게 세 칸이 모두 채워진다 — participation_bundles.refund_* 가 NOT NULL 이라 계좌 없는 참여는
-    -- 묶음을 만들 수 없기 때문이다. 컬럼 자체는 P2 에서 정본이 묶음으로 옮겨가며 INSERT 목록에서 빠지고
-    -- P4 에서 삭제된다. NULL 허용은 그때까지의 과도기 상태이며, 기존 배포 DB 에는 NOT NULL 해제 ALTER 필요.
+    -- 🔴 P2-c 이후 이 세 칸은 죽은 컬럼이다 — 정본이 participation_bundles 로 옮겨갔고 INSERT 목록에서 빠졌다.
+    -- **신규 행은 전부 NULL 이다.** 값이 있는 것은 P2-c 배포 이전에 만들어진 행뿐이다.
+    -- ⚠️ 그러므로 "NULL = 이상" 이라는 판정을 여기에 세우지 말 것. 계좌를 확인하려면 묶음을 봐야 한다.
+    -- 컬럼 자체는 P4 에서 삭제한다 — 단, 블루-그린 전환 창에서 구 색이 아직 읽으므로 P2-c 와 같은 릴리스에
+    -- 넣으면 안 된다(docs/39).
     -- ⚠️ DEFAULT '' 로 완화해서는 안 된다 — RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
     -- 그 생성자가 빈 값을 거부해(BankAccount javadoc) 그 행을 읽는 것 자체가 깨진다. 세 컬럼이 모두 NULL
     -- 이면 Hibernate 는 embeddable 을 null 로 두고 생성자를 타지 않는다.
-    refund_bank                  VARCHAR(50)  NULL COMMENT '환불 은행 (정본은 participation_bundles, NULL 은 계좌 강제 이전 0원 참여뿐)',
-    refund_account               VARCHAR(50)  NULL COMMENT '환불 계좌번호 (정본은 participation_bundles, NULL 은 계좌 강제 이전 0원 참여뿐)',
-    refund_holder                VARCHAR(50)  NULL COMMENT '환불 예금주 (정본은 participation_bundles, NULL 은 계좌 강제 이전 0원 참여뿐)',
+    refund_bank                  VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 은행 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
+    refund_account               VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 계좌번호 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
+    refund_holder                VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 예금주 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     due_at                       DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',

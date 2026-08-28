@@ -3,6 +3,11 @@ package buncheoleasy.buncheol.domain.participation;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +42,9 @@ public class ParticipationBundleDomainService {
    * {@code linkBundle} 이 메모리 값을 바꾼 뒤 dirty checking 이 UPDATE 를 한 번 더 내보내 CAS 를 우회한다.
    *
    * @param reusableBundleId 재사용할 묶음 id. {@code null} 이면 새로 연다
+   * @param refundAccount 새 묶음에 심을 계좌. <b>{@code reusableBundleId} 가 있으면 쓰이지 않으며 {@code null}
+   *     이어도 된다</b> — 재사용이면 그 묶음이 이미 가진 계좌가 정본이다. 둘 다 없으면 {@code
+   *     ParticipationBundle#open} 이 {@code PARTICIPATION_REQUIRED_FIELD_MISSING} 으로 잡는다(NPE 아님)
    */
   public void attach(
       final Participation participation,
@@ -94,6 +102,38 @@ public class ParticipationBundleDomainService {
       return;
     }
     participationBundleRepository.closeIfNoActiveSlots(bundleId, now);
+  }
+
+  /** 참여 한 건의 묶음. 미연결 행(배포선 창)이면 비어 있다. */
+  public Optional<ParticipationBundle> findByParticipation(final Participation participation) {
+    return participation.getBundleId() == null
+        ? Optional.empty()
+        : participationBundleRepository.findById(participation.getBundleId());
+  }
+
+  /**
+   * 참여 목록의 묶음을 한 번에 읽어 {@code 묶음 id → 묶음} 으로 돌려준다 (목록 화면 N+1 방지).
+   *
+   * <p>미연결 참여는 결과에 없다 — 호출부는 {@code map.get(bundleId)} 가 {@code null} 일 수 있음을 전제할 것.
+   */
+  public Map<Long, ParticipationBundle> findAllByParticipations(
+      final Collection<Participation> participations) {
+    return participationBundleRepository
+        .findAllByIds(participations.stream().map(Participation::getBundleId).toList())
+        .stream()
+        .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
+  }
+
+  /**
+   * 배치 조회 결과에서 이 참여의 계좌를 꺼낸다. 미연결 참여(배포선 창)는 {@code null}.
+   *
+   * <p>{@link #findAllByParticipations} 가 정의한 규약("{@code map.get(bundleId)} 가 null 일 수 있다")을 지키는
+   * 자리라 같은 클래스에 둔다 — 호출부마다 3항 연산을 흩뿌리면 한 곳만 빠뜨렸을 때 NPE 다.
+   */
+  public static RefundAccount refundAccountOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
+    return bundle == null ? null : bundle.getRefundAccount();
   }
 
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */

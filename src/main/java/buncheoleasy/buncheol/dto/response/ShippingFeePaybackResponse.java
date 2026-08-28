@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.dto.response;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import java.time.Instant;
 
@@ -22,10 +23,15 @@ public record ShippingFeePaybackResponse(
     Long amount,
     RefundAccountResponse refundAccount) {
 
+  /**
+   * @param refundAccount 환급 입금 계좌. <b>정본은 묶음</b>이므로 호출부가 조회해 넘긴다 (P2-c). 미연결 참여는
+   *     {@code null} 일 수 있다
+   */
   public static ShippingFeePaybackResponse of(
       final Participation participation,
       final PaybackStatus derivedStatus,
-      final Instant submitDeadline) {
+      final Instant submitDeadline,
+      final RefundAccount refundAccount) {
     return new ShippingFeePaybackResponse(
         derivedStatus,
         submitDeadline,
@@ -34,6 +40,6 @@ public record ShippingFeePaybackResponse(
         participation.getPaybackCompletedAt(),
         participation.getPaybackRejectReason(),
         participation.getPaybackAmount(),
-        RefundAccountResponse.from(participation.getRefundAccount()));
+        RefundAccountResponse.from(refundAccount));
   }
 }

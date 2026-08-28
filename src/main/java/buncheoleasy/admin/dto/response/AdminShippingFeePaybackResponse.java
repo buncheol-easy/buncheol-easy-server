@@ -2,6 +2,7 @@ package buncheoleasy.admin.dto.response;
 
 import buncheoleasy.admin.domain.payback.AdminPaybackView;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import java.time.Instant;
 
@@ -24,7 +25,9 @@ public record AdminShippingFeePaybackResponse(
     Instant completedAt,
     String rejectReason) {
 
-  public static AdminShippingFeePaybackResponse from(final AdminPaybackView view) {
+  /** @param refundAccount 환급 입금 계좌. <b>정본은 묶음</b>이라 호출부가 배치로 조회해 넘긴다 (P2-c). */
+  public static AdminShippingFeePaybackResponse from(
+      final AdminPaybackView view, final RefundAccount refundAccount) {
     return new AdminShippingFeePaybackResponse(
         view.participation().getId(),
         view.participant() == null ? null : view.participant().getNickname().value(),
@@ -33,7 +36,7 @@ public record AdminShippingFeePaybackResponse(
         view.buncheol().getTitle(),
         view.member() == null ? null : view.member().getName(),
         view.participation().getPaybackAmount(),
-        RefundAccountResponse.from(view.participation().getRefundAccount()),
+        RefundAccountResponse.from(refundAccount),
         view.participation().getPaybackTweetUrl(),
         view.participation().getPaybackStatus(),
         view.participation().getPaybackRequestedAt(),

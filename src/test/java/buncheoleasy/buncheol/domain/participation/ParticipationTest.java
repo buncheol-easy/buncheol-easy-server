@@ -37,7 +37,6 @@ class ParticipationTest {
       assertThat(participation.getAmount()).isEqualTo(AMOUNT);
       assertThat(participation.getShippingFee()).isEqualTo(SHIPPING_FEE);
       assertThat(participation.getTotalAmount()).isEqualTo(AMOUNT + SHIPPING_FEE);
-      assertThat(participation.getRefundAccount()).isEqualTo(REFUND_ACCOUNT);
       assertThat(participation.getDueAt()).isEqualTo(DUE_AT);
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(participation.getConfirmedAt()).isNull();
@@ -45,23 +44,8 @@ class ParticipationTest {
       assertThat(participation.getCancelReason()).isNull();
     }
 
-    @Test
-    void 환불계좌가_null_이면_예외가_발생한다() {
-      assertThatThrownBy(
-              () ->
-                  Participation.create(
-                      BUNCHEOL_ID,
-                      BUNCHEOL_MEMBER_ID,
-                      PARTICIPANT_ID,
-                      SHIPPING_ADDRESS_ID,
-                      AMOUNT,
-                      SHIPPING_FEE,
-                      null,
-                      DUE_AT))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
-    }
+    // 계좌 불변식은 묶음으로 옮겨갔다 (P2-c) — participation_bundles.refund_* 가 NOT NULL 이고
+    // ParticipationBundle.open() 이 null 을 거부한다. 참여는 이제 계좌를 갖지 않는다.
 
     @Test
     void 입금_만료시각이_null_이면_예외가_발생한다() {
@@ -74,7 +58,6 @@ class ParticipationTest {
                       SHIPPING_ADDRESS_ID,
                       AMOUNT,
                       SHIPPING_FEE,
-                      REFUND_ACCOUNT,
                       null))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
@@ -163,7 +146,6 @@ class ParticipationTest {
         SHIPPING_ADDRESS_ID,
         AMOUNT,
         SHIPPING_FEE,
-        REFUND_ACCOUNT,
         DUE_AT);
   }
 }

@@ -74,7 +74,9 @@ public class SlackNotificationListener {
       sendFreeParticipation(view);
       return;
     }
-    RefundAccount refundAccount = view.participation().getRefundAccount();
+    // 정본은 묶음이다 (P2-c). 배포선 창의 미연결 참여는 비어 있을 수 있어 대체 문자열로 낸다 —
+    // ⚠️ 발송 자체를 스킵하면 안 된다. 이 알림이 LEGACY 수동 입금확인의 출발점이고 페이액션 실패 시 백업이다.
+    RefundAccount refundAccount = view.bundle() == null ? null : view.bundle().getRefundAccount();
 
     String fallbackText =
         "🔔 [신규 참여] %s (분철 #%d) - %s"
@@ -98,12 +100,7 @@ public class SlackNotificationListener {
                     markdown(
                         "*입금 예정 금액*\n%s원"
                             .formatted(AlimtalkFormats.amount(view.paymentAmount()))),
-                    markdown(
-                        "*환불계좌*\n%s %s (예금주 %s)"
-                            .formatted(
-                                refundAccount.bank(),
-                                refundAccount.account(),
-                                refundAccount.holder())),
+                    markdown(refundAccountText(refundAccount)),
                     markdown(
                         "*입금 기한*\n%s (기한 내 입금확인 필요)"
                             .formatted(DUE_AT_FORMAT.format(view.participation().getDueAt()))))),
@@ -164,7 +161,7 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    RefundAccount refundAccount = view.participation().getRefundAccount();
+    RefundAccount refundAccount = view.bundle() == null ? null : view.bundle().getRefundAccount();
     Long paybackAmount = view.participation().getPaybackAmount();
     String tweetUrl = view.participation().getPaybackTweetUrl();
 
@@ -192,12 +189,7 @@ public class SlackNotificationListener {
                             .formatted(
                                 AlimtalkFormats.amount(
                                     paybackAmount == null ? 0L : paybackAmount))),
-                    markdown(
-                        "*환불계좌*\n%s %s (예금주 %s)"
-                            .formatted(
-                                refundAccount.bank(),
-                                refundAccount.account(),
-                                refundAccount.holder())))),
+                    markdown(refundAccountText(refundAccount)))),
             Map.of(
                 "type",
                 "section",
@@ -242,6 +234,24 @@ public class SlackNotificationListener {
             Map.of("type", "section", "text", plainText(event.content())),
             Map.of("type", "context", "elements", List.of(plainText(meta))));
     slackWebhookClient.send(SlackChannel.FEEDBACK, fallbackText, blocks);
+  }
+
+  /**
+   * 슬랙 블록의 환불계좌 줄. 🔴 <b>계좌가 없어도 발송은 살린다</b> — 조건 없이 역참조하면 NPE 가 나고, {@code @Async}
+   * 라 예외가 워커 스레드 로그로만 끝나 <b>메시지가 통째로 안 나간다</b>.
+   *
+   * <p>그게 특히 나쁜 이유는 같은 조건에서 {@code DepositOrderListener} 가 페이액션 등록을 스킵하기 때문이다 —
+   * 그 스킵의 근거가 "운영자가 이 슬랙 알림을 보고 수동 확인한다" 인데, 그 알림까지 죽으면 <b>자동확인도 안 되고
+   * 운영자도 모르는 참여</b>가 된다.
+   *
+   * <p>📌 배송비 환급 블록도 같은 헬퍼를 쓰지만 그쪽은 <b>도달 불가</b>다 — {@code ShippingFeePaybackService} 가
+   * 묶음 없는 신청을 접수 단계에서 막는다. 순수 방어 코드이므로 다시 추적하지 말 것.
+   */
+  private static String refundAccountText(final RefundAccount refundAccount) {
+    return refundAccount == null
+        ? "*환불계좌*\n묶음 미연결 — 계좌 확인 필요"
+        : "*환불계좌*\n%s %s (예금주 %s)"
+            .formatted(refundAccount.bank(), refundAccount.account(), refundAccount.holder());
   }
 
   private static Map<String, Object> markdown(final String text) {

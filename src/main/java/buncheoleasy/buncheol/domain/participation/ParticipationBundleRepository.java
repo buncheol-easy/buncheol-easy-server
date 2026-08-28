@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.domain.participation;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +15,14 @@ public interface ParticipationBundleRepository {
   ParticipationBundle save(ParticipationBundle bundle);
 
   Optional<ParticipationBundle> findById(Long id);
+
+  /**
+   * 묶음 여러 개를 한 번에 읽는다 (목록 화면용).
+   *
+   * <p>정본이 묶음으로 옮겨간 뒤(P2-c) 개최 관리·내 참여·어드민 결제 목록이 참여마다 계좌를 필요로 한다. 건별로 읽으면 참여 수만큼
+   * 쿼리가 늘어난다(N+1) — 목록은 반드시 이 메서드로 미리 채운 뒤 맵으로 조회할 것.
+   */
+  List<ParticipationBundle> findAllByIds(Collection<Long> ids);
 
   /**
    * 이 사람이 이 분철에서 지금 열고 있는 묶음 ({@code closed_at IS NULL}).

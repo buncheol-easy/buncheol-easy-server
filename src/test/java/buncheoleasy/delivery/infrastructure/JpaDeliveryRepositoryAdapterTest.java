@@ -600,7 +600,7 @@ class JpaDeliveryRepositoryAdapterTest {
       final Long participationId, final String storeName, final String trackingNumber) {
     Delivery delivery =
         Delivery.createSnapshot(
-            participationId, ShippingMethod.GS25_HALF, storeName, "수령인", "010-1234-5678");
+            participationId, null, ShippingMethod.GS25_HALF, storeName, "수령인", "010-1234-5678");
     deliveryRepository.save(delivery);
     em.flush();
     if (trackingNumber != null) {

@@ -13,6 +13,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import java.time.Instant;
@@ -41,6 +42,7 @@ class BuncheolAutoCloseServiceTest {
   @Mock private BuncheolDomainService buncheolDomainService;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
 

@@ -6,6 +6,8 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleRepository;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -40,18 +42,22 @@ class JpaParticipationBundleRepositoryAdapterTest {
 
   @Autowired private ParticipationBundleRepository participationBundleRepository;
   @Autowired private BuncheolRepository buncheolRepository;
+  @Autowired private BuncheolMemberRepository buncheolMemberRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
   @PersistenceContext private EntityManager entityManager;
 
   private Long hostId;
   private Long participantId;
   private Long buncheolId;
+  private Long groupId;
+  private int memberSeq;
 
   @BeforeEach
   void setUp() {
     hostId = TestUserFixture.insertUser(jdbcTemplate, "bdl_h");
     participantId = TestUserFixture.insertUser(jdbcTemplate, "bdl_p");
-    Long groupId = TestGroupFixture.insertGroup(jdbcTemplate, "묶음 테스트 그룹");
+    groupId = TestGroupFixture.insertGroup(jdbcTemplate, "묶음 테스트 그룹");
+    memberSeq = 0;
     Buncheol buncheol =
         Buncheol.create(
             hostId,
@@ -81,7 +87,7 @@ class JpaParticipationBundleRepositoryAdapterTest {
                 participantId,
                 null,
                 3000L,
-                RefundAccount.of("국민은행", "12345678", "홍길동")));
+                RefundAccount.of("국민은행", "12345678", "홍길동"), null));
     // 1차 캐시에서 그대로 돌려받으면 매핑이 검증되지 않는다 — 실제 SELECT 를 태운다.
     entityManager.flush();
     entityManager.clear();
@@ -110,10 +116,10 @@ class JpaParticipationBundleRepositoryAdapterTest {
     // 추가 모집분이 "새 묶음" 이어야 하므로 이 삽입이 막히면 안 된다.
     participationBundleRepository.save(
         ParticipationBundle.open(
-            buncheolId, participantId, null, 3000L, RefundAccount.of("국민은행", "12345678", "홍길동")));
+            buncheolId, participantId, null, 3000L, RefundAccount.of("국민은행", "12345678", "홍길동"), null));
     participationBundleRepository.save(
         ParticipationBundle.open(
-            buncheolId, participantId, null, 3000L, RefundAccount.of("국민은행", "12345678", "홍길동")));
+            buncheolId, participantId, null, 3000L, RefundAccount.of("국민은행", "12345678", "홍길동"), null));
     entityManager.flush();
     entityManager.clear();
 
@@ -134,7 +140,7 @@ class JpaParticipationBundleRepositoryAdapterTest {
                 participantId,
                 null,
                 3000L,
-                RefundAccount.of("국민은행", "12345678", "홍길동")));
+                RefundAccount.of("국민은행", "12345678", "홍길동"), null));
     entityManager.flush();
     jdbcTemplate.update(
         "UPDATE participation_bundles SET closed_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -148,5 +154,154 @@ class JpaParticipationBundleRepositoryAdapterTest {
     assertThat(participationBundleRepository.findAllByBuncheolId(buncheolId)).hasSize(1);
     assertThat(participationBundleRepository.findById(closed.getId()).orElseThrow().isActive())
         .isFalse();
+  }
+
+  // ── 묶음 종료 CAS (P2-b) ────────────────────────────────────────────────────────
+  //
+  // 이 CAS 가 이 트랙에서 가장 미묘한 자리다. "세어 보고 0이면 닫는다" 로 짜면 같은 묶음의 두 슬롯이 동시에
+  // 취소될 때 두 트랜잭션이 서로의 취소를 못 보고 둘 다 안 닫는다. 여기서는 활성 슬롯 존재 판정이 UPDATE 의
+  // WHERE 서브쿼리 안에 있는지를 실제 SQL 로 태운다 — 목으로는 증명되지 않는 부분이다.
+
+  private Long openBundle() {
+    return participationBundleRepository
+        .save(
+            ParticipationBundle.open(
+                buncheolId,
+                participantId,
+                null,
+                3000L,
+                RefundAccount.of("국민", "12345678", "홍길동"),
+                null))
+        .getId();
+  }
+
+  /** 이 묶음에 속한 참여 한 건을 원하는 상태로 심는다 (멤버 슬롯 FK 를 함께 만든다). */
+  private void insertParticipation(final Long bundleId, final String status) {
+    // 멤버 슬롯은 (분철, 그룹멤버) 유니크라 참여마다 새 그룹 멤버가 필요하다.
+    Long freshGroupMemberId =
+        TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "묶음 멤버 " + (memberSeq++));
+    BuncheolMember member = BuncheolMember.create(buncheolId, freshGroupMemberId, 10_000L);
+    buncheolMemberRepository.saveAll(List.of(member));
+    entityManager.flush();
+    jdbcTemplate.update(
+        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, bundle_id,"
+            + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account,"
+            + " refund_holder, status, created_at, updated_at)"
+            + " VALUES (?, ?, ?, ?, NULL, 10000, 3000, '국민', '12345678', '홍길동', ?,"
+            + " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        buncheolId,
+        member.getId(),
+        participantId,
+        bundleId,
+        status);
+  }
+
+  @Test
+  @DisplayName("활성 슬롯이 남아 있으면 묶음을 닫지 않는다")
+  void 활성_슬롯이_남아_있으면_묶음을_닫지_않는다() {
+    Long bundleId = openBundle();
+    insertParticipation(bundleId, "CANCELLED");
+    insertParticipation(bundleId, "CONFIRMED");
+    entityManager.flush();
+    entityManager.clear();
+
+    boolean closed = participationBundleRepository.closeIfNoActiveSlots(bundleId, Instant.now());
+
+    assertThat(closed).isFalse();
+    assertThat(participationBundleRepository.findById(bundleId))
+        .get()
+        .extracting(ParticipationBundle::isActive)
+        .isEqualTo(true);
+  }
+
+  @Test
+  @DisplayName("활성 슬롯이 하나도 없으면 묶음을 닫는다")
+  void 활성_슬롯이_하나도_없으면_묶음을_닫는다() {
+    Long bundleId = openBundle();
+    insertParticipation(bundleId, "CANCELLED");
+    entityManager.flush();
+    entityManager.clear();
+
+    boolean closed = participationBundleRepository.closeIfNoActiveSlots(bundleId, Instant.now());
+
+    assertThat(closed).isTrue();
+    assertThat(participationBundleRepository.findById(bundleId))
+        .get()
+        .extracting(ParticipationBundle::isActive)
+        .isEqualTo(false);
+  }
+
+  // 두 슬롯이 각각 취소되며 두 번 호출되는 상황. 두 번째는 이미 닫혀 있어 false 여야 한다 — 그래야 호출부가
+  // 취소 경로마다 무조건 호출해도 안전하다(멱등).
+  @Test
+  @DisplayName("이미 닫힌 묶음을 다시 닫으려 하면 false 다")
+  void 이미_닫힌_묶음을_다시_닫으려_하면_false다() {
+    Long bundleId = openBundle();
+    insertParticipation(bundleId, "CANCELLED");
+    entityManager.flush();
+    entityManager.clear();
+    participationBundleRepository.closeIfNoActiveSlots(bundleId, Instant.now());
+    entityManager.clear();
+
+    assertThat(participationBundleRepository.closeIfNoActiveSlots(bundleId, Instant.now()))
+        .isFalse();
+  }
+
+  @Test
+  @DisplayName("분철 일괄 닫기는 빈 묶음만 닫고 살아 있는 묶음은 건드리지 않는다")
+  void 분철_일괄_닫기는_빈_묶음만_닫는다() {
+    Long empty = openBundle();
+    Long alive = openBundle();
+    insertParticipation(empty, "CANCELLED");
+    insertParticipation(alive, "CONFIRMED");
+    entityManager.flush();
+    entityManager.clear();
+
+    int closed = participationBundleRepository.closeEmptyByBuncheolId(buncheolId, Instant.now());
+
+    assertThat(closed).isEqualTo(1);
+    entityManager.clear();
+    assertThat(participationBundleRepository.findById(empty)).get().extracting(
+            ParticipationBundle::isActive).isEqualTo(false);
+    assertThat(participationBundleRepository.findById(alive)).get().extracting(
+            ParticipationBundle::isActive).isEqualTo(true);
+  }
+
+  // 슬롯이 하나도 없는 묶음(고아)은 닫지 않는다 — 참여 INSERT 와 연결 사이에서 롤백되면 애초에 남지 않지만,
+  // 조건에 EXISTS 가 빠지면 "만들자마자 닫히는" 묶음이 생겨 첫 참여가 곧장 시체가 된다.
+  @Test
+  @DisplayName("슬롯이 아직 없는 묶음은 일괄 닫기 대상이 아니다")
+  void 슬롯이_아직_없는_묶음은_일괄_닫기_대상이_아니다() {
+    Long bundleId = openBundle();
+    entityManager.flush();
+    entityManager.clear();
+
+    assertThat(participationBundleRepository.closeEmptyByBuncheolId(buncheolId, Instant.now()))
+        .isZero();
+  }
+
+  @Test
+  @DisplayName("성사 확정 기한 채우기는 기한이 빈 활성 묶음만 채운다")
+  void 성사_확정_기한_채우기는_기한이_빈_활성_묶음만_채운다() {
+    Long bundleId = openBundle();
+    entityManager.flush();
+    entityManager.clear();
+    Instant dueAt = Instant.now().plus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+
+    int filled = participationBundleRepository.assignDueAtByBuncheolId(
+        buncheolId, dueAt, Instant.now());
+
+    assertThat(filled).isEqualTo(1);
+    entityManager.clear();
+    assertThat(participationBundleRepository.findById(bundleId))
+        .get()
+        .extracting(ParticipationBundle::getDueAt)
+        .isEqualTo(dueAt);
+
+    // 이미 채워진 묶음은 다시 덮어쓰지 않는다 — 반려로 연장된 기한이 되돌아가면 안 된다.
+    entityManager.clear();
+    assertThat(participationBundleRepository.assignDueAtByBuncheolId(
+            buncheolId, dueAt.plus(1, ChronoUnit.DAYS), Instant.now()))
+        .isZero();
   }
 }

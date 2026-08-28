@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -25,6 +26,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
@@ -50,6 +52,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
@@ -74,12 +77,15 @@ class ParticipationServiceTest {
   private static final Instant NOW = Instant.parse("2026-05-14T12:00:00Z");
   private static final BankAccount HOST_ACCOUNT = BankAccount.of("국민", "98765432", "개최자");
   private static final BankAccount PARTICIPANT_ACCOUNT = BankAccount.of("국민", "12345678", "홍길동");
+  private static final RefundAccount REFUND_ACCOUNT_SNAPSHOT =
+      RefundAccount.of("국민", "12345678", "홍길동");
 
   @InjectMocks private ParticipationService participationService;
 
   @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ParticipationCodeDomainService participationCodeDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
@@ -767,6 +773,161 @@ class ParticipationServiceTest {
   }
 
   @Nested
+  @DisplayName("묶음 쓰기 경로 테스트 (P2-b)")
+  class BundleWritePathTest {
+
+    private static final Long EXISTING_BUNDLE_ID = 700L;
+
+    private Buncheol stubC2c(final BuncheolStatus status) {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(status);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      return buncheol;
+    }
+
+    /** 신청(APPLIED) INSERT 성공 + 정원 충족 판정에 필요한 최소 스텁. */
+    private void givenAppliedInsert() {
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember()));
+    }
+
+    /** 추가 모집(AWAITING_PAYMENT) INSERT 성공. */
+    private void givenCollectingInsert() {
+      given(participationDomainService.createParticipationIfCollecting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+    }
+
+    private void givenFirstParticipation(final Buncheol buncheol) {
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      givenParticipantAccount();
+    }
+
+    /** 같은 분철에 이미 활성 참여가 있는 상태 — 배송지·입금자명 상속 분기를 태운다. */
+    private void givenExistingActive(final Long bundleId) {
+      Participation existing = newInstance(Participation.class);
+      setField(existing, "id", 499L);
+      setField(existing, "shippingAddressId", SHIPPING_ADDRESS_ID);
+      setField(existing, "refundAccount", REFUND_ACCOUNT_SNAPSHOT);
+      setField(existing, "bundleId", bundleId);
+      given(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .willReturn(Optional.of(existing));
+    }
+
+    // LEGACY 는 1인 1활성슬롯이라 묶을 것이 없다 — 백필 STEP 1(행별 1:1)과 같은 규칙이어야 한다.
+    @Test
+    void LEGACY_참여는_항상_새_묶음을_연다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getDeadline()).willReturn(NOW.plus(Duration.ofDays(7)));
+      given(buncheol.getHostId()).willReturn(HOST_ID);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      givenOpenSlot();
+      givenParticipantAccount();
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      User host = mock(User.class);
+      given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
+      given(userDomainService.getUser(HOST_ID)).willReturn(host);
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(SHIPPING_FEE), any(), any(), eq(NOW));
+    }
+
+    // 모집중 재참여는 같은 이체·같은 택배다.
+    @Test
+    void C2C_모집중_재참여는_기존_묶음을_재사용한다() {
+      stubC2c(BuncheolStatus.RECRUITING);
+      givenExistingActive(EXISTING_BUNDLE_ID);
+      givenAppliedInsert();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), eq(EXISTING_BUNDLE_ID), eq(SHIPPING_ADDRESS_ID), eq(0L), any(), isNull(), eq(NOW));
+    }
+
+    @Test
+    void C2C_첫_신청은_새_묶음을_연다() {
+      Buncheol buncheol = stubC2c(BuncheolStatus.RECRUITING);
+      givenFirstParticipation(buncheol);
+      given(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      givenAppliedInsert();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(SHIPPING_FEE), any(), isNull(), eq(NOW));
+    }
+
+    // 🔴 이 트랙의 핵심 회귀 방지. "열린 묶음이면 재사용" 으로 짜면 추가 모집이 옛 묶음에 붙어
+    // ⑤ 배송비 재부과가 한 번도 발동하지 않고 조용히 죽는다 (docs/80 결정 12).
+    @Test
+    void C2C_추가_모집은_활성_묶음이_있어도_재사용하지_않는다() {
+      stubC2c(BuncheolStatus.PAYMENT_COLLECTING);
+      givenExistingActive(EXISTING_BUNDLE_ID);
+      givenCollectingInsert();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(0L), any(), any(), eq(NOW));
+    }
+
+    // 배포선 창에서 생긴 미연결 행(bundle_id NULL)이 재사용 후보가 되는 경우. 새로 열되
+    // ⚠️ 배송비는 상속분(0)을 그대로 써야 한다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
+    @Test
+    void 재사용_후보의_묶음이_비어_있으면_새로_열되_배송비는_상속분을_쓴다() {
+      stubC2c(BuncheolStatus.RECRUITING);
+      givenExistingActive(null);
+      givenAppliedInsert();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(0L), any(), isNull(), eq(NOW));
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 보냈어요 마킹 테스트")
   class MarkPaymentSentTest {
 
@@ -1020,6 +1181,8 @@ class ParticipationServiceTest {
       participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
 
       then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+      // 마지막 슬롯이면 묶음도 끝난다 — 안 닫으면 재참여가 시체 묶음을 재사용해 택배가 옛 주소로 나간다.
+      then(participationBundleDomainService).should().closeIfEmpty(any(), eq(NOW));
     }
 
     @Test
@@ -1030,6 +1193,8 @@ class ParticipationServiceTest {
       participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
 
       then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
+      // 마지막 슬롯이면 묶음도 끝난다 — 안 닫으면 재참여가 시체 묶음을 재사용해 택배가 옛 주소로 나간다.
+      then(participationBundleDomainService).should().closeIfEmpty(any(), eq(NOW));
     }
   }
 

@@ -41,7 +41,7 @@ class DeliveryPickupReminderServiceTest {
   void 독촉_대상은_도착_후_기준_시간이_지난_배송을_조회한다() {
     // given
     Delivery delivery =
-        Delivery.createSnapshot(20L, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
+        Delivery.createSnapshot(20L, null, ShippingMethod.GS25_HALF, "GS25 강남점", "테스트유저", "01012345678");
     given(deliveryDomainService.findPickupReminderTargets(NOW.minus(THRESHOLD), 200))
         .willReturn(List.of(delivery));
 

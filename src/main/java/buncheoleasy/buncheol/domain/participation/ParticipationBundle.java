@@ -1,6 +1,8 @@
 package buncheoleasy.buncheol.domain.participation;
 
 import buncheoleasy.global.domain.TimestampedEntity;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -28,7 +30,8 @@ import lombok.NoArgsConstructor;
  * 하기 때문이다. 중복 방지는 앱 가드가 하고, LEGACY 1인 1슬롯 보호는 {@code
  * participations.uq_participations_legacy_active_participant} 가 그대로 계속한다.
  *
- * <p><b>P1 범위</b> — 이 엔티티는 아직 어떤 읽기·쓰기 경로에도 연결돼 있지 않다. 정본 이전은 P2 다.
+ * <p><b>P2-b 범위</b> — 참여 생성 경로가 이 엔티티를 <b>쓰기 시작했다</b>(묶음 생성·연결·닫기). 다만 <b>읽는 코드는 아직 0줄</b>
+ * 이다 — 응답·알림은 여전히 {@code participations} 의 스냅샷을 본다. 정본 이전(읽기 전환)은 P2-c 다.
  */
 @Entity
 @Table(name = "participation_bundles")
@@ -76,24 +79,48 @@ public class ParticipationBundle extends TimestampedEntity {
    * 새 묶음을 연다. 배송지·배송비·환불계좌는 <b>참여 시점 스냅샷</b>이라 생성 후 바뀌지 않는다({@code
    * updatable = false}).
    *
-   * <p>{@code dueAt} 은 성사 확정 시점에 정해지므로 생성 시점에는 비어 있다 — 신청 구간에는 입금 기한이라는 개념이 없다.
+   * <p>{@code dueAt} 은 <b>즉시 입금 경로(LEGACY·C2C 추가 모집)에서만</b> 값이 있다. C2C 신청(APPLIED)은 성사 확정
+   * 시점에 기한이 정해지므로 {@code null} 로 열고 나중에 {@link #assignDueAt} 으로 채운다 — 신청 구간에는 입금 기한이라는
+   * 개념이 없다.
+   *
+   * <p>⚠️ 검증을 여기서 하는 이유: 이 필드들은 DB 가 {@code NOT NULL} 이라, 없는 채로 저장하면
+   * {@code BusinessException} 이 아니라 {@code Column 'refund_bank' cannot be null} <b>500</b> 이 난다.
    */
   public static ParticipationBundle open(
       final Long buncheolId,
       final Long participantId,
       final Long shippingAddressId,
       final long shippingFee,
-      final RefundAccount refundAccount) {
+      final RefundAccount refundAccount,
+      final Instant dueAt) {
+    if (buncheolId == null || participantId == null || refundAccount == null) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+    }
     ParticipationBundle bundle = new ParticipationBundle();
     bundle.buncheolId = buncheolId;
     bundle.participantId = participantId;
     bundle.shippingAddressId = shippingAddressId;
     bundle.shippingFee = shippingFee;
     bundle.refundAccount = refundAccount;
+    bundle.dueAt = dueAt;
     return bundle;
   }
 
   public boolean isActive() {
     return closedAt == null;
+  }
+
+  // ⚠️ closed_at·payment_sent_at 은 엔티티 setter 로 바꾸지 않는다 — 둘 다 경쟁이 있는 전이라 CAS 로만 쓴다
+  // (ParticipationBundleRepository#closeIfNoActiveSlots). 여기 setter 를 두면 "읽고 판단하고 쓰는" 코드가
+  // 생기고, 그 순간 같은 묶음의 두 슬롯이 동시에 취소될 때 양쪽 다 "아직 하나 남았다" 를 보고 둘 다 안 닫는다.
+
+  /**
+   * 성사 확정 시점에 묶음 입금 기한을 채운다 (C2C 신청 경로 전용 — 그 구간은 기한 없이 열린다).
+   *
+   * <p>비워 두면 나중에 붙을 개최자 「제외」 기한 가드가 <b>fail-open</b> 된다 — 기한 안인데도 참여자를 뺄 수 있게 된다
+   * (docs/71 §8-1 이 이 시각에 기능적 의미를 부여했다).
+   */
+  public void assignDueAt(final Instant dueAt) {
+    this.dueAt = dueAt;
   }
 }

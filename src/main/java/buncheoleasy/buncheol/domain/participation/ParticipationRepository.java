@@ -132,6 +132,15 @@ public interface ParticipationRepository {
    */
   boolean cancelByUserIfCancellable(Long participationId, Instant now);
 
+  /**
+   * 참여를 묶음에 연결한다 (CAS — 아직 연결되지 않은 행만). 이미 연결돼 있으면 {@code false}.
+   *
+   * <p>참여 INSERT 에 컬럼을 더하지 않고 별도 UPDATE 로 채우는 이유는 그 INSERT 가 조건부 원시 SQL 이고 H2 에 없는
+   * {@code UTC_TIMESTAMP()} 를 써서 <b>테스트가 한 줄도 실행하지 못하기</b> 때문이다 — 바인딩 인덱스가 밀려도 잡아 줄
+   * 것이 없다 (docs/80 ④).
+   */
+  boolean linkBundle(Long participationId, Long bundleId, Instant now);
+
   /** C2C 개최자 수동 입금확인 CAS — AWAITING_PAYMENT·PAYMENT_SENT 에서 기한 경과와 무관하게 CONFIRMED 로 전이. */
   boolean confirmPaymentIfPayable(Long participationId, Instant now);
 

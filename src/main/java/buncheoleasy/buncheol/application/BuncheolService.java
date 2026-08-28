@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
@@ -42,6 +43,7 @@ public class BuncheolService {
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final DeliveryDomainService deliveryDomainService;
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
@@ -269,6 +271,9 @@ public class BuncheolService {
       // 신청자가 전부 취소된 직후 — 확정이 무의미하므로 롤백해 RECRUITING 을 유지한다.
       throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
+    // 신청 구간의 묶음은 기한 없이 열려 있다 — 참여 행과 같은 기한을 묶음에도 채운다. 비워 두면 나중에 붙을
+    // 개최자 「제외」 기한 가드가 fail-open 된다(기한 안인데도 참여자를 뺄 수 있게 된다 — docs/71 §8-1).
+    participationBundleDomainService.assignDueAt(buncheolId, paymentDueAt, now);
 
     // 커밋 후 성사 확정·입금 안내 알림톡(신청자 전원, 유저 단위 합산 — docs/46 §4.7-A3)과 수신함 기록을 트리거한다.
     eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId, appliedIds));
@@ -346,6 +351,9 @@ public class BuncheolService {
     // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이
     // 자발취소·만료된 참여에 중복 알림이 가지 않도록).
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
+    // cascade 는 참여를 한 번의 UPDATE 로 전이시켜 어느 묶음이 비었는지 개별로 알 수 없다 — 같은 CAS 조건을
+    // 분철 범위로 넓혀 일괄 판정한다. 안 닫으면 취소된 분철에 활성 묶음이 영구히 남는다.
+    participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
     List<Participation> cancelled =
         participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
     // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.

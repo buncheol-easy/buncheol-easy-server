@@ -38,6 +38,9 @@ public class DeliverySnapshotCreator {
     Delivery delivery =
         Delivery.createSnapshot(
             participation.getId(),
+            // 택배 1개 = 묶음 1개. 안 넣으면 참여는 묶음을 갖는데 배송만 미연결로 남아, P4 의
+            // uq_deliveries_bundle 승격에서야 발견된다 (staging 에서 실제로 3건이 그렇게 샜다).
+            participation.getBundleId(),
             shippingAddress.getShippingMethod(),
             shippingAddress.getStoreName(),
             user.getNickname().value(),

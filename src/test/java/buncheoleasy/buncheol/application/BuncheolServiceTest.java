@@ -24,6 +24,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
@@ -76,6 +77,7 @@ class BuncheolServiceTest {
   @Mock private BuncheolMemberDomainService buncheolMemberDomainService;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
   @Mock private DeliveryDomainService deliveryDomainService;
 
@@ -938,6 +940,8 @@ class BuncheolServiceTest {
       then(buncheol).should().validateOwner(HOST_ID);
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // cascade 는 어느 묶음이 비었는지 개별로 알 수 없어 분철 범위로 일괄 판정한다.
+      then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
       // 취소된 참여의 배송 스냅샷을 정리한다.
       then(deliveryDomainService).should().deleteByParticipationIds(List.of(50L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));

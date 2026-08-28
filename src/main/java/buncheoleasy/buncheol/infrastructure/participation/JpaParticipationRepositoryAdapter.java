@@ -334,6 +334,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public boolean linkBundle(
+      final Long participationId, final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.linkBundleIfUnlinked(participationId, bundleId, now) > 0;
+  }
+
+  @Override
   public boolean cancelByUserIfCancellable(final Long participationId, final Instant now) {
     return jpaParticipationRepository.cancelIfStatusIn(
             participationId,

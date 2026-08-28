@@ -2,6 +2,8 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -40,5 +42,24 @@ public class JpaParticipationBundleRepositoryAdapter implements ParticipationBun
   @Override
   public List<ParticipationBundle> findAllByBuncheolId(final Long buncheolId) {
     return jpaParticipationBundleRepository.findAllByBuncheolIdOrderByIdAsc(buncheolId);
+  }
+
+  @Override
+  public boolean closeIfNoActiveSlots(final Long bundleId, final Instant now) {
+    return jpaParticipationBundleRepository.closeIfNoActiveSlots(
+            bundleId, ParticipationStatus.active(), now)
+        > 0;
+  }
+
+  @Override
+  public int closeEmptyByBuncheolId(final Long buncheolId, final Instant now) {
+    return jpaParticipationBundleRepository.closeEmptyByBuncheolId(
+        buncheolId, ParticipationStatus.active(), now);
+  }
+
+  @Override
+  public int assignDueAtByBuncheolId(
+      final Long buncheolId, final Instant dueAt, final Instant now) {
+    return jpaParticipationBundleRepository.assignDueAtByBuncheolId(buncheolId, dueAt, now);
   }
 }

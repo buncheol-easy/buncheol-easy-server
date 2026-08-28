@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -46,6 +47,7 @@ public class ParticipationService {
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final ParticipationCodeDomainService participationCodeDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final UserDomainService userDomainService;
@@ -131,6 +133,10 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
+    // LEGACY 는 1인 1활성슬롯이라 묶음이 곧 참여다 — 묶을 것이 애초에 없어 항상 새로 연다(백필 STEP 1 과 같은 규칙).
+    participationBundleDomainService.attach(
+        participation, null, shippingAddress.getId(), shippingFee, refundAccount, dueAt, now);
+
     // 참여 INSERT 이후여야 코드에 참여 id 를 남길 수 있고, 슬롯 점유 실패 시 코드도 함께 롤백된다.
     code.ifPresent(it -> participationCodeDomainService.consume(it, participation.getId(), now));
 
@@ -207,13 +213,41 @@ public class ParticipationService {
       refundAccount = refundAccountSnapshot(participantId);
     }
 
+    // 🔴 묶음 경계 판정은 「분철 상태」다 (docs/80 결정 12) — 그리고 그 판정은 <b>아래 switch 자체</b>다.
+    // RECRUITING(applyC2c)만 기존 묶음을 재사용하고, PAYMENT_COLLECTING(joinCollectingC2c)은 재사용 후보를
+    // 아예 넘겨받지 않는다. 모집중 재참여는 같은 이체·같은 택배지만, 성사 확정 뒤 추가 모집은 별도 이체·별도
+    // 택배이기 때문이다. 이 경계가 무너지면 추가 모집이 옛 묶음에 붙어 배송비 재부과(⑤)가 영원히 발동하지 않는다.
+    //
+    // ❌ 시각 비교(finalized_at)로 짜면 안 된다 — 개최자가 입금 수집 중 취소하면 그 값이 덮어써진다
+    // (JpaBuncheolRepository#hostCancelIfCollectingAndNoConfirmed). 백필 SQL 은 시각을 쓰지만 그건 과거를
+    // 재구성하는 일회성이고, 여기는 지금 상태를 보면 되므로 더 정확하다.
+    //
+    // 재사용 후보는 배송지·입금자명을 상속한 그 참여의 묶음이다 — 돈 판정과 묶음 판정이 같은 existing 하나에서
+    // 나와야 "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기지 않는다.
+    // ⚠️ 그 참여의 bundle_id 가 비어 있으면(배포선 창에서 생긴 행) 새로 연다. 이때 배송비는 반드시 위에서
+    // 정해진 상속분(0)을 그대로 쓴다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
+    Long reusableBundleId = existing.map(Participation::getBundleId).orElse(null);
+
     return switch (buncheol.getStatus()) {
       case RECRUITING ->
           applyC2c(
-              buncheol, participantId, member, shippingAddressId, shippingFee, refundAccount, now);
+              buncheol,
+              participantId,
+              member,
+              shippingAddressId,
+              shippingFee,
+              refundAccount,
+              reusableBundleId,
+              now);
       case PAYMENT_COLLECTING ->
           joinCollectingC2c(
-              buncheol, participantId, member, shippingAddressId, shippingFee, refundAccount, now);
+              buncheol,
+              participantId,
+              member,
+              shippingAddressId,
+              shippingFee,
+              refundAccount,
+              now);
       default -> throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     };
   }
@@ -226,6 +260,7 @@ public class ParticipationService {
       final Long shippingAddressId,
       final long shippingFee,
       final RefundAccount refundAccount,
+      final Long reusableBundleId,
       final Instant now) {
     // deadline 경과(확정 유예 대기) 구간의 신규 신청 차단 — docs/46 §4.7-E3. INSERT 의 원자 조건과 이중 방어.
     buncheol.validateRecruiting(now);
@@ -242,6 +277,10 @@ public class ParticipationService {
     if (!participationDomainService.createParticipationIfRecruiting(participation)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
+
+    // 신청 구간에는 입금 기한이 없다 — 성사 확정 시 묶음에 일괄로 채운다(assignDueAt).
+    participationBundleDomainService.attach(
+        participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, null, now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
     publishFullIfAllSlotsApplied(buncheol);
@@ -296,6 +335,12 @@ public class ParticipationService {
       // 진행확정(CONFIRMED) 전이 직후 등 — 추가 모집이 이미 닫힘.
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
+
+    // 추가 모집은 별도 이체·별도 택배라 항상 새 묶음이다(재사용 후보를 넘기지 않는다).
+    // ⚠️ 배송비·배송지는 아직 상속분을 그대로 복사한다 — P2-b 는 "동작 무변경, 추가만" 이다. 새 묶음에 맞게
+    // 다시 부과·재선택하는 것은 ⑤(배송비 재부과)이고, 서버·클라가 같은 릴리스로 나가야 화면과 청구가 안 갈린다.
+    participationBundleDomainService.attach(
+        participation, null, shippingAddressId, shippingFee, refundAccount, dueAt, now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
     return new ParticipateResult(
@@ -489,6 +534,10 @@ public class ParticipationService {
     if (!participationDomainService.cancelByUser(participationId, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
     }
+
+    // 이 슬롯이 마지막이었으면 묶음도 끝난다. 안 닫으면 「죽었는데 활성」 묶음이 남고, 그 사람이 재참여할 때
+    // 시체 묶음을 재사용해 택배가 옛 주소로 나간다. 판정은 CAS 가 한다(동시 취소 안전 — 포트 javadoc).
+    participationBundleDomainService.closeIfEmpty(participation.getBundleId(), now);
   }
 
   /**

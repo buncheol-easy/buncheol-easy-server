@@ -212,6 +212,19 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("rejectedAt") Instant rejectedAt,
       @Param("now") Instant now);
 
+  /**
+   * 참여 → 묶음 연결 CAS. 조건부 원시 INSERT 를 건드리지 않으려고 INSERT 직후 별도로 채운다 (docs/80 ④).
+   *
+   * <p>{@code bundleId IS NULL} 조건은 재실행·경쟁에서 이미 붙은 묶음을 덮어쓰지 않게 한다 — 덮어쓰면 그 사람의 이체가
+   * 엉뚱한 묶음으로 옮겨간다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p SET p.bundleId = :bundleId, p.updatedAt = :now "
+          + "WHERE p.id = :id AND p.bundleId IS NULL")
+  int linkBundleIfUnlinked(
+      @Param("id") Long id, @Param("bundleId") Long bundleId, @Param("now") Instant now);
+
   /** C2C 참여자 자발 취소 CAS — 신청(APPLIED)·입금 대기(AWAITING_PAYMENT)에서만 (docs/46 §5 구간 ①·②). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

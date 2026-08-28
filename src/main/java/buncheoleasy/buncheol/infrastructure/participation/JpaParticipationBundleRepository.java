@@ -1,8 +1,14 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBundle, Long> {
 
@@ -10,4 +16,45 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       Long buncheolId, Long participantId);
 
   List<ParticipationBundle> findAllByBuncheolIdOrderByIdAsc(Long buncheolId);
+
+  /**
+   * 묶음 닫기 CAS. 🔴 활성 슬롯 존재 판정을 <b>UPDATE 의 WHERE 서브쿼리</b>로 묶는 것이 핵심이다 — 밖에서 세어 보고
+   * 넘기면 동시 취소 시 두 트랜잭션이 서로의 취소를 못 보고 둘 다 안 닫는다(포트 javadoc 참조).
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.closedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :bundleId AND b.closedAt IS NULL "
+          // 슬롯이 하나도 없는 묶음은 "끝난 묶음" 이 아니라 "아직 연결 전인 묶음" 이다 — 이 조건이 없으면
+          // 만들자마자 닫혀 첫 참여가 곧장 시체가 된다. 백필 STEP 6 도 같은 EXISTS 를 갖고 있다.
+          + "AND EXISTS (SELECT p FROM Participation p WHERE p.bundleId = b.id) "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.bundleId = b.id AND p.status IN :activeStatuses)")
+  int closeIfNoActiveSlots(
+      @Param("bundleId") Long bundleId,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
+      @Param("now") Instant now);
+
+  /** 위와 같은 조건을 분철 범위로 넓힌 일괄 판정 (취소 cascade·자동 마감). */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.closedAt = :now, b.updatedAt = :now "
+          + "WHERE b.buncheolId = :buncheolId AND b.closedAt IS NULL "
+          + "AND EXISTS (SELECT p FROM Participation p WHERE p.bundleId = b.id) "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.bundleId = b.id AND p.status IN :activeStatuses)")
+  int closeEmptyByBuncheolId(
+      @Param("buncheolId") Long buncheolId,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
+      @Param("now") Instant now);
+
+  /** 성사 확정 시 기한 없이 열려 있던 활성 묶음에 입금 기한을 채운다. 이미 채워진 묶음은 건드리지 않는다. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.dueAt = :dueAt, b.updatedAt = :now "
+          + "WHERE b.buncheolId = :buncheolId AND b.closedAt IS NULL AND b.dueAt IS NULL")
+  int assignDueAtByBuncheolId(
+      @Param("buncheolId") Long buncheolId,
+      @Param("dueAt") Instant dueAt,
+      @Param("now") Instant now);
 }

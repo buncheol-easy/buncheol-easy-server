@@ -9,7 +9,15 @@ import jakarta.persistence.Embeddable;
  * 테이블의 {@code refund_*} 컬럼에 매핑되는 별도 VO 다 (User 의 정산 계좌는 {@code settlement_*} 컬럼이라 컬럼이 다르다). 검증은
  * {@link BankAccount#validate} 로 공유한다.
  *
- * <p>참여의 이 필드는 <b>null 일 수 있다</b> (0원 참여). 응답·알림에 실을 때 null 을 확인할 것.
+ * <p><b>참여 생성은 금액과 무관하게 이 계좌를 요구한다</b> (docs/80 결정 1) — 0원 참여도 예외가 아니다. 환불할 돈이 없어도
+ * 예금주가 개최자 통장 대조 키이고, 참여 묶음({@code participation_bundles.refund_*})이 NOT NULL 이라 계좌 없는 참여는
+ * 묶음을 만들 수 없다.
+ *
+ * <p>다만 <b>2026-08-28 이전에 만들어진 0원 참여는 이 필드가 null 이다</b>. 옛 행을 읽을 수 있는 경로(개최 관리·내 참여·알림)는
+ * 계속 null 을 확인할 것. 컬럼의 NOT NULL 원복은 P4 에서 컬럼을 삭제하며 정리한다.
+ *
+ * <p>⚠️ 세 칸은 all-or-nothing 이다 — 전부 null 이면 조회가 정상이지만 <b>하나라도 남으면 생성자 검증이 예외를 던진다</b>.
+ * 부분 채움을 만들지 말 것.
  */
 @Embeddable
 public record RefundAccount(

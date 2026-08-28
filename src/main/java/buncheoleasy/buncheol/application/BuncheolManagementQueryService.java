@@ -7,6 +7,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
@@ -149,7 +150,7 @@ public class BuncheolManagementQueryService {
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
-        participation.getRefundAccount().holder(),
+        depositorNameOf(participation),
         participation.getTotalAmount(),
         participation.getShippingFee(),
         participation.getStatus(),
@@ -158,6 +159,19 @@ public class BuncheolManagementQueryService {
         refundAccountFor(participation),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
         participation.getPaymentSentAt());
+  }
+
+  /**
+   * 통장 대조 키(입금자명). 계좌가 없으면 {@code null} 을 내리고 클라가 닉네임으로 폴백한다
+   * ({@code HostedBuncheolManage.tsx}).
+   *
+   * <p>참여 생성은 금액과 무관하게 계좌를 요구하므로(docs/80 결정 1) 이 분기는 <b>2026-08-28 이전에 만들어진 0원 참여</b>
+   * 전용이다. 그 시절엔 계좌를 NULL 로 남겼고, 여기서 조건 없이 역참조해 개최 관리 화면 전체가 500 이 났다 —
+   * 계좌를 강제한 뒤에도 옛 행은 그대로 남아 있어 가드가 필요하다.
+   */
+  private static String depositorNameOf(final Participation participation) {
+    RefundAccount refundAccount = participation.getRefundAccount();
+    return refundAccount == null ? null : refundAccount.holder();
   }
 
   /**

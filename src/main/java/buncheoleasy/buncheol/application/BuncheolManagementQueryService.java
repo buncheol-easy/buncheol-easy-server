@@ -184,7 +184,7 @@ public class BuncheolManagementQueryService {
    * </ul>
    *
    * <p>⚠️ <b>C2C 는 0원 슬롯이어도 내린다.</b> {@link Participation#isFree()} 는 <b>슬롯</b> 판정인데 C2C 통장 대조는
-   * <b>묶음</b> 단위다 — 배송비가 첫 슬롯에만 붙고 멤버 가격 0 도 허용돼서, 같은 사람의 "0원 슬롯 + 유상 슬롯"이 한 묶음이
+   * <b>묶음</b> 단위다 — 배송비가 묶음당 1회만 붙고(추가 모집은 새 묶음이라 또 붙는다) 멤버 가격 0 도 허용돼서, 같은 사람의 "0원 슬롯 + 유상 슬롯"이 한 묶음이
    * 될 수 있다. 그 0원 행의 예금주를 지우면 이체 1건에 대조 키가 갈린다. C2C 가 0원 슬롯에도 계좌를 요구하는 이유가
    * 그것이다({@code ParticipationService#participateC2c}). LEGACY 는 1인 1참여라 0원 = 아무것도 안 낸 사람이다.
    *

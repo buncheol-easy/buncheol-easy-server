@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -776,6 +777,9 @@ class ParticipationServiceTest {
   class BundleWritePathTest {
 
     private static final Long EXISTING_BUNDLE_ID = 700L;
+    private static final Long INHERITED_ADDRESS_ID = 201L;
+    private static final RefundAccount INHERITED_REFUND_ACCOUNT =
+        RefundAccount.of("신한", "99998888", "옛이름");
 
     private Buncheol stubC2c(final BuncheolStatus status) {
       Buncheol buncheol = mock(Buncheol.class);
@@ -821,15 +825,22 @@ class ParticipationServiceTest {
       givenParticipantAccount();
     }
 
-    /** 같은 분철에 이미 활성 참여가 있는 상태 — 배송지·입금자명 상속 분기를 태운다. */
+    /**
+     * 같은 분철에 이미 활성 참여가 있는 상태 — 배송지·입금자명 상속 분기의 전제.
+     *
+     * <p>⚠️ {@code lenient()} 인 이유: 추가 모집 경로는 이 조회를 <b>아예 하지 않는다</b>. 그래도 깔아 두지 않으면
+     * "상속 후보가 있는데도 상속하지 않는다" 를 검증할 수 없고, 단언이 배제할 값(옛 배송지·옛 이름·0원)이
+     * 테스트 안에 존재하지 않아 <b>변경 전 코드로도 통과</b>한다.
+     */
     private void givenExistingActive(final Long bundleId) {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
-      setField(existing, "shippingAddressId", SHIPPING_ADDRESS_ID);
-      setField(existing, "refundAccount", REFUND_ACCOUNT_SNAPSHOT);
+      setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
+      setField(existing, "refundAccount", INHERITED_REFUND_ACCOUNT);
       setField(existing, "bundleId", bundleId);
-      given(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
-          .willReturn(Optional.of(existing));
+      lenient()
+          .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .thenReturn(Optional.of(existing));
     }
 
     // LEGACY 는 1인 1활성슬롯이라 묶을 것이 없다 — 백필 STEP 1(행별 1:1)과 같은 규칙이어야 한다.
@@ -886,7 +897,9 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should()
-          .attach(any(), eq(EXISTING_BUNDLE_ID), eq(SHIPPING_ADDRESS_ID), eq(0L), any(), isNull(), eq(NOW));
+          .attach(
+              any(), eq(EXISTING_BUNDLE_ID), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(),
+              eq(NOW));
     }
 
     @Test
@@ -905,11 +918,14 @@ class ParticipationServiceTest {
     }
 
     // 🔴 이 트랙의 핵심 회귀 방지. "열린 묶음이면 재사용" 으로 짜면 추가 모집이 옛 묶음에 붙어
-    // ⑤ 배송비 재부과가 한 번도 발동하지 않고 조용히 죽는다 (docs/80 결정 12).
+    // 배송비 재부과가 한 번도 발동하지 않고 조용히 죽는다 (docs/80 결정 12).
+    // 배송비·배송지가 상속분이 아니라 새 값인 것은 AdditionalRoundShippingFeeTest 가 따로 고정한다.
     @Test
     void C2C_추가_모집은_활성_묶음이_있어도_재사용하지_않는다() {
-      stubC2c(BuncheolStatus.PAYMENT_COLLECTING);
+      Buncheol buncheol = stubC2c(BuncheolStatus.PAYMENT_COLLECTING);
+      // 재사용 후보를 실제로 깔아야 "있어도 재사용하지 않는다" 가 성립한다.
       givenExistingActive(EXISTING_BUNDLE_ID);
+      givenFirstParticipation(buncheol);
       givenCollectingInsert();
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
@@ -920,7 +936,7 @@ class ParticipationServiceTest {
               any(),
               isNull(),
               eq(SHIPPING_ADDRESS_ID),
-              eq(0L),
+              eq(SHIPPING_FEE),
               any(),
               eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
               eq(NOW));
@@ -938,7 +954,155 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should()
-          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(0L), any(), isNull(), eq(NOW));
+          .attach(any(), isNull(), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(), eq(NOW));
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 모집 배송비 재부과 테스트 (docs/80 §3-6)")
+  class AdditionalRoundShippingFeeTest {
+
+    private static final Long INHERITED_ADDRESS_ID = 201L;
+    private static final Long INHERITED_BUNDLE_ID = 700L;
+    private static final RefundAccount INHERITED_REFUND_ACCOUNT =
+        RefundAccount.of("신한", "99998888", "옛이름");
+
+    private Buncheol stubC2c(final BuncheolStatus status) {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(status);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      return buncheol;
+    }
+
+    /**
+     * 같은 분철에 이미 활성 참여가 있다 — 상속 분기의 전제.
+     *
+     * <p>⚠️ {@code lenient()} 인 이유: 추가 모집 경로는 이 조회를 <b>아예 하지 않는다</b>. 그래도 깔아 두지 않으면
+     * 단언이 배제할 값(옛 배송지·옛 이름·0원)이 테스트 안에 없어 <b>변경 전 코드로도 통과</b>한다.
+     */
+    private void givenExistingActive() {
+      Participation existing = newInstance(Participation.class);
+      setField(existing, "id", 499L);
+      setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
+      setField(existing, "refundAccount", INHERITED_REFUND_ACCOUNT);
+      setField(existing, "bundleId", INHERITED_BUNDLE_ID);
+      lenient()
+          .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .thenReturn(Optional.of(existing));
+    }
+
+    // 🔴 이 트랙의 돈 규칙. 새 묶음이 생기면 배송비 1회 부과 — 추가 모집은 별도 이체·별도 택배다.
+    @Test
+    void 성사_확정_후_추가_모집은_배송비를_다시_부과하고_요청_배송지를_쓴다() {
+      Buncheol buncheol = stubC2c(BuncheolStatus.PAYMENT_COLLECTING);
+      // 🔴 상속 후보가 살아 있는 상태 — 이 PR 이 바꾸는 유일한 시나리오다(staging 참여 222→223).
+      // 안 깔면 아래 단언이 배제할 값이 없어 변경 전 코드로도 통과한다.
+      givenExistingActive();
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      givenParticipantAccount();
+      given(participationDomainService.createParticipationIfCollecting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationDomainService)
+          .should()
+          .createParticipationIfCollecting(participationCaptor.capture());
+      Participation saved = participationCaptor.getValue();
+      // 상속분(0원)이 아니라 새로 부과된 금액이다.
+      assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
+      // 상속한 옛 배송지가 아니라 요청한 배송지를 쓴다 — 새 택배라 소유·배송방법 검증도 여기서 처음 걸린다.
+      assertThat(saved.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
+      // 입금자명도 그 시점 프로필로 다시 스냅샷한다 — 이체별로 통장에 찍히는 이름이 맞아야 한다.
+      assertThat(saved.getRefundAccount().holder()).isEqualTo(PARTICIPANT_ACCOUNT.holder());
+      assertThat(saved.getShippingAddressId()).isNotEqualTo(INHERITED_ADDRESS_ID);
+      // 🔴 정본은 묶음이다. 묶음의 배송지가 틀리면 updatable=false 라 코드로 못 되돌린다 —
+      // 참여 행만 보는 검증으로는 상속분이 묶음에 흘러들어도 통과한다.
+      then(participationBundleDomainService)
+          .should()
+          .attach(
+              any(),
+              isNull(),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(SHIPPING_FEE),
+              any(),
+              eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
+              eq(NOW));
+      // 상속 조회 자체를 하지 않는다 — 추가 모집에서 상속은 구조적으로 불가능하다.
+      then(participationDomainService)
+          .should(never())
+          .findFirstActiveInBuncheol(anyLong(), anyLong());
+    }
+
+    // 상태 판정이 스냅샷 계산보다 뒤에 있으면, 모집이 끝난 분철에 재참여할 때 배송지·계좌 예외가
+    // 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다. 재참여자는 이 PR 로 그 경로에 새로 편입된다.
+    @Test
+    void 모집이_끝난_분철은_배송지_계좌를_보기_전에_거절한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.CONFIRMED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(participationShippingAddressResolver).should(never()).resolve(any(), any(), any());
+      then(userDomainService).should(never()).getUser(anyLong());
+      // 상속 조회도 헛돌지 않는다.
+      then(participationDomainService)
+          .should(never())
+          .findFirstActiveInBuncheol(anyLong(), anyLong());
+    }
+
+    // 모집중 재참여는 한 번의 이체·한 개의 택배다 — 상속과 0원이 유지돼야 한다(회귀 방지).
+    @Test
+    void 모집중_재참여는_배송지와_입금자명을_상속하고_배송비를_부과하지_않는다() {
+      stubC2c(BuncheolStatus.RECRUITING);
+      givenExistingActive();
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember()));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationDomainService)
+          .should()
+          .createParticipationIfRecruiting(participationCaptor.capture());
+      Participation saved = participationCaptor.getValue();
+      assertThat(saved.getShippingFee()).isZero();
+      assertThat(saved.getShippingAddressId()).isEqualTo(INHERITED_ADDRESS_ID);
+      assertThat(saved.getRefundAccount().holder()).isEqualTo("옛이름");
+      // 상속 구간에서는 배송지 검증을 아예 타지 않는다(요청 입력을 무시한다).
+      then(participationShippingAddressResolver).should(never()).resolve(any(), any(), any());
     }
   }
 

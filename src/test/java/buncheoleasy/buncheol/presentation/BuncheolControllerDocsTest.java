@@ -1104,7 +1104,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("participants[].shippingFee")
                                 .description(
-                                    "amount 에 포함된 배송비(원). 다슬롯은 묶음 첫 슬롯에만 부과되므로 같은 분철의 두 번째 슬롯은 0 이다"),
+                                    "amount 에 포함된 배송비(원). 배송비는 묶음당 1회다 — 같은 묶음의 두 번째 슬롯은 0 이지만, 성사 확정 후 추가 모집은 새 묶음이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다"),
                             fieldWithPath("participants[].status")
                                 .description("참여 상태 (AWAITING_PAYMENT / CONFIRMED)"),
                             fieldWithPath("participants[].dueAt")

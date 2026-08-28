@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
@@ -168,8 +169,13 @@ public class ParticipationService {
    * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)엔 무입금 신청(APPLIED)으로 슬롯을 선점하고, 성사 확정 후 입금
    * 수집중(PAYMENT_COLLECTING)엔 빈 슬롯에 즉시입금(AWAITING_PAYMENT, 개별 24h)으로 진입한다(추가 모집 — §4.7-E1).
    *
-   * <p>다슬롯 일관성(§4.7-A1·A2): 같은 분철에 기존 활성 참여가 있으면 배송지·환불계좌(입금자명)를 강제로 재사용하고 배송비는 첫 참여에만 부과한다 — 개최자
-   * 통장 대조(입금자명 1개)와 배송 1묶음을 보장한다. 요청의 배송지 입력은 무시된다(FE 는 프리필+잠금).
+   * <p>다슬롯 일관성(§4.7-A1·A2)은 <b>모집중 구간에만</b> 적용된다: 그 구간의 재참여는 배송지·환불계좌(입금자명)를 강제로 재사용하고
+   * 배송비는 첫 참여에만 부과한다 — 한 번의 이체·한 개의 택배이므로 개최자 통장 대조(입금자명 1개)와 배송 1묶음이 성립한다. 요청의 배송지
+   * 입력은 무시된다(FE 는 프리필+잠금).
+   *
+   * <p><b>성사 확정 뒤 추가 모집은 별개 거래다</b> — 새 묶음·새 이체·새 택배라 배송지를 다시 고르고 배송비를 다시 부과하며 입금자명도 그
+   * 시점 프로필로 다시 스냅샷한다. A1·A2 의 근거는 무너지지 않는다: 묶음이 나뉘면 이체와 택배도 같이 나뉘므로 <b>이체별로 실제 입금자명이
+   * 맞아떨어지는 쪽이 오히려 정확하다</b>(옛 이름을 상속하면 통장에 안 찍힌 이름으로 대조하게 된다).
    */
   private ParticipateResult participateC2c(
       final Buncheol loaded,
@@ -194,8 +200,31 @@ public class ParticipationService {
         || ParticipationCodeDomainService.submitted(request.participationCode())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
     }
+    // 상태는 한 번만 읽고 여기서 먼저 거른다. 스냅샷 계산 뒤로 미루면 모집이 끝난 분철에 재참여할 때
+    // BUNCHEOL_NOT_RECRUITING 대신 배송지·계좌 예외가 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다.
+    //
+    // ⚠️ 이 값이 <b>최신이라는 보장은 락이 주지 않는다</b>. 위 getBuncheolForUpdate 는 SELECT ... FOR UPDATE 를
+    // 내보내지만, 같은 트랜잭션에서 getBuncheol 이 이미 올려 둔 인스턴스가 영속성 컨텍스트에 있으면 Hibernate 는
+    // 그 인스턴스를 그대로 돌려주고 필드를 덮지 않는다 — 즉 락 이전에 읽은 값일 수 있다.
+    // 그래도 안전한 이유는 <b>INSERT CAS</b> 다: 상태를 낡게 봐 RECRUITING 으로 오판하면 상속 분기를 타지만
+    // createParticipationIfRecruiting 의 조건부 INSERT 가 0행을 돌려 전부 롤백된다. 0원 배송비가 커밋되는
+    // 경로는 없다. 돈 판정을 이 값에 매달았으므로 그 근거를 여기 남긴다.
+    final BuncheolStatus status = buncheol.getStatus();
+    if (status != BuncheolStatus.RECRUITING && status != BuncheolStatus.PAYMENT_COLLECTING) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    // 🔴 상속은 <b>모집중 재참여에만</b> 적용된다. 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라
+    // 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6). 그래서 조회 자체를
+    // 모집중에만 한다 — 추가 모집에서는 이 값이 쓰이지 않아 헛쿼리가 된다.
+    //
+    // ⚠️ 배송지·배송비·입금자명·묶음 재사용 넷이 <b>이 existing 하나</b>에서 나와야 한다. 조건을 두 벌 세우면
+    // "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기고, 그러면 새 택배에 배송비가 0원으로 굳는다
+    // — shipping_fee 와 shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
     Optional<Participation> existing =
-        participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId);
+        status == BuncheolStatus.RECRUITING
+            ? participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId)
+            : Optional.empty();
     final Long shippingAddressId;
     final long shippingFee;
     final RefundAccount refundAccount;
@@ -226,7 +255,7 @@ public class ParticipationService {
     // 나와야 "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기지 않는다.
     // ⚠️ 그 참여의 bundle_id 가 비어 있으면(배포선 창에서 생긴 행) 새로 연다. 이때 배송비는 반드시 위에서
     // 정해진 상속분(0)을 그대로 쓴다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
-    return switch (buncheol.getStatus()) {
+    return switch (status) {
       case RECRUITING ->
           applyC2c(
               buncheol,
@@ -235,7 +264,7 @@ public class ParticipationService {
               shippingAddressId,
               shippingFee,
               refundAccount,
-              // 재사용 후보를 이 케이스 안에서만 계산해, "추가 모집은 넘겨받지 않는다" 를 구조로 드러낸다.
+              // 위 상속 분기와 같은 existing 에서 나온다 — 둘이 갈리면 배송비와 묶음이 어긋난다.
               existing.map(Participation::getBundleId).orElse(null),
               now);
       case PAYMENT_COLLECTING ->
@@ -247,6 +276,7 @@ public class ParticipationService {
               shippingFee,
               refundAccount,
               now);
+      // 위 가드가 이미 걸렀다 — 여기 도달하면 가드가 깨진 것이다. switch 식 exhaustiveness 때문에 남는다.
       default -> throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     };
   }
@@ -347,9 +377,10 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 추가 모집은 별도 이체·별도 택배라 항상 새 묶음이다(재사용 후보를 넘기지 않는다).
-    // ⚠️ 배송비·배송지는 아직 상속분을 그대로 복사한다 — P2-b 는 "동작 무변경, 추가만" 이다. 새 묶음에 맞게
-    // 다시 부과·재선택하는 것은 ⑤(배송비 재부과)이고, 서버·클라가 같은 릴리스로 나가야 화면과 청구가 안 갈린다.
+    // 추가 모집은 별도 이체·별도 택배라 항상 새 묶음이다(재사용 후보를 넘기지 않는다). 배송지·배송비도
+    // 이 회차 것이다 — 호출부(participateC2c)가 상속을 모집중으로 한정해 여기로는 새 값이 넘어온다.
+    // ⚠️ 같은 회차에 슬롯을 여러 개 잡으면 그때마다 새 묶음이라 배송비도 그때마다 붙는다(수용된 한계 —
+    // ParticipationBundle javadoc 의 경계 문단).
     participationBundleDomainService.attach(
         participation, null, shippingAddressId, shippingFee, refundAccount, dueAt, now);
 

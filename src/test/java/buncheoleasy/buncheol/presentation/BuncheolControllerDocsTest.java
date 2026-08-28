@@ -994,16 +994,21 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `memberCount` = 분철에 등록된 멤버 슬롯 수
                             - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
-                            - `participants[].depositorName` = **입금자명**(= 참여 시점 참여자의 정산 계좌 예금주 스냅샷). 개최자의 통장 대조 키
+                            - `participants[].depositorName` = **입금자명**(= 참여 시점 참여자의 정산 계좌 예금주 스냅샷). 개최자의 통장 대조 키.
+                              **null 일 수 있다** — ⑴ LEGACY 0원(코드) 참여는 대조할 입금이 없어 내리지 않고 ⑵ 참여 계좌 강제 이전에
+                              만들어진 0원 참여는 계좌 자체가 없다. **참여자 닉네임으로 폴백해 표시할 것.**
+                              C2C 는 0원 슬롯이어도 내려간다 — 대조 단위가 슬롯이 아니라 묶음(같은 사람)이라, 배송비가 첫 슬롯에만
+                              붙어 생긴 0원 슬롯의 예금주를 지우면 이체 1건에 대조 키가 갈린다
                             - `participants[].refundAccount` = **평시에는 항상 null.** 계좌번호는 개최자가 실제로 환불해야 하는 건, 즉
-                              **취소분 중 입금 흔적(마킹·입금확인)이 있는 건**에만 채운다
+                              **취소분 중 입금 흔적(마킹·입금확인)이 있고 0원이 아닌 건**에만 채운다
                             - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
                             - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
                             - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
                               개최자 계좌로 직접 입금되는 직거래라 개최자가 환불 주체). 환불이 실제로 필요한지는 개최자가 판단한다.
                               필드 구조는 `participants[]` 와 같고 `status` 는 항상 `CANCELLED`, `delivery` 는 취소 시 정리되어 항상 null.
                               서버가 **입금 흔적이 있는 건만** 계좌를 내리고, 그중 실제 환불이 필요한지는 개최자가 판단한다.
-                              `refundAccount` 는 **입금 흔적이 있는 건에만** 채워진다(흔적 없는 취소는 환불할 돈이 없다).
+                              `refundAccount` 는 **입금 흔적이 있고 0원이 아닌 건에만** 채워진다(흔적 없는 취소·LEGACY 0원 참여는
+                              환불할 돈이 없다).
                               슬롯을 점유하지 않으므로 참여 수·정원 집계에 넣지 않는다
 
                             **응답 예시**
@@ -1092,7 +1097,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
                             fieldWithPath("participants[].depositorName")
-                                .description("입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키"),
+                                .description(
+                                    "입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키. LEGACY 0원(코드) 참여와 계좌 강제 이전 잔여 행은 null — 닉네임 폴백")
+                                .optional(),
                             fieldWithPath("participants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("participants[].shippingFee")
@@ -1164,7 +1171,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("멤버 이름. 멤버가 삭제·이동돼 조회되지 않으면 null")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].depositorName")
-                                .description("입금자명 (= 환불 계좌 예금주)"),
+                                .description(
+                                    "입금자명 (= 환불 계좌 예금주). LEGACY 0원(코드) 참여와 계좌 강제 이전 잔여 행은 null — 닉네임 폴백")
+                                .optional(),
                             fieldWithPath("cancelledParticipants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("cancelledParticipants[].shippingFee")
@@ -1178,7 +1187,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("입금확인 시각. 입금확인 전에 취소됐으면 null")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount")
-                                .description("환불 계좌. 입금 흔적(paymentSentAt·confirmedAt)이 있는 건에만 채워진다")
+                                .description(
+                                    "환불 계좌. 입금 흔적(paymentSentAt·confirmedAt)이 있고 0원이 아닌 건에만 채워진다 — LEGACY 0원(코드) 참여는 돌려줄 돈이 없다")
                                 .type(JsonFieldType.OBJECT)
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].refundAccount.bank")

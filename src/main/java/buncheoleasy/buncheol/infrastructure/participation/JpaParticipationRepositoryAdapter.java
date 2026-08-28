@@ -119,7 +119,9 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(4, participation.getShippingAddressId());
                 ps.setLong(5, participation.getAmount());
                 ps.setLong(6, participation.getShippingFee());
-                // 0원 참여는 환불 계좌가 없다 (세 컬럼 모두 NULL — 조회 시 임베더블이 null 로 온다).
+                // 세 컬럼 모두 NULL 이면 조회 시 임베더블이 null 로 온다 (부분 NULL 은 RefundAccount 생성자가 거부).
+                // 신규 참여는 금액과 무관하게 계좌를 채우지만(ParticipationService), 도메인 불변식이 아직 null 을
+                // 허용하므로(Participation#validate) null 바인딩을 방어적으로 남긴다.
                 RefundAccount refundAccount = participation.getRefundAccount();
                 ps.setString(7, refundAccount == null ? null : refundAccount.bank());
                 ps.setString(8, refundAccount == null ? null : refundAccount.account());

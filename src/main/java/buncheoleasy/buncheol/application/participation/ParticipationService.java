@@ -102,9 +102,11 @@ public class ParticipationService {
     long shippingFee =
         code.isPresent() ? 0L : buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
     Instant dueAt = paymentDueAt(now, buncheol.getDeadline());
-    // 0원 참여는 환불받을 돈도 대조할 입금도 없어 계좌를 요구하지 않는다 (Participation 의 불변식과 동일 조건).
-    RefundAccount refundAccount =
-        member.getPrice() + shippingFee > 0 ? refundAccountSnapshot(participantId) : null;
+    // 금액과 무관하게 계좌를 요구한다 (docs/80 결정 1). 0원이라 환불할 돈은 없지만, 참여 묶음
+    // (participation_bundles.refund_*)이 NOT NULL 이라 계좌 없는 참여는 묶음을 만들 수 없다 — 두 테이블이
+    // 반대로 말하면 그 컬럼을 읽는 13곳이 각자 종류를 판단해야 하고, 하나만 빠뜨려도 500 이다(실제로 빠뜨렸다).
+    // C2C 는 이미 같은 규칙이다(아래 participateC2c).
+    RefundAccount refundAccount = refundAccountSnapshot(participantId);
 
     // 0원 참여는 아래에서 분철 조기 확정 CAS(X 락)까지 간다. 참여 INSERT 가 buncheols 에 공유 락을
     // 걸므로 그대로 두면 한 트랜잭션 안에서 S→X 업그레이드가 생겨 동시 참여끼리 데드락이 난다.

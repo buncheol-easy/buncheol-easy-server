@@ -78,7 +78,8 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
-  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 0원 참여는 환불할 돈이 없어 null 이다.
+  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌 + 개최자 통장 대조 키(입금자명).
+  // 금액과 무관하게 채워진다 — 경계·이유의 정본은 RefundAccount javadoc. (계좌 강제 이전 0원 참여만 null)
   @Embedded private RefundAccount refundAccount;
 
   // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
@@ -277,6 +278,9 @@ public class Participation extends TimestampedEntity {
     }
   }
 
+  // 애플리케이션 서비스는 금액과 무관하게 계좌를 요구하지만(ParticipationService, PR #151) 이 불변식은 아직
+  // 조건부다 — P2-c 가 이 필드를 엔티티에서 제거하며 불변식을 묶음 쪽으로 옮긴다(묶음은 이미 NOT NULL).
+  // 지금 조건을 떼면 몇 시간 뒤 같은 줄을 지우게 되고, 픽스처 8곳(ParticipationTest 등)만 흔들린다.
   private void validate(final RefundAccount refundAccount, final long totalAmount) {
     if (refundAccount == null && totalAmount > 0) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);

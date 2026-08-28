@@ -360,14 +360,16 @@ CREATE TABLE IF NOT EXISTS participations
     shipping_address_id          BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
     amount                       BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
     shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회만 부과; 묶음 첫 슬롯만 >0). 입금 총액 = amount + shipping_fee',
-    -- NULL 인 경우: 0원(코드) 참여는 환불할 돈이 없어 계좌를 받지 않고, P2 에서 정본이 묶음으로 옮겨가면
-    -- 이 컬럼들이 INSERT 목록에서 빠진다. 기존 배포 DB 에는 NOT NULL 해제 ALTER 필요.
+    -- NULL 은 참여 계좌 강제(PR #151) 이전에 만들어진 0원(코드) 참여의 잔여 행뿐이다. 신규 참여는 금액과
+    -- 무관하게 세 칸이 모두 채워진다 — participation_bundles.refund_* 가 NOT NULL 이라 계좌 없는 참여는
+    -- 묶음을 만들 수 없기 때문이다. 컬럼 자체는 P2 에서 정본이 묶음으로 옮겨가며 INSERT 목록에서 빠지고
+    -- P4 에서 삭제된다. NULL 허용은 그때까지의 과도기 상태이며, 기존 배포 DB 에는 NOT NULL 해제 ALTER 필요.
     -- ⚠️ DEFAULT '' 로 완화해서는 안 된다 — RefundAccount 는 record 라 JPA 가 조회 시에도 생성자를 태우고
     -- 그 생성자가 빈 값을 거부해(BankAccount javadoc) 그 행을 읽는 것 자체가 깨진다. 세 컬럼이 모두 NULL
     -- 이면 Hibernate 는 embeddable 을 null 로 두고 생성자를 타지 않는다.
-    refund_bank                  VARCHAR(50)  NULL COMMENT '환불 은행 (0원 참여는 NULL, 정본은 participation_bundles)',
-    refund_account               VARCHAR(50)  NULL COMMENT '환불 계좌번호 (0원 참여는 NULL, 정본은 participation_bundles)',
-    refund_holder                VARCHAR(50)  NULL COMMENT '환불 예금주 (0원 참여는 NULL, 정본은 participation_bundles)',
+    refund_bank                  VARCHAR(50)  NULL COMMENT '환불 은행 (정본은 participation_bundles, NULL 은 계좌 강제 이전 0원 참여뿐)',
+    refund_account               VARCHAR(50)  NULL COMMENT '환불 계좌번호 (정본은 participation_bundles, NULL 은 계좌 강제 이전 0원 참여뿐)',
+    refund_holder                VARCHAR(50)  NULL COMMENT '환불 예금주 (정본은 participation_bundles, NULL 은 계좌 강제 이전 0원 참여뿐)',
     due_at                       DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',

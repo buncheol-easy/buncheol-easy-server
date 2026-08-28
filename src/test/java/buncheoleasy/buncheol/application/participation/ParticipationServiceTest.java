@@ -11,6 +11,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
@@ -1062,6 +1063,7 @@ class ParticipationServiceTest {
     private ParticipationCode givenCodeParticipation() {
       Buncheol buncheol = mock(Buncheol.class);
       ParticipationCode code = participationCode();
+      givenParticipantAccount();
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
@@ -1098,7 +1100,51 @@ class ParticipationServiceTest {
       Participation saved = participationCaptor.getValue();
       assertThat(saved.getAmount()).isZero();
       assertThat(saved.getShippingFee()).isZero();
-      assertThat(saved.getRefundAccount()).isNull();
+    }
+
+    // 0원이라 환불할 돈은 없지만 예금주가 개최자 통장 대조 키이고, 참여 묶음이 계좌를 NOT NULL 로 요구한다 (docs/80 결정 1).
+    @Test
+    void 코드_참여도_환불_계좌를_스냅샷한다() {
+      givenCodeParticipation();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      then(participationDomainService)
+          .should()
+          .createParticipationIfRecruiting(participationCaptor.capture());
+      assertThat(participationCaptor.getValue().getRefundAccount())
+          .isEqualTo(
+              RefundAccount.of(
+                  PARTICIPANT_ACCOUNT.bank(),
+                  PARTICIPANT_ACCOUNT.account(),
+                  PARTICIPANT_ACCOUNT.holder()));
+    }
+
+    @Test
+    void 정산_계좌가_없으면_0원_코드_참여도_거부한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getDeadline()).willReturn(NOW.plus(Duration.ofDays(30)));
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(codeSlotMember());
+      given(participationCodeDomainService.validateForParticipation(any(), eq("ABCD2345"), eq(NOW)))
+          .willReturn(Optional.of(participationCode()));
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(userDomainService.getUser(PARTICIPANT_ID)).willReturn(mock(User.class));
+
+      assertThatThrownBy(
+              () -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+
+      // 계좌 검증은 참여 INSERT 앞이라 코드도 소모되지 않는다.
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(participationCodeDomainService).should(never()).consume(any(), anyLong(), any());
     }
 
     @Test
@@ -1113,7 +1159,11 @@ class ParticipationServiceTest {
       assertThat(result.totalAmount()).isZero();
       assertThat(result.dueAt()).isNull();
       assertThat(result.hostAccount()).isNull();
-      then(userDomainService).should(never()).getUser(anyLong());
+      // 참여자 계좌 스냅샷 1회뿐 — 개최자 계좌는 안내할 일이 없어 조회하지 않는다 (docs/80 결정 1).
+      // getUser(HOST_ID) never 만으로는 부족하다: 이 테스트의 buncheol 은 getHostId() 를 스텁하지 않아
+      // 개최자 조회가 되살아나도 인자가 null 이라 그 어서션은 공허하게 통과한다.
+      then(userDomainService).should(times(1)).getUser(PARTICIPANT_ID);
+      then(userDomainService).should(never()).getUser(HOST_ID);
     }
 
     @Test

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -447,6 +448,65 @@ class BuncheolManagementQueryServiceTest {
       assertThat(target.depositorName()).isNull();
     }
 
+    // C2C 회귀 방지 — isFree() 는 슬롯 판정인데 C2C 통장 대조는 묶음(같은 사람) 단위다. 배송비가 첫 슬롯에만
+    // 붙고 멤버 가격 0 도 허용돼 "0원 슬롯 + 유상 슬롯" 이 한 묶음이 될 수 있는데, 그 0원 행의 예금주를 지우면
+    // 이체 1건에 대조 키가 갈린다. C2C 가 0원 슬롯에도 계좌를 요구하는 이유가 그것이다.
+    @Test
+    void C2C는_0원_슬롯이어도_입금자명을_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L), buncheolMember(102L, 1002L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "레이")));
+      // 같은 사람의 다슬롯 — 배송비가 첫 슬롯에만 붙어 두 번째가 0원이 된다.
+      Participation paid =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      Participation freeSlot =
+          participation(602L, 102L, PARTICIPANT_USER, 0L, ParticipationStatus.CONFIRMED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(paid, freeSlot));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(601L, 602L)))
+          .willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      // 두 행의 대조 키가 갈리지 않아야 한다.
+      assertThat(response.participants().get(0).depositorName()).isEqualTo("홍길동");
+      assertThat(response.participants().get(1).depositorName()).isEqualTo("홍길동");
+    }
+
+    // FE 의 "환불이 필요한 참여" 목록 필터에는 금액 조건이 없다 (HostedBuncheolManage.tsx —
+    // confirmedAt||paymentSentAt). C2C 0원 취소분의 계좌를 서버가 지우면 목록에는 뜨는데 계좌가 비는 행이 된다.
+    @Test
+    void C2C는_0원_취소분이어도_계좌를_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CANCELLED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation cancelled =
+          participation(601L, 101L, PARTICIPANT_USER, 0L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse target = response.cancelledParticipants().get(0);
+      assertThat(target.refundAccount()).isNotNull();
+      assertThat(target.depositorName()).isEqualTo("홍길동");
+    }
+
     // 계좌 강제 이후 "유상인데 계좌가 빈" 행은 계약상 존재할 수 없다. 그래도 null 가드를 남긴 이유가
     // 이것뿐이라, 가드를 지웠을 때 깨지는 테스트가 없으면 다음 사람이 조용히 지운다 (docs/80 결정 5).
     @Test
@@ -531,7 +591,12 @@ class BuncheolManagementQueryServiceTest {
   }
 
   private void stubBasicBuncheol(final BuncheolStatus status) {
+    stubBasicBuncheol(status, FlowType.LEGACY);
+  }
+
+  private void stubBasicBuncheol(final BuncheolStatus status, final FlowType flowType) {
     Buncheol buncheol = buncheol(status);
+    setField(buncheol, "flowType", flowType);
     given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(buncheol));
     given(groupRepository.findById(GROUP_ID)).willReturn(Optional.of(group(GROUP_ID, "IVE")));
   }

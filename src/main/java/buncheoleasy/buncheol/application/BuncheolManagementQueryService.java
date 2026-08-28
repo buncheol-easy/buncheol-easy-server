@@ -29,6 +29,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>계좌는 평시에 내려가지 않는다</b> — 통장 대조에 필요한 것은 입금자명뿐이라 활성 참여에는 {@code depositorName} 만 붙고,
  * 계좌번호는 개최자가 실제로 환불해야 하는 건(취소분 중 입금 흔적이 있는 것)에만 채운다 ({@link #refundAccountFor}).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BuncheolManagementQueryService {
@@ -92,14 +94,19 @@ public class BuncheolManagementQueryService {
             .stream()
             .collect(Collectors.toMap(User::getId, Function.identity()));
 
+    // 0원 슬롯의 계좌 노출 판정이 플로우별로 다르다 ({@link #depositorNameOf}).
+    boolean c2c = buncheol.isC2c();
     List<BuncheolManagementParticipantResponse> participants =
         participations.stream()
-            .map(p -> toParticipant(p, memberNameBySlotId, userById, deliveryByParticipationId))
+            .map(
+                p ->
+                    toParticipant(
+                        p, memberNameBySlotId, userById, deliveryByParticipationId, c2c))
             .toList();
     // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
     List<BuncheolManagementParticipantResponse> cancelledParticipants =
         cancelled.stream()
-            .map(p -> toParticipant(p, memberNameBySlotId, userById, Map.of()))
+            .map(p -> toParticipant(p, memberNameBySlotId, userById, Map.of(), c2c))
             .toList();
 
     return new BuncheolManagementResponse(
@@ -142,7 +149,8 @@ public class BuncheolManagementQueryService {
       final Participation participation,
       final Map<Long, String> memberNameBySlotId,
       final Map<Long, User> userById,
-      final Map<Long, Delivery> deliveryByParticipationId) {
+      final Map<Long, Delivery> deliveryByParticipationId,
+      final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
     return new BuncheolManagementParticipantResponse(
@@ -150,13 +158,13 @@ public class BuncheolManagementQueryService {
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
-        depositorNameOf(participation),
+        depositorNameOf(participation, c2c),
         participation.getTotalAmount(),
         participation.getShippingFee(),
         participation.getStatus(),
         participation.getDueAt(),
         participation.getConfirmedAt(),
-        refundAccountFor(participation),
+        refundAccountFor(participation, c2c),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
         participation.getPaymentSentAt());
   }
@@ -169,17 +177,33 @@ public class BuncheolManagementQueryService {
    *
    * <ul>
    *   <li><b>계좌가 없는 행</b> — 참여 계좌 강제(PR #151) 이전의 0원 참여. 여기서 조건 없이 역참조해 개최 관리 화면 전체가
-   *       500 이 났다. 계좌를 강제한 뒤에도 옛 행은 P4 컬럼 삭제까지 남으므로 가드를 유지한다.
-   *   <li><b>0원 참여</b> — 계좌를 갖게 된 뒤에도 <b>대조할 입금이 없어</b> 예금주(실명)를 내리지 않는다. 이 필드의 존재
-   *       이유가 통장 대조이므로({@link BuncheolManagementParticipantResponse}), 대조할 것이 없으면 노출 근거도 없다.
+   *       500 이 났다. 계좌를 강제한 뒤에도 옛 행은 P4 컬럼 삭제까지 남으므로 가드를 유지한다. <b>유상 참여가 이 분기에
+   *       들어오면 데이터 이상</b>이라 경고를 남긴다 — 닉네임 폴백 때문에 화면만 봐서는 티가 나지 않는다.
+   *   <li><b>LEGACY 0원 참여</b> — 계좌를 갖게 된 뒤에도 <b>대조할 입금이 없어</b> 예금주(실명)를 내리지 않는다. 이 필드의
+   *       존재 이유가 통장 대조이므로({@link BuncheolManagementParticipantResponse}), 대조할 것이 없으면 노출 근거도 없다.
    * </ul>
+   *
+   * <p>⚠️ <b>C2C 는 0원 슬롯이어도 내린다.</b> {@link Participation#isFree()} 는 <b>슬롯</b> 판정인데 C2C 통장 대조는
+   * <b>묶음</b> 단위다 — 배송비가 첫 슬롯에만 붙고 멤버 가격 0 도 허용돼서, 같은 사람의 "0원 슬롯 + 유상 슬롯"이 한 묶음이
+   * 될 수 있다. 그 0원 행의 예금주를 지우면 이체 1건에 대조 키가 갈린다. C2C 가 0원 슬롯에도 계좌를 요구하는 이유가
+   * 그것이다({@code ParticipationService#participateC2c}). LEGACY 는 1인 1참여라 0원 = 아무것도 안 낸 사람이다.
+   *
+   * <p>P2 에서 묶음이 정본이 되면 이 판정은 {@code bundle} 단위로 옮긴다 — 그때 플로우 분기가 사라진다.
    *
    * <p>⚠️ 판정은 <b>금액</b>으로 한다 — 계좌 유무로 바꾸면 안 된다. {@code DepositOrderListener}·{@code
    * SlackNotificationListener} 도 같은 기준이다.
    */
-  private static String depositorNameOf(final Participation participation) {
+  private static String depositorNameOf(final Participation participation, final boolean c2c) {
     RefundAccount refundAccount = participation.getRefundAccount();
-    if (refundAccount == null || participation.isFree()) {
+    if (refundAccount == null) {
+      if (!participation.isFree()) {
+        log.warn(
+            "유상 참여에 환불 계좌가 없다 — 개최자가 통장 대조 키를 잃는다. participationId={}",
+            participation.getId());
+      }
+      return null;
+    }
+    if (!c2c && participation.isFree()) {
       return null;
     }
     return refundAccount.holder();
@@ -192,17 +216,21 @@ public class BuncheolManagementQueryService {
    * <p>판정 키({@code paymentSentAt} 또는 {@code confirmedAt})는 개최 관리 화면의 "환불이 필요한 참여" 목록 필터와 같은
    * 기준이다 — 둘이 갈리면 목록에는 뜨는데 계좌가 비는 행이 생긴다.
    */
-  private static RefundAccountResponse refundAccountFor(final Participation participation) {
-    return needsHostRefund(participation)
+  private static RefundAccountResponse refundAccountFor(
+      final Participation participation, final boolean c2c) {
+    return needsHostRefund(participation, c2c)
         ? RefundAccountResponse.from(participation.getRefundAccount())
         : null;
   }
 
-  private static boolean needsHostRefund(final Participation participation) {
-    // 0원 참여는 돌려줄 돈이 없다. 참여 계좌 강제(PR #151) 전에는 계좌가 NULL 이라 자동으로 걸러졌지만, 이제는
-    // 계좌가 채워져 있어 이 조건이 없으면 취소 시 개최자에게 계좌번호까지 내려간다 — 0원 코드 참여는 생성 즉시
+  private static boolean needsHostRefund(final Participation participation, final boolean c2c) {
+    // LEGACY 0원(코드) 참여는 돌려줄 돈이 없다. 참여 계좌 강제(PR #151) 전에는 계좌가 NULL 이라 자동으로 걸러졌지만,
+    // 이제는 계좌가 채워져 있어 이 조건이 없으면 취소 시 개최자에게 계좌번호까지 내려간다 — 0원 코드 참여는 생성 즉시
     // CONFIRMED 라 취소되면 아래 뒷 조건을 항상 만족한다.
-    if (participation.isFree()) {
+    // C2C 를 제외하는 이유는 depositorNameOf 와 같다(슬롯 판정 ≠ 묶음 판정). 게다가 FE 의 "환불이 필요한 참여"
+    // 목록 필터에는 금액 조건이 없어(HostedBuncheolManage.tsx — confirmedAt||paymentSentAt), C2C 0원 취소분을
+    // 여기서 지우면 목록에는 뜨는데 계좌가 비는 행이 된다 — 아래 판정 키 규약이 경고하는 바로 그 상태다.
+    if (!c2c && participation.isFree()) {
       return false;
     }
     return participation.getStatus() == ParticipationStatus.CANCELLED

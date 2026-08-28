@@ -78,7 +78,8 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
-  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌. 0원 참여는 환불할 돈이 없어 null 이다.
+  // 분철이 진행되지 않을 때(취소) 환불받을 참여자 본인 계좌 + 개최자 통장 대조 키(입금자명).
+  // 금액과 무관하게 채워진다 — 경계·이유의 정본은 RefundAccount javadoc. (계좌 강제 이전 0원 참여만 null)
   @Embedded private RefundAccount refundAccount;
 
   // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.

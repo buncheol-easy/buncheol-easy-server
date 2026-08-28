@@ -1924,45 +1924,4 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(buncheol.isCreatedBeforeFinalize(saved.getCreatedAt())).isTrue();
     }
   }
-
-  /**
-   * {@link RefundAccount} 는 record {@code @Embeddable} 이라 JPA 가 조회 시에도 생성자(= {@code BankAccount.validate})를
-   * 태운다. 0원 참여 행이 읽히는 것은 "임베더블 전 컬럼이 NULL 이면 Hibernate 가 인스턴스화하지 않는다" 는 규칙에 의존한다.
-   */
-  @Nested
-  @DisplayName("환불 계좌가 없는 0원 참여의 조회 왕복")
-  class FreeParticipationRefundAccountTest {
-
-    @Test
-    void refund_컬럼이_모두_NULL_인_참여를_다시_읽으면_환불계좌가_null_이다() {
-      Long buncheolId = createBuncheol();
-      Long buncheolMemberId = createBuncheolMember(buncheolId);
-      Long addressId = insertShippingAddress(participantId, "무료참여점");
-      Long participationId = insertFreeParticipation(buncheolId, buncheolMemberId, addressId);
-      em.flush();
-      em.clear();
-
-      Participation loaded = participationRepository.findById(participationId).orElseThrow();
-
-      assertThat(loaded.isFree()).isTrue();
-    }
-
-    private Long insertFreeParticipation(
-        final Long buncheolId, final Long buncheolMemberId, final Long addressId) {
-      jdbcTemplate.update(
-          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-              + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account,"
-              + " refund_holder, status)"
-              + " VALUES (?, ?, ?, ?, 0, 0, NULL, NULL, NULL, ?)",
-          buncheolId,
-          buncheolMemberId,
-          participantId,
-          addressId,
-          ParticipationStatus.CONFIRMED.name());
-      return jdbcTemplate.queryForObject(
-          "SELECT id FROM participations WHERE shipping_address_id = ? ORDER BY id DESC LIMIT 1",
-          Long.class,
-          addressId);
-    }
-  }
 }

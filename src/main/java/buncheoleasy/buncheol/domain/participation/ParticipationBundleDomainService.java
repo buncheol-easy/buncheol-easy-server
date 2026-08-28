@@ -42,6 +42,9 @@ public class ParticipationBundleDomainService {
    * {@code linkBundle} 이 메모리 값을 바꾼 뒤 dirty checking 이 UPDATE 를 한 번 더 내보내 CAS 를 우회한다.
    *
    * @param reusableBundleId 재사용할 묶음 id. {@code null} 이면 새로 연다
+   * @param refundAccount 새 묶음에 심을 계좌. <b>{@code reusableBundleId} 가 있으면 쓰이지 않으며 {@code null}
+   *     이어도 된다</b> — 재사용이면 그 묶음이 이미 가진 계좌가 정본이다. 둘 다 없으면 {@code
+   *     ParticipationBundle#open} 이 {@code PARTICIPATION_REQUIRED_FIELD_MISSING} 으로 잡는다(NPE 아님)
    */
   public void attach(
       final Participation participation,

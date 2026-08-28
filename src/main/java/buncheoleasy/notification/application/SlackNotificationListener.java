@@ -243,6 +243,9 @@ public class SlackNotificationListener {
    * <p>그게 특히 나쁜 이유는 같은 조건에서 {@code DepositOrderListener} 가 페이액션 등록을 스킵하기 때문이다 —
    * 그 스킵의 근거가 "운영자가 이 슬랙 알림을 보고 수동 확인한다" 인데, 그 알림까지 죽으면 <b>자동확인도 안 되고
    * 운영자도 모르는 참여</b>가 된다.
+   *
+   * <p>📌 배송비 환급 블록도 같은 헬퍼를 쓰지만 그쪽은 <b>도달 불가</b>다 — {@code ShippingFeePaybackService} 가
+   * 묶음 없는 신청을 접수 단계에서 막는다. 순수 방어 코드이므로 다시 추적하지 말 것.
    */
   private static String refundAccountText(final RefundAccount refundAccount) {
     return refundAccount == null

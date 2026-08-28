@@ -41,6 +41,8 @@ public class NotificationAssembler {
     User participant = userDomainService.getUser(participation.getParticipantId());
     User host = userDomainService.getUser(buncheol.getHostId());
     // 환불 계좌·입금자명의 정본은 묶음이다 (P2-c). 미연결 행이면 비어 있고, 그 경우 알림은 대체 문자열로 나간다.
+    // ⚠️ 실제로 묶음을 쓰는 리스너는 3곳인데 loadByParticipation 을 타는 모든 알림이 조회를 1건 더 낸다 —
+    // 응집도(조립은 여기 한 곳)와 맞바꾼 것이다. @Async 저부하 경로라 수용한다.
     ParticipationBundle bundle =
         participationBundleDomainService.findByParticipation(participation).orElse(null);
     // 입금 총액(멤버 금액 + 배송비)은 참여 생성 시 산정·스냅샷된 값을 그대로 쓴다.

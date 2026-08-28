@@ -914,8 +914,11 @@ class ParticipationServiceTest {
       then(participationBundleDomainService)
           .should()
           .attach(
-              any(), eq(EXISTING_BUNDLE_ID), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(),
-              eq(NOW));
+              any(), eq(EXISTING_BUNDLE_ID), eq(INHERITED_ADDRESS_ID), eq(0L),
+              // 재사용이면 계좌를 아예 안 넘긴다 — any() 로 두면 스냅샷을 떠도 통과한다.
+              isNull(), isNull(), eq(NOW));
+      // 그래서 유저 조회 헛쿼리도 없다.
+      then(userDomainService).should(never()).getUser(PARTICIPANT_ID);
     }
 
     @Test
@@ -931,6 +934,22 @@ class ParticipationServiceTest {
       then(participationBundleDomainService)
           .should()
           .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(SHIPPING_FEE), any(), isNull(), eq(NOW));
+    }
+
+    // 계좌 강제(PR #151) 이전에 만들어진 활성 C2C 참여를 가진 사람은 프로필 계좌가 없을 수 있다.
+    // 재사용이면 그 묶음의 계좌가 정본이라 계좌가 필요 없는데, 스냅샷을 뜨면 USER_BANK_ACCOUNT_NOT_REGISTERED
+    // 로 재참여가 새로 막힌다.
+    @Test
+    void 계좌_미등록_유저도_모집중_재참여는_막히지_않는다() {
+      stubC2c(BuncheolStatus.RECRUITING);
+      givenExistingActive(EXISTING_BUNDLE_ID);
+      givenAppliedInsert();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(any(), eq(EXISTING_BUNDLE_ID), any(), eq(0L), isNull(), isNull(), eq(NOW));
     }
 
     // 🔴 이 트랙의 핵심 회귀 방지. "열린 묶음이면 재사용" 으로 짜면 추가 모집이 옛 묶음에 붙어

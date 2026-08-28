@@ -52,7 +52,7 @@ public class ParticipationPaymentExpiryScheduler {
     int failedCount = 0;
     for (Participation target : targets) {
       try {
-        if (participationPaymentExpiryService.expire(target, now)) {
+        if (participationPaymentExpiryService.expire(target.getId(), now)) {
           expiredCount++;
         }
       } catch (Exception e) {

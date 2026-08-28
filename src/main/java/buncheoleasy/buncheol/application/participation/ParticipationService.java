@@ -226,8 +226,6 @@ public class ParticipationService {
     // 나와야 "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기지 않는다.
     // ⚠️ 그 참여의 bundle_id 가 비어 있으면(배포선 창에서 생긴 행) 새로 연다. 이때 배송비는 반드시 위에서
     // 정해진 상속분(0)을 그대로 쓴다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
-    Long reusableBundleId = existing.map(Participation::getBundleId).orElse(null);
-
     return switch (buncheol.getStatus()) {
       case RECRUITING ->
           applyC2c(
@@ -237,7 +235,8 @@ public class ParticipationService {
               shippingAddressId,
               shippingFee,
               refundAccount,
-              reusableBundleId,
+              // 재사용 후보를 이 케이스 안에서만 계산해, "추가 모집은 넘겨받지 않는다" 를 구조로 드러낸다.
+              existing.map(Participation::getBundleId).orElse(null),
               now);
       case PAYMENT_COLLECTING ->
           joinCollectingC2c(
@@ -297,6 +296,13 @@ public class ParticipationService {
    * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 뿐 아니라 C2C 도 {@code confirmPaymentPayable} 뒤에
    * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
    * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
+   *
+   * <p><b>P2-b 가 세 번째 방향을 더했다 — 참여 행 → 묶음 행 → 참여 행.</b> 묶음 종료 CAS 가 활성 슬롯 존재를 UPDATE 의
+   * 서브쿼리로 판정하는데(current read) InnoDB 가 그 참여 행들에 공유 락을 건다. 그래서 <b>같은 묶음의 두 슬롯을 동시에
+   * 취소하면</b> 서로 상대의 참여 행을 기다려 데드락이 날 수 있다 — 다슬롯 참여자가 두 슬롯을 연타 취소하는 경우다.
+   * 정합성은 지켜지고(롤백된 쪽은 취소 자체가 안 된다) 재시도하면 성공하지만, <b>실패 모드가 500 이라는 점</b>은 알고 있어야
+   * 한다. 이 판정을 밖으로 빼면 데드락은 사라지지만 그 대신 두 슬롯이 서로의 취소를 못 봐 <b>묶음이 영영 안 닫힌다</b> —
+   * 그쪽이 더 나쁘다(조용하고 되돌리기 어렵다).
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();

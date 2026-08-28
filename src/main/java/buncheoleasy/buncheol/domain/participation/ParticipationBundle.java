@@ -110,17 +110,9 @@ public class ParticipationBundle extends TimestampedEntity {
     return closedAt == null;
   }
 
-  // ⚠️ closed_at·payment_sent_at 은 엔티티 setter 로 바꾸지 않는다 — 둘 다 경쟁이 있는 전이라 CAS 로만 쓴다
-  // (ParticipationBundleRepository#closeIfNoActiveSlots). 여기 setter 를 두면 "읽고 판단하고 쓰는" 코드가
-  // 생기고, 그 순간 같은 묶음의 두 슬롯이 동시에 취소될 때 양쪽 다 "아직 하나 남았다" 를 보고 둘 다 안 닫는다.
-
-  /**
-   * 성사 확정 시점에 묶음 입금 기한을 채운다 (C2C 신청 경로 전용 — 그 구간은 기한 없이 열린다).
-   *
-   * <p>비워 두면 나중에 붙을 개최자 「제외」 기한 가드가 <b>fail-open</b> 된다 — 기한 안인데도 참여자를 뺄 수 있게 된다
-   * (docs/71 §8-1 이 이 시각에 기능적 의미를 부여했다).
-   */
-  public void assignDueAt(final Instant dueAt) {
-    this.dueAt = dueAt;
-  }
+  // ⚠️ 이 엔티티에는 상태 변경 setter 를 두지 않는다 — closed_at·payment_sent_at·due_at 은 전부 경쟁이
+  // 있거나 범위 일괄이라 CAS·벌크 UPDATE 로만 쓴다(ParticipationBundleRepository). setter 를 두면
+  // "읽고 판단하고 쓰는" 코드가 생기고, 그 순간 같은 묶음의 두 슬롯이 동시에 취소될 때 양쪽 다
+  // "아직 하나 남았다" 를 보고 둘 다 안 닫는다. 게다가 이 엔티티는 clearAutomatically 벌크 UPDATE 로만
+  // 갱신되므로 dirty checking 이 섞이면 그 갱신과 충돌한다.
 }

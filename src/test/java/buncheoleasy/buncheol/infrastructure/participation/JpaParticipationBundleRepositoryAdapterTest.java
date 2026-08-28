@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
@@ -43,6 +44,7 @@ class JpaParticipationBundleRepositoryAdapterTest {
   @Autowired private ParticipationBundleRepository participationBundleRepository;
   @Autowired private BuncheolRepository buncheolRepository;
   @Autowired private BuncheolMemberRepository buncheolMemberRepository;
+  @Autowired private ParticipationRepository participationRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
   @PersistenceContext private EntityManager entityManager;
 
@@ -303,5 +305,55 @@ class JpaParticipationBundleRepositoryAdapterTest {
     assertThat(participationBundleRepository.assignDueAtByBuncheolId(
             buncheolId, dueAt.plus(1, ChronoUnit.DAYS), Instant.now()))
         .isZero();
+  }
+
+  // 🔴 닫힌 묶음에는 붙지 않는다 — 재사용 후보는 비잠금 조회로 뽑히므로, 그 사이 마지막 슬롯이 취소돼
+  // 묶음이 닫혔을 수 있다. 그대로 붙이면 「닫혔는데 활성 슬롯을 가진 묶음」이 생기고, 종료 CAS 가
+  // closed_at IS NULL 을 요구하므로 그 묶음은 두 번 다시 닫히지 않는다.
+  @Test
+  @DisplayName("이미 닫힌 묶음에는 참여를 연결하지 않는다")
+  void 이미_닫힌_묶음에는_참여를_연결하지_않는다() {
+    Long bundleId = openBundle();
+    insertParticipation(bundleId, "CANCELLED");
+    entityManager.flush();
+    entityManager.clear();
+    participationBundleRepository.closeIfNoActiveSlots(bundleId, Instant.now());
+    entityManager.clear();
+
+    Long orphanId = insertUnlinkedParticipation();
+
+    assertThat(participationRepository.linkBundle(orphanId, bundleId, Instant.now())).isFalse();
+  }
+
+  @Test
+  @DisplayName("열려 있는 묶음에는 참여를 연결한다")
+  void 열려_있는_묶음에는_참여를_연결한다() {
+    Long bundleId = openBundle();
+    entityManager.flush();
+    entityManager.clear();
+
+    Long orphanId = insertUnlinkedParticipation();
+
+    assertThat(participationRepository.linkBundle(orphanId, bundleId, Instant.now())).isTrue();
+  }
+
+  /** 아직 묶음에 붙지 않은 참여 한 건. */
+  private Long insertUnlinkedParticipation() {
+    Long freshGroupMemberId =
+        TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "미연결 멤버 " + (memberSeq++));
+    BuncheolMember member = BuncheolMember.create(buncheolId, freshGroupMemberId, 10_000L);
+    buncheolMemberRepository.saveAll(List.of(member));
+    entityManager.flush();
+    jdbcTemplate.update(
+        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, bundle_id,"
+            + " shipping_address_id, amount, shipping_fee, refund_bank, refund_account,"
+            + " refund_holder, status, created_at, updated_at)"
+            + " VALUES (?, ?, ?, NULL, NULL, 10000, 3000, '국민', '12345678', '홍길동',"
+            + " 'AWAITING_PAYMENT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        buncheolId,
+        member.getId(),
+        participantId);
+    return jdbcTemplate.queryForObject(
+        "SELECT id FROM participations WHERE buncheol_member_id = ?", Long.class, member.getId());
   }
 }

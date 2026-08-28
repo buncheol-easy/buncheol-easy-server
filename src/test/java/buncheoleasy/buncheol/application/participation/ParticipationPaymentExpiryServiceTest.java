@@ -37,6 +37,13 @@ class ParticipationPaymentExpiryServiceTest {
 
   private static final Long BUNDLE_ID = 900L;
 
+  /** 만료 성공 뒤 묶음 종료 판정은 스냅샷이 아니라 <b>다시 읽은</b> 행의 bundleId 로 한다. */
+  private void givenExpiredParticipation() {
+    Participation participation = mock(Participation.class);
+    given(participation.getBundleId()).willReturn(BUNDLE_ID);
+    given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
+  }
+
   @Nested
   @DisplayName("입금 만료 대상 조회 테스트")
   class FindOverdueTargetsTest {
@@ -58,20 +65,13 @@ class ParticipationPaymentExpiryServiceTest {
   @DisplayName("단일 참여 입금 만료 처리 테스트")
   class ExpireTest {
 
-    private Participation target() {
-      Participation participation = mock(Participation.class);
-      given(participation.getId()).willReturn(PARTICIPATION_ID);
-      return participation;
-    }
-
     @Test
     void 만료_처리를_도메인_서비스에_위임하고_성공하면_자동취소_이벤트를_발행하며_true를_반환한다() {
-      Participation participation = target();
-      given(participation.getBundleId()).willReturn(BUNDLE_ID);
+      givenExpiredParticipation();
       given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW))
           .willReturn(true);
 
-      boolean result = participationPaymentExpiryService.expire(participation, NOW);
+      boolean result = participationPaymentExpiryService.expire(PARTICIPATION_ID, NOW);
 
       assertThat(result).isTrue();
       then(participationDomainService).should().expirePayment(PARTICIPATION_ID, NOW);
@@ -81,22 +81,20 @@ class ParticipationPaymentExpiryServiceTest {
     // 만료로 마지막 슬롯이 빠지면 묶음도 끝난다. 안 닫으면 「죽었는데 활성」 묶음이 남고 재참여가 그 시체를 재사용한다.
     @Test
     void 만료에_성공하면_묶음_종료를_판정한다() {
-      Participation participation = target();
-      given(participation.getBundleId()).willReturn(BUNDLE_ID);
+      givenExpiredParticipation();
       given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW)).willReturn(true);
 
-      participationPaymentExpiryService.expire(participation, NOW);
+      participationPaymentExpiryService.expire(PARTICIPATION_ID, NOW);
 
       then(participationBundleDomainService).should().closeIfEmpty(BUNDLE_ID, NOW);
     }
 
     @Test
     void 이미_확인_취소된_참여는_CAS에_막혀_false를_반환하고_이벤트를_발행하지_않는다_멱등() {
-      Participation participation = target();
       given(participationDomainService.expirePayment(PARTICIPATION_ID, NOW))
           .willReturn(false);
 
-      boolean result = participationPaymentExpiryService.expire(participation, NOW);
+      boolean result = participationPaymentExpiryService.expire(PARTICIPATION_ID, NOW);
 
       assertThat(result).isFalse();
       then(eventPublisher).should(never()).publishEvent(any());

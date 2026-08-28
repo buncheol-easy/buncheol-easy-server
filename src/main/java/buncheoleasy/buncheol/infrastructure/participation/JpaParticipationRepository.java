@@ -221,7 +221,15 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p SET p.bundleId = :bundleId, p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.bundleId IS NULL")
+          + "WHERE p.id = :id AND p.bundleId IS NULL "
+          // 🔴 대상 묶음의 생존을 같은 UPDATE 안에서(current read) 건다. 재사용 후보는 비잠금 조회로
+          // 뽑히는데(findFirstActiveInBuncheol), 참여 생성은 분철 행 X 락을 잡고 자발 취소는 안 잡아
+          // 둘이 직렬화되지 않는다. 그 사이 마지막 슬롯이 취소돼 묶음이 닫히면, 스냅샷을 믿고 그대로
+          // 붙일 경우 「닫혔는데 활성 슬롯을 가진 묶음」이 생긴다 — closeIfNoActiveSlots 가
+          // closed_at IS NULL 을 요구하므로 그 묶음은 두 번 다시 닫히지 않는다.
+          // 새로 연 묶음은 방금 INSERT 한 행이라 이 조건이 항상 참이다 — 분기 없이 두 경로를 함께 덮는다.
+          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
+          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL)")
   int linkBundleIfUnlinked(
       @Param("id") Long id, @Param("bundleId") Long bundleId, @Param("now") Instant now);
 

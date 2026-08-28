@@ -28,18 +28,20 @@ public class ParticipationPaymentExpiryService {
   }
 
   /**
-   * 단일 참여의 입금 만료 처리 (AWAITING_PAYMENT + 기한 경과일 때만 CANCELLED CAS). 인자는 {@link #findOverdueTargets}
-   * 가 돌려준 대상 객체다 — 묶음 종료 판정에 그 행의 {@code bundleId} 가 필요하다. 멱등하며, 그 사이 입금확인/자발취소된 참여는 CAS 에
+   * 단일 참여의 입금 만료 처리 (AWAITING_PAYMENT + 기한 경과일 때만 CANCELLED CAS). 멱등하며, 그 사이 입금확인/자발취소된 참여는 CAS 에
    * 막혀 false 를 돌려준다. 실제로 만료시킨 경우에만 참여자에게 자동취소 알림 이벤트를 발행한다(커밋 후 발송).
    */
   @Transactional
-  public boolean expire(final Participation participation, final Instant now) {
-    Long participationId = participation.getId();
+  public boolean expire(final Long participationId, final Instant now) {
     boolean expired = participationDomainService.expirePayment(participationId, now);
     if (expired) {
-      // 만료로 마지막 슬롯이 빠졌으면 묶음도 닫는다 (docs/80 ④ 보강 3). 대상 객체는 스케줄러가 이미 조회해
-      // 넘겨주므로 여기서 다시 읽지 않는다 — bundle_id 는 NULL→설정 한 방향뿐이라 스냅샷이어도 안전하다.
-      participationBundleDomainService.closeIfEmpty(participation.getBundleId(), now);
+      // 만료로 마지막 슬롯이 빠졌으면 묶음도 닫는다 (docs/80 ④ 보강 3).
+      // ⚠️ 스케줄러가 넘겨준 객체의 bundleId 를 쓰면 안 된다 — 그건 배치 조회 시점 스냅샷이라, 그 사이
+      // 백필이 채웠으면 여전히 NULL 로 보인다. 그러면 closeIfEmpty 가 조용히 no-op 하고 활성 슬롯 0개인
+      // 묶음이 열린 채 남는다. 스케줄러는 최대 200건을 미리 읽고 건별 트랜잭션으로 돌아 그 창이 실재한다.
+      // PK 조회 1회는 이 배치에서 측정 가능한 비용이 아니다.
+      participationBundleDomainService.closeIfEmpty(
+          participationDomainService.getParticipation(participationId).getBundleId(), now);
       eventPublisher.publishEvent(new PaymentExpiredEvent(participationId));
     }
     return expired;

@@ -1,0 +1,154 @@
+package buncheoleasy.buncheol.domain.participation;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
+import static org.springframework.test.util.ReflectionTestUtils.setField;
+
+import buncheoleasy.global.exception.domain.BusinessException;
+import java.lang.reflect.Constructor;
+import java.time.Instant;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+/**
+ * 이 클래스가 선언한 불변식 — <b>"묶음을 열었으면 반드시 연결한다"</b> — 을 검증한다.
+ *
+ * <p>서비스 테스트는 이 빈을 목으로 대체하고 호출 인자만 보므로, 열기→연결의 <b>순서</b>와 연결 실패 시 <b>예외로 롤백</b>되는지는
+ * 여기서만 확인된다.
+ */
+@ExtendWith(MockitoExtension.class)
+@DisplayName("ParticipationBundleDomainService 단위 테스트")
+class ParticipationBundleDomainServiceTest {
+
+  private static final Long BUNCHEOL_ID = 10L;
+  private static final Long PARTICIPANT_ID = 100L;
+  private static final Long PARTICIPATION_ID = 500L;
+  private static final Long SHIPPING_ADDRESS_ID = 200L;
+  private static final Long NEW_BUNDLE_ID = 900L;
+  private static final Long EXISTING_BUNDLE_ID = 700L;
+  private static final Instant NOW = Instant.parse("2026-05-14T12:00:00Z");
+  private static final RefundAccount REFUND_ACCOUNT =
+      RefundAccount.of("국민", "12345678", "홍길동");
+
+  @InjectMocks private ParticipationBundleDomainService participationBundleDomainService;
+
+  @Mock private ParticipationBundleRepository participationBundleRepository;
+  @Mock private ParticipationRepository participationRepository;
+
+  private Participation participation() {
+    Participation participation = newInstance(Participation.class);
+    setField(participation, "id", PARTICIPATION_ID);
+    setField(participation, "buncheolId", BUNCHEOL_ID);
+    setField(participation, "participantId", PARTICIPANT_ID);
+    return participation;
+  }
+
+  private void givenBundleSaved() {
+    given(participationBundleRepository.save(any()))
+        .willAnswer(
+            invocation -> {
+              ParticipationBundle bundle = invocation.getArgument(0);
+              setField(bundle, "id", NEW_BUNDLE_ID);
+              return bundle;
+            });
+  }
+
+  private Long attach(final Participation participation, final Long reusableBundleId) {
+    return participationBundleDomainService.attach(
+        participation,
+        reusableBundleId,
+        SHIPPING_ADDRESS_ID,
+        3000L,
+        REFUND_ACCOUNT,
+        null,
+        NOW);
+  }
+
+  @Test
+  void 재사용_후보가_없으면_묶음을_열고_그_id로_연결한다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW))
+        .willReturn(true);
+
+    Long bundleId = attach(participation, null);
+
+    assertThat(bundleId).isEqualTo(NEW_BUNDLE_ID);
+    // 열기가 연결보다 먼저다 — 반대면 연결할 id 가 없다.
+    InOrder inOrder = Mockito.inOrder(participationBundleRepository, participationRepository);
+    inOrder.verify(participationBundleRepository).save(any());
+    inOrder.verify(participationRepository).linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW);
+  }
+
+  @Test
+  void 재사용_후보가_있으면_묶음을_새로_열지_않는다() {
+    Participation participation = participation();
+    given(participationRepository.linkBundle(PARTICIPATION_ID, EXISTING_BUNDLE_ID, NOW))
+        .willReturn(true);
+
+    Long bundleId = attach(participation, EXISTING_BUNDLE_ID);
+
+    assertThat(bundleId).isEqualTo(EXISTING_BUNDLE_ID);
+    then(participationBundleRepository).should(never()).save(any());
+  }
+
+  // 연결 결과를 메모리에도 반영해야 같은 트랜잭션의 뒤 코드(배송 스냅샷)가 묶음을 볼 수 있다.
+  @Test
+  void 연결에_성공하면_참여_객체에도_묶음_id가_반영된다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(anyLong(), anyLong(), any())).willReturn(true);
+
+    attach(participation, null);
+
+    assertThat(participation.getBundleId()).isEqualTo(NEW_BUNDLE_ID);
+  }
+
+  // 🔴 조용히 넘어가면 "참여는 있는데 묶음이 없는" 행이 남고, P4 의 NOT NULL 승격에서야 발견된다.
+  @Test
+  void 연결에_실패하면_예외를_던져_트랜잭션을_되돌린다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(anyLong(), anyLong(), any())).willReturn(false);
+
+    assertThatThrownBy(() -> attach(participation, null))
+        .isInstanceOf(BusinessException.class);
+    assertThat(participation.getBundleId()).isNull();
+  }
+
+  @Test
+  void 묶음이_없는_참여는_종료_판정을_건너뛴다() {
+    participationBundleDomainService.closeIfEmpty(null, NOW);
+
+    then(participationBundleRepository).should(never()).closeIfNoActiveSlots(any(), any());
+  }
+
+  @Test
+  void 묶음이_있으면_종료_판정을_저장소에_위임한다() {
+    participationBundleDomainService.closeIfEmpty(EXISTING_BUNDLE_ID, NOW);
+
+    then(participationBundleRepository).should().closeIfNoActiveSlots(eq(EXISTING_BUNDLE_ID), eq(NOW));
+  }
+
+  private static <T> T newInstance(final Class<T> type) {
+    try {
+      Constructor<T> constructor = type.getDeclaredConstructor();
+      constructor.setAccessible(true);
+      return constructor.newInstance();
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+}

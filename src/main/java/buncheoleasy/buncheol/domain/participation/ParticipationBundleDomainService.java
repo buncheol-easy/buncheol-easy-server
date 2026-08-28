@@ -4,6 +4,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
  * <p><b>이 클래스가 지키는 불변식은 하나다 — "묶음을 열었으면 반드시 연결한다".</b> 열기와 연결이 호출부에 흩어지면 참여는 있는데 묶음이
  * 없는 행(또는 그 반대인 고아 묶음)이 조용히 생기고, 그 행은 P4 의 {@code bundle_id NOT NULL} 승격에서 뒤늦게 걸린다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ParticipationBundleDomainService {
@@ -56,7 +58,21 @@ public class ParticipationBundleDomainService {
 
     // 🔴 영향 행이 1이 아니면 멈춘다. 조용히 넘어가면 "참여는 있는데 묶음이 없는" 행이 남고, 그 행은
     // P4 의 bundle_id NOT NULL 승격에서야 발견된다 — 그때는 원인 트랜잭션이 이미 사라진 뒤다.
+    //
+    // 실패 사유는 둘인데 성격이 다르다:
+    //   ① 재사용하려던 묶음이 그 사이 닫혔다 — <b>정당한 경합</b>. 재시도하면 새 묶음으로 정상 진입하므로
+    //      409(CONFLICT)가 맞다.
+    //   ② 방금 INSERT 한 행의 bundle_id 가 이미 차 있다 — <b>있을 수 없는 일</b>(내부 불변식 위반).
+    // 한 CAS 로 묶여 있어 둘을 응답에서 가르지 않는다(가르려면 스냅샷 재조회가 필요한데, 그 조회는
+    // REPEATABLE READ 라 방금 CAS 가 본 current read 와 다른 답을 낼 수 있어 오히려 틀린 분류를 만든다).
+    // 대신 로그를 남겨 ②가 실제로 생기면 모니터링에서 정상 경합과 구분되게 한다.
     if (!participationRepository.linkBundle(participation.getId(), bundleId, now)) {
+      log.warn(
+          "묶음 연결 실패 — 재사용 묶음이 닫혔거나(경합) 이미 연결된 참여다(불변식 위반)."
+              + " participationId={}, bundleId={}, reused={}",
+          participation.getId(),
+          bundleId,
+          reusableBundleId != null);
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
     participation.linkBundle(bundleId);
@@ -81,7 +97,8 @@ public class ParticipationBundleDomainService {
   }
 
   /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다 (C2C 신청 구간은 기한 없이 열린다). */
-  public int assignDueAt(final Long buncheolId, final Instant dueAt, final Instant now) {
+  public int assignDueAtByBuncheolId(
+      final Long buncheolId, final Instant dueAt, final Instant now) {
     return participationBundleRepository.assignDueAtByBuncheolId(buncheolId, dueAt, now);
   }
 }

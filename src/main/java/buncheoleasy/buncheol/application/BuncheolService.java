@@ -273,7 +273,7 @@ public class BuncheolService {
     }
     // 신청 구간의 묶음은 기한 없이 열려 있다 — 참여 행과 같은 기한을 묶음에도 채운다. 비워 두면 나중에 붙을
     // 개최자 「제외」 기한 가드가 fail-open 된다(기한 안인데도 참여자를 뺄 수 있게 된다 — docs/71 §8-1).
-    participationBundleDomainService.assignDueAt(buncheolId, paymentDueAt, now);
+    participationBundleDomainService.assignDueAtByBuncheolId(buncheolId, paymentDueAt, now);
 
     // 커밋 후 성사 확정·입금 안내 알림톡(신청자 전원, 유저 단위 합산 — docs/46 §4.7-A3)과 수신함 기록을 트리거한다.
     eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId, appliedIds));

@@ -68,6 +68,12 @@ public interface ParticipationRepository {
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
   /**
+   * 한 묶음에 속한 참여 전체 (취소분 포함). 단건 조회에서 배송비 귀속을 정하려면 형제 슬롯이 필요하다 ({@code
+   * ShippingFeeAttribution}). 목록 화면은 이미 전체를 들고 있어 이 조회가 필요 없다.
+   */
+  List<Participation> findAllByBundleId(Long bundleId);
+
+  /**
    * 단일 분철의 활성 참여별 참여자 id 잠금 조회(current read, 행당 1건 — 다슬롯 참여자는 중복 포함) — RR 스냅샷이 아닌 최신 커밋 기준이
    * 필요한 C2C 정원 충족 판정용. 리스트 크기 = 채워진 슬롯 수, distinct = 신청 인원.
    */

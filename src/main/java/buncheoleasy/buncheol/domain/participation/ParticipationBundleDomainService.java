@@ -4,6 +4,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -134,6 +135,22 @@ public class ParticipationBundleDomainService {
       final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
     ParticipationBundle bundle = bundleById.get(participation.getBundleId());
     return bundle == null ? null : bundle.getRefundAccount();
+  }
+
+  /**
+   * 참여 <b>한 건</b>을 위한 배송비 귀속 ({@link ShippingFeeAttribution}). 그 묶음의 형제 슬롯을 읽어야 판정할 수 있어
+   * 조회가 한 번 더 나간다 — 목록 화면은 이미 전체를 들고 있으므로 {@link ShippingFeeAttribution#of} 를 직접 쓴다.
+   *
+   * <p>미연결 참여(배포선 창)면 빈 판정을 돌려주고, 그때 {@code shippingFeeOf} 는 저장된 값을 그대로 쓴다.
+   */
+  public ShippingFeeAttribution shippingFeeAttributionFor(final Participation participation) {
+    return findByParticipation(participation)
+        .map(
+            bundle ->
+                ShippingFeeAttribution.of(
+                    participationRepository.findAllByBundleId(bundle.getId()),
+                    Map.of(bundle.getId(), bundle)))
+        .orElseGet(() -> ShippingFeeAttribution.of(List.of(), Map.of()));
   }
 
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */

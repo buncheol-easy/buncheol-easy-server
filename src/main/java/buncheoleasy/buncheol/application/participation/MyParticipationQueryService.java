@@ -13,6 +13,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
@@ -102,6 +103,9 @@ public class MyParticipationQueryService {
     // 계좌·입금자명의 정본은 묶음이다 (P2-c). 건별로 읽으면 참여 수만큼 쿼리가 늘어난다(N+1).
     Map<Long, ParticipationBundle> bundleById =
         participationBundleDomainService.findAllByParticipations(participations);
+    // 배송비도 정본이 묶음이다. 이 목록은 사용자의 참여 전체(취소분 포함)라 묶음별 슬롯이 빠짐없이 들어온다.
+    ShippingFeeAttribution shippingFees =
+        ShippingFeeAttribution.of(participations, bundleById);
 
     final Instant now = Instant.now(clock);
     return participations.stream()
@@ -117,6 +121,7 @@ public class MyParticipationQueryService {
                     deliveryByParticipationId,
                     hostAccountByHostId,
                     bundleById,
+                    shippingFees,
                     now))
         .toList();
   }
@@ -151,6 +156,7 @@ public class MyParticipationQueryService {
       final Map<Long, Delivery> deliveryByParticipationId,
       final Map<Long, HostAccountResponse> hostAccountByHostId,
       final Map<Long, ParticipationBundle> bundleById,
+      final ShippingFeeAttribution shippingFees,
       final Instant now) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려간다. 백필이 채우면 다음 조회부터 나온다.
@@ -179,8 +185,8 @@ public class MyParticipationQueryService {
         buncheol.getTitle(),
         slotCount,
         groupMemberNameById.get(buncheolMember.getMemberId()),
-        participation.getTotalAmount(),
-        participation.getShippingFee(),
+        shippingFees.totalAmountOf(participation),
+        shippingFees.shippingFeeOf(participation),
         participation.getStatus(),
         participation.getCancelReason(),
         buncheol.getStatus(),

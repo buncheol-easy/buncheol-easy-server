@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
 import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
@@ -82,12 +83,16 @@ public class ParticipationDetailQueryService {
                 .map(ParticipationBundle::getRefundAccount)
                 .orElse(null));
 
+    // 배송비 정본은 묶음이다 — 저장된 값을 그대로 더하면 배송비를 진 슬롯이 취소됐을 때 금액이 틀린다.
+    ShippingFeeAttribution shippingFees =
+        participationBundleDomainService.shippingFeeAttributionFor(participation);
+
     return new ParticipationDetailResponse(
         participation.getId(),
         buncheol.getId(),
         buncheol.getTitle(),
         memberName,
-        participation.getTotalAmount(),
+        shippingFees.totalAmountOf(participation),
         participation.getStatus(),
         participation.getCancelReason(),
         participation.getDueAt(),

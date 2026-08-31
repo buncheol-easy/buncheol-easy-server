@@ -188,6 +188,8 @@ public class BuncheolManagementQueryService {
     Delivery delivery = deliveryByParticipationId.get(participation.getId());
     return new BuncheolManagementParticipantResponse(
         participation.getId(),
+        participation.getBundleId(),
+        participation.getParticipantId(),
         participant == null ? null : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),

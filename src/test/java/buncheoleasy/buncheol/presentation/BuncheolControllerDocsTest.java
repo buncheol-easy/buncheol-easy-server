@@ -60,6 +60,10 @@ import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequ
 @DisplayName("BuncheolController 문서화 테스트")
 class BuncheolControllerDocsTest extends DocsTestSupport {
 
+  // 네 곳(내 참여·참여 상세·participants[]·cancelledParticipants[])이 같은 문장이라 한 곳만 고치면 문서가 갈린다.
+  private static final String BUNDLE_ID_DESCRIPTION =
+      "이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null — null 끼리 묶으면 서로 다른 사람의 슬롯이 한 행이 되므로 그룹핑 키로 쓰지 말 것";
+
   private static final Long HOST_ID = USER_ID;
 
   @MockitoBean private BuncheolService buncheolService;
@@ -908,6 +912,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
     BuncheolManagementParticipantResponse confirmed =
         new BuncheolManagementParticipantResponse(
             601L,
+            9001L,
+            9L,
             "유진팬",
             101L,
             "안유진",
@@ -929,6 +935,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
+            9001L,
+            9L,
             "레이팬",
             102L,
             "레이",
@@ -943,6 +951,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
+            9001L,
+            9L,
             "가을팬",
             103L,
             "가을",
@@ -1088,6 +1098,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("활성 참여자 배열 (AWAITING_PAYMENT + CONFIRMED)"),
                             fieldWithPath("participants[].participationId")
                                 .description("참여 ID (개최자 입금확인 API 호출에 사용)"),
+                            fieldWithPath("participants[].bundleId")
+                                .description(BUNDLE_ID_DESCRIPTION)
+                                .optional(),
+                            fieldWithPath("participants[].participantId")
+                                .description(
+                                    "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(추가 모집)을"
+                                        + " 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("participants[].participantNickname")
                                 .description("참여자 닉네임. 조회 불가 시 null")
                                 .optional(),
@@ -1162,6 +1179,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
                                 .description("참여 ID"),
+                            fieldWithPath("cancelledParticipants[].bundleId")
+                                .description(BUNDLE_ID_DESCRIPTION)
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].participantId")
+                                .description(
+                                    "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(추가 모집)을"
+                                        + " 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("cancelledParticipants[].participantNickname")
                                 .description("참여자 닉네임. 조회 불가 시 null")
                                 .optional(),

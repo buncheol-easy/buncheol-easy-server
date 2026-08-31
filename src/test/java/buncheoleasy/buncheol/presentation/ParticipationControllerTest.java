@@ -260,6 +260,7 @@ class ParticipationControllerTest {
       MyParticipationResponse response =
           new MyParticipationResponse(
               500L,
+              9001L,
               10L,
               "뉴진스 1집 분철",
               5,
@@ -338,6 +339,7 @@ class ParticipationControllerTest {
       ParticipationDetailResponse response =
           new ParticipationDetailResponse(
               PARTICIPATION_ID,
+              9001L,
               10L,
               "뉴진스 1집 분철",
               "민지",

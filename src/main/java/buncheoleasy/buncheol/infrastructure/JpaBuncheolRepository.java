@@ -176,11 +176,20 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
   // 마감 판정 대상 분철 id (자동 마감 폴링용, deadline 오름차순). LEGACY 는 deadline 즉시, C2C 는 확정 유예(48h)까지
   // 지나야 대상이 된다 (docs/46 §7.1-5) — 유예 중 C2C 분철이 매 주기 배치 슬롯(LIMIT)을 잠식하지 않게 쿼리에서 거른다.
+  //
+  // 🔴 예외 하나: C2C 라도 마감 시각에 <b>최소 인원 미달</b>이면 유예를 기다리지 않는다 (2026-08-31 사용자 결정).
+  // 개최자가 확정을 눌러도 인원이 채워지지 않는 분철을 48시간 붙잡아 둘 이유가 없고, 참여자는 그동안 자기 자리가
+  // 살아 있는 줄 안다. LEGACY 가 마감 시각에 인원 미달로 바로 취소하는 것과 같은 규칙이 된다.
+  // (신청 인원으로 센다 — C2C 는 확정 전이라 입금확인 건이 0 이다.)
   @Query(
       "SELECT b.id FROM Buncheol b "
           + "WHERE b.status = :status AND ("
           + "  (b.flowType = :legacyFlow AND b.deadline <= :now) "
-          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :graceCutoff)) "
+          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :graceCutoff) "
+          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :now "
+          + "      AND (SELECT COUNT(p) FROM Participation p "
+          + "           WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)"
+          + "          < b.minHeadcount)) "
           + "ORDER BY b.deadline ASC")
   List<Long> findIdsByStatusAndDeadlineBefore(
       @Param("status") BuncheolStatus status,
@@ -188,28 +197,38 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("c2cFlow") FlowType c2cFlow,
       @Param("now") Instant now,
       @Param("graceCutoff") Instant graceCutoff,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       Pageable pageable);
 
   // 입금 수집중(PAYMENT_COLLECTING)이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용).
+  //
+  // 🟡 알려진 한계: C2C 자동 만료를 끈 뒤로는 활성 슬롯이 남은 분철이 영영 안 비므로(개최자가 「제외」를
+  // 눌러야 빈다 — 안 눌러도 되는 것이 docs/70 §1 의 수용된 트레이드오프) 이 폴링에 계속 걸리고, 오래된
+  // 순이라 앞자리를 점유한다. 그런 분철이 배치 한도(100)만큼 쌓이면 뒤에 온 분철의 정리가 굶는다.
+  // prod C2C 는 아직 「입금 수집중」이 0 건이라 당장 발현하지 않아 <b>지금은 손대지 않는다</b>.
   @Query(
       "SELECT b.id FROM Buncheol b "
           + "WHERE b.status = :status AND b.paymentDueAt <= :now "
           + "ORDER BY b.paymentDueAt ASC")
   List<Long> findIdsByStatusAndPaymentDueBefore(
-      @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
+      @Param("status") BuncheolStatus status,
+      @Param("now") Instant now,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
+      Pageable pageable);
 
   /**
-   * C2C 데드엔드 정리 CAS: 입금 수집중인데 <b>입금 흔적이 하나도 없으면</b> 미성사 취소한다. 남아 있는 미입금 슬롯은
-   * 호출부가 cascade 로 함께 취소한다.
+   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면 미성사 취소한다. 확정 참여가 있으면
+   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6). {@code finalizedAt} 은 성사 확정
+   * 시각을 보존한다.
    *
-   * <p>🔴 <b>판정 기준이 "활성 슬롯 0" 에서 "입금 흔적 0" 으로 바뀌었다.</b> 예전에는 입금 만료 스케줄러가 C2C
-   * 미입금 슬롯을 치워 줘서 활성이 저절로 0 이 됐지만, C2C 자동 만료를 끄면서(docs/70 결정 9) 그 공급원이 사라졌다.
-   * 조건을 그대로 두면 <b>아무도 입금하지 않은 분철</b>(가장 흔한 데드엔드)이 영원히 {@code PAYMENT_COLLECTING} 에
-   * 정체하고, 폴링 앞자리를 영구 점유해 뒤에 온 분철까지 굶긴다. 「제외」로도 안 풀린다 — 데드엔드의 정의가 곧
-   * <b>개최자가 방치한 분철</b>이라 아무도 버튼을 누르지 않는다.
+   * <p>⚠️ <b>C2C 자동 만료를 끈 뒤(docs/70 결정 9) 이 조건이 성립하는 경로가 크게 줄었다.</b> 예전에는 만료
+   * 스케줄러가 미입금 슬롯을 치워 줘서 활성이 저절로 0 이 됐다. 이제는 개최자가 「제외」를 눌러야 비고,
+   * <b>개최자가 아무것도 안 하면 분철이 끝나지 않는다</b> — 이는 「제외」가 정문을 만들면서 <b>수용하기로 한
+   * 트레이드오프</b>다(docs/70 §1, 사용자 결정). 자동으로 접지 않는다.
    *
-   * <p>입금확인(CONFIRMED)이나 「보냈어요」(PAYMENT_SENT)가 <b>하나라도</b> 있으면 전이하지 않는다 — 그때는 개최자가
-   * 확인·부분 확정·환불 중에 <b>고를 것이 있다</b>(docs/46 §7.1-6). 아무도 보내지 않았다면 고를 것이 없다.
+   * <p>대신 그런 분철이 폴링 배치를 잠식하지 않도록 <b>조회 쪽에서</b> 걸러 낸다({@link
+   * #findIdsByStatusAndPaymentDueBefore}) — 안 그러면 안 죽는 분철이 {@code paymentDueAt ASC} 앞자리를 영구
+   * 점유해 뒤에 온 분철의 정리까지 굶긴다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
@@ -217,11 +236,11 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "SET b.status = :cancelledStatus, b.updatedAt = :now "
           + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
           + "AND NOT EXISTS (SELECT p FROM Participation p "
-          + "  WHERE p.buncheolId = b.id AND p.status IN :paidStatuses)")
-  int cancelIfCollectingAndUnpaid(
+          + "  WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)")
+  int cancelIfCollectingAndEmpty(
       @Param("buncheolId") Long buncheolId,
       @Param("collectingStatus") BuncheolStatus collectingStatus,
-      @Param("paidStatuses") Collection<ParticipationStatus> paidStatuses,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 
@@ -232,7 +251,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    *
    * <p>⚠️ 락 순서는 분철 행 → 참여 행이다. C2C 입금확인(참여 행 → {@link #confirmIfAllCollected} 의 분철 행)과 역순이라,
    * 위 동시 실행이 실제로 겹치면 정합성은 지켜지지만 실패 모드가 409 가 아니라 InnoDB 데드락 롤백이 될 수 있다(레포에 재시도 핸들러 없음).
-   * 같은 형태가 {@link #cancelIfCollectingAndUnpaid} 에 이미 있어 새로 생긴 리스크 클래스는 아니다.
+   * 같은 형태가 {@link #cancelIfCollectingAndEmpty} 에 이미 있어 새로 생긴 리스크 클래스는 아니다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

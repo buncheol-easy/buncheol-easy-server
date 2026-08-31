@@ -172,21 +172,23 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         FlowType.C2C,
         now,
         c2cGraceCutoff,
+        ParticipationStatus.active(),
         PageRequest.of(0, limit));
   }
 
   @Override
   public List<Long> findCollectingIdsPastPaymentDue(final Instant now, final int limit) {
     return jpaBuncheolRepository.findIdsByStatusAndPaymentDueBefore(
-        BuncheolStatus.PAYMENT_COLLECTING, now, PageRequest.of(0, limit));
+        BuncheolStatus.PAYMENT_COLLECTING, now, ParticipationStatus.active(),
+        PageRequest.of(0, limit));
   }
 
   @Override
-  public int cancelIfCollectingAndUnpaid(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.cancelIfCollectingAndUnpaid(
+  public int cancelIfCollectingAndEmpty(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.cancelIfCollectingAndEmpty(
         buncheolId,
         BuncheolStatus.PAYMENT_COLLECTING,
-        ParticipationStatus.paidOrClaimed(),
+        ParticipationStatus.active(),
         BuncheolStatus.CANCELLED,
         now);
   }

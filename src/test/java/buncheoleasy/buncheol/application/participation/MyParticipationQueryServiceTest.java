@@ -155,8 +155,8 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "해린"), groupMember(1002L, "민지")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByBundleIds(List.of(sharedBundleId)))
-          .willReturn(List.of());
+      // 둘 다 입금확인 전이라 배송 조회 대상이 없다.
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -345,8 +345,8 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(groupMember(2001L, "지수"), groupMember(3001L, "제니")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
           .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
-      // 확정된 pA 의 묶음에만 배송 스냅샷이 생성돼 있다 (택배 1개 = 묶음 1개).
-      given(deliveryRepository.findAllByBundleIds(List.of(9500L, 9600L)))
+      // 입금확인된 슬롯의 묶음만 조회한다 — pB 는 AWAITING_PAYMENT 라 애초에 배송이 없다.
+      given(deliveryRepository.findAllByBundleIds(List.of(9500L)))
           .willReturn(List.of(delivery(900L, 500L, 9500L, "1234567890", DeliveryStatus.SHIPPING)));
       given(userRepository.findAllByIds(List.of(HOST_ID)))
           .willReturn(List.of(host(HOST_ID, "국민", "98765432", "개최자")));

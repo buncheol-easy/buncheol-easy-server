@@ -139,6 +139,13 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * 남아 있거나, 입금확인 참여 중 배송이 끝나지 않은 건이 하나라도 남아 있으면 끝나지 않은 분철로 판정한다 (배송 스냅샷이 없는 입금확인 참여도
    * 미종료로 본다). 진행확정 분철의 입금 확인 중 참여는 만료 스케줄러가 곧 취소하는 게 정상 흐름이지만, 스케줄러 지연 사이에 호스트가 탈퇴하면
    * 해당 참여자의 참여 상세(호스트 조회)가 깨지므로 배송 조건 없이 미종료로 본다.
+   *
+   * <p>🔴 <b>{@code p.bundleId} 가 NULL 이면 이 조건은 어느 배송과도 매칭되지 않는다</b> — 그 참여는 영구히
+   * "배송 미종료" 로 남아 탈퇴가 막힌다. <b>지금 그런 행은 없다</b>: 2026-08-31 실측으로 {@code bundle_id IS
+   * NULL} 인 참여가 prod 0/47 · staging 0/104 이고, 참여를 만드는 세 경로가 모두 같은 트랜잭션에서
+   * {@code ParticipationBundleDomainService#attach} 를 부르며 그 연결 CAS 가 실패하면 예외로 전체 롤백된다
+   * — 즉 <b>묶음 없는 참여를 만들 수 있는 코드 경로가 없다</b>. 참여 id 폴백을 남기지 않은 근거가 이것이다.
+   * P4 가 {@code bundle_id} 를 NOT NULL 로 조이면 이 전제가 스키마로 굳는다.
    */
   @Query(
       "SELECT COUNT(b) > 0 FROM Buncheol b "
@@ -152,7 +159,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR (p.status = :confirmedParticipationStatus "
           + "          AND NOT EXISTS ("
           + "            SELECT d FROM Delivery d "
-          + "            WHERE d.participationId = p.id "
+          // 배송은 묶음으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 배송 행이
+          // 아예 생기지 않는다. 참여 id 로 찾으면 그 슬롯이 영구히 "배송 미종료" 로 남아, 그 분철의
+          // 개최자가 영원히 탈퇴하지 못한다. 참여자 가드(JpaParticipationRepository)와 같은 수정이다.
+          + "            WHERE d.bundleId = p.bundleId "
           + "            AND d.status IN :finishedDeliveryStatuses))))))")
   boolean existsUnfinishedByHostId(
       @Param("hostId") Long hostId,

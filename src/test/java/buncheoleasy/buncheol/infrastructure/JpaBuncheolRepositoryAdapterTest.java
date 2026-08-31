@@ -409,10 +409,46 @@ class JpaBuncheolRepositoryAdapterTest {
           "홍길동",
           Timestamp.from(Instant.now()),
           participationStatus);
+      Long participationId =
+          jdbcTemplate.queryForObject(
+              "SELECT MAX(id) FROM participations WHERE buncheol_member_id = ?",
+              Long.class,
+              buncheolMemberId);
+      // 탈퇴 가드가 배송을 묶음으로 찾는다 — 참여마다 묶음을 하나 심는다.
+      linkNewBundle(buncheolId, participationId);
+      return participationId;
+    }
+
+    private Long insertBundle(final Long buncheolId, final Long participationId) {
+      Long owner =
+          jdbcTemplate.queryForObject(
+              "SELECT participant_id FROM participations WHERE id = ?", Long.class, participationId);
+      jdbcTemplate.update(
+          "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+              + " refund_bank, refund_account, refund_holder) VALUES (?, ?, ?, ?, ?, ?)",
+          buncheolId,
+          owner,
+          0L,
+          "국민",
+          "12345678",
+          "홍길동");
+      return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+    }
+
+    private Long linkNewBundle(final Long buncheolId, final Long participationId) {
+      Long bundleId = insertBundle(buncheolId, participationId);
+      linkBundle(participationId, bundleId);
+      return bundleId;
+    }
+
+    private void linkBundle(final Long participationId, final Long bundleId) {
+      jdbcTemplate.update(
+          "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, participationId);
+    }
+
+    private Long bundleOf(final Long participationId) {
       return jdbcTemplate.queryForObject(
-          "SELECT MAX(id) FROM participations WHERE buncheol_member_id = ?",
-          Long.class,
-          buncheolMemberId);
+          "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
     }
 
     private Long insertConfirmedParticipation(final Long buncheolId) {
@@ -421,10 +457,11 @@ class JpaBuncheolRepositoryAdapterTest {
 
     private void insertDelivery(final Long participationId, final String deliveryStatus) {
       jdbcTemplate.update(
-          "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+          "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
               + " receiver_nickname, receiver_phone_number, status)"
-              + " VALUES (?, ?, ?, ?, ?, ?)",
+              + " VALUES (?, ?, ?, ?, ?, ?, ?)",
           participationId,
+          bundleOf(participationId),
           "GS25_HALF",
           "매장",
           "닉네임",
@@ -510,6 +547,33 @@ class JpaBuncheolRepositoryAdapterTest {
       insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
       // 만료 스케줄러가 아직 취소하지 못한 입금 확인 중 참여 — 호스트가 입금확인해 줘야 하므로 미종료.
       insertParticipation(buncheolId, "AWAITING_PAYMENT");
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
+    }
+
+    // 🔴 회귀 방지 — 배송이 묶음 단위가 되면서 다슬롯 묶음의 두 번째 슬롯에는 배송 행이 생기지 않는다.
+    // 가드가 참여 id 로 배송을 찾으면 그 슬롯이 영구히 "배송 미종료" 로 남아, 그 분철의 개최자가
+    // 영원히 탈퇴하지 못한다.
+    @Test
+    void 한_묶음의_두_슬롯이_배송_1건을_공유해도_배송이_끝났으면_false를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      Long carrier = insertConfirmedParticipation(buncheolId);
+      Long sibling = insertConfirmedParticipation(buncheolId);
+      // 같은 묶음으로 합친다 — 실제 다슬롯 신청이 만드는 모양.
+      linkBundle(sibling, bundleOf(carrier));
+      // 택배는 하나뿐이다.
+      insertDelivery(carrier, "RECEIVED");
+
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
+    }
+
+    @Test
+    void 한_묶음의_공유_배송이_아직_진행_중이면_true를_반환한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      Long carrier = insertConfirmedParticipation(buncheolId);
+      Long sibling = insertConfirmedParticipation(buncheolId);
+      linkBundle(sibling, bundleOf(carrier));
+      insertDelivery(carrier, "SHIPPING");
 
       assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isTrue();
     }

@@ -131,10 +131,12 @@ class JpaDeliveryRepositoryAdapterTest {
       assertThat(deliveryRepository.findByBundleId(shared))
           .get()
           .satisfies(d -> assertThat(d.getId()).isEqualTo(first));
-      // 목록 조회도 같은 규칙이 성립하도록 id 오름차순이어야 한다 (호출부가 merge (a, b) -> a 를 쓴다).
+      // 목록 조회도 <b>묶음당 1건</b>으로 줄여서 나온다 — 호출부가 merge 함수를 갖추지 않아도 안전해야 한다.
+      // (merge 없는 Collectors.toMap 이 호출부에 하나만 생겨도 중복 묶음에서 500 이 난다.)
       assertThat(deliveryRepository.findAllByBundleIds(List.of(shared)))
           .extracting(Delivery::getId)
-          .containsExactly(first, second);
+          .containsExactly(first);
+      assertThat(second).isNotNull();
     }
   }
 

@@ -99,7 +99,7 @@ public class BuncheolManagementQueryService {
                     .distinct()
                     .toList())
             .stream()
-            .collect(Collectors.toMap(Delivery::getBundleId, Function.identity(), (a, b) -> a));
+            .collect(Collectors.toMap(Delivery::getBundleId, Function.identity()));
 
     Map<Long, User> userById =
         userRepository
@@ -213,12 +213,18 @@ public class BuncheolManagementQueryService {
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
     RefundAccount refundAccount =
         ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
-    // ⚠️ 맵을 조회하기 전에 null 을 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
-    // null 키 조회에서 NPE 다. 묶음 없는 참여(배포선 창)가 그 키다. (ShippingFeeAttribution 과 같은 함정)
+    // 🔴 <b>입금확인된 슬롯만</b> 배송을 문다. 배송은 이제 묶음에 붙어 있어(택배 1개 = 묶음 1개) 같은
+    // 묶음의 미입금 슬롯도 키가 맞는데, 그대로 물리면 <b>입금하지도 않은 슬롯에 "배송중" 과 운송장</b>이
+    // 뜬다. 한 묶음에 확정·미확정이 섞이는 건 실제로 도달 가능하다 — 슬롯 단위 입금확인
+    // ({@code ParticipationService#confirmPayment})과 어드민 벌크 확인(건별 트랜잭션 순회)이 열려 있다.
+    //
+    // ⚠️ 맵을 조회하기 전에 null 도 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
+    // null 키 조회에서 NPE 다. (ShippingFeeAttribution 과 같은 함정)
     Delivery delivery =
-        participation.getBundleId() == null
-            ? null
-            : deliveryByBundleId.get(participation.getBundleId());
+        participation.getStatus() == ParticipationStatus.CONFIRMED
+                && participation.getBundleId() != null
+            ? deliveryByBundleId.get(participation.getBundleId())
+            : null;
     return new BuncheolManagementParticipantResponse(
         participation.getId(),
         participation.getBundleId(),

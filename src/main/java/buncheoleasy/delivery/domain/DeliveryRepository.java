@@ -54,7 +54,10 @@ public interface DeliveryRepository {
    */
   Optional<Delivery> findByBundleId(Long bundleId);
 
-  /** 묶음들의 배송 스냅샷을 한 번에 조회한다 (목록 N+1 방지). 중복 처리 규칙은 {@link #findByBundleId} 와 같다. */
+  /**
+   * 묶음들의 배송 스냅샷을 한 번에 조회한다 (목록 N+1 방지). <b>묶음당 최대 1건</b>을 보장한다 — 중복 축약은
+   * 어댑터가 끝내고 나오므로 호출부가 merge 함수를 갖출 필요가 없다. 규칙은 {@link #findByBundleId} 와 같다.
+   */
   List<Delivery> findAllByBundleIds(List<Long> bundleIds);
 
   /** 취소된 참여들의 배송 스냅샷을 일괄 삭제한다 (분철 취소 cascade 시 고아 스냅샷 정리). 호출 측 {@code @Transactional} 필수. */

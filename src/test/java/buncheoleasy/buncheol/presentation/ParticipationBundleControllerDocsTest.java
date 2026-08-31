@@ -127,7 +127,7 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-114` (`BUNDLE_NOT_FOUND`) | 묶음 없음 |
                             | 403 | `BCH-069` (`PARTICIPATION_NO_PERMISSION`) | 본인 묶음이 아님 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
-                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | 마킹할 입금 대기 슬롯이 없음 |
+                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | 마킹할 입금 대기 슬롯이 없음 — **개최자가 이미 전부 입금확인한 뒤** 누른 경우도 여기 해당한다 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("bundleId").description("참여 묶음 ID"))

@@ -127,36 +127,39 @@ public class ParticipationBundleService {
     }
 
     int marked = participationRepository.markBundlePaymentSent(bundleId, now);
+
+    // 🔴 <b>잠금 조회로 다시 읽는다.</b> 평범한 SELECT 는 REPEATABLE READ 라 트랜잭션 첫 읽기 시점의 스냅샷을
+    // 본다 — 동시 더블탭에서 A 가 먼저 커밋하면 B 의 UPDATE 는 current read 로 0행이 되는데, 이어지는 일반
+    // 조회는 <b>아직 마킹 전으로 보여</b> "마킹할 게 없다" 며 409 를 낸다. 이 기능이 막으려던 더블탭이 정확히
+    // 그 경합이다.
+    List<Participation> slots = participationRepository.findAllByBundleIdForUpdate(bundleId);
+    List<Long> sentIds =
+        slots.stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.PAYMENT_SENT)
+            .map(Participation::getId)
+            .toList();
+
     if (marked == 0) {
-      // 멱등: 이미 전부 마킹됐으면 성공으로 끝낸다. 그게 아니면(입금 대기 슬롯이 아예 없음) 상태 위반이다.
-      List<Long> alreadySent = markedSlots(bundleId, ParticipationStatus.PAYMENT_SENT, null);
-      if (alreadySent.isEmpty()) {
+      // 멱등: 이미 마킹된 슬롯이 있으면 성공으로 끝낸다(더블탭). 하나도 없으면 상태 위반이다 — 개최자가
+      // 이미 전부 입금확인한 뒤 누른 경우도 여기 해당한다.
+      if (sentIds.isEmpty()) {
         throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
       }
-      return alreadySent;
+      return sentIds;
     }
 
-    // 「제외」와 같은 이유로 CAS 이후에 뽑는다 — 이 호출이 실제로 마킹한 슬롯만 알림에 실어야 한다.
-    List<Long> markedIds = markedSlots(bundleId, ParticipationStatus.PAYMENT_SENT, now);
-    eventPublisher.publishEvent(new BundlePaymentSentEvent(bundleId, markedIds));
+    // 응답은 <b>이번 호출이</b> 마킹한 슬롯이다 — 화면이 사후 대조하는 대상이 그것이다.
+    List<Long> markedIds =
+        slots.stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.PAYMENT_SENT)
+            .filter(p -> writtenAt(p.getPaymentSentAt(), now))
+            .map(Participation::getId)
+            .toList();
+    // 알림은 <b>묶음 전체</b>의 마킹분으로 만든다 — 부분 마킹에서 금액이 축소되면 통장 대조가 어긋난다.
+    eventPublisher.publishEvent(new BundlePaymentSentEvent(bundleId, markedIds, sentIds));
     return markedIds;
   }
 
-  /**
-   * {@code at} 에 마킹된 슬롯. {@code at} 이 null 이면 상태만 본다.
-   *
-   * <p>🔴 <b>{@code equals} 로 비교하면 안 된다.</b> {@code payment_sent_at} 은 초 단위 {@code DATETIME}
-   * (precision 0) 이라 나노초를 가진 {@code Instant} 와 <b>영원히 같지 않다</b> — 같은 실수로 「제외」 응답이
-   * 항상 빈 배열로 나갔다(server#163). H2 는 정밀도를 보존해 테스트가 통과한다.
-   */
-  private List<Long> markedSlots(
-      final Long bundleId, final ParticipationStatus status, final Instant at) {
-    return participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
-        .filter(p -> p.getStatus() == status)
-        .filter(p -> at == null || writtenAt(p.getPaymentSentAt(), at))
-        .map(Participation::getId)
-        .toList();
-  }
 
 
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */

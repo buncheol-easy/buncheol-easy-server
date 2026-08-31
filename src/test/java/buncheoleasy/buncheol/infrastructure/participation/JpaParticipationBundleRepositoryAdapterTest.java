@@ -434,6 +434,52 @@ class JpaParticipationBundleRepositoryAdapterTest {
       assertThat(statusCount(bundleId, "CONFIRMED")).isEqualTo(1);
     }
 
+    // 🔴 이 왕복 검증이 없어서 "나노초 Instant 를 초 단위 DATETIME 과 equals 비교" 하는 버그가
+    // 테스트를 전부 통과하고 staging 에서야 드러났다. H2 는 정밀도를 보존하므로 여기서는 초 단위로 잘라
+    // 비교해, MySQL 이 잘라 저장해도 성립하는 계약만 단언한다.
+    @Test
+    @DisplayName("CAS 가 쓴 payment_sent_at 이 넘긴 시각과 초 단위로 일치한다")
+    void CAS가_쓴_시각이_넘긴_시각과_초_단위로_일치한다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+      Instant now = Instant.parse("2026-08-31T12:00:00.123456789Z");
+
+      participationRepository.markBundlePaymentSent(bundleId, now);
+      entityManager.clear();
+
+      Instant stored =
+          participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+              .findFirst()
+              .orElseThrow()
+              .getPaymentSentAt();
+      assertThat(stored.truncatedTo(ChronoUnit.SECONDS))
+          .isEqualTo(now.truncatedTo(ChronoUnit.SECONDS));
+    }
+
+    // 이미 마킹된 슬롯의 시각을 덮어쓰면 "언제 보냈다고 했는가" 가 사라진다 — 분쟁 증거다.
+    @Test
+    @DisplayName("이미 마킹된 슬롯의 시각은 덮어쓰지 않는다")
+    void 이미_마킹된_슬롯의_시각은_덮어쓰지_않는다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      Instant first = Instant.parse("2026-08-31T10:00:00Z");
+      participationRepository.markBundlePaymentSent(bundleId, first);
+      entityManager.clear();
+
+      participationRepository.markBundlePaymentSent(bundleId, first.plusSeconds(3600));
+      entityManager.clear();
+
+      Instant stored =
+          participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+              .findFirst()
+              .orElseThrow()
+              .getPaymentSentAt();
+      assertThat(stored.truncatedTo(ChronoUnit.SECONDS)).isEqualTo(first);
+    }
+
     private int statusCount(final Long bundleId, final String status) {
       return jdbcTemplate.queryForObject(
           "SELECT COUNT(*) FROM participations WHERE bundle_id = ? AND status = ?",

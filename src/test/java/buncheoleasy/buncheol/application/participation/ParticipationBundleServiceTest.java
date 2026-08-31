@@ -23,10 +23,12 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,17 +39,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("ParticipationBundleService — 개최자 「제외」")
+@DisplayName("ParticipationBundleService — 묶음 단위 개최자·참여자 조작")
 class ParticipationBundleServiceTest {
 
-<<<<<<< HEAD
   // 실제 운영은 나노초를 가진 시각을 넘긴다 — 초 단위로 떨어지는 값으로 테스트하면 잘림 문제가 안 드러난다.
   private static final Instant NOW_WITH_NANOS = Instant.parse("2026-08-31T12:00:00.123456789Z");
   private static final Instant NOW = NOW_WITH_NANOS;
-=======
-  // 실제 운영은 나노초를 가진 시각을 넘긴다 — 초 단위로 떨어지는 값이면 DB 잘림 문제가 안 드러난다.
-  private static final Instant NOW = Instant.parse("2026-08-31T12:00:00.123456789Z");
->>>>>>> 989a598 (fix: 마킹 응답이 초 단위 DATETIME 잘림으로 비어 나오던 것)
   private static final Long HOST_ID = 1L;
   private static final Long OTHER_HOST_ID = 999L;
   private static final Long BUNDLE_ID = 141L;
@@ -147,7 +144,7 @@ class ParticipationBundleServiceTest {
                     ParticipationStatus.CANCELLED,
                     ParticipationCancelReason.HOST_RELEASED,
                     // DB 가 잘라 저장한 값 — 서비스가 넘긴 now 와 나노초가 다르다.
-                    NOW_WITH_NANOS.truncatedTo(java.time.temporal.ChronoUnit.SECONDS))));
+                    NOW_WITH_NANOS.truncatedTo(ChronoUnit.SECONDS))));
 
     assertThat(participationBundleService.release(HOST_ID, BUNDLE_ID)).containsExactly(232L);
   }
@@ -234,33 +231,73 @@ class ParticipationBundleServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining(ErrorCode.BUNDLE_NOT_FOUND.getMessage());
   }
-  @org.junit.jupiter.api.Nested
+  @Nested
   @DisplayName("markPaymentSent — 참여자 묶음 「보냈어요」")
   class MarkPaymentSentTest {
 
     private static final Long PARTICIPANT_ID = 10L;
 
     @Test
-    @DisplayName("실제로 마킹된 슬롯만 돌려주고 알린다")
-    void marksAndReturnsActuallyMarked() {
+    @DisplayName("응답은 이번 호출 마킹분, 알림은 묶음 전체 마킹분으로 나간다")
+    void respondsWithThisCallButNotifiesWholeBundle() {
       stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
-      given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(2);
-      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+      given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(1);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
           .willReturn(
               List.of(
-                  // DB 가 초 단위로 잘라 저장한 값 — 서비스가 넘긴 now 와 나노초가 다르다.
-                  sentSlot(232L, NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)),
-                  sentSlot(233L, NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)),
-                  // 다른 호출에서 이미 마킹된 슬롯 — 이번 알림에 섞이면 안 된다.
-                  sentSlot(234L, NOW.minusSeconds(600))));
+                  // 이번 호출이 마킹 (DB 가 초 단위로 잘라 저장한 값)
+                  sentSlot(233L, NOW.truncatedTo(ChronoUnit.SECONDS)),
+                  // 슬롯 단위 API 로 <b>먼저</b> 마킹돼 있던 슬롯 — 알림 금액에는 포함돼야 한다
+                  sentSlot(232L, NOW.minusSeconds(600))));
 
       List<Long> marked = participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID);
 
-      assertThat(marked).containsExactly(232L, 233L);
+      assertThat(marked).containsExactly(233L);
       ArgumentCaptor<BundlePaymentSentEvent> captor =
           ArgumentCaptor.forClass(BundlePaymentSentEvent.class);
       then(eventPublisher).should().publishEvent(captor.capture());
-      assertThat(captor.getValue().markedParticipationIds()).containsExactly(232L, 233L);
+      assertThat(captor.getValue().markedParticipationIds()).containsExactly(233L);
+      // 🔴 부분 마킹에서 이번 호출분만 합산하면 개최자가 실제 이체액보다 작은 금액으로 대조하게 된다.
+      assertThat(captor.getValue().sentParticipationIds()).containsExactly(233L, 232L);
+    }
+
+    // 🔴 REPEATABLE READ 회귀: 동시 더블탭에서 UPDATE 는 0행인데 일반 조회는 옛 스냅샷을 봐 409 가 났다.
+    // 잠금 조회(current read)라야 이미 마킹된 것을 보고 멱등 성공한다.
+    @Test
+    @DisplayName("동시 더블탭에서 0행이어도 잠금 조회로 이미 마킹된 것을 보고 멱등 성공한다")
+    void idempotentUnderConcurrentDoubleTap() {
+      stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
+      given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(0);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(sentSlot(232L, NOW.truncatedTo(ChronoUnit.SECONDS))));
+
+      assertThat(participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))
+          .containsExactly(232L);
+      then(eventPublisher).should(never()).publishEvent(any(BundlePaymentSentEvent.class));
+    }
+
+    @Test
+    @DisplayName("LEGACY 분철의 묶음은 마킹 대상이 아니다")
+    void rejectsLegacyBundle() {
+      Buncheol legacy = org.mockito.Mockito.mock(Buncheol.class);
+      lenient().when(legacy.isC2c()).thenReturn(false);
+      stubBundleAndBuncheol(NOW.plusSeconds(3600), legacy);
+
+      assertThatThrownBy(
+              () -> participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED.getMessage());
+    }
+
+    @Test
+    @DisplayName("없는 묶음이면 404")
+    void rejectsMissingBundleOnMark() {
+      given(participationBundleDomainService.findById(BUNDLE_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(
+              () -> participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(ErrorCode.BUNDLE_NOT_FOUND.getMessage());
     }
 
     // 🔴 묶음 id 는 AUTO_INCREMENT 라 추측 가능하다 — 남의 묶음을 마킹할 수 없어야 한다.
@@ -282,7 +319,7 @@ class ParticipationBundleServiceTest {
     void idempotentWhenAlreadyMarked() {
       stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
       given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(0);
-      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
           .willReturn(List.of(sentSlot(232L, NOW.minusSeconds(600))));
 
       assertThat(participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))
@@ -295,7 +332,7 @@ class ParticipationBundleServiceTest {
     void rejectsWhenNothingToMark() {
       stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
       given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(0);
-      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID))).willReturn(List.of());
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID)).willReturn(List.of());
 
       assertThatThrownBy(
               () -> participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))

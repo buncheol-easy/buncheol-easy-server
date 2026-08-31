@@ -31,6 +31,13 @@ public class ParticipationBundleController {
    * 아직 확정도 안 된 참여자를 개최자가 임의로 자를 수 있는 도구가 되면 안 된다. 입금확인된 슬롯이 하나라도 있으면
    * 역시 거부한다(확정분은 분철 취소 + 환불 경로로만 끝난다).
    */
+  @PostMapping("/{bundleId}/release")
+  public ResponseEntity<BundleReleaseResponse> release(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long bundleId) {
+    return ResponseEntity.ok(
+        new BundleReleaseResponse(bundleId, participationBundleService.release(hostId, bundleId)));
+  }
+
   /**
    * 참여자 「보냈어요」 마킹 API — 묶음의 입금 대기 슬롯을 <b>한 번에</b> 표시한다.
    *
@@ -45,12 +52,5 @@ public class ParticipationBundleController {
     return ResponseEntity.ok(
         new BundlePaymentSentResponse(
             bundleId, participationBundleService.markPaymentSent(participantId, bundleId)));
-  }
-
-  @PostMapping("/{bundleId}/release")
-  public ResponseEntity<BundleReleaseResponse> release(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long bundleId) {
-    return ResponseEntity.ok(
-        new BundleReleaseResponse(bundleId, participationBundleService.release(hostId, bundleId)));
   }
 }

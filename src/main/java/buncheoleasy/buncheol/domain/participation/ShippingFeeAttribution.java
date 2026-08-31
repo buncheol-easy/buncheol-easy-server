@@ -62,6 +62,17 @@ public final class ShippingFeeAttribution {
   }
 
   /**
+   * 묶음을 <b>이미 읽어 둔</b> 호출부용 단건 판정. 알림 조립처럼 묶음을 먼저 꺼내는 경로가 같은 묶음을 다시 읽지 않게 한다
+   * — 그 경로는 수신자 수만큼 반복되므로 중복 조회가 그대로 배수로 늘어난다.
+   *
+   * @param siblings 그 묶음의 모든 슬롯 (취소분 포함)
+   */
+  public static ShippingFeeAttribution ofBundle(
+      final ParticipationBundle bundle, final Collection<Participation> siblings) {
+    return bundle == null ? EMPTY : ofAllSlots(siblings, Map.of(bundle.getId(), bundle));
+  }
+
+  /**
    * @param allSlots 물어볼 묶음들의 <b>모든</b> 슬롯 (취소분 포함). 🔴 불완전하면 이중 부과가 난다 — 클래스 javadoc 참고
    * @param bundleById {@link ParticipationBundleDomainService#findAllByParticipations} 결과
    */
@@ -129,9 +140,12 @@ public final class ShippingFeeAttribution {
       return participation.getShippingFee();
     }
     ParticipationBundle bundle = bundleById.get(bundleId);
-    Long carrierId = bundle == null ? null : carrierParticipationIdByBundleId.get(bundle.getId());
+    // ⚠️ carrier 조회 키로 bundle.getId() 를 쓰지 않는다. 두 값은 항상 같지만(맵이 getId 로 만들어진다),
+    // 엔티티에서 다시 꺼내면 그 게터가 비어 있는 경우 NPE 도 실패도 없이 폴백으로 빠져 <b>기능이 조용히 꺼진다</b>
+    // — 테스트 목이 getId() 를 안 채운 채로 통과하던 것이 정확히 그 상태였다.
+    Long carrierId = carrierParticipationIdByBundleId.get(bundleId);
     // 미연결 참여(배포선 창)거나 그 묶음이 판정 대상이 아니면 저장값을 그대로 쓴다.
-    if (carrierId == null) {
+    if (bundle == null || carrierId == null) {
       return participation.getShippingFee();
     }
     return carrierId.equals(participation.getId()) ? bundle.getShippingFee() : 0L;

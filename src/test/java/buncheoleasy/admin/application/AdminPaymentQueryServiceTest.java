@@ -88,7 +88,7 @@ class AdminPaymentQueryServiceTest {
     // 여기 픽스처는 묶음당 슬롯이 하나뿐이라 판정 결과가 저장값과 같다 — 판정 자체의 검증은
     // ShippingFeeAttributionTest · ParticipationBundleDomainServiceTest 가 한다.
     lenient()
-        .when(participationBundleDomainService.shippingFeeAttributionFor(anyCollection()))
+        .when(participationBundleDomainService.shippingFeeAttributionFor(anyCollection(), any()))
         .thenReturn(ShippingFeeAttribution.empty());
     lenient()
         .when(participationBundleDomainService.findAllByParticipations(any()))

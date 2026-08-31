@@ -68,12 +68,6 @@ public interface ParticipationRepository {
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
   /**
-   * 한 묶음에 속한 참여 전체 (취소분 포함). 단건 조회에서 배송비 귀속을 정하려면 형제 슬롯이 필요하다 ({@code
-   * ShippingFeeAttribution}). 목록 화면은 이미 전체를 들고 있어 이 조회가 필요 없다.
-   */
-  List<Participation> findAllByBundleId(Long bundleId);
-
-  /**
    * 여러 묶음에 속한 참여 전체 (취소분 포함). 페이지네이션된 목록에서 배송비 귀속을 정할 때, 그 페이지에 걸린 묶음들의 형제
    * 슬롯을 한 번에 읽는다 — 페이지 조각만으로 판정하면 배송비가 두 번 걷힌다 ({@code ShippingFeeAttribution}).
    */

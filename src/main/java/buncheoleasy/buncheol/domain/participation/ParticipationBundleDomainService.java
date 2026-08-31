@@ -148,6 +148,15 @@ public class ParticipationBundleDomainService {
    */
   public ShippingFeeAttribution shippingFeeAttributionFor(
       final Collection<Participation> participations) {
+    return shippingFeeAttributionFor(participations, null);
+  }
+
+  /**
+   * 묶음을 <b>이미 배치로 읽어 둔</b> 호출부용. 형제 슬롯만 추가로 읽는다 — 넘기지 않으면 여기서 다시 조회한다.
+   */
+  public ShippingFeeAttribution shippingFeeAttributionFor(
+      final Collection<Participation> participations,
+      final Map<Long, ParticipationBundle> knownBundleById) {
     List<Long> bundleIds =
         participations.stream()
             .map(Participation::getBundleId)
@@ -159,9 +168,23 @@ public class ParticipationBundleDomainService {
     }
     List<Participation> allSlots = participationRepository.findAllByBundleIds(bundleIds);
     Map<Long, ParticipationBundle> bundleById =
-        participationBundleRepository.findAllByIds(bundleIds).stream()
-            .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
+        knownBundleById != null
+            ? knownBundleById
+            : participationBundleRepository.findAllByIds(bundleIds).stream()
+                .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
     return ShippingFeeAttribution.ofAllSlots(allSlots, bundleById);
+  }
+
+  /**
+   * 묶음을 <b>이미 읽어 둔</b> 호출부용 배송비 귀속. 형제 슬롯만 추가로 읽으므로 묶음을 다시 조회하지 않는다.
+   *
+   * <p>{@code bundle} 이 {@code null}(미연결 참여)이면 조회 없이 빈 판정을 준다.
+   */
+  public ShippingFeeAttribution shippingFeeAttributionOf(final ParticipationBundle bundle) {
+    return bundle == null
+        ? ShippingFeeAttribution.empty()
+        : ShippingFeeAttribution.ofBundle(
+            bundle, participationRepository.findAllByBundleIds(List.of(bundle.getId())));
   }
 
   /** 참여 <b>한 건</b>을 위한 배송비 귀속. 위와 같은 보장을 준다. */

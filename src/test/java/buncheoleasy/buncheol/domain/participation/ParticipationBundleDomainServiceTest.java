@@ -13,6 +13,7 @@ import static org.springframework.test.util.ReflectionTestUtils.setField;
 import buncheoleasy.global.exception.domain.BusinessException;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -164,13 +165,13 @@ class ParticipationBundleDomainServiceTest {
     given(bundle.getId()).willReturn(bundleId);
     given(bundle.getShippingFee()).willReturn(3_000L);
     // 형제 슬롯 전건을 돌려준다 — 호출부는 233 하나만 넘겼다.
-    given(participationRepository.findAllByBundleIds(java.util.List.of(bundleId)))
-        .willReturn(java.util.List.of(carrier, other));
-    given(participationBundleRepository.findAllByIds(java.util.List.of(bundleId)))
-        .willReturn(java.util.List.of(bundle));
+    given(participationRepository.findAllByBundleIds(List.of(bundleId)))
+        .willReturn(List.of(carrier, other));
+    given(participationBundleRepository.findAllByIds(List.of(bundleId)))
+        .willReturn(List.of(bundle));
 
     ShippingFeeAttribution attribution =
-        participationBundleDomainService.shippingFeeAttributionFor(java.util.List.of(other));
+        participationBundleDomainService.shippingFeeAttributionFor(List.of(other));
 
     // 233 만 보였지만 carrier 는 232 다 — 조각만 봤다면 233 이 3,000 을 또 걷었을 것이다.
     assertThat(attribution.shippingFeeOf(other)).isZero();
@@ -183,7 +184,7 @@ class ParticipationBundleDomainServiceTest {
     Participation unlinked = participationFixture(300L, null, 3_000L);
 
     ShippingFeeAttribution attribution =
-        participationBundleDomainService.shippingFeeAttributionFor(java.util.List.of(unlinked));
+        participationBundleDomainService.shippingFeeAttributionFor(List.of(unlinked));
 
     assertThat(attribution.shippingFeeOf(unlinked)).isEqualTo(3_000L);
     then(participationRepository).should(never()).findAllByBundleIds(any());
@@ -191,8 +192,9 @@ class ParticipationBundleDomainServiceTest {
 
   private static Participation participationFixture(
       final Long id, final Long bundleId, final long shippingFee) {
+    final Long buncheolMemberId = 500L + id;
     Participation participation =
-        Participation.createApplied(104L, id, 10L, 1L, 10_000L, shippingFee);
+        Participation.createApplied(104L, buncheolMemberId, 10L, 1L, 10_000L, shippingFee);
     setField(participation, "id", id);
     setField(participation, "bundleId", bundleId);
     setField(participation, "status", ParticipationStatus.APPLIED);

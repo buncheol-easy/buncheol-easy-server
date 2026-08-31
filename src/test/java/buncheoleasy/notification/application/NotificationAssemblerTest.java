@@ -63,7 +63,8 @@ class NotificationAssemblerTest {
       given(participation.getAmount()).willReturn(20_000L);
       given(participation.getShippingFee()).willReturn(3_000L);
       given(participationDomainService.getParticipation(1L)).willReturn(participation);
-      given(participationBundleDomainService.shippingFeeAttributionFor(participation))
+      // 묶음이 없는 경우(미연결) — 조립기는 읽어 둔 묶음을 그대로 넘긴다.
+      given(participationBundleDomainService.shippingFeeAttributionOf(null))
           .willReturn(ShippingFeeAttribution.empty());
 
       Buncheol buncheol = mock(Buncheol.class);
@@ -112,12 +113,15 @@ class NotificationAssemblerTest {
       given(participationDomainService.getParticipation(1L)).willReturn(participation);
 
       ParticipationBundle bundle = mock(ParticipationBundle.class);
-      given(bundle.getId()).willReturn(bundleId);
+      // getId() 는 스텁하지 않는다 — 판정이 엔티티 게터가 아니라 맵 키로 carrier 를 찾으므로 필요 없고,
+      // 그게 "목의 게터가 비어 기능이 조용히 꺼지는" 구멍을 구조적으로 없앤 결과다.
       given(bundle.getShippingFee()).willReturn(3_000L);
       // 판정을 given() 바깥에서 먼저 만든다 — 안에서 만들면 목을 읽는 사이에 UnfinishedStubbing 이 난다.
       ShippingFeeAttribution attribution =
           ShippingFeeAttribution.ofAllSlots(List.of(participation), Map.of(bundleId, bundle));
-      given(participationBundleDomainService.shippingFeeAttributionFor(participation))
+      given(participationBundleDomainService.findByParticipation(participation))
+          .willReturn(java.util.Optional.of(bundle));
+      given(participationBundleDomainService.shippingFeeAttributionOf(bundle))
           .willReturn(attribution);
 
       Buncheol buncheol = mock(Buncheol.class);

@@ -6,7 +6,6 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
-import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import java.time.Instant;
@@ -43,20 +42,20 @@ public record AdminPaymentRecordResponse(
   /**
    * @param refundAccount 환불 계좌. <b>정본은 묶음</b>이라 호출부가 배치로 조회해 넘긴다 (P2-c). 미연결 참여는
    *     {@code null} 일 수 있다
-   * @param shippingFees 배송비 귀속 판정. 총액을 저장값으로 내면 개최 관리 화면과 값이 갈린다 — 운영자가 통장 대사에
-   *     쓰는 화면이라 갈리면 안 된다. 이 목록은 커서 페이지네이션이라 호출부가 형제 슬롯을 대신 읽어 주는 진입점을 쓴다
+   * @param totalAmount 입금 총액. <b>저장값이 아니라 배송비 귀속 판정을 거친 값</b>이라 호출부가 계산해 넘긴다 —
+   *     저장값으로 내면 개최 관리 화면과 갈리는데, 운영자가 통장 대사에 쓰는 화면이라 갈리면 안 된다
    */
   public static AdminPaymentRecordResponse of(
       final AdminPaymentView view,
       final long confirmedCount,
       final RefundAccount refundAccount,
-      final ShippingFeeAttribution shippingFees) {
+      final long totalAmount) {
     return new AdminPaymentRecordResponse(
         view.participation().getId(),
         view.participant() == null ? null : view.participant().getNickname().value(),
         view.participant() == null ? null : view.participant().getName(),
         view.member() == null ? null : view.member().getName(),
-        shippingFees.totalAmountOf(view.participation()),
+        totalAmount,
         AdminPaymentStatus.from(view.participation()),
         view.participation().getStatus(),
         view.participation().getCancelReason(),

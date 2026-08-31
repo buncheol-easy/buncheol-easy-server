@@ -203,15 +203,6 @@ public enum ErrorCode {
   PARTICIPATION_CODE_EXPIRED(
       "BCH-098", "참여 코드가 만료되었습니다. 코드를 보내드린 곳으로 문의해 주세요.", HttpStatus.CONFLICT),
   PARTICIPATION_CODE_ALREADY_USED("BCH-099", "이미 사용된 참여 코드예요.", HttpStatus.CONFLICT),
-
-  // 「제외」는 미입금자를 정리하는 도구지 사람을 고르는 도구가 아니다 — 기한이 지나야 열린다 (docs/71 §8-1).
-  BUNDLE_RELEASE_RECRUITING(
-      "BCH-111", "모집 중에는 참여를 제외할 수 없어요. 입금 기한이 지난 뒤에 정리할 수 있어요.", HttpStatus.CONFLICT),
-  BUNDLE_RELEASE_BEFORE_DUE(
-      "BCH-112", "아직 입금 기한 전이에요. 기한이 지난 뒤에 제외할 수 있어요.", HttpStatus.CONFLICT),
-  BUNDLE_RELEASE_HAS_CONFIRMED(
-      "BCH-113", "입금이 확인된 참여는 제외할 수 없어요. 환불이 필요하면 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
-  BUNDLE_NOT_FOUND("BCH-114", "참여 묶음을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   PARTICIPATION_CODE_REVOKED("BCH-100", "더 이상 사용할 수 없는 코드예요.", HttpStatus.CONFLICT),
   // 이하 운영자(어드민) 발급 경로 전용.
   PARTICIPATION_CODE_NOT_FOUND("BCH-101", "존재하지 않는 참여 코드입니다.", HttpStatus.NOT_FOUND),
@@ -232,6 +223,17 @@ public enum ErrorCode {
       "BCH-109", "코드 참여 슬롯은 0원이어야 합니다.", HttpStatus.CONFLICT),
   BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED(
       "BCH-110", "회원 개최(C2C) 분철에는 코드 참여 멤버를 만들 수 없습니다.", HttpStatus.CONFLICT),
+
+  // ── 참여 묶음 ──
+  // 「제외」는 미입금자를 정리하는 도구지 사람을 고르는 도구가 아니다 — 기한이 지나야 열린다 (docs/71 §8-1).
+  BUNDLE_RELEASE_RECRUITING(
+      "BCH-111", "모집 중에는 참여를 제외할 수 없어요. 입금 기한이 지난 뒤에 정리할 수 있어요.", HttpStatus.CONFLICT),
+  BUNDLE_RELEASE_BEFORE_DUE(
+      "BCH-112", "아직 입금 기한 전이에요. 기한이 지난 뒤에 제외할 수 있어요.", HttpStatus.CONFLICT),
+  BUNDLE_RELEASE_HAS_CONFIRMED(
+      "BCH-113", "입금이 확인된 참여는 제외할 수 없어요. 환불이 필요하면 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
+  // 「제외」 전용이 아닌 범용 조회 실패다.
+  BUNDLE_NOT_FOUND("BCH-114", "참여 묶음을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

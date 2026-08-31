@@ -345,6 +345,18 @@ public class ParticipationService {
    * {@code EXISTS(묶음)} 로 묶음 행에 S 를 요청하고, 취소는 옛 참여 행에 X 를 잡은 뒤 종료 CAS 로 묶음 행에 X 를
    * 잡고 그 서브쿼리가 새 참여 행에 S 를 요청한다. 원인은 같다 — <b>취소 경로가 분철 행 락을 잡지 않아</b> 두 경로가
    * 직렬화되지 않는다. 레포에 데드락 재시도 핸들러가 없어 실패 모드는 500 이다.
+   *
+   * <p><b>2026-08-31 추가된 두 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
+   *
+   * <ul>
+   *   <li>{@code rejectPaymentSent} — 참여 행(X) → 묶음 행(X). 기존 「참여 → 묶음」 방향과 같다.
+   *   <li>{@code ParticipationBundleService#release} — ⚠️ <b>묶음 행에서 S → X 승격</b>이 일어난다.
+   *       {@code releaseBundleIfDue} 의 {@code EXISTS (SELECT b FROM ParticipationBundle ...)} 가
+   *       InnoDB 에서 묶음 행에 <b>공유 락</b>을 걸고({@code linkBundleIfUnlinked} 주석과 같은 성질),
+   *       이어지는 {@code closeIfEmpty} 가 같은 행의 <b>X 락</b>을 요청한다. 같은 묶음에 「제외」가 동시에
+   *       두 번 들어오면(개최자 더블클릭) 각자 S 를 쥔 채 X 를 기다려 <b>데드락</b>이 날 수 있다.
+   *       정합성은 CAS 가 지키고 실패 모드는 롤백(500)이라 기존에 문서화된 리스크와 같은 종류다.
+   * </ul>
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();

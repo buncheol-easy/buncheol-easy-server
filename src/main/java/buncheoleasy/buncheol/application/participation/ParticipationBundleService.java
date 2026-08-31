@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -52,15 +53,9 @@ public class ParticipationBundleService {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
 
-    List<Participation> slots = participationRepository.findAllByBundleIds(List.of(bundleId));
-    requireReleasable(BundleReleasability.of(bundle, slots, now));
-
-    // 실제로 뺄 슬롯을 CAS 전에 붙잡아 둔다 — CAS 는 영향 행 수만 돌려주고, 알림은 어떤 슬롯이 빠졌는지 알아야 한다.
-    List<Long> targets =
-        slots.stream()
-            .filter(p -> ParticipationStatus.releasableStatuses().contains(p.getStatus()))
-            .map(Participation::getId)
-            .toList();
+    requireReleasable(
+        BundleReleasability.of(
+            bundle, participationRepository.findAllByBundleIds(List.of(bundleId)), now));
 
     int released = participationRepository.releaseBundleIfDue(bundleId, now);
     if (released == 0) {
@@ -69,8 +64,24 @@ public class ParticipationBundleService {
     }
     participationBundleDomainService.closeIfEmpty(bundleId, now);
 
-    eventPublisher.publishEvent(new BundleReleasedEvent(bundleId, targets));
-    return targets;
+    // 🔴 <b>CAS 이후에</b> 실제로 취소된 슬롯을 뽑는다. CAS 전 스냅샷으로 계산하면 REPEATABLE READ 라,
+    // 그 사이 참여자가 자발 취소한 슬롯이 우리 눈에는 아직 활성으로 보여 목록에 들어간다 — 정작 CAS 의
+    // current read 는 이미 취소된 그 행을 건드리지 않는다. 그러면 <b>이 응답이 존재하는 이유인 사후 대조가
+    // 오히려 틀린 답을 내고</b>, 알림톡이 자기가 직접 취소한 슬롯을 "기한이 지나 취소되었어요" 로 안내한다.
+    //
+    // CAS 가 cancelReason·cancelledAt 을 같은 now 로 박아 주므로 이 두 값으로 정확히 걸러진다.
+    // @Modifying(clearAutomatically = true) 라 재조회가 갱신값을 본다.
+    List<Long> releasedIds =
+        participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+            .filter(
+                p ->
+                    p.getCancelReason() == ParticipationCancelReason.HOST_RELEASED
+                        && now.equals(p.getCancelledAt()))
+            .map(Participation::getId)
+            .toList();
+
+    eventPublisher.publishEvent(new BundleReleasedEvent(bundleId, releasedIds));
+    return releasedIds;
   }
 
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */

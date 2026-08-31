@@ -57,9 +57,59 @@ public class ParticipationService {
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
+  /**
+   * 참여 신청. 요청이 슬롯을 여러 개 담고 있으면 <b>한 트랜잭션에서</b> 전부 만든다.
+   *
+   * <p>🔴 <b>하나라도 실패하면 전체 롤백</b>이다 (docs/70 §5). 3개 중 하나가 이미 팔렸으면 나머지 둘도 만들지
+   * 않는다 — 부분 성공을 남기면 참여자가 "몇 개가 잡혔는지" 를 화면에서 재구성해야 한다. 조건부 INSERT 가
+   * 0행을 돌리면 예외가 나므로 {@code @Transactional} 이 그대로 롤백한다.
+   *
+   * <p><b>배송비·묶음은 자연히 맞는다.</b> 2번째 슬롯부터는 {@code findFirstActiveInBuncheol} 이 <b>방금 만든
+   * 첫 슬롯</b>을 찾아내 같은 묶음을 재사용하고 배송비를 0으로 둔다 — 슬롯 하나씩 N번 신청한 것과 결과가 같다.
+   * 그래서 루프가 묶음 id 를 따로 이어 나를 필요가 없다.
+   *
+   * <p>⚠️ 다중 슬롯은 <b>C2C 에서만</b> 열린다. LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있어 2번째
+   * INSERT 가 그 자리에서 막힌다 — 요청 단계에서 먼저 거절해 원인이 드러나게 한다.
+   */
   @Transactional
   public ParticipateResult participate(
       final Long buncheolId, final Long participantId, final ParticipateRequest request) {
+    List<Long> slotIds = request.slotIds();
+    if (slotIds.isEmpty()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
+    }
+    if (slotIds.size() == 1) {
+      return participateSingle(buncheolId, participantId, request, slotIds.get(0));
+    }
+
+    // 다중은 C2C 전용이다. LEGACY 에서 2번째가 유니크에 막히면 "이미 참여했다" 로 보여 원인이 안 드러난다.
+    if (!buncheolDomainService.getBuncheol(buncheolId).isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 쓸 수 없다.
+    if (ParticipationCodeDomainService.submitted(request.participationCode())) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
+    }
+
+    List<ParticipateResult> results =
+        slotIds.stream()
+            .map(slotId -> participateSingle(buncheolId, participantId, request, slotId))
+            .toList();
+    // 첫 슬롯이 배송비를 지므로 총액은 합산해야 한다. 기한·계좌는 묶음 단위라 전부 같다.
+    ParticipateResult first = results.get(0);
+    return new ParticipateResult(
+        first.participationId(),
+        results.stream().map(ParticipateResult::participationId).toList(),
+        results.stream().mapToLong(ParticipateResult::totalAmount).sum(),
+        first.dueAt(),
+        first.hostAccount());
+  }
+
+  private ParticipateResult participateSingle(
+      final Long buncheolId,
+      final Long participantId,
+      final ParticipateRequest request,
+      final Long slotId) {
     final Instant now = Instant.now(clock);
 
     // 가입 미완료(전화번호 미등록) 유저 차단. 배송 스냅샷이 phoneNumber 를 요구하므로 참여 진입 자체를 막는다.
@@ -69,7 +119,7 @@ public class ParticipationService {
 
     // C2C 는 신청(무입금)→확정→입금 플로우라 별도 경로로 처리한다. LEGACY 경로는 이하 현행 그대로 (docs/46 §0.1-3).
     if (buncheol.isC2c()) {
-      return participateC2c(buncheol, participantId, request, now);
+      return participateC2c(buncheol, participantId, request, slotId, now);
     }
 
     buncheol.validateRecruiting(now);
@@ -87,11 +137,7 @@ public class ParticipationService {
     // DTO(@NotNull) 검증과 별개로 서비스에서도 방어 검증한다 — 참여 1건 = 멤버 슬롯 1개(단일 선택 정책).
     // HTTP 경로에서는 @NotNull 이 먼저 걸러 C-001 로 응답하므로 이 분기는 도달하지 않는다.
     // 컨트롤러를 거치지 않는 직접 호출(배치·테스트 등)을 막는 최후 가드로만 동작한다.
-    if (request.buncheolMemberId() == null) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
-    }
-    BuncheolMember member =
-        buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheolId);
+    BuncheolMember member = buncheolMemberDomainService.getBuncheolMember(slotId, buncheolId);
 
     Optional<ParticipationCode> code =
         participationCodeDomainService.validateForParticipation(
@@ -149,7 +195,7 @@ public class ParticipationService {
     }
 
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
-    return new ParticipateResult(
+    return ParticipateResult.single(
         participation.getId(), participation.getTotalAmount(), dueAt, hostAccount);
   }
 
@@ -161,7 +207,8 @@ public class ParticipationService {
       final Participation participation, final Buncheol buncheol, final Instant now) {
     participationDomainService.confirmPayment(participation.getId(), now);
     applyPaymentConfirmed(participation, buncheol, now);
-    return new ParticipateResult(participation.getId(), 0L, null, null);
+    return ParticipateResult.single(
+        participation.getId(), 0L, null, null);
   }
 
   /**
@@ -180,6 +227,7 @@ public class ParticipationService {
       final Buncheol loaded,
       final Long participantId,
       final ParticipateRequest request,
+      final Long slotId,
       final Instant now) {
     // 분철 행 락으로 참여 생성을 직렬화한다 — 같은 유저의 동시 다슬롯 신청에서 "첫 참여 판정"(배송비 1회·배송지/입금자명
     // 스냅샷 재사용)이 둘 다 첫 참여로 오판되는 check-then-insert 레이스를 막는다 (docs/46 §4.7-A1·A2).
@@ -189,11 +237,8 @@ public class ParticipationService {
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }
-    if (request.buncheolMemberId() == null) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
-    }
     BuncheolMember member =
-        buncheolMemberDomainService.getBuncheolMember(request.buncheolMemberId(), buncheol.getId());
+        buncheolMemberDomainService.getBuncheolMember(slotId, buncheol.getId());
     // C2C 에는 코드 슬롯을 만들 수 없다(개최 가드) — 도달했다면 데이터 이상이다.
     if (member.requiresCode()
         || ParticipationCodeDomainService.submitted(request.participationCode())) {
@@ -320,7 +365,8 @@ public class ParticipationService {
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
     publishFullIfAllSlotsApplied(buncheol);
-    return new ParticipateResult(participation.getId(), participation.getTotalAmount(), null, null);
+    return ParticipateResult.single(
+        participation.getId(), participation.getTotalAmount(), null, null);
   }
 
   /**
@@ -412,7 +458,7 @@ public class ParticipationService {
         participation, null, shippingAddressId, shippingFee, refundAccount, dueAt, now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
-    return new ParticipateResult(
+    return ParticipateResult.single(
         participation.getId(), participation.getTotalAmount(), dueAt, buncheol.getPaymentAccount());
   }
 

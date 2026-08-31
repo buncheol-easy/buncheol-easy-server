@@ -65,7 +65,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
     // given
     Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     ParticipateResult result =
-        new ParticipateResult(500L, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
+        ParticipateResult.single(500L, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
     given(participationService.participate(eq(10L), eq(PARTICIPANT_ID), any()))
         .willReturn(result);
 
@@ -153,6 +153,10 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .responseSchema(Schema.schema("ParticipateResponse"))
                         .responseFields(
                             fieldWithPath("participationId").description("생성된 참여 ID"),
+                            fieldWithPath("participationIds")
+                                .description(
+                                    "생성된 참여 ID 전체. 다중 슬롯 신청이면 여러 개다 — participationId 는 그중 첫 슬롯이며"
+                                        + " 구버전 호환을 위해 남긴 값이다"),
                             fieldWithPath("amount").description("입금할 총액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("dueAt")
                                 .description("입금 만료 시각 (UTC ISO-8601). 코드 참여는 결제가 없어 null")

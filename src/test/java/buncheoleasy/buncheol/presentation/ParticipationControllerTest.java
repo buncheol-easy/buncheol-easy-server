@@ -109,7 +109,7 @@ class ParticipationControllerTest {
     void 참여_신청에_성공하면_201을_반환한다() throws Exception {
       Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
       ParticipateResult result =
-          new ParticipateResult(
+          ParticipateResult.single(
               PARTICIPATION_ID, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
 
       given(

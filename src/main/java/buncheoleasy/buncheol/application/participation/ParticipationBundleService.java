@@ -142,15 +142,22 @@ public class ParticipationBundleService {
     return markedIds;
   }
 
-  /** {@code paymentSentAt} 이 {@code at} 인 슬롯. {@code at} 이 null 이면 상태만 본다. */
+  /**
+   * {@code at} 에 마킹된 슬롯. {@code at} 이 null 이면 상태만 본다.
+   *
+   * <p>🔴 <b>{@code equals} 로 비교하면 안 된다.</b> {@code payment_sent_at} 은 초 단위 {@code DATETIME}
+   * (precision 0) 이라 나노초를 가진 {@code Instant} 와 <b>영원히 같지 않다</b> — 같은 실수로 「제외」 응답이
+   * 항상 빈 배열로 나갔다(server#163). H2 는 정밀도를 보존해 테스트가 통과한다.
+   */
   private List<Long> markedSlots(
       final Long bundleId, final ParticipationStatus status, final Instant at) {
     return participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
         .filter(p -> p.getStatus() == status)
-        .filter(p -> at == null || at.equals(p.getPaymentSentAt()))
+        .filter(p -> at == null || writtenAt(p.getPaymentSentAt(), at))
         .map(Participation::getId)
         .toList();
   }
+
 
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */
   private static void requireReleasable(final BundleReleasability releasability) {

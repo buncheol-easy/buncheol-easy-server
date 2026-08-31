@@ -40,9 +40,14 @@ import org.springframework.context.ApplicationEventPublisher;
 @DisplayName("ParticipationBundleService — 개최자 「제외」")
 class ParticipationBundleServiceTest {
 
+<<<<<<< HEAD
   // 실제 운영은 나노초를 가진 시각을 넘긴다 — 초 단위로 떨어지는 값으로 테스트하면 잘림 문제가 안 드러난다.
   private static final Instant NOW_WITH_NANOS = Instant.parse("2026-08-31T12:00:00.123456789Z");
   private static final Instant NOW = NOW_WITH_NANOS;
+=======
+  // 실제 운영은 나노초를 가진 시각을 넘긴다 — 초 단위로 떨어지는 값이면 DB 잘림 문제가 안 드러난다.
+  private static final Instant NOW = Instant.parse("2026-08-31T12:00:00.123456789Z");
+>>>>>>> 989a598 (fix: 마킹 응답이 초 단위 DATETIME 잘림으로 비어 나오던 것)
   private static final Long HOST_ID = 1L;
   private static final Long OTHER_HOST_ID = 999L;
   private static final Long BUNDLE_ID = 141L;
@@ -243,8 +248,9 @@ class ParticipationBundleServiceTest {
       given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
           .willReturn(
               List.of(
-                  sentSlot(232L, NOW),
-                  sentSlot(233L, NOW),
+                  // DB 가 초 단위로 잘라 저장한 값 — 서비스가 넘긴 now 와 나노초가 다르다.
+                  sentSlot(232L, NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)),
+                  sentSlot(233L, NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)),
                   // 다른 호출에서 이미 마킹된 슬롯 — 이번 알림에 섞이면 안 된다.
                   sentSlot(234L, NOW.minusSeconds(600))));
 

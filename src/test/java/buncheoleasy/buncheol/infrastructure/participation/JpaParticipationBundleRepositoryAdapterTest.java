@@ -505,11 +505,18 @@ class JpaParticipationBundleRepositoryAdapterTest {
       assertThat(activeSlotCount(bundleId)).isEqualTo(1);
     }
 
-    // 🔴 확정 슬롯이 하나라도 있으면 <b>같은 묶음의 미입금 슬롯도</b> 안 빠져야 한다 — 확정분은 분철 취소
-    // cascade + 환불 경로로만 끝난다. 부분 취소가 나면 개최자가 돈 계산을 못 한다.
+    /**
+     * ⚠️ <b>확정 슬롯 검사는 이 CAS 에 없다.</b> MySQL 이 {@code UPDATE} 대상 테이블을 서브쿼리 FROM 에서
+     * 참조하는 것을 금지하기 때문이다(error 1093). 그 검사는 서비스가 {@link
+     * buncheoleasy.buncheol.domain.participation.ParticipationRepository#findAllByBundleIdForUpdate}
+     * 로 슬롯을 잠근 뒤 수행한다 — {@code ParticipationBundleServiceTest} 가 그쪽을 검증한다.
+     *
+     * <p>🔴 <b>H2 는 {@code MODE=MySQL} 이어도 이 제약을 재현하지 않는다.</b> 원래 조건이 들어간 CAS 가 여기서
+     * 통과하고 staging(MySQL)에서야 500 으로 드러났다. 같은 테이블을 보는 조건은 CAS 에 넣지 말 것.
+     */
     @Test
-    @DisplayName("확정 슬롯이 있으면 같은 묶음의 미입금 슬롯도 취소하지 않는다")
-    void 확정_슬롯이_있으면_같은_묶음의_미입금_슬롯도_취소하지_않는다() {
+    @DisplayName("확정 슬롯 유무는 이 CAS 가 보지 않는다 — 잠금 조회 뒤 서비스가 판정한다")
+    void 확정_슬롯_유무는_이_CAS_가_보지_않는다() {
       Long bundleId = openBundle(Instant.now().minusSeconds(3600));
       insertC2cParticipation(bundleId, "CONFIRMED");
       insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
@@ -518,8 +525,17 @@ class JpaParticipationBundleRepositoryAdapterTest {
 
       int released = participationRepository.releaseBundleIfDue(bundleId, Instant.now());
 
-      assertThat(released).isZero();
-      assertThat(activeSlotCount(bundleId)).isEqualTo(2);
+      // 미입금 슬롯만 빠지고 확정분은 남는다 — 실제 차단은 서비스의 판정이 한다.
+      assertThat(released).isEqualTo(1);
+      assertThat(statusCountForRelease(bundleId, "CONFIRMED")).isEqualTo(1);
+    }
+
+    private int statusCountForRelease(final Long bundleId, final String status) {
+      return jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM participations WHERE bundle_id = ? AND status = ?",
+          Integer.class,
+          bundleId,
+          status);
     }
 
     @Test

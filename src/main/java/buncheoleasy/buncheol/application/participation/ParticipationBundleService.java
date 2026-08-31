@@ -53,9 +53,12 @@ public class ParticipationBundleService {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
 
+    // 🔴 <b>잠금 조회로 판정한다.</b> 확정 슬롯 검사를 CAS 서브쿼리에 넣을 수 없다 — MySQL 은 UPDATE 대상
+    // 테이블을 서브쿼리 FROM 에서 참조하는 것을 금지한다(error 1093). H2 는 허용해서 테스트가 전부 통과하고
+    // staging 에서야 500 으로 드러났다. 락이 그 원자성을 대신한다 — 입금확인 CAS 가 이 락에 막힌다.
     requireReleasable(
         BundleReleasability.of(
-            bundle, participationRepository.findAllByBundleIds(List.of(bundleId)), now));
+            bundle, participationRepository.findAllByBundleIdForUpdate(bundleId), now));
 
     int released = participationRepository.releaseBundleIfDue(bundleId, now);
     if (released == 0) {

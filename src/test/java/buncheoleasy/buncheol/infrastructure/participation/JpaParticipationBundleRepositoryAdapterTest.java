@@ -390,6 +390,59 @@ class JpaParticipationBundleRepositoryAdapterTest {
         "SELECT id FROM participations WHERE buncheol_member_id = ?", Long.class, member.getId());
   }
   @Nested
+  @DisplayName("confirmBundleIfPayable — 묶음 단위 입금확인")
+  class ConfirmBundleIfPayableTest {
+
+    @Test
+    @DisplayName("입금 대기·「보냈어요」 슬롯을 한 번에 확정한다")
+    void 확인_가능_슬롯을_한_번에_확정한다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      insertC2cParticipation(bundleId, "PAYMENT_SENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      int confirmed = participationRepository.confirmBundleIfPayable(bundleId, Instant.now());
+
+      assertThat(confirmed).isEqualTo(2);
+      assertThat(confirmedCount(bundleId)).isEqualTo(2);
+    }
+
+    // 기한이 지나도 확인은 열려 있어야 한다 — 개최자 확인이 늦어도 유효하다 (docs/46 §3-6).
+    @Test
+    @DisplayName("입금 기한이 지나도 확정할 수 있다")
+    void 기한이_지나도_확정할_수_있다() {
+      Long bundleId = openBundle(Instant.now().minusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      assertThat(participationRepository.confirmBundleIfPayable(bundleId, Instant.now()))
+          .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("취소·이미 확정된 슬롯은 건드리지 않는다")
+    void 취소되거나_이미_확정된_슬롯은_건드리지_않는다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "CANCELLED");
+      insertC2cParticipation(bundleId, "CONFIRMED");
+      entityManager.flush();
+      entityManager.clear();
+
+      assertThat(participationRepository.confirmBundleIfPayable(bundleId, Instant.now())).isZero();
+      assertThat(confirmedCount(bundleId)).isEqualTo(1);
+    }
+
+    private int confirmedCount(final Long bundleId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM participations WHERE bundle_id = ? AND status = 'CONFIRMED'",
+          Integer.class,
+          bundleId);
+    }
+  }
+
+  @Nested
   @DisplayName("markBundlePaymentSent — 묶음 단위 「보냈어요」")
   class MarkBundlePaymentSentTest {
 

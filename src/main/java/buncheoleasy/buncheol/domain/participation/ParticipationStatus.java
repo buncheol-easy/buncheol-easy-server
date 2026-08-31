@@ -44,4 +44,12 @@ public enum ParticipationStatus {
   public static Set<ParticipationStatus> releasableStatuses() {
     return RELEASABLE;
   }
+
+  // 개최자가 입금확인할 수 있는 상태. C2C 는 「보냈어요」 마킹 여부와 무관하게 확인 가능하다 — 마킹은 단서일
+  // 뿐이고 실제 판단 근거는 개최자 통장이다 (docs/46 §3-6).
+  private static final Set<ParticipationStatus> PAYABLE = Set.of(AWAITING_PAYMENT, PAYMENT_SENT);
+
+  public static Set<ParticipationStatus> payableStatuses() {
+    return PAYABLE;
+  }
 }

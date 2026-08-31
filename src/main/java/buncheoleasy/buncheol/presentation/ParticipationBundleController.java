@@ -1,13 +1,17 @@
 package buncheoleasy.buncheol.presentation;
 
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
+import buncheoleasy.buncheol.dto.request.BundleConfirmRequest;
+import buncheoleasy.buncheol.dto.response.BundleConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BundlePaymentSentResponse;
 import buncheoleasy.buncheol.dto.response.BundleReleaseResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -52,5 +56,25 @@ public class ParticipationBundleController {
     return ResponseEntity.ok(
         new BundlePaymentSentResponse(
             bundleId, participationBundleService.markPaymentSent(participantId, bundleId)));
+  }
+
+  /**
+   * 개최자 입금확인 API — 묶음의 확인 가능 슬롯을 <b>한 번에</b> 확정한다 (all-or-nothing).
+   *
+   * <p>부분 확인은 애초에 성립하지 않는다 — 확인 API 에 금액이 없어 시스템은 실입금액을 모르고, 개최자가
+   * 판단하는 것은 "이 이체가 들어왔는가" 하나뿐이다.
+   *
+   * <p>요청의 {@code expectedSlotIds} 에는 개최 관리 응답에서 {@code confirmTarget} 이 {@code true} 인
+   * 슬롯만 담는다. 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
+   */
+  @PostMapping("/{bundleId}/confirm")
+  public ResponseEntity<BundleConfirmResponse> confirmPayment(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long bundleId,
+      @Valid @RequestBody final BundleConfirmRequest request) {
+    return ResponseEntity.ok(
+        new BundleConfirmResponse(
+            bundleId,
+            participationBundleService.confirmPayment(hostId, bundleId, request.expectedSlotIds())));
   }
 }

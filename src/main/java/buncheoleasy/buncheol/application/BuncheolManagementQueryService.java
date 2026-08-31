@@ -223,7 +223,9 @@ public class BuncheolManagementQueryService {
         participation.getPaymentSentAt(),
         participation.getBundleId() == null
             ? null
-            : releasabilityByBundleId.get(participation.getBundleId()));
+            : releasabilityByBundleId.get(participation.getBundleId()),
+        // 묶음 확인 API 의 expectedSlotIds 는 이 값이 true 인 슬롯만 실어야 한다 — 판정을 서버가 준다.
+        ParticipationStatus.payableStatuses().contains(participation.getStatus()));
   }
 
   /**

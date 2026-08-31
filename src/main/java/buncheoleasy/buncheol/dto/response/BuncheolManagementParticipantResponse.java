@@ -28,6 +28,11 @@ import java.time.Instant;
  * ⚠️ 값이 묶음 단위라 <b>취소된 행에도 {@code RELEASABLE} 이 실릴 수 있다</b>(같은 묶음에 활성 슬롯이
  * 남아 있고 기한이 지난 경우). 「제외」 버튼은 <b>활성 행에만</b> 그린다.
  *
+ * <p>{@code confirmTarget} 은 이 슬롯이 <b>묶음 입금확인의 대상</b>인지다. 화면은 묶음 확인 API 에
+ * {@code expectedSlotIds} 로 <b>이 값이 true 인 슬롯만</b> 실어야 한다 — 서버가 확인 대상을 같은 판정으로
+ * 내려주므로 화면이 상태 문자열을 해석할 필요가 없고, 확인 대상 상태가 늘어도 양쪽이 갈리지 않는다.
+ * 취소분·확정분까지 실으면 <b>영원히 409</b> 가 난다({@code BUNDLE_SLOTS_CHANGED}).
+ *
  * <p><b>계좌 노출 범위</b>(docs/70 결정 21) — 개최자가 통장을 대조하는 데 필요한 것은 <b>입금자명뿐</b>이므로 평시에는 {@code
  * depositorName} 만 내리고 {@code refundAccount} 는 {@code null} 이다. 계좌번호는 <b>개최자가 실제로 환불해야 하는 건</b>, 즉
  * 취소분 중 입금 흔적(마킹·입금확인)이 있는 건에만 채운다 — 직거래라 환불 주체가 개최자다.
@@ -52,4 +57,5 @@ public record BuncheolManagementParticipantResponse(
     RefundAccountResponse refundAccount,
     ManagementDeliveryResponse delivery,
     Instant paymentSentAt,
-    BundleReleasability releasability) {}
+    BundleReleasability releasability,
+    boolean confirmTarget) {}

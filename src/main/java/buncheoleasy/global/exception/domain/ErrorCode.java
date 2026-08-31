@@ -234,7 +234,12 @@ public enum ErrorCode {
       "BCH-113", "입금이 확인된 참여는 제외할 수 없어요. 환불이 필요하면 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
   // 「제외」 전용이 아닌 범용 조회 실패다.
   BUNDLE_NOT_FOUND("BCH-114", "참여 묶음을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
-
+  // 개최자가 화면에서 본 슬롯 집합과 서버의 실제 집합이 다르다 — 화면을 새로 고쳐야 한다.
+  BUNDLE_SLOTS_CHANGED(
+      "BCH-115", "그 사이 참여 구성이 바뀌었어요. 새로고침 후 다시 확인해 주세요.", HttpStatus.CONFLICT),
+  BUNDLE_CONFIRM_NOT_ALLOWED(
+      "BCH-116", "입금 확인할 참여가 없어요. 이미 확인되었거나 취소된 참여입니다.", HttpStatus.CONFLICT),
+  
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

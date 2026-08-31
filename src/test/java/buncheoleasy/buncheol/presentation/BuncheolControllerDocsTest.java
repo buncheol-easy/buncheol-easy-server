@@ -932,7 +932,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 "010-1234-5678",
                 "1234567890",
                 DeliveryStatus.SHIPPING), null,
-            null);
+            null,
+            true);
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
@@ -949,7 +950,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             null,
             null,
             null, null,
-            null);
+            null,
+            true);
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
@@ -967,7 +969,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             new RefundAccountResponse("카카오뱅크", "3333012345678", "가을팬"),
             null,
             null,
-            null);
+            null,
+            true);
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
@@ -1182,6 +1185,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "묶음 「제외」 가능 여부. RELEASABLE | RECRUITING(모집 중이라 불가) | BEFORE_DUE(입금 기한 전) | HAS_CONFIRMED(입금확인된 슬롯 있음) | ALREADY_CLOSED. 「제외」 API 게이트와 같은 판정이라 RELEASABLE 이 아니면 버튼을 비활성하고 사유를 표기하면 된다. 미연결 참여는 null")
                                 .optional(),
+                            fieldWithPath("participants[].confirmTarget")
+                                .description(
+                                    "이 슬롯이 묶음 입금확인의 대상인지. 묶음 확인 API 의 expectedSlotIds 에는 **이 값이 true 인 슬롯만** 실어야 한다 — 취소분·확정분까지 실으면 영원히 409(BCH-115) 가 난다. 서버가 같은 판정을 내려주므로 화면이 상태 문자열을 해석할 필요가 없다"),
                             fieldWithPath("cancelledParticipants")
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
@@ -1244,6 +1250,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "묶음 「제외」 가능 여부. RELEASABLE | RECRUITING(모집 중이라 불가) | BEFORE_DUE(입금 기한 전) | HAS_CONFIRMED(입금확인된 슬롯 있음) | ALREADY_CLOSED. 「제외」 API 게이트와 같은 판정이라 RELEASABLE 이 아니면 버튼을 비활성하고 사유를 표기하면 된다. 미연결 참여는 null")
                                 .optional(),
+                            fieldWithPath("cancelledParticipants[].confirmTarget")
+                                .description(
+                                    "이 슬롯이 묶음 입금확인의 대상인지. 묶음 확인 API 의 expectedSlotIds 에는 **이 값이 true 인 슬롯만** 실어야 한다 — 취소분·확정분까지 실으면 영원히 409(BCH-115) 가 난다. 서버가 같은 판정을 내려주므로 화면이 상태 문자열을 해석할 필요가 없다"),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")

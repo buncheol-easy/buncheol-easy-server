@@ -1008,7 +1008,8 @@ class BuncheolControllerTest {
                   "010-1234-5678",
                   "1234567890",
                   DeliveryStatus.SHIPPING), null,
-              null);
+              null,
+              true);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
@@ -1025,7 +1026,8 @@ class BuncheolControllerTest {
               null,
               null,
               null, null,
-              null);
+              null,
+              true);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,

@@ -7,9 +7,13 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -25,6 +29,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -53,8 +58,8 @@ class ParticipationBundleServiceTest {
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ParticipationRepository participationRepository;
   @Mock private BuncheolDomainService buncheolDomainService;
-  @Mock private buncheoleasy.buncheol.application.DeliverySnapshotCreator deliverySnapshotCreator;
-  @Mock private buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -83,7 +88,7 @@ class ParticipationBundleServiceTest {
   }
 
   private Buncheol c2cBuncheol(final Long hostId) {
-    Buncheol buncheol = org.mockito.Mockito.mock(Buncheol.class);
+    Buncheol buncheol = mock(Buncheol.class);
     lenient().when(buncheol.isC2c()).thenReturn(true);
     lenient().when(buncheol.getId()).thenReturn(BUNCHEOL_ID);
     lenient()
@@ -165,7 +170,7 @@ class ParticipationBundleServiceTest {
   @Test
   @DisplayName("LEGACY 분철은 제외 대상이 아니다")
   void rejectsLegacy() {
-    Buncheol legacy = org.mockito.Mockito.mock(Buncheol.class);
+    Buncheol legacy = mock(Buncheol.class);
     lenient().when(legacy.isC2c()).thenReturn(false);
     stubBundleAndBuncheol(NOW.minusSeconds(3600), legacy);
 
@@ -282,7 +287,7 @@ class ParticipationBundleServiceTest {
     @Test
     @DisplayName("LEGACY 분철의 묶음은 마킹 대상이 아니다")
     void rejectsLegacyBundle() {
-      Buncheol legacy = org.mockito.Mockito.mock(Buncheol.class);
+      Buncheol legacy = mock(Buncheol.class);
       lenient().when(legacy.isC2c()).thenReturn(false);
       stubBundleAndBuncheol(NOW.plusSeconds(3600), legacy);
 
@@ -358,7 +363,7 @@ class ParticipationBundleServiceTest {
     private void stubPayable(final Long... ids) {
       given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
           .willReturn(
-              java.util.Arrays.stream(ids)
+              Arrays.stream(ids)
                   .map(id -> slot(id, ParticipationStatus.AWAITING_PAYMENT, null, null))
                   .toList());
     }
@@ -370,16 +375,56 @@ class ParticipationBundleServiceTest {
       stubPayable(232L, 233L);
       given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
       given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
-          .willReturn(List.of(slot(232L, ParticipationStatus.CONFIRMED, null, null)));
+          .willReturn(
+              List.of(
+                  slot(232L, ParticipationStatus.CONFIRMED, null, null),
+                  slot(233L, ParticipationStatus.CONFIRMED, null, null)));
 
       List<Long> confirmed =
           participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L));
 
       assertThat(confirmed).containsExactly(232L, 233L);
+      // 🔴 배송 스냅샷 누락은 조용히 샌다 — Delivery 없는 CONFIRMED 참여는 영구 미종료로 잡혀
+      // <b>회원탈퇴까지 막는다</b>. 확정한 슬롯 수만큼 만들어져야 한다.
+      then(deliverySnapshotCreator).should(times(2)).create(any());
       ArgumentCaptor<BundlePaymentConfirmedEvent> captor =
           ArgumentCaptor.forClass(BundlePaymentConfirmedEvent.class);
       then(eventPublisher).should().publishEvent(captor.capture());
       assertThat(captor.getValue().confirmedParticipationIds()).containsExactly(232L, 233L);
+    }
+
+    // "진행확정 판정은 묶음당 1회" 라는 주장을 고정한다 — 슬롯마다 부르면 같은 판정을 N 번 돌린다.
+    @Test
+    @DisplayName("전 슬롯이 확정되면 분철 진행확정을 한 번만 태운다")
+    void finalizesBuncheolOnceWhenAllCollected() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubPayable(232L, 233L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(
+              List.of(
+                  slot(232L, ParticipationStatus.CONFIRMED, null, null),
+                  slot(233L, ParticipationStatus.CONFIRMED, null, null)));
+      given(buncheolDomainService.confirmIfAllCollected(BUNCHEOL_ID, NOW)).willReturn(true);
+
+      participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L, 233L));
+
+      then(buncheolConfirmedFinalizer).should(times(1)).finalizeConfirmed(BUNCHEOL_ID);
+    }
+
+    @Test
+    @DisplayName("아직 다 안 모였으면 진행확정을 태우지 않는다")
+    void doesNotFinalizeWhenNotAllCollected() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubPayable(232L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(List.of(slot(232L, ParticipationStatus.CONFIRMED, null, null)));
+      given(buncheolDomainService.confirmIfAllCollected(BUNCHEOL_ID, NOW)).willReturn(false);
+
+      participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L));
+
+      then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
     }
 
     // 🔴 개최자가 보지 못한 슬롯까지 확정되면 안 된다 — 추가 모집 묶음은 슬롯이 늘 수 있다.
@@ -403,10 +448,15 @@ class ParticipationBundleServiceTest {
       stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
       stubPayable(232L, 233L);
       given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
-      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID))).willReturn(List.of());
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(
+              List.of(
+                  slot(232L, ParticipationStatus.CONFIRMED, null, null),
+                  slot(233L, ParticipationStatus.CONFIRMED, null, null)));
 
       assertThat(participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L)))
           .containsExactly(232L, 233L);
+      then(deliverySnapshotCreator).should(times(2)).create(any());
     }
 
     @Test
@@ -439,7 +489,7 @@ class ParticipationBundleServiceTest {
     @Test
     @DisplayName("LEGACY 분철은 묶음 확인 대상이 아니다")
     void rejectsLegacyConfirm() {
-      Buncheol legacy = org.mockito.Mockito.mock(Buncheol.class);
+      Buncheol legacy = mock(Buncheol.class);
       lenient().when(legacy.isC2c()).thenReturn(false);
       stubBundleAndBuncheol(NOW.minusSeconds(3600), legacy);
 

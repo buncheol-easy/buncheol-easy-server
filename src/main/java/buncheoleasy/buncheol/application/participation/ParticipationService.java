@@ -346,10 +346,19 @@ public class ParticipationService {
    * 잡고 그 서브쿼리가 새 참여 행에 S 를 요청한다. 원인은 같다 — <b>취소 경로가 분철 행 락을 잡지 않아</b> 두 경로가
    * 직렬화되지 않는다. 레포에 데드락 재시도 핸들러가 없어 실패 모드는 500 이다.
    *
-   * <p><b>2026-08-31 추가된 두 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
+   * <p><b>2026-08-31 추가된 세 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
    *
    * <ul>
    *   <li>{@code rejectPaymentSent} — 참여 행(X) → 묶음 행(X). 기존 「참여 → 묶음」 방향과 같다.
+   *   <li>{@code ParticipationBundleService#confirmPayment} — ⚠️ <b>참여 행(X) → 분철 행(X) → 다른
+   *       묶음 포함 참여 행(S)</b>. {@code confirmIfAllCollected} 의 서브쿼리가 그 분철의 참여 전체에
+   *       공유 락을 건다. <b>같은 분철의 두 묶음을 개최자가 연속 확인</b>하면(목록을 위에서 아래로 클릭하는
+   *       평범한 조작) Tx A 가 묶음1 슬롯 X → 분철 X 를 쥔 채 묶음2 슬롯 S 를 기다리고, Tx B 는 묶음2 슬롯
+   *       X 를 쥔 채 분철 X 를 기다려 <b>데드락</b>이 난다. 슬롯 단위 경로에도 있던 성질이라 새 리스크
+   *       클래스는 아니지만, 이 경로는 ① 잡는 행이 슬롯 1개가 아니라 <b>묶음 전건</b>이고 ② 분철 락 <b>전에</b>
+   *       배송 스냅샷 N건(조회 2 + INSERT 1 × 슬롯 수)을 처리해 <b>락 보유 시간이 길어 창이 넓다</b>.
+   *       창을 줄이려면 {@code confirmIfAllCollected} 를 스냅샷 루프보다 앞으로 당기는 선택지가 있으나,
+   *       {@code applyPaymentConfirmed} 의 기존 순서와 달라지므로 별도 판단이 필요하다.
    *   <li>{@code ParticipationBundleService#release} — ⚠️ <b>묶음 행에서 S → X 승격</b>이 일어난다.
    *       {@code releaseBundleIfDue} 의 {@code EXISTS (SELECT b FROM ParticipationBundle ...)} 가
    *       InnoDB 에서 묶음 행에 <b>공유 락</b>을 걸고({@code linkBundleIfUnlinked} 주석과 같은 성질),

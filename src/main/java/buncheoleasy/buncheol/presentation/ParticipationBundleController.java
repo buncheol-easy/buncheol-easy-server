@@ -64,8 +64,8 @@ public class ParticipationBundleController {
    * <p>부분 확인은 애초에 성립하지 않는다 — 확인 API 에 금액이 없어 시스템은 실입금액을 모르고, 개최자가
    * 판단하는 것은 "이 이체가 들어왔는가" 하나뿐이다.
    *
-   * <p>요청의 {@code expectedSlotIds} 가 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한
-   * 슬롯까지 확정되면 안 된다.
+   * <p>요청의 {@code expectedSlotIds} 에는 개최 관리 응답에서 {@code confirmTarget} 이 {@code true} 인
+   * 슬롯만 담는다. 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
    */
   @PostMapping("/{bundleId}/confirm")
   public ResponseEntity<BundleConfirmResponse> confirmPayment(

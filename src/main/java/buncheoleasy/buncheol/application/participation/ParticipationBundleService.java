@@ -13,6 +13,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -76,15 +77,25 @@ public class ParticipationBundleService {
     // @Modifying(clearAutomatically = true) 라 재조회가 갱신값을 본다.
     List<Long> releasedIds =
         participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
-            .filter(
-                p ->
-                    p.getCancelReason() == ParticipationCancelReason.HOST_RELEASED
-                        && now.equals(p.getCancelledAt()))
+            .filter(p -> p.getCancelReason() == ParticipationCancelReason.HOST_RELEASED)
+            .filter(p -> writtenAt(p.getCancelledAt(), now))
             .map(Participation::getId)
             .toList();
 
     eventPublisher.publishEvent(new BundleReleasedEvent(bundleId, releasedIds));
     return releasedIds;
+  }
+
+  /**
+   * 이 트랜잭션의 CAS 가 쓴 시각인지 판정한다.
+   *
+   * <p>🔴 <b>{@code equals} 로 비교하면 안 된다.</b> {@code cancelled_at}·{@code payment_sent_at} 은 초 단위
+   * {@code DATETIME}(precision 0) 이라 나노초를 가진 {@code Instant} 와 <b>영원히 같지 않다</b>. staging 에서
+   * 「제외」가 성공했는데 응답의 취소 목록이 비어 나온 것이 이 때문이다 — H2 는 정밀도를 보존해 테스트가
+   * 통과했다.
+   */
+  private static boolean writtenAt(final Instant stored, final Instant now) {
+    return stored != null && !stored.isBefore(now.truncatedTo(ChronoUnit.SECONDS));
   }
 
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */

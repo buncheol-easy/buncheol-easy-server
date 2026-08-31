@@ -4,7 +4,9 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -134,6 +136,60 @@ public class ParticipationBundleDomainService {
       final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
     ParticipationBundle bundle = bundleById.get(participation.getBundleId());
     return bundle == null ? null : bundle.getRefundAccount();
+  }
+
+  /**
+   * <b>불완전할 수 있는 목록</b>을 위한 배송비 귀속 ({@link ShippingFeeAttribution}). 목록에 걸린 묶음들의 형제 슬롯을
+   * 대신 읽어 오므로 <b>페이지네이션·필터가 걸린 목록에도 안전</b>하다 — 그런 목록을 {@link
+   * ShippingFeeAttribution#ofAllSlots} 에 직접 넘기면 페이지 조각 안에서 carrier 를 다시 뽑아 배송비가 두 번 걷힌다.
+   *
+   * <p>이미 묶음별 슬롯을 빠짐없이 들고 있는 호출부(개최 관리·내 참여)는 이 조회가 낭비이므로 {@code ofAllSlots} 를
+   * 직접 쓴다.
+   */
+  public ShippingFeeAttribution shippingFeeAttributionFor(
+      final Collection<Participation> participations) {
+    return shippingFeeAttributionFor(participations, null);
+  }
+
+  /**
+   * 묶음을 <b>이미 배치로 읽어 둔</b> 호출부용. 형제 슬롯만 추가로 읽는다 — 넘기지 않으면 여기서 다시 조회한다.
+   */
+  public ShippingFeeAttribution shippingFeeAttributionFor(
+      final Collection<Participation> participations,
+      final Map<Long, ParticipationBundle> knownBundleById) {
+    List<Long> bundleIds =
+        participations.stream()
+            .map(Participation::getBundleId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+    if (bundleIds.isEmpty()) {
+      return ShippingFeeAttribution.empty();
+    }
+    List<Participation> allSlots = participationRepository.findAllByBundleIds(bundleIds);
+    Map<Long, ParticipationBundle> bundleById =
+        knownBundleById != null
+            ? knownBundleById
+            : participationBundleRepository.findAllByIds(bundleIds).stream()
+                .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
+    return ShippingFeeAttribution.ofAllSlots(allSlots, bundleById);
+  }
+
+  /**
+   * 묶음을 <b>이미 읽어 둔</b> 호출부용 배송비 귀속. 형제 슬롯만 추가로 읽으므로 묶음을 다시 조회하지 않는다.
+   *
+   * <p>{@code bundle} 이 {@code null}(미연결 참여)이면 조회 없이 빈 판정을 준다.
+   */
+  public ShippingFeeAttribution shippingFeeAttributionOf(final ParticipationBundle bundle) {
+    return bundle == null
+        ? ShippingFeeAttribution.empty()
+        : ShippingFeeAttribution.ofBundle(
+            bundle, participationRepository.findAllByBundleIds(List.of(bundle.getId())));
+  }
+
+  /** 참여 <b>한 건</b>을 위한 배송비 귀속. 위와 같은 보장을 준다. */
+  public ShippingFeeAttribution shippingFeeAttributionFor(final Participation participation) {
+    return shippingFeeAttributionFor(List.of(participation));
   }
 
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */

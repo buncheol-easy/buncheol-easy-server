@@ -5,9 +5,11 @@ import buncheoleasy.admin.domain.payment.AdminPaymentStatus;
 import buncheoleasy.admin.domain.payment.AdminPaymentView;
 import buncheoleasy.admin.domain.payment.BuncheolConfirmedCount;
 import buncheoleasy.admin.dto.response.AdminPaymentRecordResponse;
+import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
-import buncheoleasy.admin.dto.response.AdminPaymentSummaryResponse;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.global.page.Cursor;
 import buncheoleasy.global.page.CursorResponse;
 import buncheoleasy.global.query.LikeEscaper;
@@ -52,9 +54,16 @@ public class AdminPaymentQueryService {
 
     final Map<Long, Long> confirmedCountByBuncheolId = resolveConfirmedCounts(visible);
     // 계좌의 정본은 묶음이다 (P2-c). 건별로 읽으면 페이지 크기만큼 쿼리가 늘어난다(N+1).
+    final List<Participation> pageParticipations =
+        visible.stream().map(AdminPaymentView::participation).toList();
     final Map<Long, ParticipationBundle> bundleById =
-        participationBundleDomainService.findAllByParticipations(
-            visible.stream().map(AdminPaymentView::participation).toList());
+        participationBundleDomainService.findAllByParticipations(pageParticipations);
+    // ⚠️ 이 목록은 커서 페이지네이션 + 상태/키워드 필터라 한 묶음의 슬롯이 페이지 경계로 쪼개지는 게 정상이다.
+    // 페이지 조각을 그대로 판정에 넘기면 그 안에서 carrier 를 다시 뽑아 배송비가 두 번 걷힌다 —
+    // 형제 슬롯을 대신 읽어 주는 진입점을 써야 한다. 묶음은 위에서 이미 읽었으므로 그대로 넘겨 재조회를 막는다.
+    final ShippingFeeAttribution shippingFees =
+        participationBundleDomainService.shippingFeeAttributionFor(
+            pageParticipations, bundleById);
     final List<AdminPaymentRecordResponse> items =
         visible.stream()
             .map(
@@ -62,7 +71,9 @@ public class AdminPaymentQueryService {
                     AdminPaymentRecordResponse.of(
                         view,
                         confirmedCountByBuncheolId.getOrDefault(view.buncheol().getId(), 0L),
-                        ParticipationBundleDomainService.refundAccountOf(bundleById, view.participation())))
+                        ParticipationBundleDomainService.refundAccountOf(
+                            bundleById, view.participation()),
+                        shippingFees.totalAmountOf(view.participation())))
             .toList();
 
     final var lastParticipation = visible.getLast().participation();

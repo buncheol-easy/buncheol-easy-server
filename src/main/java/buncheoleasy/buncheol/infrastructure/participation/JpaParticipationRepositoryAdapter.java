@@ -229,6 +229,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findAllByBundleIds(final List<Long> bundleIds) {
+    return bundleIds.isEmpty()
+        ? List.of()
+        : jpaParticipationRepository.findByBundleIdIn(bundleIds);
+  }
+
+  @Override
   public List<Participation> findCancelledByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
         buncheolId, ParticipationStatus.CANCELLED);

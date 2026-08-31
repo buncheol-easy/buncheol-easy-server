@@ -70,8 +70,25 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
       @Param("confirmedStatus") ParticipationStatus confirmedStatus);
 
   /**
-   * 파생 상태별 건수 + 확인 대기 금액(멤버 금액+배송비) 합계. 빈 테이블이면 SUM 이 null 이라 COALESCE 로 0 처리한다. GROUP BY 없는
+   * 확인 대기 슬롯을 가진 묶음들의 배송비 합계. 묶음당 1회만 더해지므로 어느 슬롯이 배송비를 지고 있든 결과가 같다 —
+   * 목록 행의 귀속 판정과 합계가 일치하는 근거다.
+   */
+  @Query(
+      "SELECT COALESCE(SUM(b.shippingFee), 0) FROM ParticipationBundle b "
+          + "WHERE EXISTS (SELECT 1 FROM Participation p WHERE p.bundleId = b.id "
+          + "  AND (p.status = :awaitingStatus OR p.status = :paymentSentStatus))")
+  long sumPendingBundleShippingFee(
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("paymentSentStatus") ParticipationStatus paymentSentStatus);
+
+  /**
+   * 파생 상태별 건수 + 확인 대기 금액 합계. 빈 테이블이면 SUM 이 null 이라 COALESCE 로 0 처리한다. GROUP BY 없는
    * 집계라 항상 1행이며, 단일 {@code Object[]} 선언 시 Spring Data 가 이중 배열로 감싸므로 {@code List} 로 받는다.
+   *
+   * <p>🔴 <b>금액 합계에서 배송비는 여기서 더하지 않는다.</b> 배송비의 정본은 묶음이고 <b>묶음당 1회</b>라, 슬롯마다
+   * {@code p.shippingFee} 를 더하면 배송비를 지던 슬롯이 취소된 묶음에서 그 1회분이 통째로 빠진다 — 같은 화면의
+   * 목록 행(귀속 판정을 거친다)과 합계가 갈린다. 묶음 몫은 {@link #sumPendingBundleShippingFee} 가 따로 낸다.
+   * 미연결 참여(배포선 창)만 예외로 저장값을 쓴다 — 그 행에는 정본이 될 묶음이 없다.
    */
   @Query(
       "SELECT COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus THEN 1 ELSE 0 END), 0), "
@@ -79,7 +96,9 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           + "COALESCE(SUM(CASE WHEN p.status = :cancelledStatus AND p.confirmedAt IS NOT NULL THEN 1 ELSE 0 END), 0), "
           + "COALESCE(SUM(CASE WHEN p.status = :cancelledStatus AND p.confirmedAt IS NULL THEN 1 ELSE 0 END), 0), "
           + "COUNT(p), "
-          + "COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus THEN p.amount + p.shippingFee ELSE 0 END), 0) "
+          + "COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus "
+          + "  THEN p.amount + (CASE WHEN p.bundleId IS NULL THEN p.shippingFee ELSE 0 END) "
+          + "  ELSE 0 END), 0) "
           + "FROM Participation p")
   List<Object[]> summarize(
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,

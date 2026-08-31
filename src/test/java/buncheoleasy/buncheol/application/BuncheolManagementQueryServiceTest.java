@@ -223,6 +223,44 @@ class BuncheolManagementQueryServiceTest {
       assertThat(participant.delivery()).isNull();
     }
 
+    // 🔴 null 로 나가면 화면이 묶음 단위 경로 대신 슬롯 경로로 조용히 폴백한다 — 화면만 보면 티가 안 난다.
+    // 배송비 테스트에 얹지 않고 떼어 둔다: 그 테스트가 리네임·삭제되면 이 커버리지가 같이 사라진다.
+    @Test
+    void 응답에_묶음_id와_참여자_id가_실린다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+
+      final Long bundleId = 8888L;
+      Participation active =
+          participation(601L, 101L, PARTICIPANT_USER, 10_000L, ParticipationStatus.APPLIED);
+      setField(active, "bundleId", bundleId);
+      Participation cancelled =
+          participation(602L, 101L, PARTICIPANT_USER, 10_000L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "bundleId", bundleId);
+
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(active));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse activeRow = response.participants().get(0);
+      assertThat(activeRow.bundleId()).isEqualTo(bundleId);
+      assertThat(activeRow.participantId()).isEqualTo(PARTICIPANT_USER);
+      // 취소분도 같은 계약이다 — 개최자가 환불 대상을 묶음으로 접어 볼 때 필요하다.
+      BuncheolManagementParticipantResponse deadRow = response.cancelledParticipants().get(0);
+      assertThat(deadRow.bundleId()).isEqualTo(bundleId);
+      assertThat(deadRow.participantId()).isEqualTo(PARTICIPANT_USER);
+    }
+
     // 🔴 staging 재현 그대로 (분철 104 · 묶음 141 · 참여 232 취소 → 233).
     // 이 결함은 도메인 규칙이 아니라 <b>배선</b>에 있었다 — 쿼리 서비스가 묶음 슬롯을 빠짐없이 넘기는지가 정확성의 전부다.
     @Test
@@ -259,15 +297,11 @@ class BuncheolManagementQueryServiceTest {
       // 남은 슬롯이 배송비를 진다 — 이걸 안 하면 개최자가 택배비 3,000 을 자기 돈으로 문다.
       BuncheolManagementParticipantResponse active = response.participants().get(0);
       assertThat(active.participationId()).isEqualTo(233L);
-      // 묶음 단위 조작(「제외」 등)의 주소다 — null 로 나가면 화면이 슬롯 경로로 폴백해 버린다.
-      assertThat(active.bundleId()).isEqualTo(sharedBundleId);
-      assertThat(active.participantId()).isEqualTo(PARTICIPANT_USER);
       assertThat(active.shippingFee()).isEqualTo(3_000L);
       assertThat(active.amount()).isEqualTo(13_000L);
       // 취소분은 배송비를 잃는다 — 택배가 계속 나가므로 그만큼은 환불 대상이 아니다.
       BuncheolManagementParticipantResponse dead = response.cancelledParticipants().get(0);
       assertThat(dead.participationId()).isEqualTo(232L);
-      assertThat(dead.bundleId()).isEqualTo(sharedBundleId);
       assertThat(dead.shippingFee()).isZero();
       assertThat(dead.amount()).isEqualTo(10_000L);
     }

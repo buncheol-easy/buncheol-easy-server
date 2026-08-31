@@ -46,6 +46,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @DisplayName("Participation 관련 컨트롤러 문서화 테스트")
 class ParticipationControllerDocsTest extends DocsTestSupport {
 
+  // 네 곳(내 참여·참여 상세·participants[]·cancelledParticipants[])이 같은 문장이라 한 곳만 고치면 문서가 갈린다.
+  private static final String BUNDLE_ID_DESCRIPTION =
+      "이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null — null 끼리 묶으면 서로 다른 사람의 슬롯이 한 행이 되므로 그룹핑 키로 쓰지 말 것";
+
   private static final Long PARTICIPANT_ID = USER_ID;
 
   @MockitoBean private ParticipationService participationService;
@@ -254,7 +258,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .responseFields(
                             fieldWithPath("[].participationId").description("참여 ID"),
                             fieldWithPath("[].bundleId")
-                                .description("이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null")
+                                .description(BUNDLE_ID_DESCRIPTION)
                                 .optional(),
                             fieldWithPath("[].buncheolId").description("분철 ID"),
                             fieldWithPath("[].buncheolTitle").description("분철 제목"),
@@ -429,7 +433,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .responseFields(
                             fieldWithPath("participationId").description("참여 ID"),
                             fieldWithPath("bundleId")
-                                .description("이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null")
+                                .description(BUNDLE_ID_DESCRIPTION)
                                 .optional(),
                             fieldWithPath("buncheolId").description("분철 ID"),
                             fieldWithPath("buncheolTitle").description("분철 제목"),

@@ -166,13 +166,14 @@ class MyParticipationQueryServiceTest {
       // 남은 슬롯이 배송비를 진다 — 이걸 안 하면 참여자가 10,000 만 보내고 개최자가 택배비를 문다.
       assertThat(active.shippingFee()).isEqualTo(3_000L);
       assertThat(active.amount()).isEqualTo(13_000L);
-      // 묶음 단위 API(「보냈어요」 마킹)의 주소다.
-      assertThat(active.bundleId()).isEqualTo(sharedBundleId);
 
       MyParticipationResponse dead =
           result.stream().filter(r -> r.participationId().equals(232L)).findFirst().orElseThrow();
       assertThat(dead.shippingFee()).isZero();
       assertThat(dead.amount()).isEqualTo(10_000L);
+      // 묶음 단위 API(「보냈어요」 마킹)의 주소다. 활성분·취소분 모두 같은 계약이다.
+      assertThat(active.bundleId()).isEqualTo(sharedBundleId);
+      assertThat(dead.bundleId()).isEqualTo(sharedBundleId);
     }
 
     @Test

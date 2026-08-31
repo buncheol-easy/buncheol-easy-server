@@ -26,6 +26,7 @@ import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -68,6 +69,19 @@ public class ParticipationService {
    * 첫 슬롯</b>을 찾아내 같은 묶음을 재사용하고 배송비를 0으로 둔다 — 슬롯 하나씩 N번 신청한 것과 결과가 같다.
    * 그래서 루프가 묶음 id 를 따로 이어 나를 필요가 없다.
    *
+   * <p>🔴 <b>단, 그건 모집중(RECRUITING)에서만 참이다.</b> 성사 확정 뒤 추가 모집(PAYMENT_COLLECTING)은
+   * 슬롯마다 <b>별개 거래</b>다 — {@code participateC2c} 가 재사용 후보를 아예 조회하지 않아 슬롯마다 새 묶음·
+   * 배송비 재부과·개별 24h 기한이 생긴다. 그런데 이 메서드의 응답은 그걸 <b>합산 1건</b>으로 접는다. 그러면
+   * 참여자는 "한 번에 얼마를 보내라" 를 안내받는데 실제로는 묶음별로 따로 들어와야 개최자 통장 대조가
+   * 성립한다 — 한 번에 보내면 <b>어느 묶음에도 안 맞는다</b>. 알림톡도 슬롯 단위 금액으로 N건이 따로 나가
+   * 화면과 어긋난다. 그래서 다중은 아래에서 <b>모집중 전용</b>으로 막는다.
+   *
+   * <p>이 가드가 안전한 이유: 여기서 읽는 상태는 락 이전 값이지만, {@code getBuncheol} 이 올려 둔 인스턴스를
+   * 뒤의 {@code getBuncheolForUpdate} 도 <b>영속성 컨텍스트에서 그대로 돌려받는다</b>(같은 트랜잭션).
+   * 즉 이 가드가 본 상태와 {@code participateC2c} 의 분기 판정이 <b>같은 값</b>이라, 가드를 통과하면 반드시
+   * {@code applyC2c} 로 간다. 실제로는 이미 모집이 끝났다면 {@code createParticipationIfRecruiting} 의
+   * 조건부 INSERT 가 0행을 돌려 전부 롤백되므로, 낡은 값은 안전한 방향으로만 틀린다.
+   *
    * <p>⚠️ 다중 슬롯은 <b>C2C 에서만</b> 열린다. LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있어 2번째
    * INSERT 가 그 자리에서 막힌다 — 요청 단계에서 먼저 거절해 원인이 드러나게 한다.
    */
@@ -79,22 +93,36 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
     if (slotIds.size() == 1) {
-      return participateSingle(buncheolId, participantId, request, slotIds.get(0));
+      return participateSingle(buncheolId, participantId, request, slotIds.get(0), true);
     }
 
+    // 단수 경로와 <b>같은 순서로</b> 검증한다(프로필 → 분철). 순서가 갈리면 전화번호 미등록 유저가 같은
+    // 분철에 보냈는데 요청 형태(단수/다중)에 따라 다른 에러 코드를 받아 문의 재현이 어긋난다.
+    userDomainService.requireProfileCompleted(participantId);
+    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+
     // 다중은 C2C 전용이다. LEGACY 에서 2번째가 유니크에 막히면 "이미 참여했다" 로 보여 원인이 안 드러난다.
-    if (!buncheolDomainService.getBuncheol(buncheolId).isC2c()) {
+    if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    // 🔴 다중은 모집중 전용이다 — 추가 모집은 슬롯마다 별개 묶음·별개 이체라 합산 응답이 거짓이 된다(위 javadoc).
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
     // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 쓸 수 없다.
     if (ParticipationCodeDomainService.submitted(request.participationCode())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
     }
 
-    List<ParticipateResult> results =
-        slotIds.stream()
-            .map(slotId -> participateSingle(buncheolId, participantId, request, slotId))
-            .toList();
+    // 🔴 정원 충족 판정(publishFullIfAllSlotsApplied)은 <b>마지막 슬롯에서만</b> 돌린다. "지금 정원이 찼나" 를
+    // 묻는 멱등 판정이라 마지막 INSERT 뒤 한 번이면 충분한데, 반복 호출 중 가장 비싼 축이다 — 그 분철의 활성
+    // 참여를 FOR UPDATE 로 전건 스캔하고, 그게 전부 분철 행 락 안에서 돈다(같은 분철의 다른 참여자가 그동안
+    // 전부 대기한다). 중간 슬롯에서 돌려 봐야 아직 정원이 안 차 발행되지도 않는다.
+    List<ParticipateResult> results = new ArrayList<>(slotIds.size());
+    for (int i = 0; i < slotIds.size(); i++) {
+      final boolean last = i == slotIds.size() - 1;
+      results.add(participateSingle(buncheolId, participantId, request, slotIds.get(i), last));
+    }
     // 첫 슬롯이 배송비를 지므로 총액은 합산해야 한다. 기한·계좌는 묶음 단위라 전부 같다.
     ParticipateResult first = results.get(0);
     return new ParticipateResult(
@@ -105,11 +133,16 @@ public class ParticipationService {
         first.hostAccount());
   }
 
+  /**
+   * 슬롯 1개 신청. {@code checkFull} 은 이 슬롯 뒤에 정원 충족 판정을 돌릴지다 — 다중 슬롯 루프는 마지막
+   * 슬롯에서만 켠다(호출부 주석 참조). C2C 모집중 경로에서만 의미가 있고 나머지 경로는 무시한다.
+   */
   private ParticipateResult participateSingle(
       final Long buncheolId,
       final Long participantId,
       final ParticipateRequest request,
-      final Long slotId) {
+      final Long slotId,
+      final boolean checkFull) {
     final Instant now = Instant.now(clock);
 
     // 가입 미완료(전화번호 미등록) 유저 차단. 배송 스냅샷이 phoneNumber 를 요구하므로 참여 진입 자체를 막는다.
@@ -119,7 +152,7 @@ public class ParticipationService {
 
     // C2C 는 신청(무입금)→확정→입금 플로우라 별도 경로로 처리한다. LEGACY 경로는 이하 현행 그대로 (docs/46 §0.1-3).
     if (buncheol.isC2c()) {
-      return participateC2c(buncheol, participantId, request, slotId, now);
+      return participateC2c(buncheol, participantId, request, slotId, now, checkFull);
     }
 
     buncheol.validateRecruiting(now);
@@ -228,7 +261,8 @@ public class ParticipationService {
       final Long participantId,
       final ParticipateRequest request,
       final Long slotId,
-      final Instant now) {
+      final Instant now,
+      final boolean checkFull) {
     // 분철 행 락으로 참여 생성을 직렬화한다 — 같은 유저의 동시 다슬롯 신청에서 "첫 참여 판정"(배송비 1회·배송지/입금자명
     // 스냅샷 재사용)이 둘 다 첫 참여로 오판되는 check-then-insert 레이스를 막는다 (docs/46 §4.7-A1·A2).
     // 성사 확정·취소 CAS 와도 직렬화되어 상태 판정이 안정된다. 분철당 참여 빈도가 낮아 락 경합 부담은 미미하다.
@@ -319,7 +353,8 @@ public class ParticipationService {
               shippingFee,
               refundAccount,
               reusableBundleId,
-              now);
+              now,
+              checkFull);
       case PAYMENT_COLLECTING ->
           joinCollectingC2c(
               buncheol,
@@ -343,7 +378,8 @@ public class ParticipationService {
       final long shippingFee,
       final RefundAccount refundAccount,
       final Long reusableBundleId,
-      final Instant now) {
+      final Instant now,
+      final boolean checkFull) {
     // deadline 경과(확정 유예 대기) 구간의 신규 신청 차단 — docs/46 §4.7-E3. INSERT 의 원자 조건과 이중 방어.
     buncheol.validateRecruiting(now);
 
@@ -364,7 +400,9 @@ public class ParticipationService {
         participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, null, now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
-    publishFullIfAllSlotsApplied(buncheol);
+    if (checkFull) {
+      publishFullIfAllSlotsApplied(buncheol);
+    }
     return ParticipateResult.single(
         participation.getId(), participation.getTotalAmount(), null, null);
   }

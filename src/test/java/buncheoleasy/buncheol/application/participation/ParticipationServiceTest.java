@@ -318,12 +318,33 @@ class ParticipationServiceTest {
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
+    // 🔴 추가 모집(성사 확정 후)은 슬롯마다 새 묶음·배송비 재부과·개별 24h 기한이라 별개 거래다. 그런데
+    // 응답은 합산 1건으로 접히므로, 열어 두면 참여자가 안내받은 금액을 한 번에 보내도 어느 묶음에도 안 맞는다.
+    @Test
+    void 추가_모집_구간에는_다중_슬롯_신청을_열지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+
+      ParticipateRequest multi =
+          new ParticipateRequest(null, List.of(101L, 102L), SHIPPING_ADDRESS_ID, null, null);
+
+      assertThatThrownBy(() -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, multi))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+    }
+
     // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 재사용할 수 없다.
     @Test
     void 다중_슬롯에는_참여_코드를_쓸_수_없다() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
 
       ParticipateRequest multi =
           new ParticipateRequest(null, List.of(101L, 102L), SHIPPING_ADDRESS_ID, null, "ABCD2345");

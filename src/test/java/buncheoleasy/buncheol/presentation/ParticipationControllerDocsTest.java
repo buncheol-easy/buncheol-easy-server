@@ -92,15 +92,30 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .summary("분철 참여 신청")
                         .description(
                             """
-                            멤버 슬롯을 선착순으로 점유한다. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)이고,
-                            오픈 이벤트 운영 정책으로 **분철당 참여는 1회(멤버 1명)로 제한**된다 — 같은 분철에
-                            활성(입금확인중·확정) 참여가 있으면 중복 참여가 거부되며, 취소·만료된 참여는 재참여할 수
-                            있다. `buncheolMemberId` 로 슬롯 하나를 지정하고, 점유에 성공하면
-                            입금확인중(AWAITING_PAYMENT) 상태로 등록되며 응답으로 생성된 참여
+                            멤버 슬롯을 선착순으로 점유한다. `buncheolMemberId` 로 슬롯 하나를 지정하거나,
+                            `buncheolMemberIds` 로 **여러 슬롯을 한 번에** 신청한다(둘 다 보내면 배열이 이긴다).
+                            점유에 성공하면 입금확인중(AWAITING_PAYMENT) 상태로 등록되며 응답으로 생성된 참여
                             ID(`participationId`)·개최자 계좌·입금 총액·입금 만료 시각(`dueAt`)을 받는다.
                             `amount` 는 (멤버 가격 + 배송비)다. 분철 취소 시 환불받을 계좌는 **요청으로 보내지 않는다** —
                             서버가 참여 시점의 마이페이지 정산 계좌를 읽어 스냅샷으로 저장한다. 계좌가 등록돼 있지
                             않으면 `409 USR-025` 로 거부되므로, 참여 전에 계좌 등록을 유도한다.
+
+                            **다중 슬롯 신청 (`buncheolMemberIds`)**
+
+                            - **C2C 분철의 모집중(RECRUITING) 구간에서만** 열린다. LEGACY 분철에 보내면 `409 BCH-084`,
+                              성사 확정 뒤 추가 모집 구간에 보내면 `409 BCH-060` 이다 — 추가 모집은 슬롯마다 별개
+                              이체·별개 택배라 한 건으로 합쳐 안내할 수 없다
+                            - **하나라도 실패하면 전체 롤백**이다. 3개 중 하나가 이미 팔렸으면 나머지 둘도 만들어지지
+                              않는다 — 부분 성공을 화면에서 재구성하지 않아도 된다
+                            - 배송비는 **첫 슬롯에만** 붙고 나머지는 0원이다(한 번의 이체·한 개의 택배). `amount` 는
+                              전체 합산액이고, `participationIds` 에 생성된 참여 ID 가 순서대로 들어온다
+                            - 배열에 중복 id 가 있으면 서버가 걷어낸다. 다만 길이 상한(20)은 **중복 제거 전** 배열
+                              길이에 걸린다
+                            - `participationCode` 와 **함께 보낼 수 없다**(`400 BCH-096`) — 코드는 슬롯 하나에 대응한다
+
+                            LEGACY 분철은 종전대로 **분철당 참여 1회(멤버 1명)로 제한**된다 — 같은 분철에
+                            활성(입금확인중·확정) 참여가 있으면 중복 참여가 거부되며, 취소·만료된 참여는 재참여할 수
+                            있다.
 
                             **참여 코드 슬롯 (`saleStatus: "CODE_ONLY"`)**
 
@@ -120,14 +135,15 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
-                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `buncheolMemberId` 등 필수값 누락 |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | 필수값 누락(슬롯을 하나도 안 보냄)·`buncheolMemberIds` 가 21개 이상이거나 원소에 `null` 포함 |
                             | 400 | `BCH-062` (`PARTICIPATION_REQUIRED_FIELD_MISSING`) | 참여 필수 항목 누락 (도메인 방어 검증 — 정상 HTTP 요청에서는 `C-001` 이 먼저 잡는다) |
                             | 400 | `BCH-065` (`PARTICIPATION_SHIPPING_METHOD_NOT_SUPPORTED`) | 선택한 수령지의 배송방법을 이 분철이 지원하지 않음 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 마이페이지 정산 계좌 미등록 (**0원 코드 참여 포함**) |
                             | 403 | `BCH-066` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님. **다중 슬롯을 추가 모집(성사 확정 후) 구간에 보낸 경우도 여기** |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철에 다중 슬롯을 보냄 (C2C 전용) |
                             | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |
                             | 400 | `BCH-095` (`PARTICIPATION_CODE_REQUIRED`) | `CODE_ONLY` 슬롯인데 `participationCode` 누락 |
@@ -142,7 +158,18 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .requestSchema(Schema.schema("ParticipateRequest"))
                         .requestFields(
                             fieldWithPath("buncheolMemberId")
-                                .description("참여할 분철 멤버 슬롯 ID (단일 선택 정책)"),
+                                .description(
+                                    "참여할 분철 멤버 슬롯 ID (단일). `buncheolMemberIds` 를 보내면 무시된다."
+                                        + " 둘 중 하나는 반드시 있어야 한다")
+                                .type(JsonFieldType.NUMBER)
+                                .optional(),
+                            fieldWithPath("buncheolMemberIds")
+                                .description(
+                                    "참여할 분철 멤버 슬롯 ID 목록 (다중, 최대 20개). **C2C 모집중 전용**이고"
+                                        + " 하나라도 실패하면 전체 롤백된다. 배송비는 첫 슬롯에만 붙는다."
+                                        + " 단일 신청이면 생략한다")
+                                .type(JsonFieldType.ARRAY)
+                                .optional(),
                             fieldWithPath("shippingAddressId").description("수령지 ID"),
                             fieldWithPath("participationCode")
                                 .description(

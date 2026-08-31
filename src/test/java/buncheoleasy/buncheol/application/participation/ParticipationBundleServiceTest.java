@@ -102,8 +102,9 @@ class ParticipationBundleServiceTest {
   @DisplayName("기한이 지났으면 제외하고 실제로 취소된 슬롯을 돌려준다")
   void releasesAndReturnsActuallyCancelledSlots() {
     stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+    given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+        .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
     given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
-        .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)))
         // CAS 이후 재조회 — 실제로 취소된 것만 걸러진다.
         .willReturn(
             List.of(
@@ -147,7 +148,7 @@ class ParticipationBundleServiceTest {
   @DisplayName("모집 중이면 사유가 드러나는 에러로 막는다")
   void rejectsWhileRecruiting() {
     stubBundleAndBuncheol(null, c2cBuncheol(HOST_ID));
-    given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+    given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
         .willReturn(List.of(slot(232L, ParticipationStatus.APPLIED, null, null)));
 
     assertThatThrownBy(() -> participationBundleService.release(HOST_ID, BUNDLE_ID))
@@ -160,7 +161,7 @@ class ParticipationBundleServiceTest {
   @DisplayName("입금 기한 전이면 사유가 드러나는 에러로 막는다")
   void rejectsBeforeDue() {
     stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
-    given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+    given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
         .willReturn(List.of(slot(232L, ParticipationStatus.PAYMENT_SENT, null, null)));
 
     assertThatThrownBy(() -> participationBundleService.release(HOST_ID, BUNDLE_ID))
@@ -172,7 +173,7 @@ class ParticipationBundleServiceTest {
   @DisplayName("입금확인된 슬롯이 있으면 사유가 드러나는 에러로 막는다")
   void rejectsWithConfirmedSlot() {
     stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
-    given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+    given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
         .willReturn(List.of(slot(232L, ParticipationStatus.CONFIRMED, null, null)));
 
     assertThatThrownBy(() -> participationBundleService.release(HOST_ID, BUNDLE_ID))
@@ -185,7 +186,7 @@ class ParticipationBundleServiceTest {
   @DisplayName("판정 통과 후 CAS 가 0행이면 상태 충돌로 막는다")
   void rejectsWhenCasAffectsNothing() {
     stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
-    given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+    given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
         .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
     given(participationRepository.releaseBundleIfDue(BUNDLE_ID, NOW)).willReturn(0);
 

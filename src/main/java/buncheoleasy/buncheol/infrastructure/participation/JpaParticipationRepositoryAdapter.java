@@ -230,11 +230,15 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findAllByBundleIdForUpdate(final Long bundleId) {
+    return jpaParticipationRepository.findAllByBundleIdForUpdate(bundleId);
+  }
+
+  @Override
   public int releaseBundleIfDue(final Long bundleId, final Instant now) {
     return jpaParticipationRepository.releaseBundleIfDue(
         bundleId,
         ParticipationStatus.releasableStatuses(),
-        ParticipationStatus.CONFIRMED,
         ParticipationStatus.CANCELLED,
         ParticipationCancelReason.HOST_RELEASED,
         now);

@@ -79,6 +79,14 @@ public interface ParticipationRepository {
    *
    * @return 실제로 취소된 슬롯 수. 0 이면 가드에 막혔거나 이미 활성 슬롯이 없다
    */
+  /**
+   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다 (「제외」 판정용). 판정과 UPDATE 사이에 입금확인이 끼어들지 못하게
+   * 한다 — 같은 테이블을 CAS 서브쿼리로 볼 수 없어(MySQL error 1093) 락으로 원자성을 만든다.
+   *
+   * <p>호출 측 {@code @Transactional} 필수.
+   */
+  List<Participation> findAllByBundleIdForUpdate(Long bundleId);
+
   int releaseBundleIfDue(Long bundleId, Instant now);
 
   /**

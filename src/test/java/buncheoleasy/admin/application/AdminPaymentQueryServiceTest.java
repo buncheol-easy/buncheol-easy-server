@@ -2,10 +2,12 @@ package buncheoleasy.admin.application;
 
 import org.junit.jupiter.api.BeforeEach;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -82,6 +84,12 @@ class AdminPaymentQueryServiceTest {
   /** 계좌의 정본은 묶음이다 (P2-c) — bundleId 가 있는 참여에는 계좌 있는 묶음을 돌려준다. */
   @BeforeEach
   void stubBundles() {
+    // 배송비 귀속. 이 목록은 커서 페이지네이션이라 서비스가 형제 슬롯을 대신 읽어 주는 진입점을 쓴다.
+    // 여기 픽스처는 묶음당 슬롯이 하나뿐이라 판정 결과가 저장값과 같다 — 판정 자체의 검증은
+    // ShippingFeeAttributionTest · ParticipationBundleDomainServiceTest 가 한다.
+    lenient()
+        .when(participationBundleDomainService.shippingFeeAttributionFor(anyCollection()))
+        .thenReturn(ShippingFeeAttribution.empty());
     lenient()
         .when(participationBundleDomainService.findAllByParticipations(any()))
         .thenAnswer(

@@ -151,4 +151,53 @@ class ParticipationBundleDomainServiceTest {
       throw new IllegalStateException(e);
     }
   }
+  // 🔴 어드민 결제 목록은 커서 페이지네이션이라 한 묶음의 슬롯이 페이지 경계로 쪼개진다.
+  // 페이지 조각을 그대로 판정에 넘기면 그 안에서 carrier 를 다시 뽑아 배송비가 두 번 걷힌다 —
+  // 이 진입점이 형제 슬롯을 대신 읽어 그걸 막는다.
+  @Test
+  @DisplayName("불완전한 목록을 받아도 형제 슬롯을 읽어 이중 부과를 막는다")
+  void 배송비_귀속은_형제_슬롯을_대신_읽는다() {
+    final Long bundleId = 141L;
+    Participation carrier = participationFixture(232L, bundleId, 3_000L);
+    Participation other = participationFixture(233L, bundleId, 0L);
+    ParticipationBundle bundle = Mockito.mock(ParticipationBundle.class);
+    given(bundle.getId()).willReturn(bundleId);
+    given(bundle.getShippingFee()).willReturn(3_000L);
+    // 형제 슬롯 전건을 돌려준다 — 호출부는 233 하나만 넘겼다.
+    given(participationRepository.findAllByBundleIds(java.util.List.of(bundleId)))
+        .willReturn(java.util.List.of(carrier, other));
+    given(participationBundleRepository.findAllByIds(java.util.List.of(bundleId)))
+        .willReturn(java.util.List.of(bundle));
+
+    ShippingFeeAttribution attribution =
+        participationBundleDomainService.shippingFeeAttributionFor(java.util.List.of(other));
+
+    // 233 만 보였지만 carrier 는 232 다 — 조각만 봤다면 233 이 3,000 을 또 걷었을 것이다.
+    assertThat(attribution.shippingFeeOf(other)).isZero();
+    assertThat(attribution.shippingFeeOf(carrier)).isEqualTo(3_000L);
+  }
+
+  @Test
+  @DisplayName("묶음 없는 참여만 있으면 조회 없이 빈 판정을 준다")
+  void 미연결_참여만_있으면_조회하지_않는다() {
+    Participation unlinked = participationFixture(300L, null, 3_000L);
+
+    ShippingFeeAttribution attribution =
+        participationBundleDomainService.shippingFeeAttributionFor(java.util.List.of(unlinked));
+
+    assertThat(attribution.shippingFeeOf(unlinked)).isEqualTo(3_000L);
+    then(participationRepository).should(never()).findAllByBundleIds(any());
+  }
+
+  private static Participation participationFixture(
+      final Long id, final Long bundleId, final long shippingFee) {
+    Participation participation =
+        Participation.createApplied(104L, id, 10L, 1L, 10_000L, shippingFee);
+    setField(participation, "id", id);
+    setField(participation, "bundleId", bundleId);
+    setField(participation, "status", ParticipationStatus.APPLIED);
+    setField(participation, "createdAt", Instant.parse("2026-08-29T00:00:00Z").plusSeconds(id));
+    return participation;
+  }
+
 }

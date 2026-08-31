@@ -45,15 +45,16 @@ public class NotificationAssembler {
     // 응집도(조립은 여기 한 곳)와 맞바꾼 것이다. @Async 저부하 경로라 수용한다.
     ParticipationBundle bundle =
         participationBundleDomainService.findByParticipation(participation).orElse(null);
-    // 입금 총액(멤버 금액 + 배송비)은 참여 생성 시 산정·스냅샷된 값을 그대로 쓴다.
+    // 🔴 입금 총액은 저장값이 아니라 <b>귀속 판정</b>으로 낸다. 저장값을 쓰면 배송비를 진 슬롯이 취소됐을 때
+    // 알림톡이 화면보다 배송비만큼 적은 금액을 말한다 — 사용자는 "얼마 보내라"의 구속력이 큰 알림톡을 믿고
+    // 그 금액을 보내므로, 화면만 고치면 결함이 남는 게 아니라 <b>두 숫자가 갈리는 상태</b>가 새로 생긴다.
+    // 슬롯 단위로 판정해도 묶음 합계는 보존되므로, 다슬롯 합산 알림(sendFinalizedNotice)도 같이 맞는다.
+    long paymentAmount =
+        participationBundleDomainService
+            .shippingFeeAttributionFor(participation)
+            .totalAmountOf(participation);
     return new ParticipationView(
-        participation,
-        bundle,
-        buncheol,
-        memberName,
-        participant,
-        host,
-        participation.getTotalAmount());
+        participation, bundle, buncheol, memberName, participant, host, paymentAmount);
   }
 
   public BuncheolHostView loadBuncheolHost(final Long buncheolId) {

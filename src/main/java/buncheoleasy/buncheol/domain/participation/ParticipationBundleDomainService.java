@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -138,19 +139,34 @@ public class ParticipationBundleDomainService {
   }
 
   /**
-   * 참여 <b>한 건</b>을 위한 배송비 귀속 ({@link ShippingFeeAttribution}). 그 묶음의 형제 슬롯을 읽어야 판정할 수 있어
-   * 조회가 한 번 더 나간다 — 목록 화면은 이미 전체를 들고 있으므로 {@link ShippingFeeAttribution#of} 를 직접 쓴다.
+   * <b>불완전할 수 있는 목록</b>을 위한 배송비 귀속 ({@link ShippingFeeAttribution}). 목록에 걸린 묶음들의 형제 슬롯을
+   * 대신 읽어 오므로 <b>페이지네이션·필터가 걸린 목록에도 안전</b>하다 — 그런 목록을 {@link
+   * ShippingFeeAttribution#ofAllSlots} 에 직접 넘기면 페이지 조각 안에서 carrier 를 다시 뽑아 배송비가 두 번 걷힌다.
    *
-   * <p>미연결 참여(배포선 창)면 빈 판정을 돌려주고, 그때 {@code shippingFeeOf} 는 저장된 값을 그대로 쓴다.
+   * <p>이미 묶음별 슬롯을 빠짐없이 들고 있는 호출부(개최 관리·내 참여)는 이 조회가 낭비이므로 {@code ofAllSlots} 를
+   * 직접 쓴다.
    */
+  public ShippingFeeAttribution shippingFeeAttributionFor(
+      final Collection<Participation> participations) {
+    List<Long> bundleIds =
+        participations.stream()
+            .map(Participation::getBundleId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+    if (bundleIds.isEmpty()) {
+      return ShippingFeeAttribution.empty();
+    }
+    List<Participation> allSlots = participationRepository.findAllByBundleIds(bundleIds);
+    Map<Long, ParticipationBundle> bundleById =
+        participationBundleRepository.findAllByIds(bundleIds).stream()
+            .collect(Collectors.toMap(ParticipationBundle::getId, Function.identity()));
+    return ShippingFeeAttribution.ofAllSlots(allSlots, bundleById);
+  }
+
+  /** 참여 <b>한 건</b>을 위한 배송비 귀속. 위와 같은 보장을 준다. */
   public ShippingFeeAttribution shippingFeeAttributionFor(final Participation participation) {
-    return findByParticipation(participation)
-        .map(
-            bundle ->
-                ShippingFeeAttribution.of(
-                    participationRepository.findAllByBundleId(bundle.getId()),
-                    Map.of(bundle.getId(), bundle)))
-        .orElseGet(() -> ShippingFeeAttribution.of(List.of(), Map.of()));
+    return shippingFeeAttributionFor(List.of(participation));
   }
 
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */

@@ -9,8 +9,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
-import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementParticipantResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
@@ -103,9 +103,10 @@ public class BuncheolManagementQueryService {
         Stream.concat(participations.stream(), cancelled.stream()).toList();
     Map<Long, ParticipationBundle> bundleById =
         participationBundleDomainService.findAllByParticipations(allParticipations);
-    // 배송비도 정본이 묶음이다. 활성분과 취소분을 <b>함께</b> 넘겨야 "활성이 하나도 없는 묶음"까지 판정된다.
+    // 배송비도 정본이 묶음이다. 활성분과 취소분을 함께 넘겨야 "활성이 하나도 없는 묶음"까지 판정된다.
+    // 이 목록은 그 분철의 전 상태(active ∪ CANCELLED)라 묶음별 슬롯이 빠짐없이 들어온다 — ofAllSlots 의 전제.
     ShippingFeeAttribution shippingFees =
-        ShippingFeeAttribution.of(allParticipations, bundleById);
+        ShippingFeeAttribution.ofAllSlots(allParticipations, bundleById);
     // 0원 슬롯의 계좌 노출 판정이 플로우별로 다르다 ({@link #depositorNameOf}).
     boolean c2c = buncheol.isC2c();
     List<BuncheolManagementParticipantResponse> participants =

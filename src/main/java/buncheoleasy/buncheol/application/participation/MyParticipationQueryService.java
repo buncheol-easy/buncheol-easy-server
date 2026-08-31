@@ -1,20 +1,20 @@
 package buncheoleasy.buncheol.application.participation;
 
+import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.participation.Participation;
-import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
-import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
-import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
@@ -103,9 +103,10 @@ public class MyParticipationQueryService {
     // 계좌·입금자명의 정본은 묶음이다 (P2-c). 건별로 읽으면 참여 수만큼 쿼리가 늘어난다(N+1).
     Map<Long, ParticipationBundle> bundleById =
         participationBundleDomainService.findAllByParticipations(participations);
-    // 배송비도 정본이 묶음이다. 이 목록은 사용자의 참여 전체(취소분 포함)라 묶음별 슬롯이 빠짐없이 들어온다.
+    // 배송비도 정본이 묶음이다. 이 목록은 사용자의 참여 전체(상태 필터 없음)이고 묶음은 (분철·사람·사이클) 단위라
+    // 한 묶음의 슬롯이 전부 이 안에 들어온다 — ofAllSlots 의 전제.
     ShippingFeeAttribution shippingFees =
-        ShippingFeeAttribution.of(participations, bundleById);
+        ShippingFeeAttribution.ofAllSlots(participations, bundleById);
 
     final Instant now = Instant.now(clock);
     return participations.stream()

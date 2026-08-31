@@ -6,10 +6,10 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
-import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
-import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
@@ -70,6 +70,10 @@ public class ParticipationDetailQueryService {
                     : userDomainService.getUser(buncheol.getHostId()).getBankAccount())
             : null;
 
+    // 계좌·배송비의 정본은 묶음이다 (P2-c). 한 번만 꺼내 아래 두 곳에서 함께 쓴다.
+    ParticipationBundle bundle =
+        participationBundleDomainService.findByParticipation(participation).orElse(null);
+
     Delivery delivery = deliveryRepository.findByParticipationId(participationId).orElse(null);
     ShippingFeePaybackResponse payback =
         ShippingFeePaybackResponse.of(
@@ -78,10 +82,7 @@ public class ParticipationDetailQueryService {
                 participation, buncheol.getFlowType(), delivery, Instant.now(clock)),
             shippingFeePaybackPolicy.submitDeadline(
                 participation, buncheol.getFlowType(), delivery),
-            participationBundleDomainService
-                .findByParticipation(participation)
-                .map(ParticipationBundle::getRefundAccount)
-                .orElse(null));
+            bundle == null ? null : bundle.getRefundAccount());
 
     // 배송비 정본은 묶음이다 — 저장된 값을 그대로 더하면 배송비를 진 슬롯이 취소됐을 때 금액이 틀린다.
     ShippingFeeAttribution shippingFees =

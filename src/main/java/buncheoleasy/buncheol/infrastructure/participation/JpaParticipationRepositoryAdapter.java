@@ -328,6 +328,12 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public int markBundlePaymentSent(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.markBundlePaymentSent(
+        bundleId, ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT, now);
+  }
+
+  @Override
   public boolean markPaymentSentIfAwaiting(final Long participationId, final Instant now) {
     return jpaParticipationRepository.markPaymentSentIfAwaiting(
             participationId,

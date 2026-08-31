@@ -137,6 +137,13 @@ public interface ParticipationRepository {
   boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
 
   /**
+   * 묶음 단위 「보냈어요」 — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다. 기한이 지난 뒤에도 열려 있다.
+   *
+   * @return 실제로 마킹된 슬롯 수. 0 이면 이미 전부 마킹됐거나 입금 대기 슬롯이 없다
+   */
+  int markBundlePaymentSent(Long bundleId, Instant now);
+
+  /**
    * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code
    * dueAt} 을 함께 세팅한다. {@code paymentSentAt} 은 보존.
    *

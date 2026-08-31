@@ -390,6 +390,106 @@ class JpaParticipationBundleRepositoryAdapterTest {
         "SELECT id FROM participations WHERE buncheol_member_id = ?", Long.class, member.getId());
   }
   @Nested
+  @DisplayName("markBundlePaymentSent — 묶음 단위 「보냈어요」")
+  class MarkBundlePaymentSentTest {
+
+    @Test
+    @DisplayName("묶음의 입금 대기 슬롯을 한 번에 마킹한다")
+    void 입금_대기_슬롯을_한_번에_마킹한다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      int marked = participationRepository.markBundlePaymentSent(bundleId, Instant.now());
+
+      assertThat(marked).isEqualTo(2);
+      assertThat(statusCount(bundleId, "PAYMENT_SENT")).isEqualTo(2);
+    }
+
+    // 🔴 기한이 지난 뒤에도 열려 있어야 한다 — 늦게 보낸 사람도 보냈다는 사실을 남길 수 있어야 개최자가 확인한다.
+    @Test
+    @DisplayName("입금 기한이 지나도 마킹할 수 있다")
+    void 기한이_지나도_마킹할_수_있다() {
+      Long bundleId = openBundle(Instant.now().minusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      assertThat(participationRepository.markBundlePaymentSent(bundleId, Instant.now()))
+          .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("이미 마킹됐거나 확정된 슬롯은 건드리지 않는다")
+    void 이미_마킹됐거나_확정된_슬롯은_건드리지_않는다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "PAYMENT_SENT");
+      insertC2cParticipation(bundleId, "CONFIRMED");
+      entityManager.flush();
+      entityManager.clear();
+
+      assertThat(participationRepository.markBundlePaymentSent(bundleId, Instant.now())).isZero();
+      assertThat(statusCount(bundleId, "CONFIRMED")).isEqualTo(1);
+    }
+
+    // 🔴 이 왕복 검증이 없어서 "나노초 Instant 를 초 단위 DATETIME 과 equals 비교" 하는 버그가
+    // 테스트를 전부 통과하고 staging 에서야 드러났다. H2 는 정밀도를 보존하므로 여기서는 초 단위로 잘라
+    // 비교해, MySQL 이 잘라 저장해도 성립하는 계약만 단언한다.
+    @Test
+    @DisplayName("CAS 가 쓴 payment_sent_at 이 넘긴 시각과 초 단위로 일치한다")
+    void CAS가_쓴_시각이_넘긴_시각과_초_단위로_일치한다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+      Instant now = Instant.parse("2026-08-31T12:00:00.123456789Z");
+
+      participationRepository.markBundlePaymentSent(bundleId, now);
+      entityManager.clear();
+
+      Instant stored =
+          participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+              .findFirst()
+              .orElseThrow()
+              .getPaymentSentAt();
+      assertThat(stored.truncatedTo(ChronoUnit.SECONDS))
+          .isEqualTo(now.truncatedTo(ChronoUnit.SECONDS));
+    }
+
+    // 이미 마킹된 슬롯의 시각을 덮어쓰면 "언제 보냈다고 했는가" 가 사라진다 — 분쟁 증거다.
+    @Test
+    @DisplayName("이미 마킹된 슬롯의 시각은 덮어쓰지 않는다")
+    void 이미_마킹된_슬롯의_시각은_덮어쓰지_않는다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      Instant first = Instant.parse("2026-08-31T10:00:00Z");
+      participationRepository.markBundlePaymentSent(bundleId, first);
+      entityManager.clear();
+
+      participationRepository.markBundlePaymentSent(bundleId, first.plusSeconds(3600));
+      entityManager.clear();
+
+      Instant stored =
+          participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+              .findFirst()
+              .orElseThrow()
+              .getPaymentSentAt();
+      assertThat(stored.truncatedTo(ChronoUnit.SECONDS)).isEqualTo(first);
+    }
+
+    private int statusCount(final Long bundleId, final String status) {
+      return jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM participations WHERE bundle_id = ? AND status = ?",
+          Integer.class,
+          bundleId,
+          status);
+    }
+  }
+
+  @Nested
   @DisplayName("extendDueAt — 개최자 반려 시 묶음 기한 연장")
   class ExtendDueAtTest {
 

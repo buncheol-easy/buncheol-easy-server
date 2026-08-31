@@ -98,6 +98,70 @@ public class ParticipationBundleService {
     return stored != null && !stored.isBefore(now.truncatedTo(ChronoUnit.SECONDS));
   }
 
+  /**
+   * 참여자가 묶음을 한 번에 「보냈어요」로 표시한다 (docs/71 §1-2).
+   *
+   * <p>묶음은 <b>이체 1회</b>의 단위다. 슬롯마다 누르게 하면 ① 참여자가 한 번 보낸 돈을 여러 번 신고하게 되고
+   * ② 중간에 멈추면 같은 묶음의 슬롯 상태가 갈린다 — 「제외」·입금확인이 전부 "묶음 안 슬롯은 상태가 갈리지
+   * 않는다" 는 전제 위에 서 있으므로 그 전제를 여기서 지켜야 한다.
+   *
+   * <p><b>기한 검사가 없다.</b> 기한이 지난 뒤에도 마킹은 가능해야 한다 — 늦게 보낸 사람도 보냈다는 사실을
+   * 남길 수 있어야 개최자가 확인하고, 그게 「제외」가 기한을 기다리는 이유이기도 하다.
+   *
+   * <p>멱등하다. 이미 전부 마킹됐으면 이벤트 없이 조용히 끝난다 — 더블탭으로 개최자 알림이 중복되면 안 된다.
+   */
+  @Transactional
+  public List<Long> markPaymentSent(final Long participantId, final Long bundleId) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle =
+        participationBundleDomainService
+            .findById(bundleId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.BUNDLE_NOT_FOUND));
+    // 🔴 묶음 id 는 AUTO_INCREMENT 라 추측 가능하다 — 소유자 검증이 필수다.
+    if (!participantId.equals(bundle.getParticipantId())) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
+    }
+    Buncheol buncheol = buncheolDomainService.getBuncheol(bundle.getBuncheolId());
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    int marked = participationRepository.markBundlePaymentSent(bundleId, now);
+
+    // 🔴 <b>잠금 조회로 다시 읽는다.</b> 평범한 SELECT 는 REPEATABLE READ 라 트랜잭션 첫 읽기 시점의 스냅샷을
+    // 본다 — 동시 더블탭에서 A 가 먼저 커밋하면 B 의 UPDATE 는 current read 로 0행이 되는데, 이어지는 일반
+    // 조회는 <b>아직 마킹 전으로 보여</b> "마킹할 게 없다" 며 409 를 낸다. 이 기능이 막으려던 더블탭이 정확히
+    // 그 경합이다.
+    List<Participation> slots = participationRepository.findAllByBundleIdForUpdate(bundleId);
+    List<Long> sentIds =
+        slots.stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.PAYMENT_SENT)
+            .map(Participation::getId)
+            .toList();
+
+    if (marked == 0) {
+      // 멱등: 이미 마킹된 슬롯이 있으면 성공으로 끝낸다(더블탭). 하나도 없으면 상태 위반이다 — 개최자가
+      // 이미 전부 입금확인한 뒤 누른 경우도 여기 해당한다.
+      if (sentIds.isEmpty()) {
+        throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+      }
+      return sentIds;
+    }
+
+    // 응답은 <b>이번 호출이</b> 마킹한 슬롯이다 — 화면이 사후 대조하는 대상이 그것이다.
+    List<Long> markedIds =
+        slots.stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.PAYMENT_SENT)
+            .filter(p -> writtenAt(p.getPaymentSentAt(), now))
+            .map(Participation::getId)
+            .toList();
+    // 알림은 <b>묶음 전체</b>의 마킹분으로 만든다 — 부분 마킹에서 금액이 축소되면 통장 대조가 어긋난다.
+    eventPublisher.publishEvent(new BundlePaymentSentEvent(bundleId, markedIds, sentIds));
+    return markedIds;
+  }
+
+
+
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */
   private static void requireReleasable(final BundleReleasability releasability) {
     ErrorCode errorCode =

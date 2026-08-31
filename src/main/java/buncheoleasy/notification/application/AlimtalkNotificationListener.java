@@ -7,9 +7,10 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
+import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
-import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
@@ -302,6 +303,49 @@ public class AlimtalkNotificationListener {
             "분철ID", String.valueOf(view.buncheol().getId()));
     recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
     String hostPhone = hostPhoneOrNull(view.host(), view.buncheol().getId());
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
+  }
+
+  /**
+   * (개최자) 참여자가 <b>묶음</b>을 「보냈어요」로 표시함 — <b>묶음 1통</b>으로 알린다.
+   *
+   * <p>묶음은 이체 1회의 단위라, 슬롯마다 보내면 개최자가 <b>같은 입금을 여러 건으로 착각</b>해 통장 대조가
+   * 어긋난다. 멤버명은 나열하고 금액은 합산한다 — 성사 확정 안내(sendFinalizedNotice)와 같은 형태다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundlePaymentSent(final BundlePaymentSentEvent event) {
+    // 🔴 <b>묶음 전체</b>의 마킹분으로 만든다. 이번 호출분만 합산하면, 슬롯 단위 API 로 먼저 마킹된 슬롯이
+    // 빠져 개최자가 <b>실제 이체액보다 작은 금액</b>으로 통장을 대조하게 된다 — 그게 곧 반려로 이어진다.
+    List<ParticipationView> views = loadViewsSafely(event.sentParticipationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    if (views.size() != event.sentParticipationIds().size()) {
+      // 조립에 실패한 슬롯이 있으면 금액이 조용히 줄어든다 — 통장 대조가 어긋나므로 흔적을 남긴다.
+      log.error(
+          "묶음 「보냈어요」 알림의 슬롯 조립이 일부 실패해 금액이 축소될 수 있다 - bundleId={}, 기대={}, 조립={}",
+          event.bundleId(),
+          event.sentParticipationIds().size(),
+          views.size());
+    }
+    ParticipationView first = views.get(0);
+    long totalAmount = views.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.host().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views),
+            "참여자닉네임", first.participant().getNickname().value(),
+            // ⚠️ Map.of 는 null 에 NPE 를 던진다. 정본(묶음)이 비어 있어도 대체 문자열로 채워 발송을 살린다.
+            "입금자명", depositorNameOf(first),
+            "입금금액", AlimtalkFormats.amount(totalAmount),
+            "분철ID", String.valueOf(first.buncheol().getId()));
+    recordSafely(first.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
+    String hostPhone = hostPhoneOrNull(first.host(), first.buncheol().getId());
     if (hostPhone == null) {
       return;
     }

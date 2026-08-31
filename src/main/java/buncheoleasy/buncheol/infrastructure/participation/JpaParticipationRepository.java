@@ -143,6 +143,34 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 
+  /**
+   * 개최자 「제외」 CAS — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다.
+   *
+   * <p>🔴 <b>가드를 UPDATE 의 WHERE 안에 넣는 것이 핵심이다.</b> 밖에서 판정하고 넘기면 그 사이에 ① 마지막 슬롯이
+   * 입금확인되어 확정분을 빼거나 ② 개최자가 반려로 기한을 밀었는데 옛 기한으로 통과시키는 창이 남는다.
+   *
+   * <p>기한 조건이 {@code b.dueAt IS NOT NULL AND b.dueAt <= :now} 인 것도 계약이다 — 기한이 없으면(모집 중)
+   * <b>거부</b>이므로 fail-closed 다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status IN :releasableStatuses "
+          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
+          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL "
+          + "    AND b.dueAt IS NOT NULL AND b.dueAt <= :now) "
+          + "AND NOT EXISTS (SELECT c FROM Participation c "
+          + "  WHERE c.bundleId = :bundleId AND c.status = :confirmedStatus)")
+  int releaseBundleIfDue(
+      @Param("bundleId") Long bundleId,
+      @Param("releasableStatuses") Collection<ParticipationStatus> releasableStatuses,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
+      @Param("now") Instant now);
+
   /** 분철의 특정 상태 참여를 모두 지정 사유로 CANCELLED 로 일괄 전이 (분철 취소 cascade). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.dto.response;
 
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
 
@@ -20,6 +21,12 @@ import java.time.Instant;
  * <p>⚠️ 미연결 참여는 {@code bundleId} 가 {@code null} 일 수 있다. <b>null 끼리 묶으면 안 된다</b> — 화면이
  * {@code groupBy(bundleId)} 를 그대로 돌리면 <b>서로 다른 사람의 슬롯이 한 행으로 합쳐지고</b>, 그 행에서 「제외」를
  * 누르면 남의 슬롯까지 걸린다. null 인 행은 묶지 말고 슬롯 단위로 분리해 그린다.
+ *
+ * <p>{@code releasability} 는 이 참여가 속한 <b>묶음</b>의 「제외」 가능 여부다 — 슬롯 행마다 실리지만 값은 묶음
+ * 단위다. 「제외」 게이트와 <b>같은 판정</b>을 내려줘 "버튼은 있는데 누르면 409" 가 생기지 않게 한다. 화면은
+ * {@code RELEASABLE} 이 아니면 버튼을 비활성하고 사유를 표기한다. 미연결 참여는 {@code null}.
+ * ⚠️ 값이 묶음 단위라 <b>취소된 행에도 {@code RELEASABLE} 이 실릴 수 있다</b>(같은 묶음에 활성 슬롯이
+ * 남아 있고 기한이 지난 경우). 「제외」 버튼은 <b>활성 행에만</b> 그린다.
  *
  * <p><b>계좌 노출 범위</b>(docs/70 결정 21) — 개최자가 통장을 대조하는 데 필요한 것은 <b>입금자명뿐</b>이므로 평시에는 {@code
  * depositorName} 만 내리고 {@code refundAccount} 는 {@code null} 이다. 계좌번호는 <b>개최자가 실제로 환불해야 하는 건</b>, 즉
@@ -44,4 +51,5 @@ public record BuncheolManagementParticipantResponse(
     Instant confirmedAt,
     RefundAccountResponse refundAccount,
     ManagementDeliveryResponse delivery,
-    Instant paymentSentAt) {}
+    Instant paymentSentAt,
+    BundleReleasability releasability) {}

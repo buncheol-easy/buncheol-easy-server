@@ -230,6 +230,17 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public int releaseBundleIfDue(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.releaseBundleIfDue(
+        bundleId,
+        ParticipationStatus.releasableStatuses(),
+        ParticipationStatus.CONFIRMED,
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.HOST_RELEASED,
+        now);
+  }
+
+  @Override
   public List<Participation> findAllByBundleIds(final List<Long> bundleIds) {
     return bundleIds.isEmpty()
         ? List.of()

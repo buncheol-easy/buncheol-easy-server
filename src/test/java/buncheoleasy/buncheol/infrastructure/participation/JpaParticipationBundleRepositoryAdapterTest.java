@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -165,6 +166,10 @@ class JpaParticipationBundleRepositoryAdapterTest {
   // WHERE 서브쿼리 안에 있는지를 실제 SQL 로 태운다 — 목으로는 증명되지 않는 부분이다.
 
   private Long openBundle() {
+    return openBundle(null);
+  }
+
+  private Long openBundle(final Instant dueAt) {
     return participationBundleRepository
         .save(
             ParticipationBundle.open(
@@ -173,8 +178,19 @@ class JpaParticipationBundleRepositoryAdapterTest {
                 null,
                 3000L,
                 RefundAccount.of("국민", "12345678", "홍길동"),
-                null))
+                dueAt))
         .getId();
+  }
+
+  /**
+   * 이 묶음에 속한 <b>C2C</b> 참여 한 건을 심는다. LEGACY 는 1인 1활성슬롯 유니크가 걸려 있어 같은 사람의
+   * 활성 슬롯을 두 개 만들 수 없다 — 다슬롯 묶음은 C2C 에서만 생기므로 이쪽이 실제와 맞다.
+   */
+  private void insertC2cParticipation(final Long bundleId, final String status) {
+    insertParticipation(bundleId, status);
+    jdbcTemplate.update(
+        "UPDATE participations SET flow_type = 'C2C' WHERE bundle_id = ? AND flow_type = 'LEGACY'",
+        bundleId);
   }
 
   /** 이 묶음에 속한 참여 한 건을 원하는 상태로 심는다 (멤버 슬롯 FK 를 함께 만든다). */
@@ -373,4 +389,168 @@ class JpaParticipationBundleRepositoryAdapterTest {
     return jdbcTemplate.queryForObject(
         "SELECT id FROM participations WHERE buncheol_member_id = ?", Long.class, member.getId());
   }
+  @Nested
+  @DisplayName("extendDueAt — 개최자 반려 시 묶음 기한 연장")
+  class ExtendDueAtTest {
+
+    // 🔴 이 가드가 이 기능의 안전성 근거다 — 기한이 앞으로 당겨지면 「제외」가 열려, 반려로 24h 를 더 받은
+    // 정상 입금 대기자를 개최자가 바로 뺄 수 있게 된다.
+    @Test
+    @DisplayName("이미 더 뒤인 기한은 앞으로 당겨지지 않는다")
+    void 이미_더_뒤인_기한은_당겨지지_않는다() {
+      Instant later = Instant.now().plusSeconds(86_400).truncatedTo(ChronoUnit.SECONDS);
+      Long bundleId = openBundle(later);
+      entityManager.flush();
+      entityManager.clear();
+
+      participationBundleRepository.extendDueAt(
+          bundleId, later.minusSeconds(3600), Instant.now());
+      entityManager.clear();
+
+      assertThat(participationBundleRepository.findById(bundleId))
+          .get()
+          .extracting(ParticipationBundle::getDueAt)
+          .isEqualTo(later);
+    }
+
+    @Test
+    @DisplayName("더 뒤로 미는 것은 반영된다")
+    void 더_뒤로_미는_것은_반영된다() {
+      Instant original = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.SECONDS);
+      Instant extended = original.plusSeconds(86_400);
+      Long bundleId = openBundle(original);
+      entityManager.flush();
+      entityManager.clear();
+
+      participationBundleRepository.extendDueAt(bundleId, extended, Instant.now());
+      entityManager.clear();
+
+      assertThat(participationBundleRepository.findById(bundleId))
+          .get()
+          .extracting(ParticipationBundle::getDueAt)
+          .isEqualTo(extended);
+    }
+
+    @Test
+    @DisplayName("이미 닫힌 묶음의 기한은 밀지 않는다")
+    void 이미_닫힌_묶음의_기한은_밀지_않는다() {
+      Instant original = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.SECONDS);
+      Long bundleId = openBundle(original);
+      entityManager.flush();
+      jdbcTemplate.update(
+          "UPDATE participation_bundles SET closed_at = CURRENT_TIMESTAMP WHERE id = ?", bundleId);
+      entityManager.clear();
+
+      participationBundleRepository.extendDueAt(
+          bundleId, original.plusSeconds(86_400), Instant.now());
+      entityManager.clear();
+
+      assertThat(participationBundleRepository.findById(bundleId))
+          .get()
+          .extracting(ParticipationBundle::getDueAt)
+          .isEqualTo(original);
+    }
+  }
+
+  /**
+   * 「제외」 CAS 는 {@code ParticipationRepository} 에 있지만 묶음 픽스처가 여기 있어 함께 둔다. 검증 대상이
+   * <b>가드가 UPDATE WHERE 안에서 원자적으로 도는가</b> 라 실제 DB 로 돌려야 의미가 있다.
+   */
+  @Nested
+  @DisplayName("releaseBundleIfDue — 개최자 「제외」")
+  class ReleaseBundleIfDueTest {
+
+    @Test
+    @DisplayName("기한이 지났으면 활성 슬롯을 전부 취소한다")
+    void 기한이_지났으면_활성_슬롯을_전부_취소한다() {
+      Long bundleId = openBundle(Instant.now().minusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      insertC2cParticipation(bundleId, "PAYMENT_SENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      int released = participationRepository.releaseBundleIfDue(bundleId, Instant.now());
+
+      assertThat(released).isEqualTo(2);
+      assertThat(activeSlotCount(bundleId)).isZero();
+      assertThat(cancelReasons(bundleId)).containsOnly("HOST_RELEASED");
+    }
+
+    // 🔴 모집 중에는 기한이 없다 — 가드가 fail-closed 라 여기서 막힌다.
+    @Test
+    @DisplayName("기한이 없으면(모집 중) 한 건도 취소하지 않는다")
+    void 기한이_없으면_한_건도_취소하지_않는다() {
+      Long bundleId = openBundle(null);
+      insertC2cParticipation(bundleId, "APPLIED");
+      entityManager.flush();
+      entityManager.clear();
+
+      int released = participationRepository.releaseBundleIfDue(bundleId, Instant.now());
+
+      assertThat(released).isZero();
+      assertThat(activeSlotCount(bundleId)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("기한 전이면 한 건도 취소하지 않는다")
+    void 기한_전이면_한_건도_취소하지_않는다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "PAYMENT_SENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      int released = participationRepository.releaseBundleIfDue(bundleId, Instant.now());
+
+      assertThat(released).isZero();
+      assertThat(activeSlotCount(bundleId)).isEqualTo(1);
+    }
+
+    // 🔴 확정 슬롯이 하나라도 있으면 <b>같은 묶음의 미입금 슬롯도</b> 안 빠져야 한다 — 확정분은 분철 취소
+    // cascade + 환불 경로로만 끝난다. 부분 취소가 나면 개최자가 돈 계산을 못 한다.
+    @Test
+    @DisplayName("확정 슬롯이 있으면 같은 묶음의 미입금 슬롯도 취소하지 않는다")
+    void 확정_슬롯이_있으면_같은_묶음의_미입금_슬롯도_취소하지_않는다() {
+      Long bundleId = openBundle(Instant.now().minusSeconds(3600));
+      insertC2cParticipation(bundleId, "CONFIRMED");
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      int released = participationRepository.releaseBundleIfDue(bundleId, Instant.now());
+
+      assertThat(released).isZero();
+      assertThat(activeSlotCount(bundleId)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("이미 닫힌 묶음은 제외 대상이 아니다")
+    void 이미_닫힌_묶음은_제외_대상이_아니다() {
+      Long bundleId = openBundle(Instant.now().minusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      jdbcTemplate.update(
+          "UPDATE participation_bundles SET closed_at = CURRENT_TIMESTAMP WHERE id = ?", bundleId);
+      entityManager.clear();
+
+      int released = participationRepository.releaseBundleIfDue(bundleId, Instant.now());
+
+      assertThat(released).isZero();
+    }
+
+    private int activeSlotCount(final Long bundleId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM participations WHERE bundle_id = ?"
+              + " AND status IN ('APPLIED','AWAITING_PAYMENT','PAYMENT_SENT','CONFIRMED')",
+          Integer.class,
+          bundleId);
+    }
+
+    private List<String> cancelReasons(final Long bundleId) {
+      return jdbcTemplate.queryForList(
+          "SELECT cancel_reason FROM participations WHERE bundle_id = ? AND status = 'CANCELLED'",
+          String.class,
+          bundleId);
+    }
+  }
+
 }

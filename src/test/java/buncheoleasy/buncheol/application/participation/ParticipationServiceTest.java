@@ -1275,6 +1275,22 @@ class ParticipationServiceTest {
           .revertPaymentSent(anyLong(), any(), any());
     }
 
+    // 🔴 슬롯 기한만 밀고 묶음 기한을 안 밀면, 반려로 24h 를 더 받은 정상 입금 대기자를 개최자가 바로
+    // 「제외」할 수 있다 — 복구 경로가 문의뿐이다. 배선이 빠져도 반려 자체는 성공하므로 여기서 못 박는다.
+    @Test
+    void 개최자_반려는_묶음_기한도_함께_민다() {
+      Participation participation = c2cParticipation();
+      given(participation.getDueAt()).willReturn(NOW);
+      given(participation.getBundleId()).willReturn(9999L);
+      c2cBuncheol();
+      given(participationDomainService.rejectPaymentSent(eq(PARTICIPATION_ID), any(), any()))
+          .willReturn(true);
+
+      participationService.rejectPaymentSent(HOST_ID, PARTICIPATION_ID);
+
+      then(participationBundleDomainService).should().extendDueAt(eq(9999L), any(), any());
+    }
+
     @Test
     void 참여자_셀프_철회는_반려_시각을_남기지_않는_경로로_위임한다() {
       Participation participation = c2cParticipation();

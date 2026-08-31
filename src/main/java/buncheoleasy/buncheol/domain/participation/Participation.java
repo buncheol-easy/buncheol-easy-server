@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.domain.participation;
 import buncheoleasy.global.domain.TimestampedEntity;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.buncheol.domain.FlowType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -90,6 +91,21 @@ public class Participation extends TimestampedEntity {
   // ⚠️ 환불 계좌(refund_*)는 이제 이 엔티티가 갖지 않는다 — 정본은 participation_bundles 다 (P2-c).
   // 컬럼은 P4 에서 삭제될 때까지 DB 에 남지만 매핑을 지웠으므로 읽지도 쓰지도 않는다. 새 행의 세 칸은
   // NULL 이고, 그래도 되는 이유는 묶음이 NOT NULL 로 같은 값을 갖기 때문이다.
+
+  /**
+   * 분철의 플로우를 참여 행에 <b>비정규화 사본</b>으로 들고 있는 칸. 값은 참여 INSERT 가 {@code SELECT ... FROM
+   * buncheols} 로 <b>원자적으로 복사</b>하므로 코드 경로에서는 원본과 어긋날 수 없다 (JpaParticipationRepositoryAdapter
+   * 의 INSERT_COLUMNS_SQL).
+   *
+   * <p><b>왜 조인 대신 사본인가.</b> 입금 만료 폴링이 1분마다 도는데 {@code buncheols} 조인을 매번 걸면 그 비용을 영구히
+   * 문다. 사본이면 {@code (status, flow_type, due_at)} 인덱스 하나로 끝난다.
+   *
+   * <p>⚠️ 쓰기는 raw INSERT 가 전담하므로 <b>JPA 가 이 칸을 건드리면 안 된다</b>. 그래서 {@code insertable=false,
+   * updatable=false} 다.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "flow_type", length = 10, insertable = false, updatable = false)
+  private FlowType flowType;
 
   // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
   // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변.

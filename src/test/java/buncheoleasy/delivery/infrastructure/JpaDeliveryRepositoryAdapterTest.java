@@ -21,6 +21,7 @@ import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,46 +65,76 @@ class JpaDeliveryRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("findAllByParticipationIds — participationId IN 조회")
-  class FindAllByParticipationIdsTest {
+  @DisplayName("findByBundleId / findAllByBundleIds — 택배 1개 = 묶음 1개")
+  class FindByBundleTest {
 
     @Test
     void 빈_입력에는_빈_리스트를_반환한다() {
-      List<Delivery> result = deliveryRepository.findAllByParticipationIds(List.of());
-
-      assertThat(result).isEmpty();
+      assertThat(deliveryRepository.findAllByBundleIds(List.of())).isEmpty();
     }
 
     @Test
-    void 여러_participationId_에_매핑된_Delivery_를_모두_반환한다() {
+    void 묶음이_없는_참여는_조회_대상에서_빠진다() {
+      // null 을 그대로 넘기면 IS NULL 조회가 되어 남의 배송이 걸린다 — 어댑터가 걸러야 한다.
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      saveDelivery(participationA, "GS25 잠실점", null);
+
+      assertThat(deliveryRepository.findByBundleId(null)).isEmpty();
+      assertThat(deliveryRepository.findAllByBundleIds(Arrays.asList((Long) null))).isEmpty();
+    }
+
+    @Test
+    void 여러_묶음의_배송을_한_번에_반환한다() {
       Long participationA = createConfirmedParticipation("fanA", 90_000L);
       Long participationB = createConfirmedParticipation("fanB", 80_000L);
-      saveDelivery(participationA, "GS25 잠실점", "트래킹A");
-      saveDelivery(participationB, "CU 강남점", null);
+      Long bundleA = createBundle(participantOf(participationA));
+      Long bundleB = createBundle(participantOf(participationB));
+      saveDelivery(participationA, bundleA, "GS25 잠실점", "트래킹A");
+      saveDelivery(participationB, bundleB, "CU 강남점", null);
 
-      List<Delivery> result =
-          deliveryRepository.findAllByParticipationIds(List.of(participationA, participationB));
+      List<Delivery> result = deliveryRepository.findAllByBundleIds(List.of(bundleA, bundleB));
 
       assertThat(result)
-          .extracting(Delivery::getParticipationId)
-          .containsExactlyInAnyOrder(participationA, participationB);
+          .extracting(Delivery::getBundleId)
+          .containsExactlyInAnyOrder(bundleA, bundleB);
       assertThat(result)
-          .filteredOn(d -> d.getParticipationId().equals(participationA))
+          .filteredOn(d -> d.getBundleId().equals(bundleA))
           .singleElement()
           .satisfies(d -> assertThat(d.getTrackingNumber()).isEqualTo("트래킹A"));
     }
 
     @Test
-    void 매핑되지_않는_participationId_는_결과에서_제외된다() {
+    void 매핑되지_않는_묶음_id_는_결과에서_제외된다() {
       Long participationA = createConfirmedParticipation("fanA", 90_000L);
-      saveDelivery(participationA, "GS25 잠실점", null);
+      Long bundleA = createBundle(participantOf(participationA));
+      saveDelivery(participationA, bundleA, "GS25 잠실점", null);
 
-      List<Delivery> result =
-          deliveryRepository.findAllByParticipationIds(List.of(participationA, 99_999L));
+      List<Delivery> result = deliveryRepository.findAllByBundleIds(List.of(bundleA, 99_999L));
 
       assertThat(result)
           .singleElement()
-          .satisfies(d -> assertThat(d.getParticipationId()).isEqualTo(participationA));
+          .satisfies(d -> assertThat(d.getBundleId()).isEqualTo(bundleA));
+    }
+
+    // 🔴 전환 이전 다슬롯 묶음은 슬롯마다 배송이 생겨 한 묶음에 여러 건이 남아 있다
+    // (실측: prod 묶음 64 · staging 66·83·87). P4 의 유니크 승격 전까지 이 상태라, 조회가
+    // 예외 없이 한 건으로 확정돼야 한다 — 규칙은 "id 가 가장 작은 행".
+    @Test
+    void 한_묶음에_배송이_둘이면_id_가_작은_쪽을_돌려준다() {
+      Long participationA = createConfirmedParticipation("fanA", 90_000L);
+      Long participationB = createConfirmedParticipation("fanB", 80_000L);
+      Long shared = createBundle(participantOf(participationA));
+      Long first = saveDelivery(participationA, shared, "GS25 잠실점", "먼저");
+      Long second = saveDelivery(participationB, shared, "CU 강남점", "나중");
+      assertThat(first).isLessThan(second);
+
+      assertThat(deliveryRepository.findByBundleId(shared))
+          .get()
+          .satisfies(d -> assertThat(d.getId()).isEqualTo(first));
+      // 목록 조회도 같은 규칙이 성립하도록 id 오름차순이어야 한다 (호출부가 merge (a, b) -> a 를 쓴다).
+      assertThat(deliveryRepository.findAllByBundleIds(List.of(shared)))
+          .extracting(Delivery::getId)
+          .containsExactly(first, second);
     }
   }
 
@@ -598,15 +629,42 @@ class JpaDeliveryRepositoryAdapterTest {
 
   private Long saveDelivery(
       final Long participationId, final String storeName, final String trackingNumber) {
+    return saveDelivery(participationId, null, storeName, trackingNumber);
+  }
+
+  /** 분철·참여자로 묶음을 하나 만든다 — 배송 조회 키가 묶음이라 실제 행이 있어야 FK 가 통과한다. */
+  private Long createBundle(final Long participantId) {
+    jdbcTemplate.update(
+        "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+            + " refund_bank, refund_account, refund_holder) VALUES (?, ?, ?, ?, ?, ?)",
+        buncheolId,
+        participantId,
+        3_000L,
+        "국민",
+        "12345678",
+        "홍길동");
+    return jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+  }
+
+  private Long saveDelivery(
+      final Long participationId,
+      final Long bundleId,
+      final String storeName,
+      final String trackingNumber) {
     Delivery delivery =
         Delivery.createSnapshot(
-            participationId, null, ShippingMethod.GS25_HALF, storeName, "수령인", "010-1234-5678");
+            participationId, bundleId, ShippingMethod.GS25_HALF, storeName, "수령인", "010-1234-5678");
     deliveryRepository.save(delivery);
     em.flush();
     if (trackingNumber != null) {
       deliveryRepository.registerTrackingIfRegistrable(delivery.getId(), trackingNumber, NOW);
     }
     return delivery.getId();
+  }
+
+  private Long participantOf(final Long participationId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT participant_id FROM participations WHERE id = ?", Long.class, participationId);
   }
 
   private Delivery findFresh(final Long deliveryId) {

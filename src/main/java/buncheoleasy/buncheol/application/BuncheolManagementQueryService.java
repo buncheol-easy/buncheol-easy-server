@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -83,14 +84,22 @@ public class BuncheolManagementQueryService {
     // 취소되면 활성 조회에서 빠지는데, 개최자가 환불하려면 계좌에 닿아야 한다 (C2C 는 개최자가 환불 주체).
     List<Participation> cancelled = participationRepository.findCancelledByBuncheolId(buncheolId);
 
-    List<Long> confirmedParticipationIds =
+    List<Participation> confirmed =
         participations.stream()
             .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
-            .map(Participation::getId)
             .toList();
-    Map<Long, Delivery> deliveryByParticipationId =
-        deliveryRepository.findAllByParticipationIds(confirmedParticipationIds).stream()
-            .collect(Collectors.toMap(Delivery::getParticipationId, Function.identity()));
+    // 택배 1개 = 묶음 1개 — 다슬롯 묶음은 배송 1건을 슬롯들이 공유하므로 묶음 id 로 찾는다.
+    // (참여 id 로 찾으면 배송을 갖지 않은 두 번째 슬롯이 개최 관리에서 "미발송" 으로 보인다.)
+    Map<Long, Delivery> deliveryByBundleId =
+        deliveryRepository
+            .findAllByBundleIds(
+                confirmed.stream()
+                    .map(Participation::getBundleId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList())
+            .stream()
+            .collect(Collectors.toMap(Delivery::getBundleId, Function.identity(), (a, b) -> a));
 
     Map<Long, User> userById =
         userRepository
@@ -133,7 +142,7 @@ public class BuncheolManagementQueryService {
                         p,
                         memberNameBySlotId,
                         userById,
-                        deliveryByParticipationId,
+                        deliveryByBundleId,
                         bundleById,
                         shippingFees,
                         releasabilityByBundleId,
@@ -164,7 +173,7 @@ public class BuncheolManagementQueryService {
         buncheol.getDeadline(),
         buncheol.getMinHeadcount(),
         buncheolMembers.size(),
-        confirmedParticipationIds.size(),
+        confirmed.size(),
         participants,
         cancelledParticipants,
         buncheol.getFlowType(),
@@ -195,7 +204,7 @@ public class BuncheolManagementQueryService {
       final Participation participation,
       final Map<Long, String> memberNameBySlotId,
       final Map<Long, User> userById,
-      final Map<Long, Delivery> deliveryByParticipationId,
+      final Map<Long, Delivery> deliveryByBundleId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
       final Map<Long, BundleReleasability> releasabilityByBundleId,
@@ -204,7 +213,12 @@ public class BuncheolManagementQueryService {
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
     RefundAccount refundAccount =
         ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
-    Delivery delivery = deliveryByParticipationId.get(participation.getId());
+    // ⚠️ 맵을 조회하기 전에 null 을 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
+    // null 키 조회에서 NPE 다. 묶음 없는 참여(배포선 창)가 그 키다. (ShippingFeeAttribution 과 같은 함정)
+    Delivery delivery =
+        participation.getBundleId() == null
+            ? null
+            : deliveryByBundleId.get(participation.getBundleId());
     return new BuncheolManagementParticipantResponse(
         participation.getId(),
         participation.getBundleId(),

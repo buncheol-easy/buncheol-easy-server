@@ -93,10 +93,19 @@ public class MyParticipationQueryService {
         buncheolImageRepository.findThumbnailsByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
-    List<Long> participationIds = participations.stream().map(Participation::getId).toList();
-    Map<Long, Delivery> deliveryByParticipationId =
-        deliveryRepository.findAllByParticipationIds(participationIds).stream()
-            .collect(Collectors.toMap(Delivery::getParticipationId, d -> d));
+    // 택배 1개 = 묶음 1개. 다슬롯 묶음의 두 번째 슬롯에는 자기 배송 행이 없으므로(그 묶음의 배송 1건을
+    // 슬롯들이 공유한다) 참여 id 로 찾으면 그 슬롯만 배송 정보가 비어 보인다.
+    // merge (a, b) -> a 는 전환 이전 중복 행에서 id 최소값을 고르는 규칙이다 (DeliveryRepository javadoc).
+    // 묶음이 없는 참여(배포선 창에서 생긴 행)는 걸러 낸다 — 그대로 넘기면 IS NULL 조회가 되어 남의 배송이 걸린다.
+    List<Long> bundleIds =
+        participations.stream()
+            .map(Participation::getBundleId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+    Map<Long, Delivery> deliveryByBundleId =
+        deliveryRepository.findAllByBundleIds(bundleIds).stream()
+            .collect(Collectors.toMap(Delivery::getBundleId, d -> d, (a, b) -> a));
 
     Map<Long, HostAccountResponse> hostAccountByHostId =
         findHostAccountsForAwaitingPayments(participations, buncheolById);
@@ -119,7 +128,7 @@ public class MyParticipationQueryService {
                     slotCountByBuncheolId,
                     groupMemberNameById,
                     thumbnailByBuncheolId,
-                    deliveryByParticipationId,
+                    deliveryByBundleId,
                     hostAccountByHostId,
                     bundleById,
                     shippingFees,
@@ -154,7 +163,7 @@ public class MyParticipationQueryService {
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, String> groupMemberNameById,
       final Map<Long, String> thumbnailByBuncheolId,
-      final Map<Long, Delivery> deliveryByParticipationId,
+      final Map<Long, Delivery> deliveryByBundleId,
       final Map<Long, HostAccountResponse> hostAccountByHostId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
@@ -166,7 +175,12 @@ public class MyParticipationQueryService {
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
-    Delivery delivery = deliveryByParticipationId.get(participation.getId());
+    // ⚠️ 맵을 조회하기 전에 null 을 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
+    // null 키 조회에서 NPE 다. 묶음 없는 참여(배포선 창)가 그 키다. (ShippingFeeAttribution 과 같은 함정)
+    Delivery delivery =
+        participation.getBundleId() == null
+            ? null
+            : deliveryByBundleId.get(participation.getBundleId());
     // 입금 대기(입금확인중·보냈어요)일 때만 계좌를 노출한다. C2C 는 확정 시점 스냅샷 계좌 (docs/46 §3-5·§4.7-B1).
     boolean paymentPending =
         participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT

@@ -30,7 +30,11 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           + "LEFT JOIN User u ON u.id = p.participantId "
           + "LEFT JOIN BuncheolMember bm ON bm.id = p.buncheolMemberId "
           + "LEFT JOIN GroupMember gm ON gm.id = bm.memberId "
-          + "LEFT JOIN Delivery d ON d.participationId = p.id "
+          + "LEFT JOIN Delivery d ON d.bundleId = p.bundleId "
+          // 택배 1개 = 묶음 1개라 묶음으로 조인한다(다슬롯 묶음의 두 번째 슬롯도 같은 배송을 보게).
+          // ⚠️ 전환 이전 중복 행이 남아 있는 동안 묶음당 배송이 2건인 곳이 있어(prod 묶음 64) 그대로
+          // 조인하면 그 참여가 목록에 두 줄로 나온다. id 최소값 1건으로 확정해 행 수를 보존한다.
+          + "  AND d.id = (SELECT MIN(d2.id) FROM Delivery d2 WHERE d2.bundleId = p.bundleId) "
           + "LEFT JOIN ShippingAddress sa ON sa.id = p.shippingAddressId "
           + "WHERE (:statusFilter IS NULL OR :statusFilter = "
           + "  CASE WHEN p.status = :appliedStatus THEN 'APPLIED' "

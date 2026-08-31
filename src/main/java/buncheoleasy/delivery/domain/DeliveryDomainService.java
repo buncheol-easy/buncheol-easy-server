@@ -6,6 +6,7 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -25,10 +26,9 @@ public class DeliveryDomainService {
         .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
   }
 
-  public Delivery getDeliveryByParticipationId(final Long participationId) {
-    return deliveryRepository
-        .findByParticipationId(participationId)
-        .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
+  /** 묶음의 배송 스냅샷. 택배 1개 = 묶음 1개 — 중복·NULL 처리 규칙은 {@link DeliveryRepository#findByBundleId}. */
+  public Optional<Delivery> findByBundleId(final Long bundleId) {
+    return deliveryRepository.findByBundleId(bundleId);
   }
 
   /** 취소된 참여들의 배송 스냅샷을 일괄 삭제한다 (분철 취소 cascade 시 고아 스냅샷 정리). 호출 측 {@code @Transactional} 필수. */

@@ -8,6 +8,7 @@ import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -110,16 +111,22 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
   }
 
   @Override
-  public Optional<Delivery> findByParticipationId(final Long participationId) {
-    return jpaDeliveryRepository.findByParticipationId(participationId);
+  public Optional<Delivery> findByBundleId(final Long bundleId) {
+    // 묶음이 없는 참여(배포선 창에서 생긴 행)는 배송도 찾을 수 없다 — null 을 키로 넘기면 IS NULL 조회가 되어
+    // 남의 배송이 걸린다. 여기서 끊는다.
+    if (bundleId == null) {
+      return Optional.empty();
+    }
+    return jpaDeliveryRepository.findFirstByBundleIdOrderByIdAsc(bundleId);
   }
 
   @Override
-  public List<Delivery> findAllByParticipationIds(final List<Long> participationIds) {
-    if (participationIds.isEmpty()) {
+  public List<Delivery> findAllByBundleIds(final List<Long> bundleIds) {
+    List<Long> ids = bundleIds.stream().filter(Objects::nonNull).distinct().toList();
+    if (ids.isEmpty()) {
       return List.of();
     }
-    return jpaDeliveryRepository.findAllByParticipationIdIn(participationIds);
+    return jpaDeliveryRepository.findAllByBundleIdInOrderByIdAsc(ids);
   }
 
   @Override

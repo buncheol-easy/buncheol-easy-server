@@ -493,9 +493,10 @@ CREATE TABLE IF NOT EXISTS participation_codes
 CREATE TABLE IF NOT EXISTS deliveries
 (
     id                      BIGINT       NOT NULL AUTO_INCREMENT,
-    participation_id        BIGINT       NOT NULL COMMENT '참여 ID (P4 에서 DROP — 정본은 bundle_id)',
-    -- 1묶음 = 1택배 = 배송 1행 (docs/70 결정 4). 백필 후 NOT NULL + UNIQUE 로 조인다.
-    bundle_id               BIGINT       NULL COMMENT '소속 묶음',
+    participation_id        BIGINT       NOT NULL COMMENT '묶음 대표 슬롯 (P4 에서 DROP — 정본은 bundle_id)',
+    -- 1묶음 = 1택배 = 배송 1행 (docs/70 결정 4). 생성·조회 모두 이 칸이 기준이다.
+    -- 전환 이전 다슬롯 묶음만 아직 여러 건이라, 병합 후 NOT NULL + UNIQUE 로 조인다.
+    bundle_id               BIGINT       NULL COMMENT '소속 묶음 = 택배 1개',
     shipping_method         VARCHAR(20)  NOT NULL COMMENT '배송 방식 스냅샷',
     store_name              VARCHAR(100) NOT NULL COMMENT '편의점 지점명 스냅샷',
     receiver_nickname       VARCHAR(20)  NOT NULL COMMENT '닉네임 스냅샷',

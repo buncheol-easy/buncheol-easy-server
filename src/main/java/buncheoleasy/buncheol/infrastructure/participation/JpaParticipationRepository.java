@@ -27,6 +27,11 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   /**
    * 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드). 입금 확인 중이거나, 입금확인됐지만 배송이 끝나지 않았거나
    * (배송 스냅샷이 없으면 미종료로 본다), 배송비 환급 신청이 검수 대기 중이면 끝나지 않은 것으로 판정한다.
+   *
+   * <p>배송은 <b>묶음</b>으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 자기 배송 행이
+   * 없다. 참여 id 로 찾으면 그 슬롯이 영원히 "배송 미종료" 로 남아 탈퇴가 막힌다.
+   * {@code p.bundleId} 가 NULL 이면 조건이 어느 배송과도 매칭되지 않아 미종료 판정이 되는데, 이는 배송
+   * 스냅샷이 없는 참여의 기존 동작과 같고 <b>탈퇴를 막는 쪽</b>이라 안전한 방향이다.
    */
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
@@ -36,7 +41,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "    AND (p.paybackStatus = :requestedPaybackStatus "
           + "      OR NOT EXISTS ("
           + "        SELECT d FROM Delivery d "
-          + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
+          + "        WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses))))")
   boolean existsUnfinishedByParticipantId(
       @Param("participantId") Long participantId,
       @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,

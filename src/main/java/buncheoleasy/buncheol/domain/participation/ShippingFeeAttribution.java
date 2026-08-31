@@ -101,16 +101,24 @@ public final class ShippingFeeAttribution {
         : b;
   }
 
-  // 취소 시각이 비어 있는 행(있을 수 없지만 방어)은 가장 오래 전에 취소된 것으로 본다.
+  /**
+   * 더 나중에 취소된 쪽. 취소 시각이 비어 있는 행(있을 수 없지만 방어)은 가장 오래 전에 취소된 것으로 본다.
+   *
+   * <p>⚠️ <b>동률이면 먼저 만들어진 쪽(작은 id)을 고른다.</b> 분철 취소 cascade 는 활성 슬롯 전부를 <b>같은
+   * {@code now}</b> 로 한꺼번에 취소하므로 동률이 실제로 흔하다. 그때 큰 id 를 고르면, 취소 직전까지 배송비를 지고
+   * 있던 슬롯(= 활성 중 가장 오래된 것)에서 배송비가 <b>이유 없이 옮겨간다</b> — 개최자가 보는 환불 금액이 취소
+   * 순간에 두 행 사이를 오간다. 작은 id 를 고르면 취소 전후로 같은 행이 배송비를 진다.
+   */
   private static Participation laterCancelled(final Participation a, final Participation b) {
-    return Comparator.comparing(
+    int byCancelledAt =
+        Comparator.comparing(
                 (Participation p) ->
                     p.getCancelledAt() == null ? Instant.MIN : p.getCancelledAt())
-            .thenComparing(Participation::getId)
-            .compare(a, b)
-        >= 0
-        ? a
-        : b;
+            .compare(a, b);
+    if (byCancelledAt != 0) {
+      return byCancelledAt > 0 ? a : b;
+    }
+    return a.getId() <= b.getId() ? a : b;
   }
 
   /** 이 참여가 화면에 표시해야 할 배송비. */

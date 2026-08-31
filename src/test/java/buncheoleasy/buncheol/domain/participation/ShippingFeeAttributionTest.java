@@ -134,6 +134,29 @@ class ShippingFeeAttributionTest {
     assertThat(atT2.totalAmountOf(laterCancelled)).isEqualTo(SLOT_PRICE + SHIPPING_FEE);
   }
 
+  // 분철 취소 cascade 는 활성 슬롯 전부를 같은 now 로 한꺼번에 취소한다 — 동률이 흔하다.
+  @Test
+  @DisplayName("한꺼번에 취소되면(cascade) 직전까지 배송비를 지던 슬롯이 그대로 진다")
+  void cascadeCancelKeepsTheSameCarrier() {
+    Instant cancelledAt = Instant.parse("2026-08-29T10:00:00Z");
+    Participation active232 = participation(232L, SHIPPING_FEE, ParticipationStatus.APPLIED);
+    Participation active233 = participation(233L, 0L, ParticipationStatus.APPLIED);
+    ShippingFeeAttribution before =
+        ShippingFeeAttribution.ofAllSlots(List.of(active232, active233), bundle());
+    assertThat(before.totalAmountOf(active232)).isEqualTo(SLOT_PRICE + SHIPPING_FEE);
+
+    // 같은 시각에 둘 다 취소
+    Participation dead232 =
+        participation(232L, SHIPPING_FEE, ParticipationStatus.CANCELLED, cancelledAt);
+    Participation dead233 = participation(233L, 0L, ParticipationStatus.CANCELLED, cancelledAt);
+    ShippingFeeAttribution after =
+        ShippingFeeAttribution.ofAllSlots(List.of(dead232, dead233), bundle());
+
+    // 배송비가 이유 없이 옮겨가면 개최자의 환불 금액이 취소 순간에 두 행 사이를 오간다.
+    assertThat(after.totalAmountOf(dead232)).isEqualTo(SLOT_PRICE + SHIPPING_FEE);
+    assertThat(after.totalAmountOf(dead233)).isEqualTo(SLOT_PRICE);
+  }
+
   @Test
   @DisplayName("슬롯이 하나뿐이면(LEGACY) 저장된 값과 결과가 같다 — 기존 동작 무변경")
   void singleSlotBundleKeepsStoredValue() {

@@ -555,6 +555,9 @@ public class ParticipationService {
     if (!participationDomainService.rejectPaymentSent(participationId, newDueAt, now)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
     }
+    // 🔴 묶음 기한도 함께 민다. 기한의 정본은 묶음이고(「제외」 가드가 그 값을 본다), 슬롯만 밀면 반려로 기한을
+    // 연장받은 정상 입금 대기자를 개최자가 바로 「제외」할 수 있게 된다 — 복구 경로가 문의뿐이다.
+    participationBundleDomainService.extendDueAt(participation.getBundleId(), newDueAt, now);
 
     eventPublisher.publishEvent(new PaymentRecheckRequestedEvent(participationId));
   }

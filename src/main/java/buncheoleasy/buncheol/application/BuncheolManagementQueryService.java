@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
@@ -25,6 +26,8 @@ import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +55,7 @@ public class BuncheolManagementQueryService {
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
   private final ParticipationBundleDomainService participationBundleDomainService;
+  private final Clock clock;
   private final DeliveryRepository deliveryRepository;
   private final UserRepository userRepository;
   private final GroupRepository groupRepository;
@@ -107,6 +111,18 @@ public class BuncheolManagementQueryService {
     // 이 목록은 그 분철의 전 상태(active ∪ CANCELLED)라 묶음별 슬롯이 빠짐없이 들어온다 — ofAllSlots 의 전제.
     ShippingFeeAttribution shippingFees =
         ShippingFeeAttribution.ofAllSlots(allParticipations, bundleById);
+    // 「제외」 가부는 묶음 단위 판정이다. 슬롯마다 다시 계산하면 같은 묶음의 행끼리 답이 갈릴 수 있으므로
+    // 묶음별로 한 번만 구해 재사용한다 — 게이트와 같은 판정을 내려줘야 "버튼은 있는데 409" 가 안 생긴다.
+    final Instant now = Instant.now(clock);
+    Map<Long, List<Participation>> slotsByBundleId =
+        allParticipations.stream()
+            .filter(p -> p.getBundleId() != null)
+            .collect(Collectors.groupingBy(Participation::getBundleId));
+    Map<Long, BundleReleasability> releasabilityByBundleId = new HashMap<>();
+    bundleById.forEach(
+        (id, bundle) ->
+            releasabilityByBundleId.put(
+                id, BundleReleasability.of(bundle, slotsByBundleId.getOrDefault(id, List.of()), now)));
     // 0원 슬롯의 계좌 노출 판정이 플로우별로 다르다 ({@link #depositorNameOf}).
     boolean c2c = buncheol.isC2c();
     List<BuncheolManagementParticipantResponse> participants =
@@ -120,6 +136,7 @@ public class BuncheolManagementQueryService {
                         deliveryByParticipationId,
                         bundleById,
                         shippingFees,
+                        releasabilityByBundleId,
                         c2c))
             .toList();
     // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
@@ -134,6 +151,7 @@ public class BuncheolManagementQueryService {
                         Map.of(),
                         bundleById,
                         shippingFees,
+                        releasabilityByBundleId,
                         c2c))
             .toList();
 
@@ -180,6 +198,7 @@ public class BuncheolManagementQueryService {
       final Map<Long, Delivery> deliveryByParticipationId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
+      final Map<Long, BundleReleasability> releasabilityByBundleId,
       final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
@@ -201,7 +220,10 @@ public class BuncheolManagementQueryService {
         participation.getConfirmedAt(),
         refundAccountFor(participation, refundAccount, c2c),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
-        participation.getPaymentSentAt());
+        participation.getPaymentSentAt(),
+        participation.getBundleId() == null
+            ? null
+            : releasabilityByBundleId.get(participation.getBundleId()));
   }
 
   /**

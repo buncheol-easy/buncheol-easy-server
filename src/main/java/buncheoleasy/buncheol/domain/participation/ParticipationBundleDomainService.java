@@ -106,6 +106,11 @@ public class ParticipationBundleDomainService {
     participationBundleRepository.closeIfNoActiveSlots(bundleId, now);
   }
 
+  /** 묶음 단건. 묶음 단위 API 의 진입점이다. */
+  public Optional<ParticipationBundle> findById(final Long bundleId) {
+    return participationBundleRepository.findById(bundleId);
+  }
+
   /** 참여 한 건의 묶음. 미연결 행(배포선 창)이면 비어 있다. */
   public Optional<ParticipationBundle> findByParticipation(final Participation participation) {
     return participation.getBundleId() == null
@@ -195,6 +200,19 @@ public class ParticipationBundleDomainService {
   /** 분철 취소 cascade·자동 마감 뒤에 비게 된 묶음을 일괄로 닫는다. 호출 측 {@code @Transactional} 필수. */
   public int closeEmptyByBuncheolId(final Long buncheolId, final Instant now) {
     return participationBundleRepository.closeEmptyByBuncheolId(buncheolId, now);
+  }
+
+  /**
+   * 묶음 기한을 뒤로 민다 (개최자 반려). 이미 더 뒤인 기한은 건드리지 않는다 — 반려가 기한을 <b>앞으로</b> 당기면
+   * 「제외」가 열려 버린다.
+   *
+   * <p>{@code bundleId} 가 {@code null}(미연결 참여)이면 조용히 넘어간다.
+   */
+  public void extendDueAt(final Long bundleId, final Instant dueAt, final Instant now) {
+    if (bundleId == null) {
+      return;
+    }
+    participationBundleRepository.extendDueAt(bundleId, dueAt, now);
   }
 
   /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */

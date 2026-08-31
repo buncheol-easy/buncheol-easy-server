@@ -33,11 +33,12 @@ public enum ParticipationStatus {
     return ACTIVE;
   }
 
-  // 돈이 오갔거나 오갔다고 주장된 상태. 이게 하나라도 있으면 개최자에게 <b>고를 것이 있다</b>(확인·부분 확정·환불)
-  // — 자동으로 분철을 접으면 안 된다. 하나도 없으면 고를 것이 없어 데드엔드 정리 대상이다.
-  private static final Set<ParticipationStatus> PAID_OR_CLAIMED = Set.of(PAYMENT_SENT, CONFIRMED);
+  // 개최자 「제외」 대상. 활성 상태에서 CONFIRMED 만 뺀 것 — 확정분은 분철 취소 cascade + 환불 경로로만 끝난다
+  // (docs/70 결정 8). ACTIVE 에서 파생시켜, 활성 상태가 늘어도 두 목록이 갈리지 않게 한다.
+  private static final Set<ParticipationStatus> RELEASABLE =
+      Set.of(APPLIED, AWAITING_PAYMENT, PAYMENT_SENT);
 
-  public static Set<ParticipationStatus> paidOrClaimed() {
-    return PAID_OR_CLAIMED;
+  public static Set<ParticipationStatus> releasableStatuses() {
+    return RELEASABLE;
   }
 }

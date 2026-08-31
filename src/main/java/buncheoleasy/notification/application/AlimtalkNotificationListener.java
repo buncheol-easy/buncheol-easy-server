@@ -9,6 +9,7 @@ import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
+import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
@@ -114,6 +115,34 @@ public class AlimtalkNotificationListener {
             "멤버명", view.memberName());
     recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);
+  }
+
+  /**
+   * (참여자) 개최자가 묶음을 「제외」함 — 입금 기한이 지나 참여가 취소됐다.
+   *
+   * <p>🟡 <b>기존 {@code C2C_PAYMENT_EXPIRED} 템플릿을 재사용한다.</b> 본문이 "입금 기한이 지나 참여가
+   * <b>자동</b> 취소되었어요" 라 '자동' 한 단어가 부정확하지만, 참여자가 겪는 사실(기한이 지나 취소됨)과 안내할
+   * 행동(입금 전이면 할 일 없음 / 이미 보냈으면 문의)이 정확히 같다. 전용 템플릿은 카카오 승인 리드타임을 알 수 없어
+   * 이 기능 전체를 묶어 세우므로, <b>침묵보다 재사용이 낫다</b>고 판단했다. 문구 개정은 별도로 신청한다.
+   *
+   * <p>묶음 1통으로 보낸다 — 슬롯마다 보내면 같은 사람이 같은 내용을 여러 번 받는다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundleReleased(final BundleReleasedEvent event) {
+    List<ParticipationView> views = loadViewsSafely(event.releasedParticipationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    ParticipationView first = views.get(0);
+    AlimtalkTemplate template = AlimtalkTemplate.C2C_PAYMENT_EXPIRED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views));
+    recordSafely(first.participant().getId(), template, variables);
+    sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
   /**

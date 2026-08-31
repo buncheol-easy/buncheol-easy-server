@@ -1007,7 +1007,8 @@ class BuncheolControllerTest {
                   "유진팬",
                   "010-1234-5678",
                   "1234567890",
-                  DeliveryStatus.SHIPPING), null);
+                  DeliveryStatus.SHIPPING), null,
+              null);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
@@ -1023,7 +1024,8 @@ class BuncheolControllerTest {
               Instant.parse("2026-05-26T00:30:00Z"),
               null,
               null,
-              null, null);
+              null, null,
+              null);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,

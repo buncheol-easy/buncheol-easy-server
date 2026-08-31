@@ -74,6 +74,14 @@ public interface ParticipationRepository {
   List<Participation> findAllByBundleIds(List<Long> bundleIds);
 
   /**
+   * 개최자 「제외」 — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다. 기한 미도래·모집 중·확정 슬롯
+   * 존재는 <b>CAS 조건에 포함</b>되어 원자적으로 막힌다.
+   *
+   * @return 실제로 취소된 슬롯 수. 0 이면 가드에 막혔거나 이미 활성 슬롯이 없다
+   */
+  int releaseBundleIfDue(Long bundleId, Instant now);
+
+  /**
    * 단일 분철의 활성 참여별 참여자 id 잠금 조회(current read, 행당 1건 — 다슬롯 참여자는 중복 포함) — RR 스냅샷이 아닌 최신 커밋 기준이
    * 필요한 C2C 정원 충족 판정용. 리스트 크기 = 채워진 슬롯 수, distinct = 신청 인원.
    */

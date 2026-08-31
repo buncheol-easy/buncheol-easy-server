@@ -931,7 +931,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 "유진팬",
                 "010-1234-5678",
                 "1234567890",
-                DeliveryStatus.SHIPPING), null);
+                DeliveryStatus.SHIPPING), null,
+            null);
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
@@ -947,7 +948,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             Instant.parse("2026-05-26T00:30:00Z"),
             null,
             null,
-            null, null);
+            null, null,
+            null);
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
@@ -963,6 +965,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             Instant.parse("2026-05-26T00:30:00Z"),
             Instant.parse("2026-05-26T00:10:00Z"),
             new RefundAccountResponse("카카오뱅크", "3333012345678", "가을팬"),
+            null,
             null,
             null);
     BuncheolManagementResponse response =
@@ -1175,6 +1178,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "C2C '보냈어요' 마킹 시각 — 개최자 통장 대조 우선순위 근거. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
+                            fieldWithPath("participants[].releasability")
+                                .description(
+                                    "묶음 「제외」 가능 여부. RELEASABLE | RECRUITING(모집 중이라 불가) | BEFORE_DUE(입금 기한 전) | HAS_CONFIRMED(입금확인된 슬롯 있음) | ALREADY_CLOSED. 「제외」 API 게이트와 같은 판정이라 RELEASABLE 이 아니면 버튼을 비활성하고 사유를 표기하면 된다. 미연결 참여는 null")
+                                .optional(),
                             fieldWithPath("cancelledParticipants")
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
@@ -1232,6 +1239,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].releasability")
+                                .description(
+                                    "묶음 「제외」 가능 여부. RELEASABLE | RECRUITING(모집 중이라 불가) | BEFORE_DUE(입금 기한 전) | HAS_CONFIRMED(입금확인된 슬롯 있음) | ALREADY_CLOSED. 「제외」 API 게이트와 같은 판정이라 RELEASABLE 이 아니면 버튼을 비활성하고 사유를 표기하면 된다. 미연결 참여는 null")
                                 .optional(),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),

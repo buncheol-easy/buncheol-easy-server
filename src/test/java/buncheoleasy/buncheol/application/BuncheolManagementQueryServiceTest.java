@@ -40,6 +40,8 @@ import buncheoleasy.user.domain.UserRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.Clock;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -53,11 +55,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("BuncheolManagementQueryService 단위 테스트")
 class BuncheolManagementQueryServiceTest {
+
+  private static final Instant FIXED_NOW = Instant.parse("2026-08-31T00:00:00Z");
 
   @InjectMocks private BuncheolManagementQueryService buncheolManagementQueryService;
 
@@ -69,6 +74,9 @@ class BuncheolManagementQueryServiceTest {
   @Mock private GroupMemberRepository groupMemberRepository;
   @Mock private UserRepository userRepository;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
+
+  // 「제외」 가부 판정이 현재 시각을 본다. @InjectMocks 는 Clock 을 목으로 못 만들어 @Spy 로 고정값을 넣는다.
+  @Spy private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;

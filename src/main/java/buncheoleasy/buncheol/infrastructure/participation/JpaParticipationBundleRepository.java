@@ -48,6 +48,20 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       @Param("now") Instant now);
 
+  /**
+   * 묶음 기한을 뒤로 민다 (개최자 반려). {@code b.dueAt < :dueAt} 조건이 핵심 — 없으면 반려가 기한을 <b>앞으로
+   * 당겨</b> 「제외」를 열어 버릴 수 있다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.dueAt = :dueAt, b.updatedAt = :now "
+          + "WHERE b.id = :bundleId AND b.closedAt IS NULL "
+          + "AND (b.dueAt IS NULL OR b.dueAt < :dueAt)")
+  int extendDueAt(
+      @Param("bundleId") Long bundleId,
+      @Param("dueAt") Instant dueAt,
+      @Param("now") Instant now);
+
   /** 성사 확정 시 기한 없이 열려 있던 활성 묶음에 입금 기한을 채운다. 이미 채워진 묶음은 건드리지 않는다. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

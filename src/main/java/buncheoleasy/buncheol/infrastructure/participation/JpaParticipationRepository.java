@@ -114,8 +114,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   List<Participation> findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
       ParticipationStatus status, FlowType flowType, Instant dueAt, Limit limit);
 
-  List<Participation> findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
-      ParticipationStatus status, Instant dueAt, Limit limit);
 
   boolean existsByPaybackTweetUrlAndIdNot(String paybackTweetUrl, Long id);
 

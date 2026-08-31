@@ -49,16 +49,27 @@ public class BuncheolAutoCloseService {
   }
 
   /**
-   * C2C 입금 수집 데드엔드 정리 (docs/46 §7.1-6 보완). 기한이 지났고 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건)
-   * 미성사 취소한다 — 개최자가 선택할 것(부분 확정/취소)이 없는 유일한 케이스라 자동화해도 §7.1-6(개최자 선택)과 충돌하지 않는다.
-   * 방치 시 분철이 PAYMENT_COLLECTING 에 영구 정체해 목록 노출·개최자 탈퇴 차단이 이어지는 문제를 막는다.
+   * C2C 입금 수집 데드엔드 정리 (docs/46 §7.1-6 보완). 기한이 지났고 <b>입금 흔적이 하나도 없으면</b> 미성사
+   * 취소하고, 남아 있는 미입금 슬롯도 함께 취소한다 — 개최자가 선택할 것(부분 확정/취소)이 없는 유일한 케이스라
+   * 자동화해도 §7.1-6(개최자 선택)과 충돌하지 않는다. 방치 시 분철이 PAYMENT_COLLECTING 에 영구 정체해 목록
+   * 노출·개최자 탈퇴 차단이 이어지고, 폴링 앞자리를 점유해 뒤에 온 분철까지 굶는다.
    *
-   * <p>참여자 알림은 없다 — 전원이 이미 만료/자발취소 시점에 개별 취소 안내를 받았다. 확정 참여가 있으면 CAS 가 전이하지 않고 개최자
-   * 선택을 기다린다.
+   * <p>🔴 <b>C2C 자동 만료를 끄면서(docs/70 결정 9) 판정 기준이 바뀌었다.</b> 예전에는 만료 스케줄러가 미입금
+   * 슬롯을 치워 줘서 "활성 0" 이 저절로 성립했지만 이제 그 공급원이 없다. 조건을 그대로 뒀다면 <b>아무도 입금하지
+   * 않은 분철</b>(가장 흔한 데드엔드)이 영원히 안 닫힌다. 「제외」로도 안 풀린다 — 데드엔드는 곧 개최자가 방치한
+   * 분철이라 버튼을 누를 사람이 없다.
+   *
+   * <p>확정·「보냈어요」가 하나라도 있으면 CAS 가 전이하지 않고 개최자 선택을 기다린다 — 그때는 고를 것이 있다.
    */
   @Transactional
   public boolean cancelDeadCollecting(final Long buncheolId, final Instant now) {
-    return buncheolDomainService.cancelCollectingIfEmpty(buncheolId, now);
+    if (!buncheolDomainService.cancelCollectingIfUnpaid(buncheolId, now)) {
+      return false;
+    }
+    // 예전에는 슬롯이 이미 전부 취소돼 있어 여기서 할 일이 없었다. 이제는 미입금 슬롯이 살아 있는 채로 들어오므로
+    // 함께 취소하고 알린다 — 안 하면 취소된 분철에 활성 참여가 남아 "내 참여" 화면이 계속 살아 있는 것으로 보인다.
+    finalizeAsCancelled(buncheolId, now, BuncheolCancelReason.NOT_FINALIZED);
+    return true;
   }
 
   /**

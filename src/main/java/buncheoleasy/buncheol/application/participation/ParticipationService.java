@@ -329,7 +329,7 @@ public class ParticipationService {
    * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다.
    *
    * <p>락 순서 규약: 이 경로는 분철 행(X) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
-   * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
+   * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndUnpaid}) 도 같은
    * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 뿐 아니라 C2C 도 {@code confirmPaymentPayable} 뒤에
    * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
    * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.

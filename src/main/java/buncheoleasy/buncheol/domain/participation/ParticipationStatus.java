@@ -32,4 +32,12 @@ public enum ParticipationStatus {
   public static Set<ParticipationStatus> active() {
     return ACTIVE;
   }
+
+  // 돈이 오갔거나 오갔다고 주장된 상태. 이게 하나라도 있으면 개최자에게 <b>고를 것이 있다</b>(확인·부분 확정·환불)
+  // — 자동으로 분철을 접으면 안 된다. 하나도 없으면 고를 것이 없어 데드엔드 정리 대상이다.
+  private static final Set<ParticipationStatus> PAID_OR_CLAIMED = Set.of(PAYMENT_SENT, CONFIRMED);
+
+  public static Set<ParticipationStatus> paidOrClaimed() {
+    return PAID_OR_CLAIMED;
+  }
 }

@@ -199,8 +199,17 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
   /**
-   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건) 미성사 취소한다. 확정 참여가 있으면
-   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6). {@code finalizedAt} 은 성사 확정 시각을 보존한다.
+   * C2C 데드엔드 정리 CAS: 입금 수집중인데 <b>입금 흔적이 하나도 없으면</b> 미성사 취소한다. 남아 있는 미입금 슬롯은
+   * 호출부가 cascade 로 함께 취소한다.
+   *
+   * <p>🔴 <b>판정 기준이 "활성 슬롯 0" 에서 "입금 흔적 0" 으로 바뀌었다.</b> 예전에는 입금 만료 스케줄러가 C2C
+   * 미입금 슬롯을 치워 줘서 활성이 저절로 0 이 됐지만, C2C 자동 만료를 끄면서(docs/70 결정 9) 그 공급원이 사라졌다.
+   * 조건을 그대로 두면 <b>아무도 입금하지 않은 분철</b>(가장 흔한 데드엔드)이 영원히 {@code PAYMENT_COLLECTING} 에
+   * 정체하고, 폴링 앞자리를 영구 점유해 뒤에 온 분철까지 굶긴다. 「제외」로도 안 풀린다 — 데드엔드의 정의가 곧
+   * <b>개최자가 방치한 분철</b>이라 아무도 버튼을 누르지 않는다.
+   *
+   * <p>입금확인(CONFIRMED)이나 「보냈어요」(PAYMENT_SENT)가 <b>하나라도</b> 있으면 전이하지 않는다 — 그때는 개최자가
+   * 확인·부분 확정·환불 중에 <b>고를 것이 있다</b>(docs/46 §7.1-6). 아무도 보내지 않았다면 고를 것이 없다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
@@ -208,11 +217,11 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "SET b.status = :cancelledStatus, b.updatedAt = :now "
           + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
           + "AND NOT EXISTS (SELECT p FROM Participation p "
-          + "  WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)")
-  int cancelIfCollectingAndEmpty(
+          + "  WHERE p.buncheolId = b.id AND p.status IN :paidStatuses)")
+  int cancelIfCollectingAndUnpaid(
       @Param("buncheolId") Long buncheolId,
       @Param("collectingStatus") BuncheolStatus collectingStatus,
-      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
+      @Param("paidStatuses") Collection<ParticipationStatus> paidStatuses,
       @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 
@@ -223,7 +232,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    *
    * <p>⚠️ 락 순서는 분철 행 → 참여 행이다. C2C 입금확인(참여 행 → {@link #confirmIfAllCollected} 의 분철 행)과 역순이라,
    * 위 동시 실행이 실제로 겹치면 정합성은 지켜지지만 실패 모드가 409 가 아니라 InnoDB 데드락 롤백이 될 수 있다(레포에 재시도 핸들러 없음).
-   * 같은 형태가 {@link #cancelIfCollectingAndEmpty} 에 이미 있어 새로 생긴 리스크 클래스는 아니다.
+   * 같은 형태가 {@link #cancelIfCollectingAndUnpaid} 에 이미 있어 새로 생긴 리스크 클래스는 아니다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

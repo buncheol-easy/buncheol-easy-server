@@ -118,12 +118,13 @@ public interface BuncheolRepository {
   List<Long> findCollectingIdsPastPaymentDue(Instant now, int limit);
 
   /**
-   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건) 미성사 취소한다. 확정 참여가 있으면
+   * C2C 데드엔드 정리 CAS: 입금 수집중인데 <b>입금 흔적(확정·「보냈어요」)이 하나도 없으면</b> 미성사 취소한다.
+   * 남은 미입금 슬롯은 호출부가 cascade 로 함께 취소한다. 입금 흔적이 하나라도 있으면
    * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6).
    *
    * @return 갱신된 행 수 (0 이면 활성 참여가 남았거나 입금 수집중이 아님)
    */
-  int cancelIfCollectingAndEmpty(Long buncheolId, Instant now);
+  int cancelIfCollectingAndUnpaid(Long buncheolId, Instant now);
 
   /**
    * C2C 입금 수집중 분철의 개최자 취소 CAS (PAYMENT_COLLECTING → HOST_CANCELLED). 입금이 확인된(CONFIRMED) 참여가 한 건도

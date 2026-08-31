@@ -182,11 +182,11 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int cancelIfCollectingAndEmpty(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.cancelIfCollectingAndEmpty(
+  public int cancelIfCollectingAndUnpaid(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.cancelIfCollectingAndUnpaid(
         buncheolId,
         BuncheolStatus.PAYMENT_COLLECTING,
-        ParticipationStatus.active(),
+        ParticipationStatus.paidOrClaimed(),
         BuncheolStatus.CANCELLED,
         now);
   }

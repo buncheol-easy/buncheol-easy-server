@@ -102,6 +102,11 @@ public class Participation extends TimestampedEntity {
    *
    * <p>⚠️ 쓰기는 raw INSERT 가 전담하므로 <b>JPA 가 이 칸을 건드리면 안 된다</b>. 그래서 {@code insertable=false,
    * updatable=false} 다.
+   *
+   * <p>🔴 <b>조회로 읽은 엔티티에서만 유효하다.</b> {@code saveIfRecruiting}/{@code saveIfCollecting} 직후의
+   * 인스턴스는 어댑터가 리플렉션으로 {@code id} 만 채운 <b>비관리 객체</b>라 이 게터가 {@code null} 이다(DB 행은
+   * 정상). 옆에 {@code Buncheol#getFlowType()} 이라는 동명 게터가 있어 더 헷갈리니, 플로우 판정이 필요하면
+   * <b>분철에서 읽어라</b>. 이 칸의 존재 이유는 만료 폴링이 조인 없이 걸러내기 위한 것 하나뿐이다.
    */
   @Enumerated(EnumType.STRING)
   @Column(name = "flow_type", length = 10, insertable = false, updatable = false)

@@ -259,11 +259,15 @@ class BuncheolManagementQueryServiceTest {
       // 남은 슬롯이 배송비를 진다 — 이걸 안 하면 개최자가 택배비 3,000 을 자기 돈으로 문다.
       BuncheolManagementParticipantResponse active = response.participants().get(0);
       assertThat(active.participationId()).isEqualTo(233L);
+      // 묶음 단위 조작(「제외」 등)의 주소다 — null 로 나가면 화면이 슬롯 경로로 폴백해 버린다.
+      assertThat(active.bundleId()).isEqualTo(sharedBundleId);
+      assertThat(active.participantId()).isEqualTo(PARTICIPANT_USER);
       assertThat(active.shippingFee()).isEqualTo(3_000L);
       assertThat(active.amount()).isEqualTo(13_000L);
       // 취소분은 배송비를 잃는다 — 택배가 계속 나가므로 그만큼은 환불 대상이 아니다.
       BuncheolManagementParticipantResponse dead = response.cancelledParticipants().get(0);
       assertThat(dead.participationId()).isEqualTo(232L);
+      assertThat(dead.bundleId()).isEqualTo(sharedBundleId);
       assertThat(dead.shippingFee()).isZero();
       assertThat(dead.amount()).isEqualTo(10_000L);
     }

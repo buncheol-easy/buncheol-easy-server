@@ -988,6 +988,8 @@ class BuncheolControllerTest {
       BuncheolManagementParticipantResponse confirmed =
           new BuncheolManagementParticipantResponse(
               601L,
+              9001L,
+              9L,
               "유진팬",
               101L,
               "안유진",
@@ -1009,6 +1011,8 @@ class BuncheolControllerTest {
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
+              9001L,
+              9L,
               "레이팬",
               102L,
               "레이",

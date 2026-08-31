@@ -170,6 +170,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
     MyParticipationResponse confirmed =
         new MyParticipationResponse(
             500L,
+            9001L,
             10L,
             "뉴진스 1집 분철",
             5,
@@ -206,6 +207,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
+            9001L,
             20L,
             "에스파 시즌그리팅 분철",
             4,
@@ -251,6 +253,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .responseSchema(Schema.schema("MyParticipationListResponse"))
                         .responseFields(
                             fieldWithPath("[].participationId").description("참여 ID"),
+                            fieldWithPath("[].bundleId")
+                                .description("이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null")
+                                .optional(),
                             fieldWithPath("[].buncheolId").description("분철 ID"),
                             fieldWithPath("[].buncheolTitle").description("분철 제목"),
                             fieldWithPath("[].buncheolMemberCount").description("분철에 포함된 멤버 슬롯 수"),
@@ -382,6 +387,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
     ParticipationDetailResponse detail =
         new ParticipationDetailResponse(
             500L,
+            9001L,
             10L,
             "뉴진스 1집 분철",
             "민지",
@@ -422,6 +428,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .responseSchema(Schema.schema("ParticipationDetailResponse"))
                         .responseFields(
                             fieldWithPath("participationId").description("참여 ID"),
+                            fieldWithPath("bundleId")
+                                .description("이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null")
+                                .optional(),
                             fieldWithPath("buncheolId").description("분철 ID"),
                             fieldWithPath("buncheolTitle").description("분철 제목"),
                             fieldWithPath("memberName").description("참여한 멤버 이름").optional(),

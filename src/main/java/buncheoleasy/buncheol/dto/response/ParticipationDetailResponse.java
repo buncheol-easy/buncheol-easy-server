@@ -11,11 +11,15 @@ import java.time.Instant;
  * (docs/46 §3-5·§4.7-B1). {@code payback} 은 오픈 이벤트 배송비 환급(배송비 돌려받기) 상태로, 비대상이어도 status=NONE 으로 항상
  * 내려준다. {@code openChatUrl} 은 C2C 개최자 소통 채널(없으면 null).
  *
+ * <p>{@code bundleId} 는 이 참여가 속한 묶음(이체·배송비·택배의 단위)이며 묶음 단위 API 의 주소다. 미연결 참여는 {@code
+ * null} 일 수 있다.
+ *
  * <p>{@code cancellability} 는 자발 취소 가능 여부와 사유로, 취소 API 게이트와 같은 판정({@link
  * ParticipationCancellability#of})을 그대로 내려준다 (docs/56 S-1).
  */
 public record ParticipationDetailResponse(
     Long participationId,
+    Long bundleId,
     Long buncheolId,
     String buncheolTitle,
     String memberName,

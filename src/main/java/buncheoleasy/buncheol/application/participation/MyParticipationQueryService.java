@@ -182,6 +182,7 @@ public class MyParticipationQueryService {
         paymentPending && refundAccount != null ? refundAccount.holder() : null;
     return new MyParticipationResponse(
         participation.getId(),
+        participation.getBundleId(),
         participation.getBuncheolId(),
         buncheol.getTitle(),
         slotCount,

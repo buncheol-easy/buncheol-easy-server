@@ -90,6 +90,7 @@ public class ParticipationDetailQueryService {
 
     return new ParticipationDetailResponse(
         participation.getId(),
+        participation.getBundleId(),
         buncheol.getId(),
         buncheol.getTitle(),
         memberName,

@@ -908,6 +908,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
     BuncheolManagementParticipantResponse confirmed =
         new BuncheolManagementParticipantResponse(
             601L,
+            9001L,
+            9L,
             "유진팬",
             101L,
             "안유진",
@@ -929,6 +931,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
+            9001L,
+            9L,
             "레이팬",
             102L,
             "레이",
@@ -943,6 +947,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
+            9001L,
+            9L,
             "가을팬",
             103L,
             "가을",
@@ -1088,6 +1094,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("활성 참여자 배열 (AWAITING_PAYMENT + CONFIRMED)"),
                             fieldWithPath("participants[].participationId")
                                 .description("참여 ID (개최자 입금확인 API 호출에 사용)"),
+                            fieldWithPath("participants[].bundleId")
+                                .description("이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null")
+                                .optional(),
+                            fieldWithPath("participants[].participantId")
+                                .description("참여자 ID. 같은 사람의 여러 묶음(추가 모집)을 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("participants[].participantNickname")
                                 .description("참여자 닉네임. 조회 불가 시 null")
                                 .optional(),
@@ -1162,6 +1173,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
                                 .description("참여 ID"),
+                            fieldWithPath("cancelledParticipants[].bundleId")
+                                .description("이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null")
+                                .optional(),
+                            fieldWithPath("cancelledParticipants[].participantId")
+                                .description("참여자 ID. 같은 사람의 여러 묶음(추가 모집)을 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("cancelledParticipants[].participantNickname")
                                 .description("참여자 닉네임. 조회 불가 시 null")
                                 .optional(),

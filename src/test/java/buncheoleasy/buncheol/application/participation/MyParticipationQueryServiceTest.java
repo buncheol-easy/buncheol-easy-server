@@ -84,17 +84,27 @@ class MyParticipationQueryServiceTest {
         .thenAnswer(
             invocation -> {
               java.util.Collection<Participation> participations = invocation.getArgument(0);
-              java.util.Map<Long, ParticipationBundle> byId = new java.util.HashMap<>();
+              // 묶음 배송비 = 그 묶음 슬롯들에 저장된 배송비의 합 (묶음당 1회만 부과되므로 실제와 같다).
+              // ⚠️ getId() 를 채워야 한다 — 비워 두면 배송비 귀속 판정이 조용히 꺼져 회귀를 놓친다.
+              java.util.Map<Long, Long> feeByBundleId = new java.util.HashMap<>();
               for (Participation participation : participations) {
                 if (participation.getBundleId() == null) {
                   continue;
                 }
-                ParticipationBundle bundle = mock(ParticipationBundle.class);
-                lenient()
-                    .when(bundle.getRefundAccount())
-                    .thenReturn(RefundAccount.of("국민", "12345678", "홍길동"));
-                byId.put(participation.getBundleId(), bundle);
+                feeByBundleId.merge(
+                    participation.getBundleId(), participation.getShippingFee(), Long::sum);
               }
+              java.util.Map<Long, ParticipationBundle> byId = new java.util.HashMap<>();
+              feeByBundleId.forEach(
+                  (bundleId, fee) -> {
+                    ParticipationBundle bundle = mock(ParticipationBundle.class);
+                    lenient().when(bundle.getId()).thenReturn(bundleId);
+                    lenient().when(bundle.getShippingFee()).thenReturn(fee);
+                    lenient()
+                        .when(bundle.getRefundAccount())
+                        .thenReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+                    byId.put(bundleId, bundle);
+                  });
               return byId;
             });
   }
@@ -112,6 +122,55 @@ class MyParticipationQueryServiceTest {
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
 
       assertThat(result).isEmpty();
+    }
+
+    // 🔴 staging 재현 그대로 (232 취소 → 233). 참여자가 <b>직접 보고 이체하는 금액</b>이라
+    // 개최 관리보다 더 강하게 회귀를 막아야 한다.
+    @Test
+    void 배송비를_진_슬롯이_취소되면_남은_슬롯이_배송비를_이어받는다() {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Buncheol buncheol = buncheol(10L, "C2C 다슬롯 분철", deadline, BuncheolStatus.RECRUITING);
+      List<BuncheolMember> slots =
+          List.of(buncheolMember(101L, 10L, 1001L), buncheolMember(102L, 10L, 1002L));
+      final Long sharedBundleId = 9999L;
+
+      // 232 — 배송비를 지고 있던 첫 슬롯. 취소됐다.
+      Participation cancelled =
+          participation(
+              232L, 10L, 101L, 10_000L, ParticipationStatus.CANCELLED, DUE_AT, null, null);
+      setField(cancelled, "shippingFee", 3_000L);
+      setField(cancelled, "bundleId", sharedBundleId);
+      setField(cancelled, "cancelledAt", DUE_AT);
+      // 233 — 같은 묶음의 남은 슬롯. 저장된 배송비는 0 이다.
+      Participation remaining =
+          participation(
+              233L, 10L, 102L, 10_000L, ParticipationStatus.APPLIED, DUE_AT, null, null);
+      setField(remaining, "bundleId", sharedBundleId);
+
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(remaining, cancelled));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L))).willReturn(slots);
+      given(groupMemberRepository.findAllByIds(List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "해린"), groupMember(1002L, "민지")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByParticipationIds(List.of(233L, 232L)))
+          .willReturn(List.of());
+
+      List<MyParticipationResponse> result =
+          myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+      MyParticipationResponse active =
+          result.stream().filter(r -> r.participationId().equals(233L)).findFirst().orElseThrow();
+      // 남은 슬롯이 배송비를 진다 — 이걸 안 하면 참여자가 10,000 만 보내고 개최자가 택배비를 문다.
+      assertThat(active.shippingFee()).isEqualTo(3_000L);
+      assertThat(active.amount()).isEqualTo(13_000L);
+
+      MyParticipationResponse dead =
+          result.stream().filter(r -> r.participationId().equals(232L)).findFirst().orElseThrow();
+      assertThat(dead.shippingFee()).isZero();
+      assertThat(dead.amount()).isEqualTo(10_000L);
     }
 
     @Test

@@ -66,9 +66,18 @@ public class JpaAdminPaymentQueryRepositoryAdapter implements AdminPaymentQueryR
                 ParticipationStatus.CONFIRMED,
                 ParticipationStatus.CANCELLED)
             .getFirst();
+    // 배송비는 묶음당 1회다. 슬롯별로 더하면 배송비를 지던 슬롯이 취소된 묶음에서 그 1회분이 통째로 빠져
+    // 목록 행(귀속 판정)과 합계가 갈린다 — 묶음 몫을 따로 구해 더한다.
+    final long pendingBundleShippingFee =
+        jpaAdminPaymentQueryRepository.sumPendingBundleShippingFee(
+            ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT);
     return new AdminPaymentSummary(
-        toLong(row[0]), toLong(row[1]), toLong(row[2]), toLong(row[3]), toLong(row[4]),
-        toLong(row[5]));
+        toLong(row[0]),
+        toLong(row[1]),
+        toLong(row[2]),
+        toLong(row[3]),
+        toLong(row[4]),
+        toLong(row[5]) + pendingBundleShippingFee);
   }
 
   // SELECT 절 순서(p, b, g, u, gm, d, sa)와 일치해야 한다.

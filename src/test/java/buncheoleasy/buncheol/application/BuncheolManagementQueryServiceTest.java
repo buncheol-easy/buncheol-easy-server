@@ -92,15 +92,25 @@ class BuncheolManagementQueryServiceTest {
         .thenAnswer(
             invocation -> {
               Collection<Participation> participations = invocation.getArgument(0);
-              Map<Long, ParticipationBundle> byId = new HashMap<>();
+              // 묶음 배송비 = 그 묶음 슬롯들에 저장된 배송비의 합 (묶음당 1회만 부과되므로 실제와 같다).
+              // ⚠️ getId() 를 채워야 한다 — 비워 두면 배송비 귀속 판정이 조용히 꺼져 회귀를 놓친다.
+              Map<Long, Long> feeByBundleId = new HashMap<>();
               for (Participation participation : participations) {
                 if (participation.getBundleId() == null) {
                   continue;
                 }
-                ParticipationBundle bundle = mock(ParticipationBundle.class);
-                lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
-                byId.put(participation.getBundleId(), bundle);
+                feeByBundleId.merge(
+                    participation.getBundleId(), participation.getShippingFee(), Long::sum);
               }
+              Map<Long, ParticipationBundle> byId = new HashMap<>();
+              feeByBundleId.forEach(
+                  (bundleId, fee) -> {
+                    ParticipationBundle bundle = mock(ParticipationBundle.class);
+                    lenient().when(bundle.getId()).thenReturn(bundleId);
+                    lenient().when(bundle.getShippingFee()).thenReturn(fee);
+                    lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+                    byId.put(bundleId, bundle);
+                  });
               return byId;
             });
   }
@@ -211,6 +221,51 @@ class BuncheolManagementQueryServiceTest {
       assertThat(participant.depositorName()).isEqualTo("홍길동");
       assertThat(participant.refundAccount()).isNull();
       assertThat(participant.delivery()).isNull();
+    }
+
+    // 🔴 staging 재현 그대로 (분철 104 · 묶음 141 · 참여 232 취소 → 233).
+    // 이 결함은 도메인 규칙이 아니라 <b>배선</b>에 있었다 — 쿼리 서비스가 묶음 슬롯을 빠짐없이 넘기는지가 정확성의 전부다.
+    @Test
+    void 배송비를_진_슬롯이_취소되면_남은_슬롯이_배송비를_이어받는다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L), buncheolMember(102L, 1002L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "장원영")));
+
+      final Long sharedBundleId = 9999L;
+      // 232 — 배송비를 진 첫 슬롯. 취소됐다.
+      Participation cancelled =
+          participation(232L, 101L, PARTICIPANT_USER, 10_000L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "bundleId", sharedBundleId);
+      setField(cancelled, "shippingFee", 3_000L);
+      setField(cancelled, "cancelledAt", CONFIRMED_AT);
+      // 233 — 같은 묶음의 남은 슬롯. 저장된 배송비는 0 이다.
+      Participation remaining =
+          participation(233L, 102L, PARTICIPANT_USER, 10_000L, ParticipationStatus.APPLIED);
+      setField(remaining, "bundleId", sharedBundleId);
+
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(remaining));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      // 남은 슬롯이 배송비를 진다 — 이걸 안 하면 개최자가 택배비 3,000 을 자기 돈으로 문다.
+      BuncheolManagementParticipantResponse active = response.participants().get(0);
+      assertThat(active.participationId()).isEqualTo(233L);
+      assertThat(active.shippingFee()).isEqualTo(3_000L);
+      assertThat(active.amount()).isEqualTo(13_000L);
+      // 취소분은 배송비를 잃는다 — 택배가 계속 나가므로 그만큼은 환불 대상이 아니다.
+      BuncheolManagementParticipantResponse dead = response.cancelledParticipants().get(0);
+      assertThat(dead.participationId()).isEqualTo(232L);
+      assertThat(dead.shippingFee()).isZero();
+      assertThat(dead.amount()).isEqualTo(10_000L);
     }
 
     @Test

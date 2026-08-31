@@ -299,13 +299,68 @@ class ParticipationServiceTest {
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
+    // 🔴 LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있다. 그냥 흘려보내면 2번째 INSERT 가 유니크에 막혀
+    // "이미 참여했다" 로 보이고, 사용자는 왜 여러 개를 못 잡는지 알 수 없다. 요청 단계에서 사유를 드러낸다.
     @Test
-    void 멤버_지정이_없으면_저장하지_않고_예외가_발생한다() {
-      // DTO @NotNull 검증과 별개로 서비스 방어 검증을 확인한다.
+    void LEGACY_분철에는_다중_슬롯_신청을_열지_않는다() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.isC2c()).willReturn(false);
 
+      ParticipateRequest multi =
+          new ParticipateRequest(null, List.of(101L, 102L), SHIPPING_ADDRESS_ID, null, null);
+
+      assertThatThrownBy(() -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, multi))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    // 🔴 추가 모집(성사 확정 후)은 슬롯마다 새 묶음·배송비 재부과·개별 24h 기한이라 별개 거래다. 그런데
+    // 응답은 합산 1건으로 접히므로, 열어 두면 참여자가 안내받은 금액을 한 번에 보내도 어느 묶음에도 안 맞는다.
+    @Test
+    void 추가_모집_구간에는_다중_슬롯_신청을_열지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+
+      ParticipateRequest multi =
+          new ParticipateRequest(null, List.of(101L, 102L), SHIPPING_ADDRESS_ID, null, null);
+
+      assertThatThrownBy(() -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, multi))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+    }
+
+    // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 재사용할 수 없다.
+    @Test
+    void 다중_슬롯에는_참여_코드를_쓸_수_없다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+
+      ParticipateRequest multi =
+          new ParticipateRequest(null, List.of(101L, 102L), SHIPPING_ADDRESS_ID, null, "ABCD2345");
+
+      assertThatThrownBy(() -> participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, multi))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+
+    @Test
+    void 멤버_지정이_없으면_저장하지_않고_예외가_발생한다() {
+      // DTO 검증(@AssertTrue)과 별개로 서비스 방어 검증을 확인한다 — 컨트롤러를 거치지 않는 직접 호출용
+      // 최후 가드다. 슬롯 목록이 비면 분철을 읽기도 전에 끊으므로 여기서는 스텁이 필요 없다.
       ParticipateRequest emptyRequest = new ParticipateRequest(null, SHIPPING_ADDRESS_ID);
 
       assertThatThrownBy(

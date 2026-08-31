@@ -109,7 +109,7 @@ class ParticipationControllerTest {
     void 참여_신청에_성공하면_201을_반환한다() throws Exception {
       Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
       ParticipateResult result =
-          new ParticipateResult(
+          ParticipateResult.single(
               PARTICIPATION_ID, 53_000L, dueAt, BankAccount.of("국민은행", "98765432", "개최자"));
 
       given(
@@ -133,7 +133,8 @@ class ParticipationControllerTest {
 
     @Test
     void 멤버_슬롯을_지정하지_않으면_400을_반환한다() throws Exception {
-      // 참여 1건 = 멤버 슬롯 1개(단일 선택 정책). buncheolMemberId 는 @NotNull 검증에서 걸러진다.
+      // buncheolMemberId 와 buncheolMemberIds 를 둘 다 안 보낸 경우. 배열 도입으로 단수 필드의
+      // @NotNull 이 빠졌으므로 ParticipateRequest#isSlotSpecified 의 @AssertTrue 가 대신 걸러낸다.
       String missingMemberJson =
           """
           {

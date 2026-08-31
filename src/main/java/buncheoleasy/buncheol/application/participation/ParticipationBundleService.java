@@ -98,6 +98,60 @@ public class ParticipationBundleService {
     return stored != null && !stored.isBefore(now.truncatedTo(ChronoUnit.SECONDS));
   }
 
+  /**
+   * 참여자가 묶음을 한 번에 「보냈어요」로 표시한다 (docs/71 §1-2).
+   *
+   * <p>묶음은 <b>이체 1회</b>의 단위다. 슬롯마다 누르게 하면 ① 참여자가 한 번 보낸 돈을 여러 번 신고하게 되고
+   * ② 중간에 멈추면 같은 묶음의 슬롯 상태가 갈린다 — 「제외」·입금확인이 전부 "묶음 안 슬롯은 상태가 갈리지
+   * 않는다" 는 전제 위에 서 있으므로 그 전제를 여기서 지켜야 한다.
+   *
+   * <p><b>기한 검사가 없다.</b> 기한이 지난 뒤에도 마킹은 가능해야 한다 — 늦게 보낸 사람도 보냈다는 사실을
+   * 남길 수 있어야 개최자가 확인하고, 그게 「제외」가 기한을 기다리는 이유이기도 하다.
+   *
+   * <p>멱등하다. 이미 전부 마킹됐으면 이벤트 없이 조용히 끝난다 — 더블탭으로 개최자 알림이 중복되면 안 된다.
+   */
+  @Transactional
+  public List<Long> markPaymentSent(final Long participantId, final Long bundleId) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle =
+        participationBundleDomainService
+            .findById(bundleId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.BUNDLE_NOT_FOUND));
+    // 🔴 묶음 id 는 AUTO_INCREMENT 라 추측 가능하다 — 소유자 검증이 필수다.
+    if (!participantId.equals(bundle.getParticipantId())) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
+    }
+    Buncheol buncheol = buncheolDomainService.getBuncheol(bundle.getBuncheolId());
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    int marked = participationRepository.markBundlePaymentSent(bundleId, now);
+    if (marked == 0) {
+      // 멱등: 이미 전부 마킹됐으면 성공으로 끝낸다. 그게 아니면(입금 대기 슬롯이 아예 없음) 상태 위반이다.
+      List<Long> alreadySent = markedSlots(bundleId, ParticipationStatus.PAYMENT_SENT, null);
+      if (alreadySent.isEmpty()) {
+        throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
+      }
+      return alreadySent;
+    }
+
+    // 「제외」와 같은 이유로 CAS 이후에 뽑는다 — 이 호출이 실제로 마킹한 슬롯만 알림에 실어야 한다.
+    List<Long> markedIds = markedSlots(bundleId, ParticipationStatus.PAYMENT_SENT, now);
+    eventPublisher.publishEvent(new BundlePaymentSentEvent(bundleId, markedIds));
+    return markedIds;
+  }
+
+  /** {@code paymentSentAt} 이 {@code at} 인 슬롯. {@code at} 이 null 이면 상태만 본다. */
+  private List<Long> markedSlots(
+      final Long bundleId, final ParticipationStatus status, final Instant at) {
+    return participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+        .filter(p -> p.getStatus() == status)
+        .filter(p -> at == null || at.equals(p.getPaymentSentAt()))
+        .map(Participation::getId)
+        .toList();
+  }
+
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */
   private static void requireReleasable(final BundleReleasability releasability) {
     ErrorCode errorCode =

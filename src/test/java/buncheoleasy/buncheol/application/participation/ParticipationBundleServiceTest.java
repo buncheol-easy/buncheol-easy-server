@@ -229,4 +229,80 @@ class ParticipationBundleServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining(ErrorCode.BUNDLE_NOT_FOUND.getMessage());
   }
+  @org.junit.jupiter.api.Nested
+  @DisplayName("markPaymentSent — 참여자 묶음 「보냈어요」")
+  class MarkPaymentSentTest {
+
+    private static final Long PARTICIPANT_ID = 10L;
+
+    @Test
+    @DisplayName("실제로 마킹된 슬롯만 돌려주고 알린다")
+    void marksAndReturnsActuallyMarked() {
+      stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
+      given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(2);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(
+              List.of(
+                  sentSlot(232L, NOW),
+                  sentSlot(233L, NOW),
+                  // 다른 호출에서 이미 마킹된 슬롯 — 이번 알림에 섞이면 안 된다.
+                  sentSlot(234L, NOW.minusSeconds(600))));
+
+      List<Long> marked = participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID);
+
+      assertThat(marked).containsExactly(232L, 233L);
+      ArgumentCaptor<BundlePaymentSentEvent> captor =
+          ArgumentCaptor.forClass(BundlePaymentSentEvent.class);
+      then(eventPublisher).should().publishEvent(captor.capture());
+      assertThat(captor.getValue().markedParticipationIds()).containsExactly(232L, 233L);
+    }
+
+    // 🔴 묶음 id 는 AUTO_INCREMENT 라 추측 가능하다 — 남의 묶음을 마킹할 수 없어야 한다.
+    @Test
+    @DisplayName("남의 묶음은 마킹할 수 없다")
+    void rejectsOtherParticipant() {
+      given(participationBundleDomainService.findById(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(NOW.plusSeconds(3600))));
+
+      assertThatThrownBy(() -> participationBundleService.markPaymentSent(999L, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(ErrorCode.PARTICIPATION_NO_PERMISSION.getMessage());
+      then(participationRepository).should(never()).markBundlePaymentSent(anyLong(), any());
+    }
+
+    // 더블탭으로 개최자 알림이 두 번 가면 안 된다.
+    @Test
+    @DisplayName("이미 전부 마킹됐으면 멱등 성공하고 알림을 다시 보내지 않는다")
+    void idempotentWhenAlreadyMarked() {
+      stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
+      given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(0);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(List.of(sentSlot(232L, NOW.minusSeconds(600))));
+
+      assertThat(participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))
+          .containsExactly(232L);
+      then(eventPublisher).should(never()).publishEvent(any(BundlePaymentSentEvent.class));
+    }
+
+    @Test
+    @DisplayName("마킹할 슬롯이 하나도 없으면 상태 위반으로 막는다")
+    void rejectsWhenNothingToMark() {
+      stubBundleAndBuncheol(NOW.plusSeconds(3600), c2cBuncheol(HOST_ID));
+      given(participationRepository.markBundlePaymentSent(BUNDLE_ID, NOW)).willReturn(0);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID))).willReturn(List.of());
+
+      assertThatThrownBy(
+              () -> participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(
+              ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED.getMessage());
+    }
+
+    private Participation sentSlot(final long id, final Instant sentAt) {
+      Participation participation = slot(id, ParticipationStatus.PAYMENT_SENT, null, null);
+      setField(participation, "paymentSentAt", sentAt);
+      return participation;
+    }
+  }
+
 }

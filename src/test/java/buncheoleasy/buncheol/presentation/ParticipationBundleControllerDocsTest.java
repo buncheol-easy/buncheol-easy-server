@@ -91,4 +91,55 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                         .responseSchema(Schema.schema("BundleReleaseResponse"))
                         .build())));
   }
+  @Test
+  void 참여자_묶음_보냈어요_마킹() throws Exception {
+    given(participationBundleService.markPaymentSent(eq(USER_ID), eq(BUNDLE_ID)))
+        .willReturn(List.of(232L, 233L));
+
+    mockMvc
+        .perform(
+            post("/v1/participation-bundles/{bundleId}/payment-sent", BUNDLE_ID).with(userAuth()))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "participation-bundles-payment-sent",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("ParticipationBundle")
+                        .summary("참여자 묶음 「보냈어요」 마킹")
+                        .description(
+                            """
+                            참여자가 묶음의 입금 대기 슬롯을 **한 번에** 「보냈어요」로 표시한다
+                            (`AWAITING_PAYMENT` → `PAYMENT_SENT`).
+
+                            묶음은 **이체 1회**의 단위다. 슬롯마다 누르게 하면 한 번 보낸 돈을 여러 번 신고하게
+                            되고, 중간에 멈추면 같은 묶음의 슬롯 상태가 갈린다 — 「제외」·입금확인이 모두
+                            "묶음 안 슬롯은 갈리지 않는다" 를 전제로 서 있다.
+
+                            **입금 기한이 지난 뒤에도 열려 있다.** 늦게 보낸 사람도 보냈다는 사실을 남길 수
+                            있어야 개최자가 확인한다. 이미 마킹된 묶음의 재요청은 **멱등 성공**한다.
+
+                            개최자에게는 **묶음 1통**으로 알림이 간다(멤버명 나열·금액 합산).
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-114` (`BUNDLE_NOT_FOUND`) | 묶음 없음 |
+                            | 403 | `BCH-069` (`PARTICIPATION_NO_PERMISSION`) | 본인 묶음이 아님 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
+                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | 마킹할 입금 대기 슬롯이 없음 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("bundleId").description("참여 묶음 ID"))
+                        .responseFields(
+                            fieldWithPath("bundleId")
+                                .type(JsonFieldType.NUMBER)
+                                .description("마킹한 묶음 ID"),
+                            fieldWithPath("markedParticipationIds")
+                                .type(JsonFieldType.ARRAY)
+                                .description("실제로 마킹된 참여 ID 목록"))
+                        .responseSchema(Schema.schema("BundlePaymentSentResponse"))
+                        .build())));
+  }
+
 }

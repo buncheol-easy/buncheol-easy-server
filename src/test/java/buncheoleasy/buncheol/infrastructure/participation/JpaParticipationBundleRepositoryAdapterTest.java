@@ -390,6 +390,60 @@ class JpaParticipationBundleRepositoryAdapterTest {
         "SELECT id FROM participations WHERE buncheol_member_id = ?", Long.class, member.getId());
   }
   @Nested
+  @DisplayName("markBundlePaymentSent — 묶음 단위 「보냈어요」")
+  class MarkBundlePaymentSentTest {
+
+    @Test
+    @DisplayName("묶음의 입금 대기 슬롯을 한 번에 마킹한다")
+    void 입금_대기_슬롯을_한_번에_마킹한다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      int marked = participationRepository.markBundlePaymentSent(bundleId, Instant.now());
+
+      assertThat(marked).isEqualTo(2);
+      assertThat(statusCount(bundleId, "PAYMENT_SENT")).isEqualTo(2);
+    }
+
+    // 🔴 기한이 지난 뒤에도 열려 있어야 한다 — 늦게 보낸 사람도 보냈다는 사실을 남길 수 있어야 개최자가 확인한다.
+    @Test
+    @DisplayName("입금 기한이 지나도 마킹할 수 있다")
+    void 기한이_지나도_마킹할_수_있다() {
+      Long bundleId = openBundle(Instant.now().minusSeconds(3600));
+      insertC2cParticipation(bundleId, "AWAITING_PAYMENT");
+      entityManager.flush();
+      entityManager.clear();
+
+      assertThat(participationRepository.markBundlePaymentSent(bundleId, Instant.now()))
+          .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("이미 마킹됐거나 확정된 슬롯은 건드리지 않는다")
+    void 이미_마킹됐거나_확정된_슬롯은_건드리지_않는다() {
+      Long bundleId = openBundle(Instant.now().plusSeconds(3600));
+      insertC2cParticipation(bundleId, "PAYMENT_SENT");
+      insertC2cParticipation(bundleId, "CONFIRMED");
+      entityManager.flush();
+      entityManager.clear();
+
+      assertThat(participationRepository.markBundlePaymentSent(bundleId, Instant.now())).isZero();
+      assertThat(statusCount(bundleId, "CONFIRMED")).isEqualTo(1);
+    }
+
+    private int statusCount(final Long bundleId, final String status) {
+      return jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM participations WHERE bundle_id = ? AND status = ?",
+          Integer.class,
+          bundleId,
+          status);
+    }
+  }
+
+  @Nested
   @DisplayName("extendDueAt — 개최자 반려 시 묶음 기한 연장")
   class ExtendDueAtTest {
 

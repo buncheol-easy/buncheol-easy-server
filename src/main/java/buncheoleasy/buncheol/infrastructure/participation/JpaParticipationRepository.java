@@ -241,6 +241,27 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("now") Instant now);
 
   /**
+   * 묶음 단위 「보냈어요」 CAS — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다.
+   *
+   * <p>🔴 <b>기한 검사가 없다.</b> 기한이 지난 뒤에도 마킹은 가능해야 한다 — 기한 직전 입금을 보호하는 것이
+   * 이 기능의 목적이고, 늦게 보낸 사람도 자기가 보냈다는 사실을 남길 수 있어야 개최자가 확인한다.
+   *
+   * <p>묶음이 닫혔는지는 조건에 넣지 않는다. 닫힌 묶음에는 활성 슬롯이 없으므로 0행이 되어 자연히 막힌다 —
+   * 조건을 늘리는 대신 이미 성립하는 불변식에 기댄다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :sentStatus, p.paymentSentAt = :now, "
+          + "    p.paymentRejectedAt = NULL, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status = :awaitingStatus")
+  int markBundlePaymentSent(
+      @Param("bundleId") Long bundleId,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("sentStatus") ParticipationStatus sentStatus,
+      @Param("now") Instant now);
+
+  /**
    * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT 복귀). 참여자 철회(기한 유지)와 개최자 반려(기한 연장 — docs/46
    * §4.5)가 공용하며, {@code paymentSentAt} 은 분쟁 증거로 보존한다.
    *

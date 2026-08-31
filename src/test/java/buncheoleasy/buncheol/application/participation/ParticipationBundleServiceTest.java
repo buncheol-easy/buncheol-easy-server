@@ -40,7 +40,9 @@ import org.springframework.context.ApplicationEventPublisher;
 @DisplayName("ParticipationBundleService — 개최자 「제외」")
 class ParticipationBundleServiceTest {
 
-  private static final Instant NOW = Instant.parse("2026-08-31T12:00:00Z");
+  // 실제 운영은 나노초를 가진 시각을 넘긴다 — 초 단위로 떨어지는 값으로 테스트하면 잘림 문제가 안 드러난다.
+  private static final Instant NOW_WITH_NANOS = Instant.parse("2026-08-31T12:00:00.123456789Z");
+  private static final Instant NOW = NOW_WITH_NANOS;
   private static final Long HOST_ID = 1L;
   private static final Long OTHER_HOST_ID = 999L;
   private static final Long BUNDLE_ID = 141L;
@@ -120,6 +122,29 @@ class ParticipationBundleServiceTest {
         ArgumentCaptor.forClass(BundleReleasedEvent.class);
     then(eventPublisher).should().publishEvent(captor.capture());
     assertThat(captor.getValue().releasedParticipationIds()).containsExactly(232L);
+  }
+
+  // 🔴 staging 회귀: cancelled_at 은 초 단위 DATETIME 이라 나노초를 가진 now 와 equals 로 비교하면
+  // 영원히 안 맞는다. 「제외」는 성공했는데 응답의 취소 목록이 빈 배열로 나왔다.
+  // H2 는 정밀도를 보존해 테스트가 통과했으므로, DB 가 잘라 쓴 값을 흉내 내 고정한다.
+  @Test
+  @DisplayName("DB 가 시각을 초 단위로 잘라 저장해도 취소분을 찾아낸다")
+  void findsReleasedSlotsEvenWhenTimestampTruncatedBySeconds() {
+    stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+    given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+        .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+    given(participationRepository.releaseBundleIfDue(BUNDLE_ID, NOW_WITH_NANOS)).willReturn(1);
+    given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+        .willReturn(
+            List.of(
+                slot(
+                    232L,
+                    ParticipationStatus.CANCELLED,
+                    ParticipationCancelReason.HOST_RELEASED,
+                    // DB 가 잘라 저장한 값 — 서비스가 넘긴 now 와 나노초가 다르다.
+                    NOW_WITH_NANOS.truncatedTo(java.time.temporal.ChronoUnit.SECONDS))));
+
+    assertThat(participationBundleService.release(HOST_ID, BUNDLE_ID)).containsExactly(232L);
   }
 
   @Test

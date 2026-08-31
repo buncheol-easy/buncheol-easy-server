@@ -42,6 +42,7 @@ class ShippingFeePaybackServiceTest {
 
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long PARTICIPATION_ID = 500L;
+  private static final Long BUNDLE_ID = 9999L;
   private static final Instant NOW = Instant.parse("2026-07-16T09:00:00Z");
   private static final String TWEET_URL = "https://x.com/fan/status/1234567890";
   private static final ShippingFeePaybackRequest REQUEST =
@@ -80,8 +81,9 @@ class ShippingFeePaybackServiceTest {
     // 환급 입금 계좌의 정본은 묶음이다 (P2-c).
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.of(mock(ParticipationBundle.class)));
-    given(deliveryRepository.findByParticipationId(PARTICIPATION_ID))
-        .willReturn(Optional.of(delivery));
+    // 배송 조회 키는 묶음이다 (택배 1개 = 묶음 1개).
+    given(participation.getBundleId()).willReturn(BUNDLE_ID);
+    given(deliveryRepository.findByBundleId(BUNDLE_ID)).willReturn(Optional.of(delivery));
     given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
         .willReturn(PaybackStatus.ELIGIBLE);
     given(

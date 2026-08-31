@@ -11,12 +11,22 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * 개최자의 입금확인(AWAITING_PAYMENT → CONFIRMED) 시점에 해당 참여의 배송 정보를 스냅샷으로 생성한다. 참여·배송지·유저 정보를 그 시점 값으로 박제해
+ * 개최자의 입금확인(AWAITING_PAYMENT → CONFIRMED) 시점에 배송 정보를 스냅샷으로 생성한다. 참여·배송지·유저 정보를 그 시점 값으로 박제해
  * {@link Delivery} 로 보관하므로 이후 원본 변경에 영향받지 않는다. 호출자 트랜잭션({@link
  * buncheoleasy.buncheol.application.participation.ParticipationService#confirmPayment}) 안에서 실행된다.
  *
- * <p>{@code deliveries.participation_id} 가 UNIQUE 라 같은 참여에 두 번 호출하면 {@code DataIntegrityViolationException}
- * 이 난다. 참여당 입금확인은 1회뿐이라 정상 흐름에선 발생하지 않는다.
+ * <p>🔴 <b>단위는 참여가 아니라 묶음이다</b> (docs/70 결정 4 — 택배 1개 = 묶음 1개). 다슬롯 묶음은 슬롯마다
+ * 입금확인이 돌지만 <b>택배는 하나</b>다. 슬롯마다 만들면 ① 개최자에게 같은 주소의 운송장 입력칸이 슬롯 수만큼
+ * 뜨고 ② 참여자는 오지 않을 택배를 여러 건 기다리며 ③ P4 의 {@code uq_deliveries_bundle} 승격이 그 자리에서
+ * 실패한다(실측: prod 묶음 64 · staging 66·83·87 이 그렇게 생겼다).
+ *
+ * <p>그래서 <b>그 묶음에 배송이 이미 있으면 만들지 않는다.</b> 이 판정은 호출자 트랜잭션 안의 조회라 같은 묶음의
+ * 두 슬롯을 <b>동시에</b> 확인하면 둘 다 통과할 수 있다(check-then-insert 갭). 다만 묶음 입금확인은 묶음 전체를
+ * 한 트랜잭션에서 처리하므로({@code ParticipationBundleService#confirmPayment}) 정상 경로에서 그 경합이
+ * 생기지 않고, P4 의 유니크가 최종 차단한다.
+ *
+ * <p>{@code deliveries.participation_id} 는 UNIQUE 라 같은 참여에 두 번 호출하면 {@code
+ * DataIntegrityViolationException} 이 난다. 참여당 입금확인은 1회뿐이라 정상 흐름에선 발생하지 않는다.
  */
 @Component
 @RequiredArgsConstructor
@@ -27,6 +37,13 @@ public class DeliverySnapshotCreator {
   private final UserDomainService userDomainService;
 
   public void create(final Participation participation) {
+    // 이 묶음의 택배가 이미 있으면 두 번째 슬롯이다 — 만들지 않는다 (위 javadoc).
+    // 묶음이 없는 참여(배포선 창에서 생긴 행)는 판정할 근거가 없으므로 종전대로 참여당 1건을 만든다.
+    if (participation.getBundleId() != null
+        && deliveryDomainService.findByBundleId(participation.getBundleId()).isPresent()) {
+      return;
+    }
+
     ShippingAddress shippingAddress =
         shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
     User user = userDomainService.getUser(participation.getParticipantId());
@@ -37,6 +54,9 @@ public class DeliverySnapshotCreator {
 
     Delivery delivery =
         Delivery.createSnapshot(
+            // 묶음의 배송이 갖는 participation_id 는 그 묶음을 대표하는 슬롯(먼저 입금확인된 슬롯) 하나다.
+            // 소유자 검증(DeliveryService)이 이 값을 쓰는데, 묶음은 한 사람의 것이라 어느 슬롯이든 같은 사람을
+            // 가리킨다. P4 에서 이 칸이 사라지면 소유자 검증도 묶음으로 옮겨야 한다.
             participation.getId(),
             // 택배 1개 = 묶음 1개. 안 넣으면 참여는 묶음을 갖는데 배송만 미연결로 남아, P4 의
             // uq_deliveries_bundle 승격에서야 발견된다 (staging 에서 실제로 3건이 그렇게 샜다).

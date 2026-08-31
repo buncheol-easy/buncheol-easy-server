@@ -95,11 +95,14 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       final String status,
       final Instant confirmedAt,
       final Instant createdAt) {
+    // 배송 조인 키가 묶음이다 (택배 1개 = 묶음 1개) — 참여마다 묶음을 하나 만들어 붙인다.
+    // 배송비의 정본은 묶음이다 — 픽스처도 그렇게 심어야 합계가 실제와 같아진다.
+    Long bundleId = insertBundle(buncheolId, participantId, shippingFee);
     jdbcTemplate.update(
         "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, amount,"
             + " shipping_fee, refund_bank, refund_account, refund_holder, due_at, confirmed_at,"
-            + " cancelled_at, cancel_reason, status, created_at, updated_at)"
-            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + " cancelled_at, cancel_reason, status, bundle_id, created_at, updated_at)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         buncheolId,
         slotId,
         participantId,
@@ -115,18 +118,37 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
             ? (confirmedAt != null ? "BUNCHEOL_CANCELLED" : "PAYMENT_TIMEOUT")
             : null,
         status,
+        bundleId,
         Timestamp.from(createdAt),
         Timestamp.from(createdAt));
     em.clear();
     return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participations", Long.class);
   }
 
-  private void insertDelivery(final Long participationId, final String trackingNumber) {
+  private Long insertBundle(
+      final Long buncheolId, final Long participantId, final long shippingFee) {
     jdbcTemplate.update(
-        "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+        "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+            + " refund_bank, refund_account, refund_holder) VALUES (?, ?, ?, ?, ?, ?)",
+        buncheolId,
+        participantId,
+        shippingFee,
+        "국민",
+        "12345678",
+        "홍길동");
+    return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+  }
+
+  private void insertDelivery(final Long participationId, final String trackingNumber) {
+    Long bundleId =
+        jdbcTemplate.queryForObject(
+            "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
+    jdbcTemplate.update(
+        "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
             + " receiver_nickname, receiver_phone_number, tracking_number, status)"
-            + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         participationId,
+        bundleId,
         "GS25_HALF",
         "테스트지점",
         "수령닉네임",

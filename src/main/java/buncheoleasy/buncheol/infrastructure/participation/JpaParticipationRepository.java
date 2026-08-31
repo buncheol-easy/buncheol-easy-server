@@ -27,6 +27,15 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   /**
    * 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드). 입금 확인 중이거나, 입금확인됐지만 배송이 끝나지 않았거나
    * (배송 스냅샷이 없으면 미종료로 본다), 배송비 환급 신청이 검수 대기 중이면 끝나지 않은 것으로 판정한다.
+   *
+   * <p>배송은 <b>묶음</b>으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 자기 배송 행이
+   * 없다. 참여 id 로 찾으면 그 슬롯이 영원히 "배송 미종료" 로 남아 탈퇴가 막힌다.
+   * <p>🔴 <b>{@code p.bundleId} 가 NULL 이면 이 조건은 어느 배송과도 매칭되지 않는다</b> — 그 참여는 영구히
+   * "배송 미종료" 로 남아 탈퇴가 막힌다. <b>지금 그런 행은 없다</b>: 2026-08-31 실측으로 {@code bundle_id IS
+   * NULL} 인 참여가 prod 0/47 · staging 0/104 이고, 참여를 만드는 세 경로가 모두 같은 트랜잭션에서
+   * {@code ParticipationBundleDomainService#attach} 를 부르며 그 연결 CAS 가 실패하면 예외로 전체 롤백된다
+   * — 즉 <b>묶음 없는 참여를 만들 수 있는 코드 경로가 없다</b>. 참여 id 폴백을 남기지 않은 근거가 이것이다.
+   * P4 가 {@code bundle_id} 를 NOT NULL 로 조이면 이 전제가 스키마로 굳는다.
    */
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
@@ -36,7 +45,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "    AND (p.paybackStatus = :requestedPaybackStatus "
           + "      OR NOT EXISTS ("
           + "        SELECT d FROM Delivery d "
-          + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
+          + "        WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses))))")
   boolean existsUnfinishedByParticipantId(
       @Param("participantId") Long participantId,
       @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,

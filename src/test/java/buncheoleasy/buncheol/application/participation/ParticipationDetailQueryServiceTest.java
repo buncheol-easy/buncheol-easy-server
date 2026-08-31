@@ -95,8 +95,8 @@ class ParticipationDetailQueryServiceTest {
     lenient().when(groupMember.getName()).thenReturn("설윤");
     given(groupMemberRepository.findAllByIds(List.of(MEMBER_ID))).willReturn(List.of(groupMember));
 
-    given(deliveryRepository.findByParticipationId(PARTICIPATION_ID))
-        .willReturn(Optional.empty());
+    // 배송 조회 키는 묶음이다 (택배 1개 = 묶음 1개).
+    given(deliveryRepository.findByBundleId(BUNDLE_ID)).willReturn(Optional.empty());
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.empty());
     given(participationBundleDomainService.shippingFeeAttributionFor(participation))

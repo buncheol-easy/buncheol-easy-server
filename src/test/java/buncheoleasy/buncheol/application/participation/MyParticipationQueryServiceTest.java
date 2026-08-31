@@ -155,8 +155,8 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "해린"), groupMember(1002L, "민지")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(233L, 232L)))
-          .willReturn(List.of());
+      // 둘 다 입금확인 전이라 배송 조회 대상이 없다.
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -204,7 +204,7 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(groupMember(1002L, "민지")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
           .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
-      given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       // 입금확인중 참여가 있으므로 개최자 계좌를 배치 조회한다.
       given(userRepository.findAllByIds(List.of(HOST_ID)))
           .willReturn(List.of(host(HOST_ID, "국민", "98765432", "개최자")));
@@ -253,7 +253,7 @@ class MyParticipationQueryServiceTest {
       given(groupMemberRepository.findAllByIds(List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "민지")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       // 계좌 미등록 개최자.
       given(userRepository.findAllByIds(List.of(HOST_ID)))
           .willReturn(List.of(hostWithoutBankAccount(HOST_ID)));
@@ -290,7 +290,7 @@ class MyParticipationQueryServiceTest {
       given(groupMemberRepository.findAllByIds(List.of(2001L)))
           .willReturn(List.of(groupMember(2001L, "지수")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(20L))).willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(600L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -329,9 +329,11 @@ class MyParticipationQueryServiceTest {
       Participation pA =
           participation(
               500L, 10L, 201L, 83_000L, ParticipationStatus.CONFIRMED, DUE_AT, confirmedAt, null);
+      setField(pA, "bundleId", 9500L);
       Participation pB =
           participation(
               600L, 20L, 301L, 33_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+      setField(pB, "bundleId", 9600L);
 
       given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
           .willReturn(List.of(pA, pB));
@@ -343,9 +345,9 @@ class MyParticipationQueryServiceTest {
           .willReturn(List.of(groupMember(2001L, "지수"), groupMember(3001L, "제니")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
           .willReturn(List.of(BuncheolImage.create(10L, "https://cdn.example.com/10-thumb.jpg", false)));
-      // 확정된 pA 에만 배송 스냅샷이 생성돼 있다.
-      given(deliveryRepository.findAllByParticipationIds(List.of(500L, 600L)))
-          .willReturn(List.of(delivery(900L, 500L, "1234567890", DeliveryStatus.SHIPPING)));
+      // 입금확인된 슬롯의 묶음만 조회한다 — pB 는 AWAITING_PAYMENT 라 애초에 배송이 없다.
+      given(deliveryRepository.findAllByBundleIds(List.of(9500L)))
+          .willReturn(List.of(delivery(900L, 500L, 9500L, "1234567890", DeliveryStatus.SHIPPING)));
       given(userRepository.findAllByIds(List.of(HOST_ID)))
           .willReturn(List.of(host(HOST_ID, "국민", "98765432", "개최자")));
 
@@ -445,7 +447,7 @@ class MyParticipationQueryServiceTest {
       given(groupMemberRepository.findAllByIds(List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "민지")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(500L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
@@ -479,9 +481,10 @@ class MyParticipationQueryServiceTest {
   }
 
   private Delivery delivery(
-      Long id, Long participationId, String trackingNumber, DeliveryStatus status) {
+      Long id, Long participationId, Long bundleId, String trackingNumber, DeliveryStatus status) {
     Delivery delivery =
-        Delivery.createSnapshot(participationId, null, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
+        Delivery.createSnapshot(
+            participationId, bundleId, ShippingMethod.GS25_HALF, "GS25 강남점", "수령인", "01012345678");
     setField(delivery, "id", id);
     setField(delivery, "trackingNumber", trackingNumber);
     setField(delivery, "status", status);

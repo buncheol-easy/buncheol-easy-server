@@ -74,7 +74,9 @@ public class ParticipationDetailQueryService {
     ParticipationBundle bundle =
         participationBundleDomainService.findByParticipation(participation).orElse(null);
 
-    Delivery delivery = deliveryRepository.findByParticipationId(participationId).orElse(null);
+    // 택배 1개 = 묶음 1개 — 다슬롯 묶음은 슬롯들이 배송 1건을 공유한다.
+    Delivery delivery =
+        deliveryRepository.findByBundleId(participation.getBundleId()).orElse(null);
     ShippingFeePaybackResponse payback =
         ShippingFeePaybackResponse.of(
             participation,

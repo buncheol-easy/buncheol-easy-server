@@ -285,17 +285,43 @@ class JpaParticipationRepositoryAdapterTest {
           null);
     }
 
+    /**
+     * 배송 스냅샷을 그 참여의 <b>묶음</b>에 붙인다 — 탈퇴 가드가 배송을 묶음으로 찾기 때문이다
+     * (택배 1개 = 묶음 1개). 참여에 묶음이 없으면 묶음을 하나 만들어 붙인 뒤 배송을 건다.
+     */
     private void insertDelivery(final Long participationId, final String deliveryStatus) {
+      Long bundleId = ensureBundle(participationId);
       jdbcTemplate.update(
-          "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+          "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
               + " receiver_nickname, receiver_phone_number, status)"
-              + " VALUES (?, ?, ?, ?, ?, ?)",
+              + " VALUES (?, ?, ?, ?, ?, ?, ?)",
           participationId,
+          bundleId,
           "GS25_HALF",
           "매장",
           "닉네임",
           "01012345678",
           deliveryStatus);
+    }
+
+    private Long ensureBundle(final Long participationId) {
+      Long existing =
+          jdbcTemplate.queryForObject(
+              "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
+      if (existing != null) {
+        return existing;
+      }
+      jdbcTemplate.update(
+          "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+              + " refund_bank, refund_account, refund_holder)"
+              + " SELECT p.buncheol_id, p.participant_id, 0, '국민', '12345678', '홍길동'"
+              + " FROM participations p WHERE p.id = ?",
+          participationId);
+      Long bundleId =
+          jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+      jdbcTemplate.update(
+          "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, participationId);
+      return bundleId;
     }
 
     private void updatePaybackStatus(final Long participationId, final PaybackStatus status) {

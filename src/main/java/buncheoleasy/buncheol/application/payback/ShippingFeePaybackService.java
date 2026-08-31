@@ -54,7 +54,9 @@ public class ShippingFeePaybackService {
       throw new BusinessException(ErrorCode.PAYBACK_REFUND_ACCOUNT_MISSING);
     }
 
-    Delivery delivery = deliveryRepository.findByParticipationId(participationId).orElse(null);
+    // 택배 1개 = 묶음 1개 — 다슬롯 묶음은 슬롯들이 배송 1건을 공유한다.
+    Delivery delivery =
+        deliveryRepository.findByBundleId(participation.getBundleId()).orElse(null);
     // 환급은 운영진(LEGACY) 분철 전용 — 분철 flowType 을 판정에 함께 넘긴다 (C2C 셀프 환급 차단).
     PaybackStatus derived =
         policy.deriveStatus(

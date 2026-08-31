@@ -31,12 +31,17 @@ public class Delivery extends TimestampedEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  // 이 묶음을 대표하는 슬롯 하나. 소유자·분철 검증이 이 값을 타고 올라간다(DeliveryService).
+  // 묶음은 한 사람의 것이라 어느 슬롯이든 같은 사람·같은 분철을 가리킨다.
+  // ⚠️ P4 에서 이 칸을 DROP 하면 그 검증도 묶음 경유로 옮겨야 한다 — 정본은 bundle_id 다.
   @Column(name = "participation_id", nullable = false, updatable = false)
   private Long participationId;
 
-  // 소속 묶음 (participation_bundles.id) = 택배 1개의 단위. 백필 이전 행과 P2-b 배포선 창에서 생긴 행은 NULL 이다.
-  // ⚠️ 다슬롯 묶음은 배송이 여러 건일 수 있다(참여당 1건씩 만들어졌으므로) — P4 에서 유니크로 승격하기 전에
-  // 사람이 병합해야 한다(03-verify.sql V8).
+  // 소속 묶음 (participation_bundles.id) = 택배 1개의 단위이자 <b>조회 키</b>다. 배송은 이제 참여가 아니라
+  // 묶음마다 1건 만들어진다(DeliverySnapshotCreator) — 다슬롯 묶음의 슬롯들은 이 배송 하나를 공유한다.
+  // ⚠️ 전환 이전에 만들어진 다슬롯 묶음은 슬롯마다 1건씩 생겨 여전히 여러 건이다 (prod 묶음 64 ·
+  // staging 66·83·87). P4 에서 유니크로 승격하기 전에 사람이 병합해야 한다(03-verify.sql V8).
+  // 그때까지 조회는 id 가 가장 작은 행 1건으로 확정한다 (DeliveryRepository#findByBundleId).
   @Column(name = "bundle_id", updatable = false)
   private Long bundleId;
 

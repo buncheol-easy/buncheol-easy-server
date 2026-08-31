@@ -241,6 +241,26 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("now") Instant now);
 
   /**
+   * 묶음 단위 입금확인 CAS — 한 묶음의 확인 가능 슬롯 전부를 한 번에 CONFIRMED 로 전이한다.
+   *
+   * <p>C2C 는 「보냈어요」(PAYMENT_SENT)도 확인 대상이고, 개최자 확인이 늦어도 유효하도록 <b>기한 경과를
+   * 검사하지 않는다</b> (docs/46 §3-6).
+   *
+   * <p>⚠️ <b>같은 테이블을 보는 조건은 넣지 않는다</b> — MySQL 이 {@code UPDATE} 대상 테이블을 서브쿼리
+   * FROM 에서 참조하는 것을 금지한다(error 1093). all-or-nothing 판정은 호출부가 잠금 조회로 앞세운다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :confirmedStatus, p.confirmedAt = :now, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status IN :payableStatuses")
+  int confirmBundleIfPayable(
+      @Param("bundleId") Long bundleId,
+      @Param("payableStatuses") Collection<ParticipationStatus> payableStatuses,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("now") Instant now);
+
+  /**
    * 묶음 단위 「보냈어요」 CAS — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다.
    *
    * <p>🔴 <b>기한 검사가 없다.</b> 기한이 지난 뒤에도 마킹은 가능해야 한다 — 기한 직전 입금을 보호하는 것이

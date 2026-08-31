@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.application.participation;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.BundleReleasability;
@@ -15,6 +17,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,8 @@ public class ParticipationBundleService {
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final ParticipationRepository participationRepository;
   private final BuncheolDomainService buncheolDomainService;
+  private final DeliverySnapshotCreator deliverySnapshotCreator;
+  private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -161,6 +166,73 @@ public class ParticipationBundleService {
   }
 
 
+
+  /**
+   * 개최자가 묶음의 입금을 <b>한 번에</b> 확인한다 (docs/70 결정 6 — all-or-nothing).
+   *
+   * <p>묶음은 <b>이체 1회</b>의 단위다. 슬롯마다 확인하면 ① 개최자가 한 건의 입금을 여러 번 처리하게 되고
+   * ② 중간에 멈추면 같은 묶음의 슬롯 상태가 갈린다. <b>부분 확인은 애초에 성립하지 않는다</b> — 확인 API 에
+   * 금액이 없어 시스템은 실입금액을 모르고, 개최자가 판단하는 것은 "이 이체가 들어왔는가" 하나뿐이다
+   * (docs/70 §10-10).
+   *
+   * <p>🔴 <b>{@code expectedSlotIds} 를 받는다.</b> 개최자가 화면에서 본 슬롯 집합과 서버의 실제 집합이
+   * 다르면 409 로 막고 새로고침을 유도한다 — 추가 모집으로 생긴 묶음은 슬롯이 늘거나 줄 수 있어(그쪽은
+   * 개별 취소가 열려 있다), 개최자가 <b>보지 못한 슬롯까지 확정</b>하면 안 된다.
+   *
+   * <p>기한 경과를 검사하지 않는다 — 개최자 확인이 늦어도 유효해야 한다 (docs/46 §3-6).
+   */
+  @Transactional
+  public List<Long> confirmPayment(
+      final Long hostId, final Long bundleId, final List<Long> expectedSlotIds) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle =
+        participationBundleDomainService
+            .findById(bundleId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.BUNDLE_NOT_FOUND));
+    Buncheol buncheol = buncheolDomainService.getBuncheol(bundle.getBuncheolId());
+    buncheol.validateOwner(hostId);
+    // LEGACY 는 1인 1활성슬롯이라 묶음 = 참여다. 열어 두면 페이액션·배송 경로까지 묶음 계약을 검증해야 한다.
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    // 잠금 조회로 앞세운다 — all-or-nothing 판정을 CAS 서브쿼리로 넣을 수 없고(MySQL error 1093),
+    // 락이 있어야 판정과 UPDATE 사이에 참여자의 자발 취소·마킹이 끼어들지 못한다.
+    List<Long> payableIds =
+        participationRepository.findAllByBundleIdForUpdate(bundleId).stream()
+            .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
+            .map(Participation::getId)
+            .sorted()
+            .toList();
+    if (payableIds.isEmpty()) {
+      throw new BusinessException(ErrorCode.BUNDLE_CONFIRM_NOT_ALLOWED);
+    }
+    // 순서 무관하게 집합으로 대조한다 — 화면이 정렬을 보장하지 않는다.
+    if (!Set.copyOf(payableIds).equals(Set.copyOf(expectedSlotIds))) {
+      throw new BusinessException(ErrorCode.BUNDLE_SLOTS_CHANGED);
+    }
+
+    int confirmed = participationRepository.confirmBundleIfPayable(bundleId, now);
+    if (confirmed != payableIds.size()) {
+      // 락을 쥔 채 판정했으므로 여기 오면 내부 불변식 위반이다 — 롤백해 부분 확정을 남기지 않는다.
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+
+    // 배송 스냅샷은 <b>아직 슬롯당 1행</b>이다(묶음 단위 전환은 별도 트랙). 확정 시점 배송지·연락처를
+    // 박제하는 목적은 그대로라, 여기서 슬롯마다 만들어야 기존 경로와 결과가 같다.
+    // ⚠️ CAS 가 영속성 컨텍스트를 비웠으므로 갱신값을 다시 읽어 넘긴다.
+    participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+        .filter(p -> payableIds.contains(p.getId()))
+        .forEach(deliverySnapshotCreator::create);
+
+    // 분철 진행확정 판정은 <b>묶음 확정 후 1회만</b> — 슬롯마다 부르면 같은 판정을 N 번 돌린다.
+    if (buncheolDomainService.confirmIfAllCollected(buncheol.getId(), now)) {
+      buncheolConfirmedFinalizer.finalizeConfirmed(buncheol.getId());
+    }
+
+    eventPublisher.publishEvent(new BundlePaymentConfirmedEvent(bundleId, payableIds));
+    return payableIds;
+  }
 
   /** 판정 → 에러코드. switch <b>식</b>이라 사유가 늘면 컴파일 에러로 잡힌다 (fail-open 방지). */
   private static void requireReleasable(final BundleReleasability releasability) {

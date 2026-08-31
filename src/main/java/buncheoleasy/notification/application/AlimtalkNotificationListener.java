@@ -7,6 +7,7 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
 import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
@@ -307,6 +308,44 @@ public class AlimtalkNotificationListener {
       return;
     }
     sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
+  }
+
+  /**
+   * (참여자) 개최자가 <b>묶음</b>의 입금을 확인함 — <b>묶음 1통</b>으로 알린다. 이체가 1회였으므로 확인도 1회다.
+   *
+   * <p>금액은 확정된 슬롯 합산, 멤버명은 나열한다. 0원 묶음(서포터즈 코드만으로 채워진 경우)은 등록 문안이
+   * "입금이 확인되었어요 · 입금 금액" 이라 발송하지 않는다 — 슬롯 단위 경로와 같은 판정이다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundlePaymentConfirmed(final BundlePaymentConfirmedEvent event) {
+    List<ParticipationView> views = loadViewsSafely(event.confirmedParticipationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    if (views.size() != event.confirmedParticipationIds().size()) {
+      log.error(
+          "묶음 입금확인 알림의 슬롯 조립이 일부 실패해 금액이 축소될 수 있다 - bundleId={}, 기대={}, 조립={}",
+          event.bundleId(),
+          event.confirmedParticipationIds().size(),
+          views.size());
+    }
+    ParticipationView first = views.get(0);
+    long totalAmount = views.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    if (totalAmount == 0) {
+      return;
+    }
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views),
+            "입금금액", AlimtalkFormats.amount(totalAmount));
+    recordSafely(first.participant().getId(), AlimtalkTemplate.C2C_PAYMENT_CONFIRMED, variables);
+    sender.send(
+        AlimtalkTemplate.C2C_PAYMENT_CONFIRMED,
+        first.participant().getPhoneNumber().value(),
+        variables);
   }
 
   /**

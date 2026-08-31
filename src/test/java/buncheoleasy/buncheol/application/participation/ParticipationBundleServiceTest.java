@@ -53,6 +53,8 @@ class ParticipationBundleServiceTest {
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ParticipationRepository participationRepository;
   @Mock private BuncheolDomainService buncheolDomainService;
+  @Mock private buncheoleasy.buncheol.application.DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -83,6 +85,7 @@ class ParticipationBundleServiceTest {
   private Buncheol c2cBuncheol(final Long hostId) {
     Buncheol buncheol = org.mockito.Mockito.mock(Buncheol.class);
     lenient().when(buncheol.isC2c()).thenReturn(true);
+    lenient().when(buncheol.getId()).thenReturn(BUNCHEOL_ID);
     lenient()
         .doAnswer(
             invocation -> {
@@ -345,6 +348,121 @@ class ParticipationBundleServiceTest {
       Participation participation = slot(id, ParticipationStatus.PAYMENT_SENT, null, null);
       setField(participation, "paymentSentAt", sentAt);
       return participation;
+    }
+  }
+
+  @Nested
+  @DisplayName("confirmPayment — 개최자 묶음 입금확인 (all-or-nothing)")
+  class ConfirmPaymentTest {
+
+    private void stubPayable(final Long... ids) {
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(
+              java.util.Arrays.stream(ids)
+                  .map(id -> slot(id, ParticipationStatus.AWAITING_PAYMENT, null, null))
+                  .toList());
+    }
+
+    @Test
+    @DisplayName("확인 가능 슬롯 전부를 한 번에 확정한다")
+    void confirmsAllPayableSlots() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubPayable(232L, 233L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(List.of(slot(232L, ParticipationStatus.CONFIRMED, null, null)));
+
+      List<Long> confirmed =
+          participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L));
+
+      assertThat(confirmed).containsExactly(232L, 233L);
+      ArgumentCaptor<BundlePaymentConfirmedEvent> captor =
+          ArgumentCaptor.forClass(BundlePaymentConfirmedEvent.class);
+      then(eventPublisher).should().publishEvent(captor.capture());
+      assertThat(captor.getValue().confirmedParticipationIds()).containsExactly(232L, 233L);
+    }
+
+    // 🔴 개최자가 보지 못한 슬롯까지 확정되면 안 된다 — 추가 모집 묶음은 슬롯이 늘 수 있다.
+    @Test
+    @DisplayName("화면이 본 슬롯 집합과 다르면 409 로 막고 확정하지 않는다")
+    void rejectsWhenSlotsChanged() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubPayable(232L, 233L);
+
+      assertThatThrownBy(
+              () -> participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(ErrorCode.BUNDLE_SLOTS_CHANGED.getMessage());
+      then(participationRepository).should(never()).confirmBundleIfPayable(anyLong(), any());
+    }
+
+    // 순서는 화면이 보장하지 않는다 — 집합으로 대조해야 한다.
+    @Test
+    @DisplayName("순서가 달라도 같은 집합이면 통과한다")
+    void ignoresOrderOfExpectedSlotIds() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubPayable(232L, 233L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID))).willReturn(List.of());
+
+      assertThat(participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L)))
+          .containsExactly(232L, 233L);
+    }
+
+    @Test
+    @DisplayName("확인할 슬롯이 없으면 확정하지 않는다")
+    void rejectsWhenNothingPayable() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(slot(232L, ParticipationStatus.CONFIRMED, null, null)));
+
+      assertThatThrownBy(
+              () -> participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(ErrorCode.BUNDLE_CONFIRM_NOT_ALLOWED.getMessage());
+    }
+
+    @Test
+    @DisplayName("남의 분철 묶음은 확인할 수 없다")
+    void rejectsOtherHostConfirm() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+
+      assertThatThrownBy(
+              () ->
+                  participationBundleService.confirmPayment(
+                      OTHER_HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class);
+      then(participationRepository).should(never()).confirmBundleIfPayable(anyLong(), any());
+    }
+
+    // LEGACY 는 1인 1활성슬롯이라 묶음 = 참여다. 열어 두면 페이액션·배송 경로까지 검증해야 한다.
+    @Test
+    @DisplayName("LEGACY 분철은 묶음 확인 대상이 아니다")
+    void rejectsLegacyConfirm() {
+      Buncheol legacy = org.mockito.Mockito.mock(Buncheol.class);
+      lenient().when(legacy.isC2c()).thenReturn(false);
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), legacy);
+
+      assertThatThrownBy(
+              () -> participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .hasMessageContaining(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED.getMessage());
+    }
+
+    // 부분 확정이 남으면 개최자가 돈 계산을 못 한다 — 롤백해야 한다.
+    @Test
+    @DisplayName("CAS 가 일부만 바꾸면 롤백한다")
+    void rejectsPartialConfirm() {
+      stubBundleAndBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubPayable(232L, 233L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
+
+      assertThatThrownBy(
+              () ->
+                  participationBundleService.confirmPayment(
+                      HOST_ID, BUNDLE_ID, List.of(232L, 233L)))
+          .isInstanceOf(BusinessException.class);
+      then(eventPublisher).should(never()).publishEvent(any(BundlePaymentConfirmedEvent.class));
     }
   }
 

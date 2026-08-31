@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.presentation;
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
 import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
@@ -16,6 +17,7 @@ import com.epages.restdocs.apispec.Schema;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.restdocs.payload.JsonFieldType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -139,6 +141,71 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.ARRAY)
                                 .description("실제로 마킹된 참여 ID 목록"))
                         .responseSchema(Schema.schema("BundlePaymentSentResponse"))
+                        .build())));
+  }
+
+  @Test
+  void 개최자_묶음_입금확인() throws Exception {
+    given(participationBundleService.confirmPayment(eq(USER_ID), eq(BUNDLE_ID), any()))
+        .willReturn(List.of(232L, 233L));
+
+    mockMvc
+        .perform(
+            post("/v1/participation-bundles/{bundleId}/confirm", BUNDLE_ID)
+                .with(userAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"expectedSlotIds\":[232,233]}"))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "participation-bundles-confirm",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("ParticipationBundle")
+                        .summary("개최자 묶음 입금확인 (all-or-nothing)")
+                        .description(
+                            """
+                            개최자가 묶음의 확인 가능 슬롯(`AWAITING_PAYMENT`·`PAYMENT_SENT`)을 **한 번에**
+                            확정한다.
+
+                            **부분 확인은 애초에 성립하지 않는다** — 이 API 에는 금액이 없어 시스템은 실입금액을
+                            모르고, 개최자가 판단하는 것은 "이 이체가 들어왔는가" 하나뿐이다. 묶음은 이체 1회의
+                            단위이므로 확인도 1회다.
+
+                            🔴 **`expectedSlotIds` 는 필수다.** 개최자가 화면에서 본 슬롯 집합을 그대로 실어
+                            보낸다. 서버의 실제 집합과 다르면 **409** 로 막고 새로고침을 유도한다 — 추가 모집으로
+                            생긴 묶음은 슬롯이 늘거나 줄 수 있어(그쪽은 개별 취소가 열려 있다) 개최자가 **보지 못한
+                            슬롯까지 확정**되면 안 된다. 순서는 보지 않고 집합으로 대조한다.
+
+                            **입금 기한이 지나도 확인할 수 있다** — 개최자 확인이 늦어도 유효해야 한다.
+
+                            확정되면 배송 스냅샷이 만들어지고, 분철의 전 슬롯이 확정됐으면 진행확정으로 이어진다.
+                            참여자에게는 **묶음 1통**으로 확인 알림이 간다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `BCH-114` (`BUNDLE_NOT_FOUND`) | 묶음 없음 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 개최자가 아님 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
+                            | 409 | `BCH-115` (`BUNDLE_SLOTS_CHANGED`) | 화면이 본 슬롯 집합과 다름 |
+                            | 409 | `BCH-116` (`BUNDLE_CONFIRM_NOT_ALLOWED`) | 확인할 슬롯이 없음 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("bundleId").description("참여 묶음 ID"))
+                        .requestFields(
+                            fieldWithPath("expectedSlotIds")
+                                .type(JsonFieldType.ARRAY)
+                                .description("화면이 본 확인 대상 참여 ID 목록 (필수)"))
+                        .responseFields(
+                            fieldWithPath("bundleId")
+                                .type(JsonFieldType.NUMBER)
+                                .description("확인한 묶음 ID"),
+                            fieldWithPath("confirmedParticipationIds")
+                                .type(JsonFieldType.ARRAY)
+                                .description("확정된 참여 ID 목록"))
+                        .requestSchema(Schema.schema("BundleConfirmRequest"))
+                        .responseSchema(Schema.schema("BundleConfirmResponse"))
                         .build())));
   }
 

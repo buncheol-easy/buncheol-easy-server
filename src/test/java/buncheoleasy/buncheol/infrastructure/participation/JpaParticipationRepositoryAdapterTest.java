@@ -1180,6 +1180,35 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(result).extracting(Participation::getId).containsExactly(overdueId);
     }
 
+    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9). 기한은 "개최자가 「제외」로 정리에
+    // 나설 수 있는 시각"이지 취소 시각이 아니다.
+    @Test
+    void C2C_참여는_기한이_지나도_조회되지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "C2C멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long addrLegacy = insertShippingAddress(participantId, "레거시매장");
+      Long addrC2c = insertShippingAddress(secondParticipantId, "C2C매장");
+      Instant now = Instant.now();
+
+      Long legacyOverdueId =
+          insertParticipation(
+              buncheolId, bmId, participantId, addrLegacy, 30_000L,
+              now.minus(5, ChronoUnit.MINUTES), ParticipationStatus.AWAITING_PAYMENT, null);
+      Long c2cOverdueId =
+          insertParticipation(
+              buncheolId, bmId2, secondParticipantId, addrC2c, 30_000L,
+              now.minus(5, ChronoUnit.MINUTES), ParticipationStatus.AWAITING_PAYMENT, null);
+      jdbcTemplate.update(
+          "UPDATE participations SET flow_type = 'C2C' WHERE id = ?", c2cOverdueId);
+
+      List<Participation> result = participationRepository.findOverduePaymentTargets(now, 100);
+
+      // 같은 조건(AWAITING_PAYMENT + 기한 경과)인데 LEGACY 만 잡힌다.
+      assertThat(result).extracting(Participation::getId).containsExactly(legacyOverdueId);
+    }
+
     @Test
     void 확정된_건은_기한이_지나도_조회되지_않는다() {
       Long buncheolId = createBuncheol();

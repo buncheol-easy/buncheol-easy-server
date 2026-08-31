@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -105,8 +106,14 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   int countByBuncheolIdAndStatus(Long buncheolId, ParticipationStatus status);
 
-  List<Participation> findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
-      ParticipationStatus status, Instant dueAt, Limit limit);
+  /**
+   * 입금 만료 폴링 대상. 🔴 <b>{@code flowType} 을 등가조건으로</b> 받는다 — 부등호({@code &lt;&gt; 'C2C'})로 쓰면
+   * {@code (status, flow_type, due_at)} 인덱스가 {@code flow_type} 에서 동등 조건을 잃어 {@code due_at} 이
+   * 범위+정렬로 이어지지 못한다. 값이 둘뿐이라 결과는 같지만 실행 계획이 달라진다.
+   */
+  List<Participation> findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
+      ParticipationStatus status, FlowType flowType, Instant dueAt, Limit limit);
+
 
   boolean existsByPaybackTweetUrlAndIdNot(String paybackTweetUrl, Long id);
 

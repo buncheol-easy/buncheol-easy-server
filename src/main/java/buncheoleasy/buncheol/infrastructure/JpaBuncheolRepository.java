@@ -215,16 +215,19 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   // 🟡 알려진 한계: C2C 자동 만료를 끈 뒤로는 활성 슬롯이 남은 분철이 영영 안 비므로(개최자가 「제외」를
   // 눌러야 빈다 — 안 눌러도 되는 것이 docs/70 §1 의 수용된 트레이드오프) 이 폴링에 계속 걸리고, 오래된
   // 순이라 앞자리를 점유한다. 그런 분철이 배치 한도(100)만큼 쌓이면 뒤에 온 분철의 정리가 굶는다.
-  // prod C2C 는 아직 「입금 수집중」이 0 건이라 당장 발현하지 않아 <b>지금은 손대지 않는다</b>.
+  // prod C2C 는 아직 「입금 수집중」이 0 건이라 당장 발현하지 않아 <b>지금은 손대지 않는다</b>
+  // (docs/82 §6 — 「알려진 한계로 기록만」).
+  // 고칠 때 넣을 조건은 cancelIfCollectingAndEmpty 의 NOT EXISTS 와 같다(activeStatuses 를 다시 받는다):
+  //   AND NOT EXISTS (SELECT p FROM Participation p
+  //                   WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)
+  // idx_participations_buncheol_status 를 타는 semi-join 이고, 형제 쿼리
+  // findIdsByStatusAndDeadlineBefore 가 같은 이유로 이미 갖고 있다.
   @Query(
       "SELECT b.id FROM Buncheol b "
           + "WHERE b.status = :status AND b.paymentDueAt <= :now "
           + "ORDER BY b.paymentDueAt ASC")
   List<Long> findIdsByStatusAndPaymentDueBefore(
-      @Param("status") BuncheolStatus status,
-      @Param("now") Instant now,
-      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
-      Pageable pageable);
+      @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
   /**
    * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면 미성사 취소한다. 확정 참여가 있으면
@@ -236,9 +239,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * <b>개최자가 아무것도 안 하면 분철이 끝나지 않는다</b> — 이는 「제외」가 정문을 만들면서 <b>수용하기로 한
    * 트레이드오프</b>다(docs/70 §1, 사용자 결정). 자동으로 접지 않는다.
    *
-   * <p>대신 그런 분철이 폴링 배치를 잠식하지 않도록 <b>조회 쪽에서</b> 걸러 낸다({@link
-   * #findIdsByStatusAndPaymentDueBefore}) — 안 그러면 안 죽는 분철이 {@code paymentDueAt ASC} 앞자리를 영구
-   * 점유해 뒤에 온 분철의 정리까지 굶긴다.
+   * <p>🟡 <b>그래서 안 죽는 분철이 폴링 배치를 잠식한다</b> — {@code paymentDueAt ASC} 앞자리를 영구 점유해
+   * 뒤에 온 분철의 정리가 굶는다. 걸러 내지 <b>않는다</b>({@link #findIdsByStatusAndPaymentDueBefore} 의
+   * 「알려진 한계」 참조). prod C2C 「입금 수집중」이 0 건이라 당장 발현하지 않아 수용한 상태다
+   * (docs/82 §6).
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

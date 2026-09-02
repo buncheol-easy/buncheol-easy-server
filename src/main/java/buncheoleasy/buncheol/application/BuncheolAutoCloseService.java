@@ -57,9 +57,9 @@ public class BuncheolAutoCloseService {
    * 분철이 끝나지 않는데, 이는 「제외」가 정문을 만들면서 수용하기로 한 트레이드오프다</b>(docs/70 §1, 사용자
    * 결정). 자동으로 접지 않는다.
    *
-   * <p>대신 그런 분철이 <b>폴링 배치를 잠식하지 않도록</b> 조회 쪽에서 걸러 낸다({@code
-   * findCollectingIdsPastPaymentDue}) — 안 그러면 안 죽는 분철이 앞자리를 영구 점유해 뒤에 온 분철의 정리까지
-   * 굶는다. 끝나지 않는 것은 <b>그 분철만의 일</b>이어야 한다.
+   * <p>🟡 <b>그래서 그런 분철이 폴링 배치를 잠식한다</b> — 안 죽는 분철이 앞자리를 영구 점유해 뒤에 온 분철의
+   * 정리가 굶는다. 조회에서 걸러 내지 <b>않는다</b>(prod C2C 「입금 수집중」 0 건이라 당장 발현하지 않아
+   * 수용한 한계 — docs/82 §6 · {@code JpaBuncheolRepository#findIdsByStatusAndPaymentDueBefore}).
    *
    * <p>참여자 알림은 없다 — 전원이 이미 개별 취소 안내를 받은 뒤다.
    */

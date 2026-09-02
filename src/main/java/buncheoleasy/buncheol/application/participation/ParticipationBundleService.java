@@ -42,6 +42,11 @@ public class ParticipationBundleService {
    * <p>C2C 는 자동 만료가 없으므로(결정 9) <b>이것이 미입금자를 빼는 유일한 출구</b>다. 없으면 분철이 「입금 수집중」에
    * 영구 정체한다.
    *
+   * <p>⚠️ <b>다만 「제외」만으로 정체가 풀리지는 않는다.</b> 입금확인({@link #confirmPayment})은 끝에
+   * {@code confirmIfAllCollected} 로 분철을 CONFIRMED 까지 올리지만 여기는 부르지 않는다 — 부분 확정은
+   * 개최자 선택으로 남긴다(docs/46 §7.1-6). 마지막 미입금 묶음을 뺀 뒤 개최자가 「입금 수집 종료」({@code
+   * BuncheolService#finalizeCollected})를 한 번 더 눌러야 분철이 진행확정된다.
+   *
    * <p>판정({@link BundleReleasability})으로 <b>사유를 가려 에러코드로 바꾸고</b>, 실제 차단은 CAS 가 한다 —
    * 판정과 실행 사이에 마지막 슬롯이 입금확인되거나 개최자가 반려로 기한을 미는 창이 있기 때문이다. 판정을 조회 응답과
    * 공유해 "버튼은 있는데 누르면 409" 가 생기지 않게 한다.

@@ -41,6 +41,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 class OAuth2LoginSuccessHandlerTest {
 
   private static final String FRONTEND_CALLBACK_URL = "http://localhost:3000/login/callback";
+  private static final String REFRESH_COOKIE_PATH = "/api/backend/v1/auth";
 
   @Mock private OAuth2UserProfileExtractor profileExtractor;
 
@@ -53,7 +54,7 @@ class OAuth2LoginSuccessHandlerTest {
   @Mock private OAuth2User principal;
 
   private final RefreshTokenCookieFactory refreshTokenCookieFactory =
-      new RefreshTokenCookieFactory(1209600, false);
+      new RefreshTokenCookieFactory(1209600, false, REFRESH_COOKIE_PATH);
 
   private OAuth2LoginSuccessHandler createHandler() {
     return createHandler(FRONTEND_CALLBACK_URL);
@@ -106,7 +107,7 @@ class OAuth2LoginSuccessHandlerTest {
       assertThat(response.getHeader(HttpHeaders.SET_COOKIE))
           .contains("refreshToken=refresh")
           .contains("HttpOnly")
-          .contains("Path=/v1/auth")
+          .contains("Path=" + REFRESH_COOKIE_PATH)
           .contains("SameSite=Lax");
     }
 

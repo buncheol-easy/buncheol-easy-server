@@ -90,7 +90,8 @@ class AuthControllerTest {
         .andExpect(
             header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=new-refresh")))
         .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
-        .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Path=/v1/auth")))
+        .andExpect(
+            header().string(HttpHeaders.SET_COOKIE, containsString("Path=/api/backend/v1/auth")))
         .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")));
   }
 

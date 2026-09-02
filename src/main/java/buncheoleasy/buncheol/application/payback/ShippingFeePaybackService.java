@@ -2,10 +2,12 @@ package buncheoleasy.buncheol.application.payback;
 
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.request.ShippingFeePaybackRequest;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
@@ -50,9 +52,16 @@ public class ShippingFeePaybackService {
 
     // 환급 입금 계좌의 정본은 묶음이다 (P2-c). 묶음은 계좌를 NOT NULL 로 갖지만, 배포선 창에서 생긴
     // 미연결 참여는 묶음 자체가 없다 — 그 신청이 접수되면 돈 보낼 곳이 없으므로 여기서 막는다.
-    if (participationBundleDomainService.findByParticipation(participation).isEmpty()) {
-      throw new BusinessException(ErrorCode.PAYBACK_REFUND_ACCOUNT_MISSING);
-    }
+    ParticipationBundle bundle =
+        participationBundleDomainService
+            .findByParticipation(participation)
+            .orElseThrow(() -> new BusinessException(ErrorCode.PAYBACK_REFUND_ACCOUNT_MISSING));
+
+    // 배송비 정본도 묶음이다. 방금 꺼낸 묶음을 넘겨 형제 슬롯만 1회 더 읽는다(묶음 재조회 없음).
+    // 대상 판정(deriveStatus)과 환급액 스냅샷(requestPayback)이 물리적으로 같은 객체를 쓰므로
+    // 「자격은 있다는데 환급액은 0」이 구조적으로 불가능하다.
+    ShippingFeeAttribution shippingFees =
+        participationBundleDomainService.shippingFeeAttributionOf(bundle);
 
     // 택배 1개 = 묶음 1개 — 다슬롯 묶음은 슬롯들이 배송 1건을 공유한다.
     Delivery delivery =
@@ -63,7 +72,8 @@ public class ShippingFeePaybackService {
             participation,
             buncheolDomainService.getBuncheol(participation.getBuncheolId()).getFlowType(),
             delivery,
-            now);
+            now,
+            shippingFees);
     if (derived != PaybackStatus.ELIGIBLE
         && derived != PaybackStatus.REJECTED
         && derived != PaybackStatus.REQUESTED) {
@@ -80,7 +90,7 @@ public class ShippingFeePaybackService {
       throw new BusinessException(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE);
     }
 
-    participationDomainService.requestPayback(participation, tweetUrl, now);
+    participationDomainService.requestPayback(participation, tweetUrl, now, shippingFees);
     eventPublisher.publishEvent(new ShippingFeePaybackRequestedEvent(participationId));
   }
 }

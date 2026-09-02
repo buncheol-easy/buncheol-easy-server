@@ -7,6 +7,7 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Duration;
@@ -25,6 +26,10 @@ import org.mockito.quality.Strictness;
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("ShippingFeePaybackPolicy 테스트")
 class ShippingFeePaybackPolicyTest {
+
+  // 배송비 귀속 판정. 이 테스트들은 저장값 폴백 경로를 검증하므로 빈 판정을 넘긴다
+  // (empty() 는 participation.getShippingFee() 를 그대로 돌려준다).
+  private final ShippingFeeAttribution fees = ShippingFeeAttribution.empty();
 
   private static final Instant DELIVERED_AT = Instant.parse("2026-07-15T09:00:00Z");
   private static final Instant NOW_BEFORE_DEADLINE = DELIVERED_AT.plusSeconds(3600);
@@ -59,7 +64,7 @@ class ShippingFeePaybackPolicyTest {
 
     @Test
     void 이벤트_대상이고_배송_완료면_마감_전에는_ELIGIBLE_이다() {
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.ELIGIBLE);
     }
 
@@ -67,13 +72,14 @@ class ShippingFeePaybackPolicyTest {
     void 수령_완료_상태도_신청_가능하다() {
       given(delivery.getStatus()).willReturn(DeliveryStatus.RECEIVED);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.ELIGIBLE);
     }
 
     @Test
     void 이벤트가_비활성이면_NONE_이다() {
-      assertThat(policyWith(false).deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policyWith(false)
+              .deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.NONE);
     }
 
@@ -81,7 +87,7 @@ class ShippingFeePaybackPolicyTest {
     void 슬롯_금액이_0원이_아니면_NONE_이다() {
       given(participation.getAmount()).willReturn(30_000L);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.NONE);
     }
 
@@ -89,7 +95,7 @@ class ShippingFeePaybackPolicyTest {
     void 배송비가_0원인_참여는_환급할_금액이_없어_NONE_이다() {
       given(participation.getShippingFee()).willReturn(0L);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.NONE);
     }
 
@@ -97,7 +103,7 @@ class ShippingFeePaybackPolicyTest {
     void 입금확인되지_않은_참여는_NONE_이다() {
       given(participation.getStatus()).willReturn(ParticipationStatus.AWAITING_PAYMENT);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.NONE);
     }
 
@@ -105,19 +111,19 @@ class ShippingFeePaybackPolicyTest {
     void 배송_완료_전에는_NONE_이다() {
       given(delivery.getStatus()).willReturn(DeliveryStatus.SHIPPING);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.NONE);
     }
 
     @Test
     void 배송_스냅샷이_없으면_NONE_이다() {
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, null, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, null, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.NONE);
     }
 
     @Test
     void 배송_완료_후_신청_일수가_지나면_EXPIRED_이다() {
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE, fees))
           .isEqualTo(PaybackStatus.EXPIRED);
     }
 
@@ -126,7 +132,7 @@ class ShippingFeePaybackPolicyTest {
       given(delivery.getDeliveredAt()).willReturn(null);
       given(delivery.getReceivedAt()).willReturn(null);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE, fees))
           .isEqualTo(PaybackStatus.ELIGIBLE);
     }
 
@@ -134,7 +140,8 @@ class ShippingFeePaybackPolicyTest {
     void 저장된_신청_상태가_있으면_이벤트_설정과_무관하게_그대로_반환한다() {
       given(participation.getPaybackStatus()).willReturn(PaybackStatus.COMPLETED);
 
-      assertThat(policyWith(false).deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE))
+      assertThat(policyWith(false)
+              .deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE, fees))
           .isEqualTo(PaybackStatus.COMPLETED);
     }
 
@@ -142,7 +149,7 @@ class ShippingFeePaybackPolicyTest {
     void 반려_상태는_마감_전이면_그대로_반려로_반환한다() {
       given(participation.getPaybackStatus()).willReturn(PaybackStatus.REJECTED);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_BEFORE_DEADLINE, fees))
           .isEqualTo(PaybackStatus.REJECTED);
     }
 
@@ -150,7 +157,7 @@ class ShippingFeePaybackPolicyTest {
     void 반려_상태라도_마감이_지나면_EXPIRED_로_재신청을_닫는다() {
       given(participation.getPaybackStatus()).willReturn(PaybackStatus.REJECTED);
 
-      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE))
+      assertThat(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW_AFTER_DEADLINE, fees))
           .isEqualTo(PaybackStatus.EXPIRED);
     }
   }
@@ -161,7 +168,7 @@ class ShippingFeePaybackPolicyTest {
 
     @Test
     void 배송_완료_시각_더하기_신청_일수를_반환한다() {
-      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery))
+      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery, fees))
           .isEqualTo(DELIVERED_AT.plus(Duration.ofDays(7)));
     }
 
@@ -171,7 +178,7 @@ class ShippingFeePaybackPolicyTest {
       given(delivery.getDeliveredAt()).willReturn(null);
       given(delivery.getReceivedAt()).willReturn(receivedAt);
 
-      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery))
+      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery, fees))
           .isEqualTo(receivedAt.plus(Duration.ofDays(7)));
     }
 
@@ -180,12 +187,12 @@ class ShippingFeePaybackPolicyTest {
       given(delivery.getDeliveredAt()).willReturn(null);
       given(delivery.getReceivedAt()).willReturn(null);
 
-      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery)).isNull();
+      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery, fees)).isNull();
     }
 
     @Test
     void 배송_스냅샷이_없으면_null_이다() {
-      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, null)).isNull();
+      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, null, fees)).isNull();
     }
 
     @Test
@@ -194,14 +201,14 @@ class ShippingFeePaybackPolicyTest {
       // 배송 완료 게이트와 어긋나지 않아야 한다.
       given(delivery.getStatus()).willReturn(DeliveryStatus.SHIPPING);
 
-      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery)).isNull();
+      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery, fees)).isNull();
     }
 
     @Test
     void 이벤트_비대상_참여는_배송이_완료됐어도_null_이다() {
       given(participation.getAmount()).willReturn(30_000L);
 
-      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery)).isNull();
+      assertThat(policy.submitDeadline(participation, FlowType.LEGACY, delivery, fees)).isNull();
     }
   }
 
@@ -242,8 +249,8 @@ class ShippingFeePaybackPolicyTest {
       given(participation.getShippingFee()).willReturn(3000L);
       given(participation.getStatus()).willReturn(ParticipationStatus.CONFIRMED);
 
-      assertThat(policy.isEventTarget(participation, FlowType.C2C)).isFalse();
-      assertThat(policy.isEventTarget(participation, FlowType.LEGACY)).isTrue();
+      assertThat(policy.isEventTarget(participation, FlowType.C2C, fees)).isFalse();
+      assertThat(policy.isEventTarget(participation, FlowType.LEGACY, fees)).isTrue();
     }
   }
 }

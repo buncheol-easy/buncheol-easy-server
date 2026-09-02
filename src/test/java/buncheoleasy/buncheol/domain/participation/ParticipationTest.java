@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.domain.participation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.Test;
 
 @DisplayName("Participation 도메인 테스트")
 class ParticipationTest {
+
+  private final ShippingFeeAttribution fees = ShippingFeeAttribution.empty();
 
   private static final Long BUNCHEOL_ID = 1L;
   private static final Long BUNCHEOL_MEMBER_ID = 10L;
@@ -36,7 +39,8 @@ class ParticipationTest {
       assertThat(participation.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
       assertThat(participation.getAmount()).isEqualTo(AMOUNT);
       assertThat(participation.getShippingFee()).isEqualTo(SHIPPING_FEE);
-      assertThat(participation.getTotalAmount()).isEqualTo(AMOUNT + SHIPPING_FEE);
+      assertThat(participation.getAmount() + participation.getShippingFee())
+          .isEqualTo(AMOUNT + SHIPPING_FEE);
       assertThat(participation.getDueAt()).isEqualTo(DUE_AT);
       assertThat(participation.getStatus()).isEqualTo(ParticipationStatus.AWAITING_PAYMENT);
       assertThat(participation.getConfirmedAt()).isNull();
@@ -112,7 +116,7 @@ class ParticipationTest {
     void 신청하면_REQUESTED_로_전이하고_배송비를_환급액으로_스냅샷한다() {
       Participation participation = newParticipation();
 
-      participation.requestPayback(TWEET_URL, NOW);
+      participation.requestPayback(TWEET_URL, NOW, fees);
 
       assertThat(participation.getPaybackStatus()).isEqualTo(PaybackStatus.REQUESTED);
       assertThat(participation.getPaybackTweetUrl()).isEqualTo(TWEET_URL.value());
@@ -123,11 +127,11 @@ class ParticipationTest {
     @Test
     void 확인중_상태에서_다시_제출하면_트윗_링크가_수정된다() {
       Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW);
+      participation.requestPayback(TWEET_URL, NOW, fees);
 
       PaybackTweetUrl fixedUrl = PaybackTweetUrl.parse("https://x.com/fan/status/789");
       Instant editedAt = NOW.plusSeconds(600);
-      participation.requestPayback(fixedUrl, editedAt);
+      participation.requestPayback(fixedUrl, editedAt, fees);
 
       assertThat(participation.getPaybackStatus()).isEqualTo(PaybackStatus.REQUESTED);
       assertThat(participation.getPaybackTweetUrl()).isEqualTo(fixedUrl.value());

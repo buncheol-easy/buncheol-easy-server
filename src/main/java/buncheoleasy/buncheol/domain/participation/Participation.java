@@ -82,9 +82,11 @@ public class Participation extends TimestampedEntity {
   @Column(nullable = false, updatable = false)
   private long amount;
 
-  // 선택한 배송수단의 배송비. 참여 1건 = 멤버 슬롯 1개(단일 선택 정책)라 참여마다 부과된다.
-  // 단, 다중 선택 시절 생성된 기존 행은 묶음 첫 슬롯에만 부과되고(>0) 나머지는 0 일 수 있다.
-  // 실제 입금 총액은 amount + shippingFee 다(getTotalAmount).
+  // ⚠️ DEPRECATED — <b>정본은 participation_bundles.shipping_fee 다.</b> 새 행에는 쓰지 않는다(INSERT 목록에서 뺐다)
+  // 라 항상 0 이고, 옛 행만 값을 갖는다(묶음 첫 슬롯만 >0). 표시·판정에 이 값을 직접 쓰면 안 된다 —
+  // ShippingFeeAttribution 이 읽는 시점에 살아 있는 슬롯으로 귀속을 다시 정한다. 이 필드는 그 판정의
+  // 옛 행 폴백에서만 읽히고, P4 에서 컬럼과 함께 사라진다.
+  // 인메모리 값은 여전히 필요하다 — attach() 로 흘러가 <b>묶음의 배송비를 만든다</b>.
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
@@ -266,21 +268,15 @@ public class Participation extends TimestampedEntity {
     return status == ParticipationStatus.AWAITING_PAYMENT ? paymentRejectedAt : null;
   }
 
-  public long getTotalAmount() {
-    return amount + shippingFee;
-  }
-
-  /** 결제 전 구간(입금 대기·기한·계좌 안내·페이액션 주문)을 건너뛰는 판정의 단일 기준. */
-  public boolean isFree() {
-    return getTotalAmount() == 0;
-  }
-
   /**
    * 배송비 환급 신청 (NONE/REJECTED/REQUESTED → REQUESTED). 반려 후 재신청이면 이전 반려 사유를 지우고, 검수 전(REQUESTED)
    * 재제출은 잘못 올린 트윗 링크 수정으로 동작한다. 환급액은 신청 시점의 배송비를 스냅샷해 이후 배송비 정책 변경에 영향받지 않는다. 신청
    * 자격(이벤트 대상·배송 완료·마감 전)은 호출 측 {@code ShippingFeePaybackService} 가 검증한다.
    */
-  public void requestPayback(final PaybackTweetUrl tweetUrl, final Instant now) {
+  public void requestPayback(
+      final PaybackTweetUrl tweetUrl,
+      final Instant now,
+      final ShippingFeeAttribution shippingFees) {
     if (!paybackStatus.requestable()) {
       throw new BusinessException(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);
     }
@@ -288,7 +284,15 @@ public class Participation extends TimestampedEntity {
     this.paybackTweetUrl = tweetUrl.value();
     this.paybackRequestedAt = now;
     this.paybackRejectReason = null;
-    this.paybackAmount = shippingFee;
+    // 배송비 정본은 묶음이다. 귀속 판정은 묶음당 한 슬롯에만 금액을 주므로 다슬롯이어도 곱해지지 않는다.
+    //
+    // 🔴 재신청(REJECTED/REQUESTED)은 deriveStatus 가 isEventTarget 을 건너뛰어 「배송비 > 0」 재검증을
+    // 받지 않는다. 그 경로에서 0 이 내려오면 이미 확정된 환급액이 0 으로 덮여, 어드민 검수 화면과
+    // 알림톡 「환급금액」이 0원으로 나간다. 첫 스냅샷이 있으면 지킨다.
+    long resolved = shippingFees.shippingFeeOf(this);
+    if (resolved > 0 || paybackAmount == null) {
+      this.paybackAmount = resolved;
+    }
   }
 
   // 운영진의 환급 완료/반려 전이는 동시 검수 시 중복 알림을 막기 위해 CAS

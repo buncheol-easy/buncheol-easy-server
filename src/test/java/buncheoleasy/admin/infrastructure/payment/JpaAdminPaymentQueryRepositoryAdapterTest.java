@@ -226,7 +226,9 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       assertThat(view.group().getName()).isEqualTo("관리자 테스트 그룹");
       assertThat(view.member().getName()).isEqualTo("관리자 테스트 멤버");
       assertThat(view.participant().getNickname().value()).isEqualTo("Guestadminbuyer");
-      assertThat(view.participation().getTotalAmount()).isEqualTo(13000);
+      // 금액은 이제 뷰가 아니라 귀속 판정이 낸다(AdminPaymentQueryService 와 같은 계산).
+      assertThat(view.participation().getAmount() + view.participation().getShippingFee())
+          .isEqualTo(13000);
       assertThat(view.delivery()).isNull();
       // 픽스처가 배송지를 지정하지 않았으므로 LEFT JOIN 으로 행이 보존되고 배송지는 null 이다.
       assertThat(view.shippingAddress()).isNull();

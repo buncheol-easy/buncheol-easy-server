@@ -97,6 +97,9 @@ class ParticipationServiceTest {
 
   @Captor private ArgumentCaptor<Participation> participationCaptor;
 
+  private static final Long SECOND_MEMBER_ID = 202L;
+  private static final long SECOND_MEMBER_PRICE = 21_000L;
+
   private ParticipateRequest participateRequest() {
     return new ParticipateRequest(BUNCHEOL_MEMBER_ID, SHIPPING_ADDRESS_ID);
   }
@@ -186,7 +189,8 @@ class ParticipationServiceTest {
       // 멤버 금액과 배송비는 분리 저장되고, 총액(getTotalAmount)에만 합산된다.
       assertThat(saved.getAmount()).isEqualTo(MEMBER_PRICE);
       assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
-      assertThat(saved.getTotalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      assertThat(saved.getAmount() + saved.getShippingFee())
+          .isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(saved.getDueAt()).isEqualTo(expectedDueAt);
       // 계좌는 참여가 아니라 묶음이 갖는다 (P2-c) — 참여 행에는 더 이상 실리지 않는다.
       then(participationBundleDomainService)
@@ -903,11 +907,16 @@ class ParticipationServiceTest {
      * "상속 후보가 있는데도 상속하지 않는다" 를 검증할 수 없고, 단언이 배제할 값(옛 배송지·옛 이름·0원)이
      * 테스트 안에 존재하지 않아 <b>변경 전 코드로도 통과</b>한다.
      */
-    private void givenExistingActive(final Long bundleId) {
+    private Participation existingActive(final Long bundleId) {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
       setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
       setField(existing, "bundleId", bundleId);
+      return existing;
+    }
+
+    private void givenExistingActive(final Long bundleId) {
+      Participation existing = existingActive(bundleId);
       lenient()
           .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
           .thenReturn(Optional.of(existing));
@@ -974,6 +983,39 @@ class ParticipationServiceTest {
               isNull(), isNull(), eq(NOW));
       // 그래서 유저 조회 헛쿼리도 없다.
       then(userDomainService).should(never()).getUser(PARTICIPANT_ID);
+    }
+
+    // 🔴 다슬롯 <b>성공</b> 케이스. 이 트랙에서 가장 값진 단언이다 — 지금까지 다슬롯 테스트는 전부
+    // 「거절」이라, 응답 총액이 배송비를 슬롯 수만큼 곱해도 스위트가 초록으로 통과했다.
+    //
+    // 묶음 = 이체 1회 · 택배 1개다. 자리를 2개 잡아도 배송비는 <b>1회</b>여야 한다. 응답 총액을 묶음의
+    // 배송비로 계산하면(= 각 슬롯이 만액을 들고 합산되면) 참여자가 안내받은 금액이 실제보다 커지고,
+    // 그 돈을 그대로 보내면 개최자 통장에 초과 입금이 된다.
+    @Test
+    void C2C_자리_2개_신청의_응답_총액은_배송비를_한_번만_더한다() {
+      Buncheol buncheol = stubC2c(BuncheolStatus.RECRUITING);
+      givenFirstParticipation(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(SECOND_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE));
+      // 첫 슬롯은 활성 참여가 없고, 둘째 슬롯은 첫 슬롯을 상속한다(같은 묶음 · 배송비 0).
+      given(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .willReturn(Optional.empty())
+          .willReturn(Optional.of(existingActive(EXISTING_BUNDLE_ID)));
+      givenAppliedInsert();
+
+      ParticipateResult result =
+          participationService.participate(
+              BUNCHEOL_ID,
+              PARTICIPANT_ID,
+              new ParticipateRequest(
+                  null,
+                  List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID),
+                  SHIPPING_ADDRESS_ID,
+                  null,
+                  null));
+
+      assertThat(result.totalAmount())
+          .isEqualTo(MEMBER_PRICE + SECOND_MEMBER_PRICE + SHIPPING_FEE);
     }
 
     @Test

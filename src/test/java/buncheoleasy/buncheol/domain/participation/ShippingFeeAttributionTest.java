@@ -165,7 +165,8 @@ class ShippingFeeAttributionTest {
     ShippingFeeAttribution attribution = ShippingFeeAttribution.ofAllSlots(List.of(only), bundle());
 
     assertThat(attribution.shippingFeeOf(only)).isEqualTo(only.getShippingFee());
-    assertThat(attribution.totalAmountOf(only)).isEqualTo(only.getTotalAmount());
+    assertThat(attribution.totalAmountOf(only))
+        .isEqualTo(only.getAmount() + only.getShippingFee());
   }
 
   @Test

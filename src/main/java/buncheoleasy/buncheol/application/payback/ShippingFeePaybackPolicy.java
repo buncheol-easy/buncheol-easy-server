@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Duration;
@@ -36,11 +37,14 @@ public class ShippingFeePaybackPolicy {
    * 신청하는 경로를 flowType 가드로 막는다. {@code amount} 는 점유 시점 스냅샷이라 이후 가격 수정에 흔들리지 않는다. 배송비 0원
    * 참여는 환급할 금액이 없으므로 비대상.
    */
-  public boolean isEventTarget(final Participation participation, final FlowType flowType) {
+  public boolean isEventTarget(
+      final Participation participation,
+      final FlowType flowType,
+      final ShippingFeeAttribution shippingFees) {
     return properties.enabled()
         && flowType == FlowType.LEGACY
         && participation.getAmount() == 0
-        && participation.getShippingFee() > 0
+        && shippingFees.shippingFeeOf(participation) > 0
         && participation.getStatus() == ParticipationStatus.CONFIRMED;
   }
 
@@ -62,7 +66,8 @@ public class ShippingFeePaybackPolicy {
       final Participation participation,
       final FlowType flowType,
       final Delivery delivery,
-      final Instant now) {
+      final Instant now,
+      final ShippingFeeAttribution shippingFees) {
     PaybackStatus stored = participation.getPaybackStatus();
     if (stored == PaybackStatus.REJECTED && isSubmitClosed(delivery, now)) {
       return PaybackStatus.EXPIRED;
@@ -70,7 +75,7 @@ public class ShippingFeePaybackPolicy {
     if (stored != PaybackStatus.NONE) {
       return stored;
     }
-    if (!isEventTarget(participation, flowType)) {
+    if (!isEventTarget(participation, flowType, shippingFees)) {
       return PaybackStatus.NONE;
     }
     if (!isDeliveryCompleted(delivery)) {
@@ -89,8 +94,11 @@ public class ShippingFeePaybackPolicy {
    * 여부는 프론트가 파생 status 와 조합해 판단한다. 마감 판정({@link #deriveStatus})과 같은 계산을 공유한다.
    */
   public Instant submitDeadline(
-      final Participation participation, final FlowType flowType, final Delivery delivery) {
-    return isEventTarget(participation, flowType) ? submitDeadline(delivery) : null;
+      final Participation participation,
+      final FlowType flowType,
+      final Delivery delivery,
+      final ShippingFeeAttribution shippingFees) {
+    return isEventTarget(participation, flowType, shippingFees) ? submitDeadline(delivery) : null;
   }
 
   // 신청 마감 시각 = 마감 기준 시점 + submitWindowDays. 기준 시점은 임시로 배송 완료 시각(delivered_at, 없으면 received_at)

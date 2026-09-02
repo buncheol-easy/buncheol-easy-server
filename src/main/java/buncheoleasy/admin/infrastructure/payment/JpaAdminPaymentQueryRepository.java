@@ -105,7 +105,7 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           + "COALESCE(SUM(CASE WHEN p.status = :cancelledStatus AND p.confirmedAt IS NULL THEN 1 ELSE 0 END), 0), "
           + "COUNT(p), "
           + "COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus "
-          + "  THEN p.amount + (CASE WHEN p.bundleId IS NULL THEN p.shippingFee ELSE 0 END) "
+          + "  THEN p.amount "
           + "  ELSE 0 END), 0) "
           + "FROM Participation p")
   List<Object[]> summarize(

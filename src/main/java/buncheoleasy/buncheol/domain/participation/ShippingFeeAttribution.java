@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 묶음 배송비를 어느 슬롯에 붙여 보여줄지 정한다 (docs/62 M-01 · docs/81 §2).
@@ -41,6 +42,7 @@ import java.util.Map;
  * 직접 쓰면 안 된다 — 그런 호출부는 {@link ParticipationBundleDomainService#shippingFeeAttributionFor(Collection)}
  * 을 쓰면 형제 슬롯을 대신 읽어 준다.
  */
+@Slf4j
 public final class ShippingFeeAttribution {
 
   private static final ShippingFeeAttribution EMPTY =
@@ -97,7 +99,34 @@ public final class ShippingFeeAttribution {
     cancelledLatest.forEach((bundleId, p) -> carrierByBundleId.put(bundleId, p.getId()));
     // 활성 슬롯이 하나라도 있으면 취소분을 덮는다 — 취소분이 배송비를 지는 건 전부 취소됐을 때뿐이다.
     activeOldest.forEach((bundleId, p) -> carrierByBundleId.put(bundleId, p.getId()));
+    warnIfFallbackReachable(allSlots, bundleById, carrierByBundleId);
     return new ShippingFeeAttribution(bundleById, carrierByBundleId);
+  }
+
+  /**
+   * 저장값 폴백을 타게 될 슬롯이 있으면 <b>조립당 한 번</b> 경고한다.
+   *
+   * <p>배송비 정본이 묶음으로 옮겨간 뒤 이 폴백에 빠지는 것은 곧 <b>배송비가 조용히 0 이 되는 것</b>이다(새 행의 저장값은
+   * 항상 0). 다만 {@code shippingFeeOf} 는 요청당 여러 번 불리므로 거기서 찍으면 행 수의 배수로 쏟아져 오히려 묻힌다.
+   */
+  private static void warnIfFallbackReachable(
+      final Collection<Participation> allSlots,
+      final Map<Long, ParticipationBundle> bundleById,
+      final Map<Long, Long> carrierByBundleId) {
+    long fallbackCount =
+        allSlots.stream()
+            .filter(p -> p.getBundleId() != null && p.getId() != null)
+            .filter(
+                p ->
+                    bundleById.get(p.getBundleId()) == null
+                        || carrierByBundleId.get(p.getBundleId()) == null)
+            .count();
+    if (fallbackCount > 0) {
+      log.warn(
+          "배송비 귀속 폴백 {}건 — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것. slots={}",
+          fallbackCount,
+          allSlots.size());
+    }
   }
 
   // createdAt 이 같으면 id 로 가른다. id 는 AUTO_INCREMENT 라 실무상 생성 순서와 같지만,
@@ -144,7 +173,12 @@ public final class ShippingFeeAttribution {
     // 엔티티에서 다시 꺼내면 그 게터가 비어 있는 경우 NPE 도 실패도 없이 폴백으로 빠져 <b>기능이 조용히 꺼진다</b>
     // — 테스트 목이 getId() 를 안 채운 채로 통과하던 것이 정확히 그 상태였다.
     Long carrierId = carrierParticipationIdByBundleId.get(bundleId);
-    // 미연결 참여(배포선 창)거나 그 묶음이 판정 대상이 아니면 저장값을 그대로 쓴다.
+    // 🔴 이 폴백은 이제 <b>옛 행 전용</b>이다. 참여 INSERT 가 배송비를 싣지 않으므로 새 행의 저장값은
+    // 항상 0 이고, 여기로 빠지는 것은 곧 <b>배송비가 조용히 0 이 되는 것</b>이다. 정상 경로는 그 묶음의
+    // 슬롯 전건과 묶음을 함께 넘기므로 도달하지 않는다.
+    //
+    // ⚠️ 경고는 여기서 찍지 않는다 — shippingFeeOf 는 <b>요청당 여러 번</b> 불린다(개최 관리는 행당 2회).
+    // 조립 시점(ofAllSlots)에 건수로 한 번만 남긴다.
     if (bundle == null || carrierId == null) {
       return participation.getShippingFee();
     }
@@ -152,7 +186,7 @@ public final class ShippingFeeAttribution {
   }
 
   /**
-   * 이 참여의 입금 총액. {@link Participation#getTotalAmount()} 과 달리 배송비를 <b>귀속 판정</b>으로 얹는다 — 저장된
+   * 이 참여의 입금 총액. 저장된 배송비를 그대로 더하지 않고 <b>귀속 판정</b>으로 얹는다 — 저장된
    * 배송비를 그대로 더하면 위 문제가 그대로 화면에 나온다.
    */
   public long totalAmountOf(final Participation participation) {

@@ -96,7 +96,11 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
    * <p>🔴 <b>금액 합계에서 배송비는 여기서 더하지 않는다.</b> 배송비의 정본은 묶음이고 <b>묶음당 1회</b>라, 슬롯마다
    * {@code p.shippingFee} 를 더하면 배송비를 지던 슬롯이 취소된 묶음에서 그 1회분이 통째로 빠진다 — 같은 화면의
    * 목록 행(귀속 판정을 거친다)과 합계가 갈린다. 묶음 몫은 {@link #sumPendingBundleShippingFee} 가 따로 낸다.
-   * 미연결 참여(배포선 창)만 예외로 저장값을 쓴다 — 그 행에는 정본이 될 묶음이 없다.
+   *
+   * <p>⚠️ <b>미연결 참여(묶음 없는 행) 예외를 없앴다</b> — prod·staging 모두 0건 실측(2026-09-02). 다만 같은 화면의
+   * <b>목록 행은</b> 그런 행에서 {@code ShippingFeeAttribution} 의 저장값 폴백을 타므로, 미연결 행이 다시 생기면
+   * <b>합계(여기)와 목록이 갈린다.</b> 그때는 이 합계가 아니라 <b>미연결 행 자체</b>를 없애는 것이 답이다
+   * (P4 의 {@code bundle_id NOT NULL} 승격).
    */
   @Query(
       "SELECT COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus THEN 1 ELSE 0 END), 0), "
@@ -105,7 +109,7 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           + "COALESCE(SUM(CASE WHEN p.status = :cancelledStatus AND p.confirmedAt IS NULL THEN 1 ELSE 0 END), 0), "
           + "COUNT(p), "
           + "COALESCE(SUM(CASE WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus "
-          + "  THEN p.amount + (CASE WHEN p.bundleId IS NULL THEN p.shippingFee ELSE 0 END) "
+          + "  THEN p.amount "
           + "  ELSE 0 END), 0) "
           + "FROM Participation p")
   List<Object[]> summarize(

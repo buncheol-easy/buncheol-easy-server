@@ -99,7 +99,8 @@ class ParticipationDetailQueryServiceTest {
     given(deliveryRepository.findByBundleId(BUNDLE_ID)).willReturn(Optional.empty());
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.empty());
-    given(participationBundleDomainService.shippingFeeAttributionFor(participation))
+    // 이제 이미 읽은 묶음으로 귀속을 만든다(같은 묶음을 두 번 조회하던 것을 없앴다).
+    given(participationBundleDomainService.shippingFeeAttributionOf(null))
         .willReturn(ShippingFeeAttribution.empty());
 
     ParticipationDetailResponse response =

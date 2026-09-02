@@ -15,6 +15,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainServi
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.request.ShippingFeePaybackRequest;
 import buncheoleasy.delivery.domain.Delivery;
@@ -39,6 +40,8 @@ import org.springframework.context.ApplicationEventPublisher;
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("ShippingFeePaybackService 테스트")
 class ShippingFeePaybackServiceTest {
+
+  private final ShippingFeeAttribution fees = ShippingFeeAttribution.empty();
 
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long PARTICIPATION_ID = 500L;
@@ -79,12 +82,13 @@ class ShippingFeePaybackServiceTest {
     given(participation.getBuncheolId()).willReturn(1L);
     given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
     // 환급 입금 계좌의 정본은 묶음이다 (P2-c).
+    given(participationBundleDomainService.shippingFeeAttributionOf(any())).willReturn(fees);
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.of(mock(ParticipationBundle.class)));
     // 배송 조회 키는 묶음이다 (택배 1개 = 묶음 1개).
     given(participation.getBundleId()).willReturn(BUNDLE_ID);
     given(deliveryRepository.findByBundleId(BUNDLE_ID)).willReturn(Optional.of(delivery));
-    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW, fees))
         .willReturn(PaybackStatus.ELIGIBLE);
     given(
             participationDomainService.isPaybackTweetUrlUsedByOther(
@@ -99,7 +103,7 @@ class ShippingFeePaybackServiceTest {
     then(participation).should().validateOwnedBy(PARTICIPANT_ID);
     then(participationDomainService)
         .should()
-        .requestPayback(eq(participation), eq(PaybackTweetUrl.parse(TWEET_URL)), eq(NOW));
+        .requestPayback(eq(participation), eq(PaybackTweetUrl.parse(TWEET_URL)), eq(NOW), any());
     then(eventPublisher)
         .should()
         .publishEvent(new ShippingFeePaybackRequestedEvent(PARTICIPATION_ID));
@@ -107,14 +111,14 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 반려_상태에서도_재신청할_수_있다() {
-    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW, fees))
         .willReturn(PaybackStatus.REJECTED);
 
     service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST);
 
     then(participationDomainService)
         .should()
-        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW));
+        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW), any());
   }
 
   @Test
@@ -129,12 +133,12 @@ class ShippingFeePaybackServiceTest {
         .extracting("errorCode")
         .isEqualTo(ErrorCode.PAYBACK_TWEET_URL_INVALID);
 
-    then(participationDomainService).should(never()).requestPayback(any(), any(), any());
+    then(participationDomainService).should(never()).requestPayback(any(), any(), any(), any());
   }
 
   @Test
   void 환급_대상이_아니면_PAYBACK_NOT_ELIGIBLE_예외가_발생한다() {
-    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW, fees))
         .willReturn(PaybackStatus.NONE);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -145,7 +149,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 신청_마감이_지나면_PAYBACK_NOT_ELIGIBLE_예외가_발생한다() {
-    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW, fees))
         .willReturn(PaybackStatus.EXPIRED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -156,14 +160,14 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 확인중_상태에서는_트윗_링크_수정으로_재제출할_수_있다() {
-    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW, fees))
         .willReturn(PaybackStatus.REQUESTED);
 
     service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST);
 
     then(participationDomainService)
         .should()
-        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW));
+        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW), any());
     then(eventPublisher)
         .should()
         .publishEvent(new ShippingFeePaybackRequestedEvent(PARTICIPATION_ID));
@@ -171,7 +175,7 @@ class ShippingFeePaybackServiceTest {
 
   @Test
   void 입금_완료된_건이면_상태_충돌_예외가_발생한다() {
-    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW))
+    given(policy.deriveStatus(participation, FlowType.LEGACY, delivery, NOW, fees))
         .willReturn(PaybackStatus.COMPLETED);
 
     assertThatThrownBy(() -> service.request(PARTICIPANT_ID, PARTICIPATION_ID, REQUEST))
@@ -190,7 +194,7 @@ class ShippingFeePaybackServiceTest {
         .extracting("errorCode")
         .isEqualTo(ErrorCode.PAYBACK_TWEET_URL_DUPLICATE);
 
-    then(participationDomainService).should(never()).requestPayback(any(), any(), any());
+    then(participationDomainService).should(never()).requestPayback(any(), any(), any(), any());
     then(eventPublisher).should(never()).publishEvent(any());
   }
 

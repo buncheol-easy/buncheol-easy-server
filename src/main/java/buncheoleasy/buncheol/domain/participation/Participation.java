@@ -87,7 +87,12 @@ public class Participation extends TimestampedEntity {
   // ShippingFeeAttribution 이 읽는 시점에 살아 있는 슬롯으로 귀속을 다시 정한다. 이 필드는 그 판정의
   // 옛 행 폴백에서만 읽히고, P4 에서 컬럼과 함께 사라진다.
   // 인메모리 값은 여전히 필요하다 — attach() 로 흘러가 <b>묶음의 배송비를 만든다</b>.
-  @Column(name = "shipping_fee", nullable = false, updatable = false)
+  //
+  // 🔴 {@code insertable = false} 인 이유: 참여 생성은 지금 raw INSERT 하나뿐이고 거기서 이 컬럼을 뺐다.
+  // 누군가 JPA persist 경로를 하나 추가하면 값이 <b>조용히 되살아나</b> 「새 행은 항상 0」이라는 전제가
+  // 깨지고, 그 전제 위에 선 폴백 판정이 옛 행과 새 행을 구분하지 못한다. flow_type 이 같은 이유로
+  // 같은 처방을 쓴다.
+  @Column(name = "shipping_fee", nullable = false, insertable = false, updatable = false)
   private long shippingFee;
 
   // ⚠️ 환불 계좌(refund_*)는 이제 이 엔티티가 갖지 않는다 — 정본은 participation_bundles 다 (P2-c).

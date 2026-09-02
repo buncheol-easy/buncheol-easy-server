@@ -58,7 +58,16 @@ public final class ShippingFeeAttribution {
     this.carrierParticipationIdByBundleId = carrierParticipationIdByBundleId;
   }
 
-  /** 판정 근거가 없을 때. 모든 참여가 저장된 배송비를 그대로 쓴다. */
+  /**
+   * 판정 근거가 없을 때(묶음 미연결). 모든 참여가 저장된 배송비를 그대로 쓴다.
+   *
+   * <p>🔴 <b>새 행에서는 그것이 곧 0 이다.</b> 참여 INSERT 가 배송비를 싣지 않으므로(#171) 저장값은 옛 행만 갖는다. 즉 이
+   * 판정을 받은 새 행은 「배송비 없음」으로 취급되고, 그 결과가 가장 아픈 곳이 입금 자동확인 등록이다 — 배송비만 내는 0원 이벤트
+   * 참여는 등록이 통째로 스킵되고, 유상 참여는 배송비만큼 적은 금액으로 등록돼 매칭이 실패한다.
+   *
+   * <p>그래서 이 판정이 나가는 지점({@code ParticipationBundleDomainService#shippingFeeAttributionOf} 의 {@code bundle
+   * == null})에서 경고를 남긴다. 근본 해결은 미연결 행 자체를 없애는 것이다(P4 의 {@code bundle_id NOT NULL}).
+   */
   public static ShippingFeeAttribution empty() {
     return EMPTY;
   }

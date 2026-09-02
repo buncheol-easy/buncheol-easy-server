@@ -62,8 +62,8 @@ class JpaParticipationRepositoryAdapterBindingTest {
 
     adapter.saveIfRecruiting(participation());
 
-    assertSqlHasNoShippingFee();
-    assertBindingsInOrder();
+    assertSqlShape("status = 'RECRUITING'");
+    assertBindingsInOrder("AWAITING_PAYMENT");
   }
 
   @Test
@@ -72,17 +72,36 @@ class JpaParticipationRepositoryAdapterBindingTest {
 
     adapter.saveIfCollecting(participation());
 
-    assertSqlHasNoShippingFee();
-    assertBindingsInOrder();
+    assertSqlShape("status = 'PAYMENT_COLLECTING'");
+    assertBindingsInOrder("AWAITING_PAYMENT");
   }
 
-  private void assertSqlHasNoShippingFee() {
+  private void assertSqlShape(final String buncheolCondition) {
     assertThat(capturedSql).doesNotContain("shipping_fee");
-    // 컬럼 수와 값 수가 어긋나면 MySQL 1136 으로 즉사한다 — 여기서 먼저 잡는다.
+    // 🔴 컬럼 수 == 값 수. 어긋나면 MySQL 1136 으로 즉사한다 — 실제로 <b>양쪽을 세어</b> 비교한다.
+    // (`?` 총개수만 보면 컬럼 목록에만 항목을 더하는 전형적 1136 오식이 그대로 통과한다.)
+    assertThat(countColumns()).isEqualTo(countSelectExpressions());
+    // 바인딩 개수와도 맞는다 — WHERE 의 ? 1개를 포함해 8.
     assertThat(capturedSql.chars().filter(c -> c == '?').count()).isEqualTo(8);
+    // 두 SQL 이 실제로 갈리는지. 없으면 saveIfCollecting 이 모집중 SQL 을 써도 초록이다.
+    assertThat(capturedSql).contains(buncheolCondition);
   }
 
-  private void assertBindingsInOrder() throws Exception {
+  /** {@code INSERT INTO participations (...)} 괄호 안 항목 수. */
+  private int countColumns() {
+    int open = capturedSql.indexOf('(');
+    int close = capturedSql.indexOf(')');
+    return capturedSql.substring(open + 1, close).split(",").length;
+  }
+
+  /** {@code SELECT ... FROM} 사이 식 수. {@code flow_type}·{@code UTC_TIMESTAMP()} 2개를 포함한다. */
+  private int countSelectExpressions() {
+    int select = capturedSql.indexOf("SELECT ") + "SELECT ".length();
+    int from = capturedSql.indexOf(" FROM ");
+    return capturedSql.substring(select, from).split(",").length;
+  }
+
+  private void assertBindingsInOrder(final String status) throws Exception {
     InOrder order = inOrder(preparedStatement);
     order.verify(preparedStatement).setLong(1, BUNCHEOL_ID);
     order.verify(preparedStatement).setLong(2, BUNCHEOL_MEMBER_ID);
@@ -90,7 +109,7 @@ class JpaParticipationRepositoryAdapterBindingTest {
     order.verify(preparedStatement).setLong(4, SHIPPING_ADDRESS_ID);
     order.verify(preparedStatement).setLong(5, AMOUNT);
     order.verify(preparedStatement).setTimestamp(eq(6), any(), any());
-    order.verify(preparedStatement).setString(7, "AWAITING_PAYMENT");
+    order.verify(preparedStatement).setString(7, status);
     order.verify(preparedStatement).setLong(8, BUNCHEOL_ID); // WHERE id = ?
 
     // 🔴 배송비가 어느 칸으로도 새 나가지 않는다. amount 줄을 잘못 지우고 당기면 여기서 죽는다 —
@@ -116,6 +135,20 @@ class JpaParticipationRepositoryAdapterBindingTest {
               return 0;
             });
     return adapter;
+  }
+
+  // 🔴 프로덕션 트래픽의 절반이 이 경로다(C2C 신청). dueAt 이 null 이라 setTimestamp 에 null 이 들어가는데,
+  // 위 두 테스트는 AWAITING_PAYMENT 만 봐서 이 조합이 한 번도 실행되지 않았다.
+  @Test
+  void C2C_신청_INSERT_도_같은_인덱스에_기한과_상태를_넣는다() throws Exception {
+    JpaParticipationRepositoryAdapter adapter = adapterCapturingSql();
+
+    adapter.saveIfRecruiting(
+        Participation.createApplied(
+            BUNCHEOL_ID, BUNCHEOL_MEMBER_ID, PARTICIPANT_ID, SHIPPING_ADDRESS_ID, AMOUNT, SHIPPING_FEE));
+
+    assertSqlShape("status = 'RECRUITING'");
+    assertBindingsInOrder("APPLIED");
   }
 
   private Participation participation() {

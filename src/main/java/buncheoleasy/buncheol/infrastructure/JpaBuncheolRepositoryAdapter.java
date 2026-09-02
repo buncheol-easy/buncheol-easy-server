@@ -179,8 +179,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   @Override
   public List<Long> findCollectingIdsPastPaymentDue(final Instant now, final int limit) {
     return jpaBuncheolRepository.findIdsByStatusAndPaymentDueBefore(
-        BuncheolStatus.PAYMENT_COLLECTING, now, ParticipationStatus.active(),
-        PageRequest.of(0, limit));
+        BuncheolStatus.PAYMENT_COLLECTING, now, PageRequest.of(0, limit));
   }
 
   @Override

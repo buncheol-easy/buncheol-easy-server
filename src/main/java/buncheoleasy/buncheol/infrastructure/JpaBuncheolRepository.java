@@ -221,10 +221,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "WHERE b.status = :status AND b.paymentDueAt <= :now "
           + "ORDER BY b.paymentDueAt ASC")
   List<Long> findIdsByStatusAndPaymentDueBefore(
-      @Param("status") BuncheolStatus status,
-      @Param("now") Instant now,
-      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
-      Pageable pageable);
+      @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
   /**
    * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면 미성사 취소한다. 확정 참여가 있으면
@@ -236,9 +233,9 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * <b>개최자가 아무것도 안 하면 분철이 끝나지 않는다</b> — 이는 「제외」가 정문을 만들면서 <b>수용하기로 한
    * 트레이드오프</b>다(docs/70 §1, 사용자 결정). 자동으로 접지 않는다.
    *
-   * <p>대신 그런 분철이 폴링 배치를 잠식하지 않도록 <b>조회 쪽에서</b> 걸러 낸다({@link
-   * #findIdsByStatusAndPaymentDueBefore}) — 안 그러면 안 죽는 분철이 {@code paymentDueAt ASC} 앞자리를 영구
-   * 점유해 뒤에 온 분철의 정리까지 굶긴다.
+   * <p>🟡 <b>그래서 안 죽는 분철이 폴링 배치를 잠식한다</b> — {@code paymentDueAt ASC} 앞자리를 영구 점유해
+   * 뒤에 온 분철의 정리가 굶는다. 걸러 내지 <b>않는다</b>({@link #findIdsByStatusAndPaymentDueBefore} 의
+   * 「알려진 한계」 참조). prod C2C 「입금 수집중」이 0 건이라 당장 발현하지 않아 수용한 상태다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

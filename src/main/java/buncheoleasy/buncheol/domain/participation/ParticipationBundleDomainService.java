@@ -183,13 +183,16 @@ public class ParticipationBundleDomainService {
   /**
    * 묶음을 <b>이미 읽어 둔</b> 호출부용 배송비 귀속. 형제 슬롯만 추가로 읽으므로 묶음을 다시 조회하지 않는다.
    *
-   * <p>{@code bundle} 이 {@code null}(미연결 참여)이면 조회 없이 빈 판정을 준다.
+   * <p>{@code bundle} 이 {@code null}(미연결 참여)이면 조회 없이 빈 판정을 주고 <b>경고를 남긴다</b> — 새 행에서 그 판정은
+   * 곧 「배송비 0」이라 입금 자동확인 금액이 조용히 어긋난다({@link ShippingFeeAttribution#empty()} 참고).
    */
   public ShippingFeeAttribution shippingFeeAttributionOf(final ParticipationBundle bundle) {
-    return bundle == null
-        ? ShippingFeeAttribution.empty()
-        : ShippingFeeAttribution.ofBundle(
-            bundle, participationRepository.findAllByBundleIds(List.of(bundle.getId())));
+    if (bundle == null) {
+      log.warn("묶음 없는 참여의 배송비 귀속 — 저장값을 쓴다. 새 행이면 그 값은 0 이다.");
+      return ShippingFeeAttribution.empty();
+    }
+    return ShippingFeeAttribution.ofBundle(
+        bundle, participationRepository.findAllByBundleIds(List.of(bundle.getId())));
   }
 
   /** 참여 <b>한 건</b>을 위한 배송비 귀속. 위와 같은 보장을 준다. */

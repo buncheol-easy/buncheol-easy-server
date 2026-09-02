@@ -253,7 +253,6 @@ public class Participation extends TimestampedEntity {
     this.status = status;
   }
 
-  /** 실제 입금 총액 = 멤버 금액 + 배송비. */
   /**
    * 응답에 노출할 반려 시각. 입금 대기 구간을 벗어나면 {@code null} 이다.
    *

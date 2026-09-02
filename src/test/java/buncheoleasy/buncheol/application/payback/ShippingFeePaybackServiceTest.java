@@ -201,7 +201,6 @@ class ShippingFeePaybackServiceTest {
   @Test
   void 묶음이_없으면_예외가_발생한다() {
     // 배포선 창에서 생긴 미연결 참여 — 돈 보낼 곳이 없으므로 접수를 막는다.
-    given(participationBundleDomainService.shippingFeeAttributionOf(any())).willReturn(fees);
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.empty());
 

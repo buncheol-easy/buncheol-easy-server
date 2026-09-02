@@ -1,16 +1,20 @@
 package buncheoleasy.buncheol.application.payback;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.util.ReflectionTestUtils.setField;
 import static org.mockito.BDDMockito.given;
 
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import java.time.Duration;
+import java.lang.reflect.Constructor;
+import java.util.List;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -251,6 +255,49 @@ class ShippingFeePaybackPolicyTest {
 
       assertThat(policy.isEventTarget(participation, FlowType.C2C, fees)).isFalse();
       assertThat(policy.isEventTarget(participation, FlowType.LEGACY, fees)).isTrue();
+    }
+  }
+
+  @Nested
+  @DisplayName("배송비 정본 테스트")
+  class ShippingFeeSourceTest {
+
+    // 🔴 후속 PR(INSERT 에서 배송비 제거)의 안전망.
+    //
+    // 그 PR 이후 새 행의 participations.shipping_fee 는 <b>항상 0</b> 이다. 즉 대상 판정이 참이 되는
+    // 유일한 정상 경로가 묶음 값이다. 이 클래스의 나머지 테스트는 전부 저장값 폴백(empty())을 태우므로
+    // 그 경로를 한 줄도 검증하지 않는다 — 여기서 고정한다.
+    @Test
+    void 참여_저장값이_0_이어도_묶음_배송비가_있으면_환급_대상이다() {
+      Participation slot = newInstance(Participation.class);
+      setField(slot, "id", 501L);
+      setField(slot, "bundleId", 900L);
+      setField(slot, "amount", 0L);
+      setField(slot, "shippingFee", 0L); // 새 행은 항상 이 상태다
+      setField(slot, "status", ParticipationStatus.CONFIRMED);
+      setField(slot, "createdAt", Instant.parse("2026-09-02T00:00:00Z"));
+
+      ParticipationBundle bundle = newInstance(ParticipationBundle.class);
+      setField(bundle, "id", 900L);
+      setField(bundle, "shippingFee", 3000L);
+
+      ShippingFeeAttribution bundleFees =
+          ShippingFeeAttribution.ofBundle(bundle, List.of(slot));
+
+      assertThat(policy.isEventTarget(slot, FlowType.LEGACY, bundleFees)).isTrue();
+      // 저장값만 보면 배송비 0 이라 비대상이 된다 — 그게 이 PR 이 막는 것이다.
+      assertThat(policy.isEventTarget(slot, FlowType.LEGACY, ShippingFeeAttribution.empty()))
+          .isFalse();
+    }
+  }
+
+  private static <T> T newInstance(final Class<T> type) {
+    try {
+      Constructor<T> constructor = type.getDeclaredConstructor();
+      constructor.setAccessible(true);
+      return constructor.newInstance();
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException(e);
     }
   }
 }

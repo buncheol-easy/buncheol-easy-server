@@ -900,13 +900,7 @@ class ParticipationServiceTest {
       givenParticipantAccount();
     }
 
-    /**
-     * 같은 분철에 이미 활성 참여가 있는 상태 — 배송지·입금자명 상속 분기의 전제.
-     *
-     * <p>⚠️ {@code lenient()} 인 이유: 추가 모집 경로는 이 조회를 <b>아예 하지 않는다</b>. 그래도 깔아 두지 않으면
-     * "상속 후보가 있는데도 상속하지 않는다" 를 검증할 수 없고, 단언이 배제할 값(옛 배송지·옛 이름·0원)이
-     * 테스트 안에 존재하지 않아 <b>변경 전 코드로도 통과</b>한다.
-     */
+    /** 상속 분기의 전제가 되는 「이미 있는 활성 참여」. 스텁 없이 값만 만든다. */
     private Participation existingActive(final Long bundleId) {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
@@ -915,6 +909,13 @@ class ParticipationServiceTest {
       return existing;
     }
 
+    /**
+     * 같은 분철에 이미 활성 참여가 있는 상태 — 배송지·입금자명 상속 분기의 전제.
+     *
+     * <p>⚠️ {@code lenient()} 인 이유: 추가 모집 경로는 이 조회를 <b>아예 하지 않는다</b>. 그래도 깔아 두지 않으면
+     * "상속 후보가 있는데도 상속하지 않는다" 를 검증할 수 없고, 단언이 배제할 값(옛 배송지·옛 이름·0원)이
+     * 테스트 안에 존재하지 않아 <b>변경 전 코드로도 통과</b>한다.
+     */
     private void givenExistingActive(final Long bundleId) {
       Participation existing = existingActive(bundleId);
       lenient()

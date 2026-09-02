@@ -139,6 +139,13 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * 남아 있거나, 입금확인 참여 중 배송이 끝나지 않은 건이 하나라도 남아 있으면 끝나지 않은 분철로 판정한다 (배송 스냅샷이 없는 입금확인 참여도
    * 미종료로 본다). 진행확정 분철의 입금 확인 중 참여는 만료 스케줄러가 곧 취소하는 게 정상 흐름이지만, 스케줄러 지연 사이에 호스트가 탈퇴하면
    * 해당 참여자의 참여 상세(호스트 조회)가 깨지므로 배송 조건 없이 미종료로 본다.
+   *
+   * <p>🔴 <b>{@code p.bundleId} 가 NULL 이면 이 조건은 어느 배송과도 매칭되지 않는다</b> — 그 참여는 영구히
+   * "배송 미종료" 로 남아 탈퇴가 막힌다. <b>지금 그런 행은 없다</b>: 2026-08-31 실측으로 {@code bundle_id IS
+   * NULL} 인 참여가 prod 0/47 · staging 0/104 이고, 참여를 만드는 세 경로가 모두 같은 트랜잭션에서
+   * {@code ParticipationBundleDomainService#attach} 를 부르며 그 연결 CAS 가 실패하면 예외로 전체 롤백된다
+   * — 즉 <b>묶음 없는 참여를 만들 수 있는 코드 경로가 없다</b>. 참여 id 폴백을 남기지 않은 근거가 이것이다.
+   * P4 가 {@code bundle_id} 를 NOT NULL 로 조이면 이 전제가 스키마로 굳는다.
    */
   @Query(
       "SELECT COUNT(b) > 0 FROM Buncheol b "
@@ -152,7 +159,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
           + "        OR (p.status = :confirmedParticipationStatus "
           + "          AND NOT EXISTS ("
           + "            SELECT d FROM Delivery d "
-          + "            WHERE d.participationId = p.id "
+          // 배송은 묶음으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 배송 행이
+          // 아예 생기지 않는다. 참여 id 로 찾으면 그 슬롯이 영구히 "배송 미종료" 로 남아, 그 분철의
+          // 개최자가 영원히 탈퇴하지 못한다. 참여자 가드(JpaParticipationRepository)와 같은 수정이다.
+          + "            WHERE d.bundleId = p.bundleId "
           + "            AND d.status IN :finishedDeliveryStatuses))))))")
   boolean existsUnfinishedByHostId(
       @Param("hostId") Long hostId,
@@ -176,11 +186,20 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
   // 마감 판정 대상 분철 id (자동 마감 폴링용, deadline 오름차순). LEGACY 는 deadline 즉시, C2C 는 확정 유예(48h)까지
   // 지나야 대상이 된다 (docs/46 §7.1-5) — 유예 중 C2C 분철이 매 주기 배치 슬롯(LIMIT)을 잠식하지 않게 쿼리에서 거른다.
+  //
+  // 🔴 예외 하나: C2C 라도 마감 시각에 <b>최소 인원 미달</b>이면 유예를 기다리지 않는다 (2026-08-31 사용자 결정).
+  // 개최자가 확정을 눌러도 인원이 채워지지 않는 분철을 48시간 붙잡아 둘 이유가 없고, 참여자는 그동안 자기 자리가
+  // 살아 있는 줄 안다. LEGACY 가 마감 시각에 인원 미달로 바로 취소하는 것과 같은 규칙이 된다.
+  // (신청 인원으로 센다 — C2C 는 확정 전이라 입금확인 건이 0 이다.)
   @Query(
       "SELECT b.id FROM Buncheol b "
           + "WHERE b.status = :status AND ("
           + "  (b.flowType = :legacyFlow AND b.deadline <= :now) "
-          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :graceCutoff)) "
+          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :graceCutoff) "
+          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :now "
+          + "      AND (SELECT COUNT(p) FROM Participation p "
+          + "           WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)"
+          + "          < b.minHeadcount)) "
           + "ORDER BY b.deadline ASC")
   List<Long> findIdsByStatusAndDeadlineBefore(
       @Param("status") BuncheolStatus status,
@@ -188,9 +207,21 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("c2cFlow") FlowType c2cFlow,
       @Param("now") Instant now,
       @Param("graceCutoff") Instant graceCutoff,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       Pageable pageable);
 
   // 입금 수집중(PAYMENT_COLLECTING)이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용).
+  //
+  // 🟡 알려진 한계: C2C 자동 만료를 끈 뒤로는 활성 슬롯이 남은 분철이 영영 안 비므로(개최자가 「제외」를
+  // 눌러야 빈다 — 안 눌러도 되는 것이 docs/70 §1 의 수용된 트레이드오프) 이 폴링에 계속 걸리고, 오래된
+  // 순이라 앞자리를 점유한다. 그런 분철이 배치 한도(100)만큼 쌓이면 뒤에 온 분철의 정리가 굶는다.
+  // prod C2C 는 아직 「입금 수집중」이 0 건이라 당장 발현하지 않아 <b>지금은 손대지 않는다</b>
+  // (docs/82 §6 — 「알려진 한계로 기록만」).
+  // 고칠 때 넣을 조건은 cancelIfCollectingAndEmpty 의 NOT EXISTS 와 같다(activeStatuses 를 다시 받는다):
+  //   AND NOT EXISTS (SELECT p FROM Participation p
+  //                   WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)
+  // idx_participations_buncheol_status 를 타는 semi-join 이고, 형제 쿼리
+  // findIdsByStatusAndDeadlineBefore 가 같은 이유로 이미 갖고 있다.
   @Query(
       "SELECT b.id FROM Buncheol b "
           + "WHERE b.status = :status AND b.paymentDueAt <= :now "
@@ -199,8 +230,19 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
 
   /**
-   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건) 미성사 취소한다. 확정 참여가 있으면
-   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6). {@code finalizedAt} 은 성사 확정 시각을 보존한다.
+   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면 미성사 취소한다. 확정 참여가 있으면
+   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6). {@code finalizedAt} 은 성사 확정
+   * 시각을 보존한다.
+   *
+   * <p>⚠️ <b>C2C 자동 만료를 끈 뒤(docs/70 결정 9) 이 조건이 성립하는 경로가 크게 줄었다.</b> 예전에는 만료
+   * 스케줄러가 미입금 슬롯을 치워 줘서 활성이 저절로 0 이 됐다. 이제는 개최자가 「제외」를 눌러야 비고,
+   * <b>개최자가 아무것도 안 하면 분철이 끝나지 않는다</b> — 이는 「제외」가 정문을 만들면서 <b>수용하기로 한
+   * 트레이드오프</b>다(docs/70 §1, 사용자 결정). 자동으로 접지 않는다.
+   *
+   * <p>🟡 <b>그래서 안 죽는 분철이 폴링 배치를 잠식한다</b> — {@code paymentDueAt ASC} 앞자리를 영구 점유해
+   * 뒤에 온 분철의 정리가 굶는다. 걸러 내지 <b>않는다</b>({@link #findIdsByStatusAndPaymentDueBefore} 의
+   * 「알려진 한계」 참조). prod C2C 「입금 수집중」이 0 건이라 당장 발현하지 않아 수용한 상태다
+   * (docs/82 §6).
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

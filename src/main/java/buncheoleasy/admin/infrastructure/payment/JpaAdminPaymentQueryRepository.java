@@ -30,7 +30,15 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           + "LEFT JOIN User u ON u.id = p.participantId "
           + "LEFT JOIN BuncheolMember bm ON bm.id = p.buncheolMemberId "
           + "LEFT JOIN GroupMember gm ON gm.id = bm.memberId "
-          + "LEFT JOIN Delivery d ON d.participationId = p.id "
+          + "LEFT JOIN Delivery d ON d.bundleId = p.bundleId "
+          // 택배 1개 = 묶음 1개라 묶음으로 조인한다(다슬롯 묶음의 두 번째 슬롯도 같은 배송을 보게).
+          // 🔴 단 <b>입금확인된 슬롯만</b> 문다. 같은 묶음의 미입금 슬롯도 키가 맞는데 그대로 물리면
+          // 운영자가 <b>입금하지도 않은 슬롯을 배송 상태·운송장과 함께</b> 보게 되고, 이 화면은 입금 확인
+          // 판단의 근거다. 혼재 묶음은 도달 가능하다 — 슬롯 단위 확인과 어드민 벌크 확인이 열려 있다.
+          + "  AND p.status = :confirmedStatus "
+          // ⚠️ 전환 이전 중복 행이 남아 있는 동안 묶음당 배송이 2건인 곳이 있어(prod 묶음 64) 그대로
+          // 조인하면 그 참여가 목록에 두 줄로 나온다. id 최소값 1건으로 확정해 행 수를 보존한다.
+          + "  AND d.id = (SELECT MIN(d2.id) FROM Delivery d2 WHERE d2.bundleId = p.bundleId) "
           + "LEFT JOIN ShippingAddress sa ON sa.id = p.shippingAddressId "
           + "WHERE (:statusFilter IS NULL OR :statusFilter = "
           + "  CASE WHEN p.status = :appliedStatus THEN 'APPLIED' "

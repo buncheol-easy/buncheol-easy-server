@@ -93,10 +93,21 @@ public class MyParticipationQueryService {
         buncheolImageRepository.findThumbnailsByBuncheolIds(buncheolIds).stream()
             .collect(Collectors.toMap(BuncheolImage::getBuncheolId, BuncheolImage::getImageUrl));
 
-    List<Long> participationIds = participations.stream().map(Participation::getId).toList();
-    Map<Long, Delivery> deliveryByParticipationId =
-        deliveryRepository.findAllByParticipationIds(participationIds).stream()
-            .collect(Collectors.toMap(Delivery::getParticipationId, d -> d));
+    // 택배 1개 = 묶음 1개. 다슬롯 묶음의 두 번째 슬롯에는 자기 배송 행이 없으므로(그 묶음의 배송 1건을
+    // 슬롯들이 공유한다) 참여 id 로 찾으면 그 슬롯만 배송 정보가 비어 보인다.
+    // 입금확인된 슬롯의 묶음만 조회한다 — 배송은 입금확인 시점에 생기므로 그 밖의 묶음은 애초에 배송이 없고,
+    // 미확정 슬롯에 배송을 붙이지 않는 아래 게이트와 조회 범위를 맞춰 둔다.
+    // 묶음이 없는 참여(배포선 창에서 생긴 행)는 걸러 낸다 — 그대로 넘기면 IS NULL 조회가 되어 남의 배송이 걸린다.
+    List<Long> bundleIds =
+        participations.stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
+            .map(Participation::getBundleId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+    Map<Long, Delivery> deliveryByBundleId =
+        deliveryRepository.findAllByBundleIds(bundleIds).stream()
+            .collect(Collectors.toMap(Delivery::getBundleId, d -> d));
 
     Map<Long, HostAccountResponse> hostAccountByHostId =
         findHostAccountsForAwaitingPayments(participations, buncheolById);
@@ -119,7 +130,7 @@ public class MyParticipationQueryService {
                     slotCountByBuncheolId,
                     groupMemberNameById,
                     thumbnailByBuncheolId,
-                    deliveryByParticipationId,
+                    deliveryByBundleId,
                     hostAccountByHostId,
                     bundleById,
                     shippingFees,
@@ -154,7 +165,7 @@ public class MyParticipationQueryService {
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, String> groupMemberNameById,
       final Map<Long, String> thumbnailByBuncheolId,
-      final Map<Long, Delivery> deliveryByParticipationId,
+      final Map<Long, Delivery> deliveryByBundleId,
       final Map<Long, HostAccountResponse> hostAccountByHostId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
@@ -166,7 +177,18 @@ public class MyParticipationQueryService {
     BuncheolMember buncheolMember = buncheolMemberById.get(participation.getBuncheolMemberId());
     int slotCount =
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
-    Delivery delivery = deliveryByParticipationId.get(participation.getId());
+    // 🔴 <b>입금확인된 슬롯만</b> 배송을 문다. 배송은 이제 묶음에 붙어 있어(택배 1개 = 묶음 1개) 같은
+    // 묶음의 미입금 슬롯도 키가 맞는데, 그대로 물리면 <b>입금하지도 않은 슬롯에 "배송중" 과 운송장</b>이
+    // 뜬다. 한 묶음에 확정·미확정이 섞이는 건 실제로 도달 가능하다 — 슬롯 단위 입금확인
+    // ({@code ParticipationService#confirmPayment})과 어드민 벌크 확인(건별 트랜잭션 순회)이 열려 있다.
+    //
+    // ⚠️ 맵을 조회하기 전에 null 도 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
+    // null 키 조회에서 NPE 다. (ShippingFeeAttribution 과 같은 함정)
+    Delivery delivery =
+        participation.getStatus() == ParticipationStatus.CONFIRMED
+                && participation.getBundleId() != null
+            ? deliveryByBundleId.get(participation.getBundleId())
+            : null;
     // 입금 대기(입금확인중·보냈어요)일 때만 계좌를 노출한다. C2C 는 확정 시점 스냅샷 계좌 (docs/46 §3-5·§4.7-B1).
     boolean paymentPending =
         participation.getStatus() == ParticipationStatus.AWAITING_PAYMENT
@@ -182,6 +204,7 @@ public class MyParticipationQueryService {
         paymentPending && refundAccount != null ? refundAccount.holder() : null;
     return new MyParticipationResponse(
         participation.getId(),
+        participation.getBundleId(),
         participation.getBuncheolId(),
         buncheol.getTitle(),
         slotCount,

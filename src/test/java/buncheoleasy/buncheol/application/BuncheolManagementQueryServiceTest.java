@@ -1,19 +1,19 @@
 package buncheoleasy.buncheol.application;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
-import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
@@ -39,7 +39,9 @@ import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -53,11 +55,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("BuncheolManagementQueryService 단위 테스트")
 class BuncheolManagementQueryServiceTest {
+
+  private static final Instant FIXED_NOW = Instant.parse("2026-08-31T00:00:00Z");
 
   @InjectMocks private BuncheolManagementQueryService buncheolManagementQueryService;
 
@@ -69,6 +74,9 @@ class BuncheolManagementQueryServiceTest {
   @Mock private GroupMemberRepository groupMemberRepository;
   @Mock private UserRepository userRepository;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
+
+  // 「제외」 가부 판정이 현재 시각을 본다. @InjectMocks 는 Clock 을 목으로 못 만들어 @Spy 로 고정값을 넣는다.
+  @Spy private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
@@ -167,7 +175,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
       BuncheolManagementResponse response =
@@ -199,7 +207,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
       // CONFIRMED 가 없으니 Delivery 조회는 빈 id 목록으로 들어간다.
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -221,6 +229,44 @@ class BuncheolManagementQueryServiceTest {
       assertThat(participant.depositorName()).isEqualTo("홍길동");
       assertThat(participant.refundAccount()).isNull();
       assertThat(participant.delivery()).isNull();
+    }
+
+    // 🔴 null 로 나가면 화면이 묶음 단위 경로 대신 슬롯 경로로 조용히 폴백한다 — 화면만 보면 티가 안 난다.
+    // 배송비 테스트에 얹지 않고 떼어 둔다: 그 테스트가 리네임·삭제되면 이 커버리지가 같이 사라진다.
+    @Test
+    void 응답에_묶음_id와_참여자_id가_실린다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+
+      final Long bundleId = 8888L;
+      Participation active =
+          participation(601L, 101L, PARTICIPANT_USER, 10_000L, ParticipationStatus.APPLIED);
+      setField(active, "bundleId", bundleId);
+      Participation cancelled =
+          participation(602L, 101L, PARTICIPANT_USER, 10_000L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "bundleId", bundleId);
+
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(active));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse activeRow = response.participants().get(0);
+      assertThat(activeRow.bundleId()).isEqualTo(bundleId);
+      assertThat(activeRow.participantId()).isEqualTo(PARTICIPANT_USER);
+      // 취소분도 같은 계약이다 — 개최자가 환불 대상을 묶음으로 접어 볼 때 필요하다.
+      BuncheolManagementParticipantResponse deadRow = response.cancelledParticipants().get(0);
+      assertThat(deadRow.bundleId()).isEqualTo(bundleId);
+      assertThat(deadRow.participantId()).isEqualTo(PARTICIPANT_USER);
     }
 
     // 🔴 staging 재현 그대로 (분철 104 · 묶음 141 · 참여 232 취소 → 233).
@@ -249,7 +295,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(remaining));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -285,7 +331,7 @@ class BuncheolManagementQueryServiceTest {
       Delivery delivery =
           delivery(5001L, 601L, "GS25 강남역점", "유진팬", "010-1234-5678", "1234567890",
               DeliveryStatus.SHIPPING);
-      given(deliveryRepository.findAllByParticipationIds(List.of(601L)))
+      given(deliveryRepository.findAllByBundleIds(List.of(9601L)))
           .willReturn(List.of(delivery));
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
@@ -323,7 +369,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(awaiting, confirmed));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(602L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of(9602L))).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(OTHER_USER, PARTICIPANT_USER)))
           .willReturn(List.of(user(OTHER_USER, "타인"), user(PARTICIPANT_USER, "장원영")));
 
@@ -343,7 +389,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(Collections.emptyList())).willReturn(List.of());
 
       BuncheolManagementResponse response =
@@ -369,7 +415,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -405,7 +451,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -433,7 +479,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -466,8 +512,8 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(free, paid));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(601L, 602L)))
-          .willReturn(List.of());
+      // free 는 묶음이 없어(배포선 창의 미연결 행) 배송 조회 대상에서 빠진다.
+      given(deliveryRepository.findAllByBundleIds(List.of(9602L))).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER, OTHER_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영"), user(OTHER_USER, "안유진팬")));
 
@@ -500,7 +546,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(free));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(601L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of(9601L))).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -525,7 +571,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -556,7 +602,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(paid, freeSlot));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(601L, 602L)))
+      given(deliveryRepository.findAllByBundleIds(List.of(9601L, 9602L)))
           .willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
@@ -584,7 +630,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -612,7 +658,8 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(broken));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of());
-      given(deliveryRepository.findAllByParticipationIds(List.of(601L))).willReturn(List.of());
+      // 묶음이 없으므로 배송 조회 대상에서 빠진다.
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -638,7 +685,7 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of())).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -666,7 +713,7 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(active));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(cancelled));
-      given(deliveryRepository.findAllByParticipationIds(List.of(601L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of(9601L))).willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER, OTHER_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영"), user(OTHER_USER, "안유진팬")));
 
@@ -765,6 +812,8 @@ class BuncheolManagementQueryServiceTest {
     Delivery delivery = newInstance(Delivery.class);
     setField(delivery, "id", id);
     setField(delivery, "participationId", participationId);
+    // 배송 조회 키가 묶음이다 — 참여 픽스처와 같은 규칙(BUNDLE_ID_BASE + 참여 id)으로 심는다.
+    setField(delivery, "bundleId", BUNDLE_ID_BASE + participationId);
     setField(delivery, "shippingMethod", ShippingMethod.GS25_HALF);
     setField(delivery, "storeName", storeName);
     setField(delivery, "receiverNickname", nickname);

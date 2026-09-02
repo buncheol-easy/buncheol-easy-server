@@ -172,6 +172,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         FlowType.C2C,
         now,
         c2cGraceCutoff,
+        ParticipationStatus.active(),
         PageRequest.of(0, limit));
   }
 

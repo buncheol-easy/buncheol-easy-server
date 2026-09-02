@@ -418,8 +418,10 @@ CREATE TABLE IF NOT EXISTS participations
     UNIQUE INDEX uq_participations_legacy_active_participant (buncheol_id, legacy_active_participant_id),
     -- 분철별 상태 집계(확정 인원 카운트)·호스트 참여 목록 조회용
     INDEX idx_participations_buncheol_status (buncheol_id, status),
-    -- 입금 만료 스케줄러 폴링(status='AWAITING_PAYMENT' AND due_at<=now)용
-    INDEX idx_participations_status_due (status, due_at),
+    -- 입금 만료 스케줄러 폴링용. C2C 는 자동 만료하지 않으므로(docs/70 결정 9) flow_type 을 등가조건으로
+    -- 함께 받는다 — 컬럼 순서가 (동등, 동등, 범위+정렬) 이라야 due_at 이 인덱스로 이어진다.
+    -- ⚠️ 기존 배포 DB 에는 수동 ALTER 필요 (CREATE TABLE IF NOT EXISTS 는 인덱스를 추가하지 않는다).
+    INDEX idx_participations_status_flow_due (status, flow_type, due_at),
     -- 내 참여 목록(참여자별 최신순)용
     INDEX idx_participations_participant_created (participant_id, created_at DESC),
     -- 묶음의 활성 슬롯 조회·집계용 (묶음 확인·제외·종료 판정)
@@ -491,9 +493,10 @@ CREATE TABLE IF NOT EXISTS participation_codes
 CREATE TABLE IF NOT EXISTS deliveries
 (
     id                      BIGINT       NOT NULL AUTO_INCREMENT,
-    participation_id        BIGINT       NOT NULL COMMENT '참여 ID (P4 에서 DROP — 정본은 bundle_id)',
-    -- 1묶음 = 1택배 = 배송 1행 (docs/70 결정 4). 백필 후 NOT NULL + UNIQUE 로 조인다.
-    bundle_id               BIGINT       NULL COMMENT '소속 묶음',
+    participation_id        BIGINT       NOT NULL COMMENT '묶음 대표 슬롯 (P4 에서 DROP — 정본은 bundle_id)',
+    -- 1묶음 = 1택배 = 배송 1행 (docs/70 결정 4). 생성·조회 모두 이 칸이 기준이다.
+    -- 전환 이전 다슬롯 묶음만 아직 여러 건이라, 병합 후 NOT NULL + UNIQUE 로 조인다.
+    bundle_id               BIGINT       NULL COMMENT '소속 묶음 = 택배 1개',
     shipping_method         VARCHAR(20)  NOT NULL COMMENT '배송 방식 스냅샷',
     store_name              VARCHAR(100) NOT NULL COMMENT '편의점 지점명 스냅샷',
     receiver_nickname       VARCHAR(20)  NOT NULL COMMENT '닉네임 스냅샷',

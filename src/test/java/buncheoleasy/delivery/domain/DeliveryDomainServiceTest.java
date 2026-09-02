@@ -83,32 +83,28 @@ class DeliveryDomainServiceTest {
   }
 
   @Nested
-  @DisplayName("getDeliveryByParticipationId 테스트")
-  class GetDeliveryByParticipationIdTest {
+  @DisplayName("findByBundleId 테스트")
+  class FindByBundleIdTest {
 
     @Test
-    void 참여_ID로_배송_정보를_반환한다() {
-      // given
+    void 묶음_ID로_배송_정보를_반환한다() {
+      // given — 택배 1개 = 묶음 1개라 조회 키가 묶음이다.
       Delivery delivery = createDelivery();
-      given(deliveryRepository.findByParticipationId(1L)).willReturn(Optional.of(delivery));
+      given(deliveryRepository.findByBundleId(9_001L)).willReturn(Optional.of(delivery));
 
       // when
-      Delivery result = deliveryDomainService.getDeliveryByParticipationId(1L);
+      Optional<Delivery> result = deliveryDomainService.findByBundleId(9_001L);
 
       // then
-      assertThat(result).isEqualTo(delivery);
+      assertThat(result).contains(delivery);
     }
 
     @Test
-    void 존재하지_않으면_예외가_발생한다() {
-      // given
-      given(deliveryRepository.findByParticipationId(999L)).willReturn(Optional.empty());
+    void 존재하지_않으면_빈_값을_돌려준다() {
+      // 예외가 아니다 — 입금확인 전 참여는 배송이 없는 것이 정상이고, 호출부가 null 배송을 그대로 다룬다.
+      given(deliveryRepository.findByBundleId(999L)).willReturn(Optional.empty());
 
-      // when & then
-      assertThatThrownBy(() -> deliveryDomainService.getDeliveryByParticipationId(999L))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.DELIVERY_NOT_FOUND);
+      assertThat(deliveryDomainService.findByBundleId(999L)).isEmpty();
     }
   }
 

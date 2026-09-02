@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -26,6 +27,15 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   /**
    * 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드). 입금 확인 중이거나, 입금확인됐지만 배송이 끝나지 않았거나
    * (배송 스냅샷이 없으면 미종료로 본다), 배송비 환급 신청이 검수 대기 중이면 끝나지 않은 것으로 판정한다.
+   *
+   * <p>배송은 <b>묶음</b>으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 자기 배송 행이
+   * 없다. 참여 id 로 찾으면 그 슬롯이 영원히 "배송 미종료" 로 남아 탈퇴가 막힌다.
+   * <p>🔴 <b>{@code p.bundleId} 가 NULL 이면 이 조건은 어느 배송과도 매칭되지 않는다</b> — 그 참여는 영구히
+   * "배송 미종료" 로 남아 탈퇴가 막힌다. <b>지금 그런 행은 없다</b>: 2026-08-31 실측으로 {@code bundle_id IS
+   * NULL} 인 참여가 prod 0/47 · staging 0/104 이고, 참여를 만드는 세 경로가 모두 같은 트랜잭션에서
+   * {@code ParticipationBundleDomainService#attach} 를 부르며 그 연결 CAS 가 실패하면 예외로 전체 롤백된다
+   * — 즉 <b>묶음 없는 참여를 만들 수 있는 코드 경로가 없다</b>. 참여 id 폴백을 남기지 않은 근거가 이것이다.
+   * P4 가 {@code bundle_id} 를 NOT NULL 로 조이면 이 전제가 스키마로 굳는다.
    */
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
@@ -35,7 +45,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "    AND (p.paybackStatus = :requestedPaybackStatus "
           + "      OR NOT EXISTS ("
           + "        SELECT d FROM Delivery d "
-          + "        WHERE d.participationId = p.id AND d.status IN :finishedDeliveryStatuses))))")
+          + "        WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses))))")
   boolean existsUnfinishedByParticipantId(
       @Param("participantId") Long participantId,
       @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
@@ -105,8 +115,14 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   int countByBuncheolIdAndStatus(Long buncheolId, ParticipationStatus status);
 
-  List<Participation> findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
-      ParticipationStatus status, Instant dueAt, Limit limit);
+  /**
+   * 입금 만료 폴링 대상. 🔴 <b>{@code flowType} 을 등가조건으로</b> 받는다 — 부등호({@code &lt;&gt; 'C2C'})로 쓰면
+   * {@code (status, flow_type, due_at)} 인덱스가 {@code flow_type} 에서 동등 조건을 잃어 {@code due_at} 이
+   * 범위+정렬로 이어지지 못한다. 값이 둘뿐이라 결과는 같지만 실행 계획이 달라진다.
+   */
+  List<Participation> findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
+      ParticipationStatus status, FlowType flowType, Instant dueAt, Limit limit);
+
 
   boolean existsByPaybackTweetUrlAndIdNot(String paybackTweetUrl, Long id);
 
@@ -132,6 +148,46 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   int cancelIfAwaitingAndOverdue(
       @Param("id") Long id,
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
+      @Param("now") Instant now);
+
+  /**
+   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다. 「제외」가 확정 슬롯 유무를 판정하기 전에 호출해, 판정과 UPDATE
+   * 사이에 개최자의 입금확인이 끼어들지 못하게 한다.
+   *
+   * <p><b>왜 UPDATE 의 서브쿼리로 못 하는가</b>: MySQL 은 {@code UPDATE} 대상 테이블을 서브쿼리의 FROM 에서
+   * 참조하는 것을 금지한다(<b>error 1093</b> — "You can't specify target table for update in FROM clause").
+   * 🔴 <b>H2 는 이것을 허용해서 단위·통합 테스트가 전부 통과했고, staging 에서야 500 으로 드러났다.</b>
+   * 같은 테이블을 봐야 하는 조건은 CAS 안에 넣을 수 없고, 이렇게 잠금 조회로 앞세워야 한다.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT p FROM Participation p WHERE p.bundleId = :bundleId")
+  List<Participation> findAllByBundleIdForUpdate(@Param("bundleId") Long bundleId);
+
+  /**
+   * 개최자 「제외」 CAS — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다.
+   *
+   * <p>🔴 <b>기한 가드는 UPDATE 의 WHERE 안에 있다.</b> 밖에서 판정하고 넘기면 개최자가 반려로 기한을 민 사이
+   * 옛 기한으로 통과시키는 창이 남는다. {@code b.dueAt IS NOT NULL AND b.dueAt <= :now} 라 기한이
+   * 없으면(모집 중) <b>거부</b>이므로 fail-closed 다.
+   *
+   * <p>⚠️ <b>확정 슬롯 검사는 여기 없다.</b> 같은 테이블을 서브쿼리로 참조하면 MySQL 이 거부하기 때문이다
+   * (error 1093). 대신 호출부가 {@link #findAllByBundleIdForUpdate} 로 슬롯을 잠근 뒤 판정한다 — 그 락이
+   * 입금확인({@code confirmPaymentIfAwaiting})을 막아 같은 원자성을 준다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status IN :releasableStatuses "
+          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
+          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL "
+          + "    AND b.dueAt IS NOT NULL AND b.dueAt <= :now)")
+  int releaseBundleIfDue(
+      @Param("bundleId") Long bundleId,
+      @Param("releasableStatuses") Collection<ParticipationStatus> releasableStatuses,
       @Param("cancelledStatus") ParticipationStatus cancelledStatus,
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
@@ -189,6 +245,47 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.id = :id AND p.status = :awaitingStatus")
   int markPaymentSentIfAwaiting(
       @Param("id") Long id,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("sentStatus") ParticipationStatus sentStatus,
+      @Param("now") Instant now);
+
+  /**
+   * 묶음 단위 입금확인 CAS — 한 묶음의 확인 가능 슬롯 전부를 한 번에 CONFIRMED 로 전이한다.
+   *
+   * <p>C2C 는 「보냈어요」(PAYMENT_SENT)도 확인 대상이고, 개최자 확인이 늦어도 유효하도록 <b>기한 경과를
+   * 검사하지 않는다</b> (docs/46 §3-6).
+   *
+   * <p>⚠️ <b>같은 테이블을 보는 조건은 넣지 않는다</b> — MySQL 이 {@code UPDATE} 대상 테이블을 서브쿼리
+   * FROM 에서 참조하는 것을 금지한다(error 1093). all-or-nothing 판정은 호출부가 잠금 조회로 앞세운다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :confirmedStatus, p.confirmedAt = :now, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status IN :payableStatuses")
+  int confirmBundleIfPayable(
+      @Param("bundleId") Long bundleId,
+      @Param("payableStatuses") Collection<ParticipationStatus> payableStatuses,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("now") Instant now);
+
+  /**
+   * 묶음 단위 「보냈어요」 CAS — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다.
+   *
+   * <p>🔴 <b>기한 검사가 없다.</b> 기한이 지난 뒤에도 마킹은 가능해야 한다 — 기한 직전 입금을 보호하는 것이
+   * 이 기능의 목적이고, 늦게 보낸 사람도 자기가 보냈다는 사실을 남길 수 있어야 개최자가 확인한다.
+   *
+   * <p>묶음이 닫혔는지는 조건에 넣지 않는다. 닫힌 묶음에는 활성 슬롯이 없으므로 0행이 되어 자연히 막힌다 —
+   * 조건을 늘리는 대신 이미 성립하는 불변식에 기댄다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :sentStatus, p.paymentSentAt = :now, "
+          + "    p.paymentRejectedAt = NULL, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status = :awaitingStatus")
+  int markBundlePaymentSent(
+      @Param("bundleId") Long bundleId,
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
       @Param("sentStatus") ParticipationStatus sentStatus,
       @Param("now") Instant now);

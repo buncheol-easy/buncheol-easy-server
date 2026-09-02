@@ -304,7 +304,7 @@ CREATE UNIQUE INDEX uq_participations_active_member ON participations (active_me
 -- uq_participations_active_participant 는 C2C 다슬롯 허용으로 제거됨 (docs/46 §2.3-4)
 CREATE UNIQUE INDEX uq_participations_legacy_active_participant ON participations (buncheol_id, legacy_active_participant_id);
 CREATE INDEX idx_participations_buncheol_status ON participations (buncheol_id, status);
-CREATE INDEX idx_participations_status_due ON participations (status, due_at);
+CREATE INDEX idx_participations_status_flow_due ON participations (status, flow_type, due_at);
 CREATE INDEX idx_participations_participant_created ON participations (participant_id, created_at DESC);
 CREATE INDEX idx_participations_bundle_status ON participations (bundle_id, status);
 CREATE INDEX idx_participations_created ON participations (created_at DESC, id DESC);

@@ -16,7 +16,10 @@ public enum ParticipationCancelReason {
   // 분철이 취소(호스트 취소 또는 최소 인원 미달/미성사)되어 함께 취소. 입금확인된 참여는 개최자의 수동 환불처리가 필요하다.
   BUNCHEOL_CANCELLED("분철 취소"),
   // C2C 참여자 자발 취소 (docs/46 §5 — 신청~확정 전 자유 / 확정~입금확인 전 허용). 돈이 오가기 전 구간이라 환불 없음.
-  USER_CANCELLED("자발 취소");
+  USER_CANCELLED("자발 취소"),
+  // 개최자가 입금 기한이 지난 묶음을 「제외」 (docs/70 결정 8). C2C 는 자동 만료가 없어 이것이 미입금자를 빼는 유일한
+  // 출구다. 묶음 통째로만 적용되고, 확정 슬롯이 하나라도 있으면 열리지 않는다.
+  HOST_RELEASED("개최자 제외");
 
   private final String description;
 }

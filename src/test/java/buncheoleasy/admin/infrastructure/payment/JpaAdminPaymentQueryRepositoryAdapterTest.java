@@ -22,6 +22,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.function.Function;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -66,11 +69,20 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
   }
 
   private Long insertBuncheol(final String title) {
+    return insertBuncheol(title, FlowType.LEGACY);
+  }
+
+  /**
+   * ⚠️ 다슬롯 묶음 픽스처는 <b>반드시 C2C</b> 여야 한다 — LEGACY 는 {@code
+   * uq_participations_legacy_active_participant} 가 1인 1활성슬롯을 강제해 같은 참여자의 두 번째 INSERT 가
+   * 그 자리에서 막힌다. 그것이 정상 동작이고, 그래서 혼재 묶음도 C2C 에만 존재한다.
+   */
+  private Long insertBuncheol(final String title, final FlowType flowType) {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
     Buncheol buncheol =
         Buncheol.create(
             hostId,
-            new BuncheolParams(groupId, title, null, "스토어", deadline, 1, 3000, null, FlowType.LEGACY, null),
+            new BuncheolParams(groupId, title, null, "스토어", deadline, 1, 3000, null, flowType, null),
             Instant.now());
     buncheolRepository.save(buncheol);
     em.flush();
@@ -95,11 +107,18 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       final String status,
       final Instant confirmedAt,
       final Instant createdAt) {
+    // 배송 조인 키가 묶음이다 (택배 1개 = 묶음 1개) — 참여마다 묶음을 하나 만들어 붙인다.
+    // 배송비의 정본은 묶음이다 — 픽스처도 그렇게 심어야 합계가 실제와 같아진다.
+    Long bundleId = insertBundle(buncheolId, participantId, shippingFee);
     jdbcTemplate.update(
+        // ⚠️ participations.flow_type 은 분철에서 복사하는 <b>비정규화 컬럼</b>이다(generated column 은 타
+        // 테이블을 못 본다). 안 실으면 DEFAULT 'LEGACY' 가 걸려 1인 1활성슬롯 유니크에 막힌다 —
+        // 다슬롯 픽스처가 그 자리에서 죽는다.
         "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, amount,"
             + " shipping_fee, refund_bank, refund_account, refund_holder, due_at, confirmed_at,"
-            + " cancelled_at, cancel_reason, status, created_at, updated_at)"
-            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + " cancelled_at, cancel_reason, status, bundle_id, flow_type, created_at, updated_at)"
+            + " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, b.flow_type, ?, ?"
+            + " FROM buncheols b WHERE b.id = ?",
         buncheolId,
         slotId,
         participantId,
@@ -115,18 +134,47 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
             ? (confirmedAt != null ? "BUNCHEOL_CANCELLED" : "PAYMENT_TIMEOUT")
             : null,
         status,
+        bundleId,
         Timestamp.from(createdAt),
-        Timestamp.from(createdAt));
+        Timestamp.from(createdAt),
+        buncheolId);
     em.clear();
     return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participations", Long.class);
   }
 
-  private void insertDelivery(final Long participationId, final String trackingNumber) {
+  private Long insertBundle(
+      final Long buncheolId, final Long participantId, final long shippingFee) {
     jdbcTemplate.update(
-        "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+        "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+            + " refund_bank, refund_account, refund_holder) VALUES (?, ?, ?, ?, ?, ?)",
+        buncheolId,
+        participantId,
+        shippingFee,
+        "국민",
+        "12345678",
+        "홍길동");
+    return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+  }
+
+  /** 두 참여를 같은 묶음으로 합친다 — 다슬롯 묶음(자리 여러 개, 이체 1회)의 모양. */
+  private void shareBundle(final Long keeperId, final Long joinerId) {
+    Long bundleId =
+        jdbcTemplate.queryForObject(
+            "SELECT bundle_id FROM participations WHERE id = ?", Long.class, keeperId);
+    jdbcTemplate.update(
+        "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, joinerId);
+  }
+
+  private void insertDelivery(final Long participationId, final String trackingNumber) {
+    Long bundleId =
+        jdbcTemplate.queryForObject(
+            "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
+    jdbcTemplate.update(
+        "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
             + " receiver_nickname, receiver_phone_number, tracking_number, status)"
-            + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         participationId,
+        bundleId,
         "GS25_HALF",
         "테스트지점",
         "수령닉네임",
@@ -230,6 +278,42 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       assertThat(views).hasSize(1);
       assertThat(views.getFirst().delivery()).isNotNull();
       assertThat(views.getFirst().delivery().getTrackingNumber()).isEqualTo("TRACK-1234");
+    }
+
+    // 🔴 회귀 방지 — 배송은 묶음에 붙어 있어 같은 묶음의 미입금 슬롯도 조인 키가 맞는다. 게이트가
+    // 없으면 운영자가 <b>입금하지도 않은 슬롯을 운송장과 함께</b> 보게 되고, 이 화면이 입금 확인
+    // 판단의 근거다. 혼재 묶음은 도달 가능하다 — 슬롯 단위 확인과 어드민 벌크 확인이 열려 있다.
+    @Test
+    void 같은_묶음의_미입금_슬롯에는_배송이_붙지_않는다() {
+      Long buncheolId = insertBuncheol("혼재 묶음 분철", FlowType.C2C);
+      Long confirmedSlot = insertSlot(buncheolId, groupMemberId);
+      Long pendingSlot =
+          insertSlot(
+              buncheolId,
+              TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "혼재 묶음 멤버"));
+      Long confirmedId =
+          insertParticipation(
+              buncheolId, confirmedSlot, participantId, 10000, 3000, "CONFIRMED", BASE_TIME,
+              BASE_TIME);
+      Long pendingId =
+          insertParticipation(
+              buncheolId, pendingSlot, participantId, 10000, 0, "AWAITING_PAYMENT", null,
+              BASE_TIME);
+      // 같은 사람이 자리 2개를 잡은 모양 — 묶음이 하나다.
+      shareBundle(confirmedId, pendingId);
+      insertDelivery(confirmedId, "TRACK-1234");
+
+      List<AdminPaymentView> views = findAll();
+
+      Map<Long, AdminPaymentView> byId =
+          views.stream()
+              .collect(
+                  Collectors.toMap(v -> v.participation().getId(), Function.identity()));
+      assertThat(byId.get(confirmedId).delivery()).isNotNull();
+      // 이 한 줄이 이번 변경의 전부다.
+      assertThat(byId.get(pendingId).delivery()).isNull();
+      // LEFT JOIN 이라 행은 보존된다 — 조건을 WHERE 로 옮기면 미입금 행이 통째로 사라진다.
+      assertThat(views).hasSize(2);
     }
 
     @Test

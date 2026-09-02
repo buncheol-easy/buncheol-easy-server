@@ -97,6 +97,56 @@ class BuncheolAutoCloseServiceIntegrationTest {
     assertThat(deliveryCountFor(confirmedId)).isZero();
   }
 
+  // 🔴 마감 시각에 최소 인원이 안 차면 48시간 유예를 기다리지 않는다 (2026-08-31 사용자 결정).
+  // 확정을 눌러도 인원이 채워지지 않는 분철을 붙잡아 두면 참여자는 자기 자리가 살아 있는 줄 안다.
+  @Test
+  void C2C_분철이_마감시각에_최소인원_미달이면_유예를_기다리지_않고_취소된다() {
+    Long buncheolId = insertBuncheol(pastDeadline(), "RECRUITING", 3);
+    jdbcTemplate.update("UPDATE buncheols SET flow_type = 'C2C' WHERE id = ?", buncheolId);
+    Long slot = insertBuncheolMember(buncheolId, "신청멤버");
+    Long applied = insertParticipation(buncheolId, slot, "fan_applied", "APPLIED");
+
+    // 마감은 지났지만 확정 유예(48h) 안이다.
+    boolean finalized = buncheolAutoCloseService.finalizeExpired(buncheolId, Instant.now());
+    em.flush();
+
+    assertThat(finalized).isTrue();
+    assertThat(buncheolStatus(buncheolId)).isEqualTo("CANCELLED");
+    assertThat(participationStatus(applied)).isEqualTo("CANCELLED");
+  }
+
+  // 인원이 찼으면 개최자의 확정을 유예 동안 기다린다 — 조기 확정(자리 남음)은 개최자 선택이다.
+  @Test
+  void C2C_분철이_최소인원을_채웠으면_유예_안에는_취소되지_않는다() {
+    Long buncheolId = insertBuncheol(pastDeadline(), "RECRUITING", 1);
+    jdbcTemplate.update("UPDATE buncheols SET flow_type = 'C2C' WHERE id = ?", buncheolId);
+    Long slot = insertBuncheolMember(buncheolId, "신청멤버");
+    Long applied = insertParticipation(buncheolId, slot, "fan_enough", "APPLIED");
+
+    boolean finalized = buncheolAutoCloseService.finalizeExpired(buncheolId, Instant.now());
+    em.flush();
+
+    assertThat(finalized).isFalse();
+    assertThat(buncheolStatus(buncheolId)).isEqualTo("RECRUITING");
+    assertThat(participationStatus(applied)).isEqualTo("APPLIED");
+  }
+
+  // 개최자가 아무것도 안 하면 분철이 끝나지 않는다 — 「제외」가 정문을 만들면서 수용한 트레이드오프다
+  // (docs/70 §1, 사용자 결정). 자동으로 접지 <b>않는 것</b>이 의도된 동작이라 테스트로 못 박는다.
+  @Test
+  void 미입금_슬롯이_남아_있으면_입금수집중_분철을_자동으로_접지_않는다() {
+    Long buncheolId = insertBuncheol(pastDeadline(), "PAYMENT_COLLECTING", 2);
+    Long slot = insertBuncheolMember(buncheolId, "미입금멤버");
+    Long awaiting = insertParticipation(buncheolId, slot, "fan_none", "AWAITING_PAYMENT");
+
+    boolean cancelled = buncheolAutoCloseService.cancelDeadCollecting(buncheolId, Instant.now());
+    em.flush();
+
+    assertThat(cancelled).isFalse();
+    assertThat(buncheolStatus(buncheolId)).isEqualTo("PAYMENT_COLLECTING");
+    assertThat(participationStatus(awaiting)).isEqualTo("AWAITING_PAYMENT");
+  }
+
   @Test
   void 이미_마감된_분철에_다시_시도하면_false를_반환한다() {
     Long buncheolId = insertBuncheol(pastDeadline(), "CONFIRMED", 1);

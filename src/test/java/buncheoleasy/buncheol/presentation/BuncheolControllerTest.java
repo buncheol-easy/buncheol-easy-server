@@ -988,6 +988,8 @@ class BuncheolControllerTest {
       BuncheolManagementParticipantResponse confirmed =
           new BuncheolManagementParticipantResponse(
               601L,
+              9001L,
+              9L,
               "유진팬",
               101L,
               "안유진",
@@ -1005,10 +1007,14 @@ class BuncheolControllerTest {
                   "유진팬",
                   "010-1234-5678",
                   "1234567890",
-                  DeliveryStatus.SHIPPING), null);
+                  DeliveryStatus.SHIPPING), null,
+              null,
+              true);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
+              9001L,
+              9L,
               "레이팬",
               102L,
               "레이",
@@ -1019,7 +1025,9 @@ class BuncheolControllerTest {
               Instant.parse("2026-05-26T00:30:00Z"),
               null,
               null,
-              null, null);
+              null, null,
+              null,
+              true);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,

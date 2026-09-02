@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.domain.participation;
 
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -31,5 +32,24 @@ public enum ParticipationStatus {
 
   public static Set<ParticipationStatus> active() {
     return ACTIVE;
+  }
+
+  // 개최자 「제외」 대상. 활성 상태에서 CONFIRMED 만 뺀 것 — 확정분은 분철 취소 cascade + 환불 경로로만 끝난다
+  // (docs/70 결정 8). ACTIVE 에서 파생시켜, 활성 상태가 늘어도 두 목록이 갈리지 않게 한다.
+  private static final Set<ParticipationStatus> RELEASABLE =
+      ACTIVE.stream()
+          .filter(status -> status != CONFIRMED)
+          .collect(Collectors.toUnmodifiableSet());
+
+  public static Set<ParticipationStatus> releasableStatuses() {
+    return RELEASABLE;
+  }
+
+  // 개최자가 입금확인할 수 있는 상태. C2C 는 「보냈어요」 마킹 여부와 무관하게 확인 가능하다 — 마킹은 단서일
+  // 뿐이고 실제 판단 근거는 개최자 통장이다 (docs/46 §3-6).
+  private static final Set<ParticipationStatus> PAYABLE = Set.of(AWAITING_PAYMENT, PAYMENT_SENT);
+
+  public static Set<ParticipationStatus> payableStatuses() {
+    return PAYABLE;
   }
 }

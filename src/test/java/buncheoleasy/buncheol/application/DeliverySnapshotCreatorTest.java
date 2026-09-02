@@ -2,7 +2,9 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -16,6 +18,7 @@ import buncheoleasy.user.domain.shipping.ShippingAddress;
 import buncheoleasy.user.domain.shipping.ShippingAddressDomainService;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Constructor;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -77,6 +80,7 @@ class DeliverySnapshotCreatorTest {
 
   @Test
   void 배송_스냅샷은_참여의_묶음을_물고_생성된다() {
+    given(deliveryDomainService.findByBundleId(BUNDLE_ID)).willReturn(Optional.empty());
     givenSnapshotSources();
 
     deliverySnapshotCreator.create(participation(BUNDLE_ID));
@@ -95,6 +99,22 @@ class DeliverySnapshotCreatorTest {
 
     then(deliveryDomainService).should().createDelivery(deliveryCaptor.capture());
     assertThat(deliveryCaptor.getValue().getBundleId()).isNull();
+  }
+
+  // 🔴 다슬롯 묶음은 슬롯마다 입금확인이 돌지만 택배는 하나다. 슬롯마다 만들면 개최자에게 같은 주소의
+  // 운송장 입력칸이 슬롯 수만큼 뜨고, P4 의 uq_deliveries_bundle 승격이 그 자리에서 실패한다
+  // (실측: prod 묶음 64 · staging 66·83·87 이 그렇게 생겼다).
+  @Test
+  void 그_묶음의_택배가_이미_있으면_두_번째_슬롯은_만들지_않는다() {
+    given(deliveryDomainService.findByBundleId(BUNDLE_ID))
+        .willReturn(Optional.of(newInstance(Delivery.class)));
+
+    deliverySnapshotCreator.create(participation(BUNDLE_ID));
+
+    then(deliveryDomainService).should(never()).createDelivery(any());
+    // 배송지·유저 조회도 하지 않는다 — 다슬롯 묶음의 두 번째 슬롯부터는 헛쿼리다.
+    then(shippingAddressDomainService).shouldHaveNoInteractions();
+    then(userDomainService).shouldHaveNoInteractions();
   }
 
   private static <T> T newInstance(final Class<T> type) {

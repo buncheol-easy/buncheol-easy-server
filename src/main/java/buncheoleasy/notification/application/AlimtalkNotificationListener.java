@@ -7,6 +7,9 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEvent;
+import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
+import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
@@ -114,6 +117,34 @@ public class AlimtalkNotificationListener {
             "멤버명", view.memberName());
     recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);
+  }
+
+  /**
+   * (참여자) 개최자가 묶음을 「제외」함 — 입금 기한이 지나 참여가 취소됐다.
+   *
+   * <p>🟡 <b>기존 {@code C2C_PAYMENT_EXPIRED} 템플릿을 재사용한다.</b> 본문이 "입금 기한이 지나 참여가
+   * <b>자동</b> 취소되었어요" 라 '자동' 한 단어가 부정확하지만, 참여자가 겪는 사실(기한이 지나 취소됨)과 안내할
+   * 행동(입금 전이면 할 일 없음 / 이미 보냈으면 문의)이 정확히 같다. 전용 템플릿은 카카오 승인 리드타임을 알 수 없어
+   * 이 기능 전체를 묶어 세우므로, <b>침묵보다 재사용이 낫다</b>고 판단했다. 문구 개정은 별도로 신청한다.
+   *
+   * <p>묶음 1통으로 보낸다 — 슬롯마다 보내면 같은 사람이 같은 내용을 여러 번 받는다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundleReleased(final BundleReleasedEvent event) {
+    List<ParticipationView> views = loadViewsSafely(event.releasedParticipationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    ParticipationView first = views.get(0);
+    AlimtalkTemplate template = AlimtalkTemplate.C2C_PAYMENT_EXPIRED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views));
+    recordSafely(first.participant().getId(), template, variables);
+    sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
   /**
@@ -273,6 +304,87 @@ public class AlimtalkNotificationListener {
             "분철ID", String.valueOf(view.buncheol().getId()));
     recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
     String hostPhone = hostPhoneOrNull(view.host(), view.buncheol().getId());
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
+  }
+
+  /**
+   * (참여자) 개최자가 <b>묶음</b>의 입금을 확인함 — <b>묶음 1통</b>으로 알린다. 이체가 1회였으므로 확인도 1회다.
+   *
+   * <p>금액은 확정된 슬롯 합산, 멤버명은 나열한다. 0원 묶음(서포터즈 코드만으로 채워진 경우)은 등록 문안이
+   * "입금이 확인되었어요 · 입금 금액" 이라 발송하지 않는다 — 슬롯 단위 경로와 같은 판정이다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundlePaymentConfirmed(final BundlePaymentConfirmedEvent event) {
+    List<ParticipationView> views = loadViewsSafely(event.confirmedParticipationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    if (views.size() != event.confirmedParticipationIds().size()) {
+      log.error(
+          "묶음 입금확인 알림의 슬롯 조립이 일부 실패해 금액이 축소될 수 있다 - bundleId={}, 기대={}, 조립={}",
+          event.bundleId(),
+          event.confirmedParticipationIds().size(),
+          views.size());
+    }
+    ParticipationView first = views.get(0);
+    long totalAmount = views.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    if (totalAmount == 0) {
+      return;
+    }
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views),
+            "입금금액", AlimtalkFormats.amount(totalAmount));
+    recordSafely(first.participant().getId(), AlimtalkTemplate.C2C_PAYMENT_CONFIRMED, variables);
+    sender.send(
+        AlimtalkTemplate.C2C_PAYMENT_CONFIRMED,
+        first.participant().getPhoneNumber().value(),
+        variables);
+  }
+
+  /**
+   * (개최자) 참여자가 <b>묶음</b>을 「보냈어요」로 표시함 — <b>묶음 1통</b>으로 알린다.
+   *
+   * <p>묶음은 이체 1회의 단위라, 슬롯마다 보내면 개최자가 <b>같은 입금을 여러 건으로 착각</b>해 통장 대조가
+   * 어긋난다. 멤버명은 나열하고 금액은 합산한다 — 성사 확정 안내(sendFinalizedNotice)와 같은 형태다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundlePaymentSent(final BundlePaymentSentEvent event) {
+    // 🔴 <b>묶음 전체</b>의 마킹분으로 만든다. 이번 호출분만 합산하면, 슬롯 단위 API 로 먼저 마킹된 슬롯이
+    // 빠져 개최자가 <b>실제 이체액보다 작은 금액</b>으로 통장을 대조하게 된다 — 그게 곧 반려로 이어진다.
+    List<ParticipationView> views = loadViewsSafely(event.sentParticipationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    if (views.size() != event.sentParticipationIds().size()) {
+      // 조립에 실패한 슬롯이 있으면 금액이 조용히 줄어든다 — 통장 대조가 어긋나므로 흔적을 남긴다.
+      log.error(
+          "묶음 「보냈어요」 알림의 슬롯 조립이 일부 실패해 금액이 축소될 수 있다 - bundleId={}, 기대={}, 조립={}",
+          event.bundleId(),
+          event.sentParticipationIds().size(),
+          views.size());
+    }
+    ParticipationView first = views.get(0);
+    long totalAmount = views.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.host().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views),
+            "참여자닉네임", first.participant().getNickname().value(),
+            // ⚠️ Map.of 는 null 에 NPE 를 던진다. 정본(묶음)이 비어 있어도 대체 문자열로 채워 발송을 살린다.
+            "입금자명", depositorNameOf(first),
+            "입금금액", AlimtalkFormats.amount(totalAmount),
+            "분철ID", String.valueOf(first.buncheol().getId()));
+    recordSafely(first.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
+    String hostPhone = hostPhoneOrNull(first.host(), first.buncheol().getId());
     if (hostPhone == null) {
       return;
     }

@@ -16,9 +16,11 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
 
-  Optional<Delivery> findByParticipationId(Long participationId);
+  /** 묶음의 배송. 전환 이전 다슬롯 묶음은 여러 건일 수 있어 id 최소값 1건으로 확정한다 (포트 javadoc). */
+  Optional<Delivery> findFirstByBundleIdOrderByIdAsc(Long bundleId);
 
-  List<Delivery> findAllByParticipationIdIn(List<Long> participationIds);
+  /** id 오름차순 — 호출부가 앞선 것을 이기게(merge (a, b) -> a) 두면 위와 같은 규칙이 된다. */
+  List<Delivery> findAllByBundleIdInOrderByIdAsc(List<Long> bundleIds);
 
   /** 운송장·배송방식이 같은 배송 조회 — 관리자 벌크 등록으로 한 운송장에 여러 배송이 매핑될 수 있어 전부 돌려준다. */
   List<Delivery> findAllByTrackingNumberAndShippingMethodAndStatusIn(

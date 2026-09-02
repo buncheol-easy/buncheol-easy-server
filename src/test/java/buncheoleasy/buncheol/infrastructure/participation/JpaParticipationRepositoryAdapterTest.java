@@ -285,17 +285,43 @@ class JpaParticipationRepositoryAdapterTest {
           null);
     }
 
+    /**
+     * 배송 스냅샷을 그 참여의 <b>묶음</b>에 붙인다 — 탈퇴 가드가 배송을 묶음으로 찾기 때문이다
+     * (택배 1개 = 묶음 1개). 참여에 묶음이 없으면 묶음을 하나 만들어 붙인 뒤 배송을 건다.
+     */
     private void insertDelivery(final Long participationId, final String deliveryStatus) {
+      Long bundleId = ensureBundle(participationId);
       jdbcTemplate.update(
-          "INSERT INTO deliveries (participation_id, shipping_method, store_name,"
+          "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
               + " receiver_nickname, receiver_phone_number, status)"
-              + " VALUES (?, ?, ?, ?, ?, ?)",
+              + " VALUES (?, ?, ?, ?, ?, ?, ?)",
           participationId,
+          bundleId,
           "GS25_HALF",
           "매장",
           "닉네임",
           "01012345678",
           deliveryStatus);
+    }
+
+    private Long ensureBundle(final Long participationId) {
+      Long existing =
+          jdbcTemplate.queryForObject(
+              "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
+      if (existing != null) {
+        return existing;
+      }
+      jdbcTemplate.update(
+          "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+              + " refund_bank, refund_account, refund_holder)"
+              + " SELECT p.buncheol_id, p.participant_id, 0, '국민', '12345678', '홍길동'"
+              + " FROM participations p WHERE p.id = ?",
+          participationId);
+      Long bundleId =
+          jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+      jdbcTemplate.update(
+          "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, participationId);
+      return bundleId;
     }
 
     private void updatePaybackStatus(final Long participationId, final PaybackStatus status) {
@@ -1178,6 +1204,35 @@ class JpaParticipationRepositoryAdapterTest {
       List<Participation> result = participationRepository.findOverduePaymentTargets(now, 100);
 
       assertThat(result).extracting(Participation::getId).containsExactly(overdueId);
+    }
+
+    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9). 기한은 "개최자가 「제외」로 정리에
+    // 나설 수 있는 시각"이지 취소 시각이 아니다.
+    @Test
+    void C2C_참여는_기한이_지나도_조회되지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long bmId = createBuncheolMember(buncheolId);
+      Long otherMemberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "C2C멤버");
+      Long bmId2 = createBuncheolMember(buncheolId, otherMemberId);
+      Long addrLegacy = insertShippingAddress(participantId, "레거시매장");
+      Long addrC2c = insertShippingAddress(secondParticipantId, "C2C매장");
+      Instant now = Instant.now();
+
+      Long legacyOverdueId =
+          insertParticipation(
+              buncheolId, bmId, participantId, addrLegacy, 30_000L,
+              now.minus(5, ChronoUnit.MINUTES), ParticipationStatus.AWAITING_PAYMENT, null);
+      Long c2cOverdueId =
+          insertParticipation(
+              buncheolId, bmId2, secondParticipantId, addrC2c, 30_000L,
+              now.minus(5, ChronoUnit.MINUTES), ParticipationStatus.AWAITING_PAYMENT, null);
+      jdbcTemplate.update(
+          "UPDATE participations SET flow_type = 'C2C' WHERE id = ?", c2cOverdueId);
+
+      List<Participation> result = participationRepository.findOverduePaymentTargets(now, 100);
+
+      // 같은 조건(AWAITING_PAYMENT + 기한 경과)인데 LEGACY 만 잡힌다.
+      assertThat(result).extracting(Participation::getId).containsExactly(legacyOverdueId);
     }
 
     @Test

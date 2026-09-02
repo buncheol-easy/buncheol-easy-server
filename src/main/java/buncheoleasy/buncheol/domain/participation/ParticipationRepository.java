@@ -74,6 +74,22 @@ public interface ParticipationRepository {
   List<Participation> findAllByBundleIds(List<Long> bundleIds);
 
   /**
+   * 개최자 「제외」 — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다. 기한 미도래·모집 중·확정 슬롯
+   * 존재는 <b>CAS 조건에 포함</b>되어 원자적으로 막힌다.
+   *
+   * @return 실제로 취소된 슬롯 수. 0 이면 가드에 막혔거나 이미 활성 슬롯이 없다
+   */
+  /**
+   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다 (「제외」 판정용). 판정과 UPDATE 사이에 입금확인이 끼어들지 못하게
+   * 한다 — 같은 테이블을 CAS 서브쿼리로 볼 수 없어(MySQL error 1093) 락으로 원자성을 만든다.
+   *
+   * <p>호출 측 {@code @Transactional} 필수.
+   */
+  List<Participation> findAllByBundleIdForUpdate(Long bundleId);
+
+  int releaseBundleIfDue(Long bundleId, Instant now);
+
+  /**
    * 단일 분철의 활성 참여별 참여자 id 잠금 조회(current read, 행당 1건 — 다슬롯 참여자는 중복 포함) — RR 스냅샷이 아닌 최신 커밋 기준이
    * 필요한 C2C 정원 충족 판정용. 리스트 크기 = 채워진 슬롯 수, distinct = 신청 인원.
    */
@@ -119,6 +135,20 @@ public interface ParticipationRepository {
 
   /** C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT, 기한 경과 검사 없음). */
   boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
+
+  /**
+   * 묶음 단위 「보냈어요」 — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다. 기한이 지난 뒤에도 열려 있다.
+   *
+   * @return 실제로 마킹된 슬롯 수. 0 이면 이미 전부 마킹됐거나 입금 대기 슬롯이 없다
+   */
+  int markBundlePaymentSent(Long bundleId, Instant now);
+
+  /**
+   * 묶음 단위 입금확인 — 확인 가능 슬롯(입금 대기·「보냈어요」) 전부를 CONFIRMED 로 전이한다.
+   *
+   * @return 실제로 확정된 슬롯 수
+   */
+  int confirmBundleIfPayable(Long bundleId, Instant now);
 
   /**
    * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code

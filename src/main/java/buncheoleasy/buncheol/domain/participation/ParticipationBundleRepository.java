@@ -17,6 +17,12 @@ public interface ParticipationBundleRepository {
   Optional<ParticipationBundle> findById(Long id);
 
   /**
+   * 묶음 입금 기한을 뒤로 민다 (개최자 반려). 이미 {@code dueAt} 보다 뒤인 묶음은 건드리지 않는다 — 조건을
+   * UPDATE WHERE 에 넣어 <b>기한이 앞으로 당겨지는 일이 없게</b> 한다.
+   */
+  int extendDueAt(Long bundleId, Instant dueAt, Instant now);
+
+  /**
    * 묶음 여러 개를 한 번에 읽는다 (목록 화면용).
    *
    * <p>정본이 묶음으로 옮겨간 뒤(P2-c) 개최 관리·내 참여·어드민 결제 목록이 참여마다 계좌를 필요로 한다. 건별로 읽으면 참여 수만큼

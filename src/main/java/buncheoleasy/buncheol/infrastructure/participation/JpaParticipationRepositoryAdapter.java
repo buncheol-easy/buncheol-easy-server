@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
@@ -229,6 +230,21 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findAllByBundleIdForUpdate(final Long bundleId) {
+    return jpaParticipationRepository.findAllByBundleIdForUpdate(bundleId);
+  }
+
+  @Override
+  public int releaseBundleIfDue(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.releaseBundleIfDue(
+        bundleId,
+        ParticipationStatus.releasableStatuses(),
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.HOST_RELEASED,
+        now);
+  }
+
+  @Override
   public List<Participation> findAllByBundleIds(final List<Long> bundleIds) {
     return bundleIds.isEmpty()
         ? List.of()
@@ -271,8 +287,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
-    return jpaParticipationRepository.findByStatusAndDueAtLessThanEqualOrderByDueAtAsc(
-        ParticipationStatus.AWAITING_PAYMENT, now, Limit.of(limit));
+    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9) — 기한은 "개최자가 「제외」로 정리에
+    // 나설 수 있는 시각"이지 취소 시각이 아니다. 걸러내는 위치가 <b>쿼리</b>인 것이 중요하다: 루프 안에서
+    // skip 하면 안 죽는 C2C 행이 due_at ASC 앞자리를 영구 점유해 LEGACY 30분 칼컷이 기아 상태가 된다.
+    return jpaParticipationRepository.findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
+        ParticipationStatus.AWAITING_PAYMENT, FlowType.LEGACY, now, Limit.of(limit));
   }
 
   @Override
@@ -306,6 +325,18 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
         ParticipationStatus.CANCELLED,
         ParticipationCancelReason.BUNCHEOL_CANCELLED,
         now);
+  }
+
+  @Override
+  public int confirmBundleIfPayable(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.confirmBundleIfPayable(
+        bundleId, ParticipationStatus.payableStatuses(), ParticipationStatus.CONFIRMED, now);
+  }
+
+  @Override
+  public int markBundlePaymentSent(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.markBundlePaymentSent(
+        bundleId, ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT, now);
   }
 
   @Override

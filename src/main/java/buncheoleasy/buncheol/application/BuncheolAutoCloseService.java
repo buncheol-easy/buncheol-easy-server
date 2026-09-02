@@ -49,17 +49,25 @@ public class BuncheolAutoCloseService {
   }
 
   /**
-   * C2C 입금 수집 데드엔드 정리 (docs/46 §7.1-6 보완). 기한이 지났고 활성 참여가 하나도 남지 않았으면(전원 만료·자발취소, 확정 0건)
-   * 미성사 취소한다 — 개최자가 선택할 것(부분 확정/취소)이 없는 유일한 케이스라 자동화해도 §7.1-6(개최자 선택)과 충돌하지 않는다.
-   * 방치 시 분철이 PAYMENT_COLLECTING 에 영구 정체해 목록 노출·개최자 탈퇴 차단이 이어지는 문제를 막는다.
+   * C2C 입금 수집 데드엔드 정리 (docs/46 §7.1-6 보완). 기한이 지났고 활성 참여가 하나도 남지 않았으면 미성사
+   * 취소한다 — 개최자가 선택할 것(부분 확정/취소)이 없는 유일한 케이스라 자동화해도 §7.1-6 과 충돌하지 않는다.
    *
-   * <p>참여자 알림은 없다 — 전원이 이미 만료/자발취소 시점에 개별 취소 안내를 받았다. 확정 참여가 있으면 CAS 가 전이하지 않고 개최자
-   * 선택을 기다린다.
+   * <p>⚠️ <b>C2C 자동 만료를 끈 뒤로는 이 조건이 잘 성립하지 않는다.</b> 예전에는 만료 스케줄러가 미입금 슬롯을
+   * 치워 줘서 활성이 저절로 0 이 됐지만, 이제는 개최자가 「제외」를 눌러야 빈다. <b>개최자가 아무것도 안 하면
+   * 분철이 끝나지 않는데, 이는 「제외」가 정문을 만들면서 수용하기로 한 트레이드오프다</b>(docs/70 §1, 사용자
+   * 결정). 자동으로 접지 않는다.
+   *
+   * <p>🟡 <b>그래서 그런 분철이 폴링 배치를 잠식한다</b> — 안 죽는 분철이 앞자리를 영구 점유해 뒤에 온 분철의
+   * 정리가 굶는다. 조회에서 걸러 내지 <b>않는다</b>(prod C2C 「입금 수집중」 0 건이라 당장 발현하지 않아
+   * 수용한 한계 — docs/82 §6 · {@code JpaBuncheolRepository#findIdsByStatusAndPaymentDueBefore}).
+   *
+   * <p>참여자 알림은 없다 — 전원이 이미 개별 취소 안내를 받은 뒤다.
    */
   @Transactional
   public boolean cancelDeadCollecting(final Long buncheolId, final Instant now) {
     return buncheolDomainService.cancelCollectingIfEmpty(buncheolId, now);
   }
+
 
   /**
    * deadline 이 지난 단일 분철의 마감 판정. 입금확인된(CONFIRMED) 참여자가 최소 인원 이상이면 진행확정, 미만이면 취소한다. {@code RECRUITING
@@ -100,14 +108,29 @@ public class BuncheolAutoCloseService {
    * 돈이 오간 적 없는 단계라 환불은 발생하지 않는다.
    */
   private boolean finalizeExpiredC2c(final Buncheol buncheol, final Instant now) {
-    // 폴링 쿼리가 유예 경과 분철만 주지만, cron 경계·수동 호출 대비 이중 방어로 유예를 재확인한다.
-    if (now.isBefore(buncheol.getDeadline().plus(C2C_CONFIRM_GRACE))) {
+    // 🔴 최소 인원 미달이면 유예를 기다리지 않는다 (2026-08-31 사용자 결정). 개최자가 확정을 눌러도 인원이
+    // 채워지지 않는 분철을 48시간 붙잡아 두면, 참여자는 그동안 자기 자리가 살아 있는 줄 안다. LEGACY 가 마감
+    // 시각에 인원 미달로 바로 취소하는 것과 같은 규칙이다.
+    //
+    // 신청 인원으로 센다 — C2C 는 확정 전이라 입금확인 건이 0 이다(LEGACY 는 CONFIRMED 로 센다).
+    boolean belowMinHeadcount =
+        participationDomainService.findActiveByBuncheolId(buncheol.getId()).size()
+            < buncheol.getMinHeadcount();
+    // 폴링 쿼리가 대상만 주지만, cron 경계·수동 호출 대비 이중 방어로 조건을 재확인한다.
+    if (!belowMinHeadcount
+        && now.isBefore(buncheol.getDeadline().plus(C2C_CONFIRM_GRACE))) {
       return false;
     }
     if (!buncheolDomainService.cancelUnconfirmedC2c(buncheol.getId(), now)) {
       return false; // 그 사이 확정·취소됨 (CAS 경합).
     }
-    finalizeAsCancelled(buncheol.getId(), now, BuncheolCancelReason.NOT_FINALIZED);
+    // 사유를 가른다 — 참여자에게 "인원이 모이지 않았어요" 와 "개최자가 확정하지 않았어요" 는 다른 안내다.
+    finalizeAsCancelled(
+        buncheol.getId(),
+        now,
+        belowMinHeadcount
+            ? BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET
+            : BuncheolCancelReason.NOT_FINALIZED);
     return true;
   }
 

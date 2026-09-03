@@ -883,6 +883,7 @@ class BuncheolControllerTest {
                   List.of(
                       new MyParticipationItemResponse(
                           601L, 101L, ParticipationStatus.AWAITING_PAYMENT)),
+                  true,
                   new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점")),
               FlowType.LEGACY,
               null,

@@ -143,6 +143,22 @@ public class ParticipationBundleDomainService {
    *
    * <p>어느 참여인지 로그에 남긴다 — 못 찍으면 예외를 보고도 할 일이 없다.
    */
+  /**
+   * 배치 조회 결과({@code findAllByParticipations})에서 이 참여의 배송지 id 를 꺼낸다. 규약은 {@link
+   * #shippingAddressIdOf(Participation)} 와 같다 — 정본은 묶음이고, 묶음이 없는 옛 행만 사본으로 폴백한다.
+   *
+   * <p>🔴 <b>목록 경로는 반드시 이쪽을 써라.</b> 단건 메서드는 {@code findById} 를 타므로 참여마다 조회가 되고,
+   * 지금 그게 안 터지는 건 앞선 배치 조회가 영속성 컨텍스트를 채워 둔 <b>우연한 호출 순서</b> 덕이다. 순서가
+   * 바뀌거나 트랜잭션 경계가 달라지면 조용히 2N 쿼리가 된다. 경고 로그도 부르는 횟수만큼 중복돼 미연결 행
+   * 건수 파악(P4 선행)이 흐려진다.
+   */
+  public static Long shippingAddressIdOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    ParticipationBundle bundle =
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+    return bundle == null ? participation.getShippingAddressId() : bundle.getShippingAddressId();
+  }
+
   public Long requireShippingAddressIdOf(final Participation participation) {
     Long shippingAddressId = shippingAddressIdOf(participation);
     if (shippingAddressId == null) {

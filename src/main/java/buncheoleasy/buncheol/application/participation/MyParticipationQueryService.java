@@ -125,7 +125,7 @@ public class MyParticipationQueryService {
     // 배송지도 정본이 묶음이다. 참여마다 읽으면 N+1 이라 id 를 모아 한 번에 조회한다.
     // ⚠️ 삭제 가드가 있어도 null 이 올 수 있다 — 옛 행은 묶음이 없고, 가드 이전에 지워진 주소도 있다.
     Map<Long, ShippingAddress> shippingAddressById =
-        findShippingAddresses(participations);
+        findShippingAddresses(participations, bundleById);
 
     final Instant now = Instant.now(clock);
     return participations.stream()
@@ -147,11 +147,6 @@ public class MyParticipationQueryService {
         .toList();
   }
 
-  // 참여 상세와 동일한 규칙: 입금확인중(AWAITING_PAYMENT) 참여에만 개최자 계좌를 노출한다.
-  /**
-   * 참여들이 물고 있는 묶음 배송지를 한 번에 읽는다. 정본은 묶음이고, 묶음이 없는 옛 행은 사본으로 폴백한다
-   * ({@code shippingAddressIdOf} 가 그 규약을 갖고 있다).
-   */
   /**
    * 이 참여가 속한 묶음의 배송지. 화면의 「배송지 고정 · 변경 불가」 자리에 그대로 들어간다.
    *
@@ -160,9 +155,12 @@ public class MyParticipationQueryService {
    * "확인 중" 빈 상태로 그리게 null 을 내려보낸다 — <b>기본 배송지로 폴백하면 안 된다.</b> 그러면 「변경 불가」
    * 라벨이 붙은 자리에 실제로 가지 않을 주소가 확신에 차서 뜬다.
    */
-  private RequestedShippingAddressResponse requestedShippingAddressOf(
-      final Participation participation, final Map<Long, ShippingAddress> shippingAddressById) {
-    Long shippingAddressId = participationBundleDomainService.shippingAddressIdOf(participation);
+  private static RequestedShippingAddressResponse requestedShippingAddressOf(
+      final Participation participation,
+      final Map<Long, ParticipationBundle> bundleById,
+      final Map<Long, ShippingAddress> shippingAddressById) {
+    Long shippingAddressId =
+        ParticipationBundleDomainService.shippingAddressIdOf(bundleById, participation);
     if (shippingAddressId == null) {
       return null;
     }
@@ -170,11 +168,19 @@ public class MyParticipationQueryService {
     return shippingAddress == null ? null : RequestedShippingAddressResponse.from(shippingAddress);
   }
 
+  /**
+   * 참여들이 물고 있는 묶음 배송지를 한 번에 읽는다. 정본은 묶음이고, 묶음이 없는 옛 행만 사본으로 폴백한다
+   * ({@code shippingAddressIdOf} 가 그 규약을 갖고 있다).
+   *
+   * <p>이미 읽어 둔 {@code bundleById} 에서 id 를 꺼내므로 <b>참여당 0 쿼리</b>가 보장된다 — 단건 메서드를
+   * 쓰면 호출 순서에 기대게 되고, 순서가 바뀌는 순간 조용히 2N 이 된다.
+   */
   private Map<Long, ShippingAddress> findShippingAddresses(
-      final List<Participation> participations) {
+      final List<Participation> participations,
+      final Map<Long, ParticipationBundle> bundleById) {
     List<Long> ids =
         participations.stream()
-            .map(participationBundleDomainService::shippingAddressIdOf)
+            .map(p -> ParticipationBundleDomainService.shippingAddressIdOf(bundleById, p))
             .filter(Objects::nonNull)
             .distinct()
             .toList();
@@ -184,6 +190,7 @@ public class MyParticipationQueryService {
             .collect(Collectors.toMap(ShippingAddress::getId, a -> a));
   }
 
+  // 참여 상세와 동일한 규칙: 입금확인중(AWAITING_PAYMENT) 참여에만 개최자 계좌를 노출한다.
   private Map<Long, HostAccountResponse> findHostAccountsForAwaitingPayments(
       final List<Participation> participations, final Map<Long, Buncheol> buncheolById) {
     List<Long> awaitingHostIds =
@@ -270,7 +277,7 @@ public class MyParticipationQueryService {
         hostAccount,
         refundHolder,
         delivery == null ? null : MyParticipationDeliveryResponse.from(delivery),
-        requestedShippingAddressOf(participation, shippingAddressById),
+        requestedShippingAddressOf(participation, bundleById, shippingAddressById),
         // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(
             participation,

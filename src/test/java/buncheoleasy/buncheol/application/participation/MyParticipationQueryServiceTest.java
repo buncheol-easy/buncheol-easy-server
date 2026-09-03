@@ -47,6 +47,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -115,6 +116,16 @@ class MyParticipationQueryServiceTest {
             });
   }
 
+  /** 배송지를 심은 묶음 목. 사본과 <b>다른</b> 값을 줘야 이관 여부를 테스트가 말해 준다. */
+  private static ParticipationBundle bundleWithAddress(final Long bundleId, final Long addressId) {
+    ParticipationBundle bundle = mock(ParticipationBundle.class);
+    lenient().when(bundle.getId()).thenReturn(bundleId);
+    lenient().when(bundle.getShippingAddressId()).thenReturn(addressId);
+    lenient().when(bundle.getShippingFee()).thenReturn(0L);
+    lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+    return bundle;
+  }
+
   @Nested
   @DisplayName("내 참여 목록 조회 테스트")
   class GetMyParticipationsTest {
@@ -142,8 +153,11 @@ class MyParticipationQueryServiceTest {
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
           .willReturn(List.of());
       given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
-      // 묶음 정본이 가리키는 배송지는 200 이다.
-      given(participationBundleDomainService.shippingAddressIdOf(participation)).willReturn(200L);
+      // 묶음 정본이 가리키는 배송지는 200 이다. 배치 조회 결과에서 꺼내므로 묶음에 심는다.
+      // ⚠️ 헬퍼가 내부에서 스터빙하므로 given(...) 안에서 부르면 UnfinishedStubbing 이 난다 — 먼저 만든다.
+      ParticipationBundle bundle = bundleWithAddress(9999L, 200L);
+      given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+          .willReturn(Map.of(9999L, bundle));
       given(shippingAddressRepository.findAllByIds(List.of(200L)))
           .willReturn(
               List.of(
@@ -181,7 +195,10 @@ class MyParticipationQueryServiceTest {
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
           .willReturn(List.of());
       given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
-      given(participationBundleDomainService.shippingAddressIdOf(participation)).willReturn(null);
+      // 묶음은 있는데 배송지가 비었다(참조하던 주소가 지워진 경우). 사본도 비어 있다.
+      ParticipationBundle emptyAddressBundle = bundleWithAddress(9999L, null);
+      given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+          .willReturn(Map.of(9999L, emptyAddressBundle));
 
       List<MyParticipationResponse> result =
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);

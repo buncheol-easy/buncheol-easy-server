@@ -3,6 +3,9 @@ package buncheoleasy.buncheol.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
@@ -221,9 +224,7 @@ class BuncheolDetailQueryServiceTest {
       Participation mine = active(601L, 101L, ME, ParticipationStatus.AWAITING_PAYMENT);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(mine));
       // 🔴 판정은 쓰기 경로와 같은 메서드다 — 여기서 조건을 새로 짜면 화면의 약속과 실제 각인이 갈린다.
-      given(
-              participationDomainService.findInheritanceSource(
-                  BUNCHEOL_ID, BuncheolStatus.RECRUITING, ME))
+      given(participationDomainService.findInheritanceSource(any(), eq(ME), anyList()))
           .willReturn(java.util.Optional.of(mine));
       given(participationBundleDomainService.shippingAddressIdOf(mine)).willReturn(200L);
       given(shippingAddressRepository.findById(200L))
@@ -234,6 +235,7 @@ class BuncheolDetailQueryServiceTest {
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
+      assertThat(response.myParticipation().inheritanceApplies()).isTrue();
       assertThat(response.myParticipation().inheritedShippingAddress())
           .isEqualTo(new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점"));
     }
@@ -246,13 +248,13 @@ class BuncheolDetailQueryServiceTest {
       stubEmptyDetailCollaborators();
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(active(601L, 101L, ME, ParticipationStatus.AWAITING_PAYMENT)));
-      given(
-              participationDomainService.findInheritanceSource(
-                  BUNCHEOL_ID, BuncheolStatus.PAYMENT_COLLECTING, ME))
+      given(participationDomainService.findInheritanceSource(any(), eq(ME), anyList()))
           .willReturn(java.util.Optional.empty());
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
+      // 🔴 불리언까지 본다 — null 만 보면 "고를 수 있다" 와 "고정인데 값을 못 읽었다" 가 구분되지 않는다.
+      assertThat(response.myParticipation().inheritanceApplies()).isFalse();
       assertThat(response.myParticipation().inheritedShippingAddress()).isNull();
       then(shippingAddressRepository).shouldHaveNoInteractions();
     }

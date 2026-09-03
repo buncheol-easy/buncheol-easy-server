@@ -644,6 +644,94 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
     }
 
+    // 🔴 <b>PR-B 이후의 실제 데이터 모양이다.</b> 참여 INSERT 에서 배송지를 빼면 신규 행의 사본은 항상
+    // NULL 이고 주소는 묶음에만 있다. 이때 가드가 사본을 보면 <b>전 건 false</b> — 배송 대기 중인
+    // 배송지가 사용자 손으로 지워지고, ON DELETE SET NULL 이 정본까지 비운다(updatable=false 라 복구 불가).
+    @Test
+    void 참여_사본이_NULL_이어도_묶음이_배송지를_가지면_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "묶음만매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      // 신규 행의 실제 모양 — 사본은 비어 있고 주소는 묶음에만 있다.
+      jdbcTemplate.update(
+          "UPDATE participations SET shipping_address_id = NULL WHERE id = ?", participationId);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    // 미연결 옛 행(P2-b 배포선 창)은 사본으로만 찾을 수 있다. OR 폴백을 고정한다 — 가드는 비대칭이라
+    // 과탐(못 지움)은 재시도로 끝나지만 미탐은 비가역이다.
+    @Test
+    void 묶음_없는_옛_행도_사본으로_보호된다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "미연결옛행매장");
+      insertParticipation(
+          buncheolId,
+          buncheolMemberId,
+          participantId,
+          addr,
+          30_000L,
+          Instant.now().plus(30, ChronoUnit.MINUTES),
+          ParticipationStatus.AWAITING_PAYMENT,
+          null);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    // 🔴 사본 항에서 bundleId IS NULL 조건을 뺀 이유를 고정한다.
+    //
+    // 묶음이 있으면서 사본↔정본이 어긋난 행이 실재한다(staging 참여 200). 그 조건이 있으면 이 행이
+    // <b>보호에서 빠져</b> 배송 대기 중인 배송지가 지워질 수 있다. 신규 행의 사본은 항상 NULL 이라
+    // 이 항을 넓혀도 과탐이 늘지 않는다 — 어긋난 옛 행만 fail-closed 로 덮는다.
+    @Test
+    void 묶음은_다른_주소인데_사본만_이_주소여도_보호된다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long copyAddr = insertShippingAddress(participantId, "사본만매장");
+      Long bundleAddr = insertShippingAddress(participantId, "묶음쪽매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              copyAddr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+      attachBundleWithAddress(participationId, bundleAddr);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(copyAddr)).isTrue();
+      assertThat(participationRepository.existsActiveByShippingAddressId(bundleAddr)).isTrue();
+    }
+
+    /** 묶음을 만들어 붙이고 그 묶음에 배송지를 심는다. */
+    private void attachBundleWithAddress(final Long participationId, final Long addressId) {
+      jdbcTemplate.update(
+          "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_address_id,"
+              + " shipping_fee, refund_bank, refund_account, refund_holder)"
+              + " SELECT p.buncheol_id, p.participant_id, ?, 0, '국민', '12345678', '홍길동'"
+              + " FROM participations p WHERE p.id = ?",
+          addressId,
+          participationId);
+      Long bundleId =
+          jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+      jdbcTemplate.update(
+          "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, participationId);
+    }
+
     @Test
     void 배송지를_참조하는_참여가_취소된_것뿐이면_false_를_반환한다() {
       Long buncheolId = createBuncheol();

@@ -14,7 +14,9 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -188,6 +190,65 @@ class ParticipationBundleDomainServiceTest {
 
     assertThat(attribution.shippingFeeOf(unlinked)).isEqualTo(3_000L);
     then(participationRepository).should(never()).findAllByBundleIds(any());
+  }
+
+  @Nested
+  @DisplayName("shippingAddressIdOf — 배송지 정본 읽기 규칙")
+  class ShippingAddressIdOfTest {
+
+    private static final Long BUNDLE_ID = 900L;
+    private static final Long BUNDLE_ADDRESS_ID = 201L;
+    private static final Long STALE_COPY_ADDRESS_ID = 999L;
+
+    @Test
+    void 묶음의_배송지를_돌려준다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findById(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(BUNDLE_ADDRESS_ID)));
+
+      assertThat(participationBundleDomainService.shippingAddressIdOf(participation))
+          .isEqualTo(BUNDLE_ADDRESS_ID);
+    }
+
+    // 🔴 이 PR 의 핵심 규칙. 묶음 주소가 NULL 인 것은 <b>참조 배송지가 삭제됐다</b>는 뜻이고,
+    // 사본의 id 는 이미 없는 행을 가리킨다 — 되살리면 FK 위반이다.
+    //
+    // ⚠️ Optional.map(...).orElseGet(...) 으로 구현하면 매퍼가 null 을 줄 때 empty 가 되어
+    // <b>정확히 이 금지된 폴백</b>을 한다. 이 테스트가 그것을 막는다.
+    @Test
+    void 묶음_주소가_NULL_이면_사본으로_폴백하지_않고_NULL_을_돌려준다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findById(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(null)));
+
+      assertThat(participationBundleDomainService.shippingAddressIdOf(participation)).isNull();
+    }
+
+    // 미연결 옛 행(P2-b 배포선 창)만 사본으로 폴백한다. P4 의 bundle_id NOT NULL 승격과 함께 사라진다.
+    @Test
+    void 묶음이_없으면_참여_사본으로_폴백한다() {
+      Participation participation =
+          participationFixture(310L, null, 0L);
+      setField(participation, "shippingAddressId", STALE_COPY_ADDRESS_ID);
+
+      assertThat(participationBundleDomainService.shippingAddressIdOf(participation))
+          .isEqualTo(STALE_COPY_ADDRESS_ID);
+      then(participationBundleRepository).should(never()).findById(any());
+    }
+
+    private Participation linked() {
+      Participation participation = participationFixture(311L, BUNDLE_ID, 0L);
+      // 사본에는 다른 값을 심는다 — 사본을 읽으면 위 두 테스트가 실패한다.
+      setField(participation, "shippingAddressId", STALE_COPY_ADDRESS_ID);
+      return participation;
+    }
+
+    private ParticipationBundle bundle(final Long shippingAddressId) {
+      ParticipationBundle bundle = newInstance(ParticipationBundle.class);
+      setField(bundle, "id", BUNDLE_ID);
+      setField(bundle, "shippingAddressId", shippingAddressId);
+      return bundle;
+    }
   }
 
   private static Participation participationFixture(

@@ -853,6 +853,7 @@ class ParticipationServiceTest {
 
     private static final Long EXISTING_BUNDLE_ID = 700L;
     private static final Long INHERITED_ADDRESS_ID = 201L;
+    private static final Long STALE_COPY_ADDRESS_ID = 999L;
     private static final RefundAccount INHERITED_REFUND_ACCOUNT =
         RefundAccount.of("신한", "99998888", "옛이름");
 
@@ -904,7 +905,9 @@ class ParticipationServiceTest {
     private Participation existingActive(final Long bundleId) {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
-      setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
+      // 🔴 참여 사본에는 <b>다른 값</b>을 심는다. 같은 값이면 묶음을 읽든 사본을 읽든 초록이라
+      // 이관이 됐는지 테스트가 말해 주지 못한다 — 사본은 신규 행에서 어차피 NULL 이 된다.
+      setField(existing, "shippingAddressId", STALE_COPY_ADDRESS_ID);
       setField(existing, "bundleId", bundleId);
       return existing;
     }
@@ -921,6 +924,10 @@ class ParticipationServiceTest {
       lenient()
           .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
           .thenReturn(Optional.of(existing));
+      // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
+      lenient()
+          .when(participationBundleDomainService.shippingAddressIdOf(existing))
+          .thenReturn(INHERITED_ADDRESS_ID);
     }
 
     // LEGACY 는 1인 1활성슬롯이라 묶을 것이 없다 — 백필 STEP 1(행별 1:1)과 같은 규칙이어야 한다.
@@ -1097,6 +1104,7 @@ class ParticipationServiceTest {
   class AdditionalRoundShippingFeeTest {
 
     private static final Long INHERITED_ADDRESS_ID = 201L;
+    private static final Long STALE_COPY_ADDRESS_ID = 999L;
     private static final Long INHERITED_BUNDLE_ID = 700L;
     private static final RefundAccount INHERITED_REFUND_ACCOUNT =
         RefundAccount.of("신한", "99998888", "옛이름");
@@ -1123,12 +1131,19 @@ class ParticipationServiceTest {
     private void givenExistingActive() {
       Participation existing = newInstance(Participation.class);
       setField(existing, "id", 499L);
-      setField(existing, "shippingAddressId", INHERITED_ADDRESS_ID);
+      // 🔴 참여 사본에는 <b>다른 값</b>을 심는다. 같은 값이면 묶음을 읽든 사본을 읽든 초록이라
+      // 이관이 됐는지 테스트가 말해 주지 못한다 — 사본은 신규 행에서 어차피 NULL 이 된다.
+      setField(existing, "shippingAddressId", STALE_COPY_ADDRESS_ID);
       setField(existing, "bundleId", INHERITED_BUNDLE_ID);
       lenient()
           .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
           .thenReturn(Optional.of(existing));
+      // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
+      lenient()
+          .when(participationBundleDomainService.shippingAddressIdOf(existing))
+          .thenReturn(INHERITED_ADDRESS_ID);
     }
+
 
     // 🔴 이 트랙의 돈 규칙. 새 묶음이 생기면 배송비 1회 부과 — 추가 모집은 별도 이체·별도 택배다.
     @Test

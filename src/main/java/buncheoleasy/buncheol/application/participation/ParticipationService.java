@@ -312,7 +312,10 @@ public class ParticipationService {
     final Long shippingAddressId;
     final long shippingFee;
     if (existing.isPresent()) {
-      shippingAddressId = existing.get().getShippingAddressId();
+      // 🔴 상속하는 값의 출처는 참여 사본이 아니라 <b>그 참여의 묶음</b>이다. participations 의 두 칸은
+      // 정본이 아니고(배송비 #170 · 배송지 이 PR) P4 에서 사라진다 — 사본을 읽으면 신규 행에서 NULL 이
+      // 새 묶음에 각인되고, updatable=false 라 코드로 되돌릴 수 없다.
+      shippingAddressId = participationBundleDomainService.shippingAddressIdOf(existing.get());
       shippingFee = 0L;
     } else {
       ShippingAddress shippingAddress =

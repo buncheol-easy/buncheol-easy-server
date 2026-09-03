@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.user.domain.User;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
 public class DeliverySnapshotCreator {
 
   private final DeliveryDomainService deliveryDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
   private final ShippingAddressDomainService shippingAddressDomainService;
   private final UserDomainService userDomainService;
 
@@ -44,8 +46,11 @@ public class DeliverySnapshotCreator {
       return;
     }
 
+    // 🔴 주소의 정본은 묶음이다 — 이 클래스는 이미 묶음 단위로 중복을 판정하는데(위 findByBundleId)
+    // 주소만 참여 사본을 보고 있어 축이 어긋나 있었다. 사본은 P4 에서 사라진다.
     ShippingAddress shippingAddress =
-        shippingAddressDomainService.getShippingAddress(participation.getShippingAddressId());
+        shippingAddressDomainService.getShippingAddress(
+            participationBundleDomainService.shippingAddressIdOf(participation));
     User user = userDomainService.getUser(participation.getParticipantId());
     // 참여 진입 가드 도입 전에 생성된 가입 미완료(Guest) 참여가 입금확인되면 아래 phoneNumber
     // 접근에서 NPE(500)가 난다. 명시적 403 으로 바꿔 레거시 데이터의 잔여 위험을 닫는다.

@@ -690,6 +690,33 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
     }
 
+    // 🔴 사본 항에서 bundleId IS NULL 조건을 뺀 이유를 고정한다.
+    //
+    // 묶음이 있으면서 사본↔정본이 어긋난 행이 실재한다(staging 참여 200). 그 조건이 있으면 이 행이
+    // <b>보호에서 빠져</b> 배송 대기 중인 배송지가 지워질 수 있다. 신규 행의 사본은 항상 NULL 이라
+    // 이 항을 넓혀도 과탐이 늘지 않는다 — 어긋난 옛 행만 fail-closed 로 덮는다.
+    @Test
+    void 묶음은_다른_주소인데_사본만_이_주소여도_보호된다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long copyAddr = insertShippingAddress(participantId, "사본만매장");
+      Long bundleAddr = insertShippingAddress(participantId, "묶음쪽매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              copyAddr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.AWAITING_PAYMENT,
+              null);
+      attachBundleWithAddress(participationId, bundleAddr);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(copyAddr)).isTrue();
+      assertThat(participationRepository.existsActiveByShippingAddressId(bundleAddr)).isTrue();
+    }
+
     /** 묶음을 만들어 붙이고 그 묶음에 배송지를 심는다. */
     private void attachBundleWithAddress(final Long participationId, final Long addressId) {
       jdbcTemplate.update(

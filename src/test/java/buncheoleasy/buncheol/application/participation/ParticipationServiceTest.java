@@ -1133,7 +1133,7 @@ class ParticipationServiceTest {
       setField(existing, "id", 499L);
       // 🔴 참여 사본에는 <b>다른 값</b>을 심는다. 같은 값이면 묶음을 읽든 사본을 읽든 초록이라
       // 이관이 됐는지 테스트가 말해 주지 못한다 — 사본은 신규 행에서 어차피 NULL 이 된다.
-      setField(existing, "shippingAddressId", STALE_INHERIT_COPY_ADDRESS_ID);
+      setField(existing, "shippingAddressId", STALE_COPY_ADDRESS_ID);
       setField(existing, "bundleId", INHERITED_BUNDLE_ID);
       lenient()
           .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
@@ -1144,7 +1144,6 @@ class ParticipationServiceTest {
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
-    private static final Long STALE_INHERIT_COPY_ADDRESS_ID = 998L;
 
     // 🔴 이 트랙의 돈 규칙. 새 묶음이 생기면 배송비 1회 부과 — 추가 모집은 별도 이체·별도 택배다.
     @Test

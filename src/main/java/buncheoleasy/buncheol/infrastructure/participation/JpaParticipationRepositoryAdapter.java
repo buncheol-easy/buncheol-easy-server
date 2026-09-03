@@ -198,8 +198,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsActiveByShippingAddressId(final Long shippingAddressId) {
-    return jpaParticipationRepository.existsActiveByShippingAddress(
-        shippingAddressId, ParticipationStatus.active());
+    // 정본(묶음) 항과 사본 항을 OR 로 합성한다. 나눈 이유는 각각 배송지 FK 인덱스로 진입시키기 위함이고,
+    // 앞이 참이면 뒤는 아예 돌지 않는다. 사본 항은 신규 행에서 절대 매칭되지 않으므로 과탐이 늘지 않는다 —
+    // 정본과 어긋난 옛 행만 fail-closed 로 덮는다.
+    return jpaParticipationRepository.existsActiveByBundleShippingAddress(
+            shippingAddressId, ParticipationStatus.active())
+        || jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
+            shippingAddressId, ParticipationStatus.active());
   }
 
   @Override

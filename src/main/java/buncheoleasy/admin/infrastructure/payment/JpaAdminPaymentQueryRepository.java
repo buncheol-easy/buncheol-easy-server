@@ -44,7 +44,11 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
           // 미연결 옛 행만 사본으로 폴백한다(P4 에서 함께 사라진다).
           + "LEFT JOIN ParticipationBundle pb ON pb.id = p.bundleId "
           + "LEFT JOIN ShippingAddress sa "
-          + "  ON sa.id = COALESCE(pb.shippingAddressId, p.shippingAddressId) "
+          // ⚠️ COALESCE 를 쓰면 안 된다 — 묶음이 있는데 주소가 NULL 인 경우(참조 배송지가 삭제된 상태)에도
+          // 사본으로 폴백해, ParticipationBundleDomainService#shippingAddressIdOf 가 명시적으로 금지한
+          // 분기를 이 쿼리만 몰래 한다. 같은 PR 안에서 두 읽기가 다른 규칙을 따르면 다음 사람에게 함정이다.
+          + "  ON sa.id = CASE WHEN p.bundleId IS NULL "
+          + "                  THEN p.shippingAddressId ELSE pb.shippingAddressId END "
           + "WHERE (:statusFilter IS NULL OR :statusFilter = "
           + "  CASE WHEN p.status = :appliedStatus THEN 'APPLIED' "
           + "       WHEN p.status = :awaitingStatus OR p.status = :paymentSentStatus "

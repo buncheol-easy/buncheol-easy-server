@@ -64,7 +64,7 @@ class DeliverySnapshotCreatorTest {
         new ShippingAddress(
             SHIPPING_ADDRESS_ID, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
     // 배송지 정본은 묶음이다 — 이 스텁이 없으면 목이 null 을 줘 조회가 죽는다.
-    given(participationBundleDomainService.shippingAddressIdOf(any()))
+    given(participationBundleDomainService.requireShippingAddressIdOf(any()))
         .willReturn(SHIPPING_ADDRESS_ID);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(shippingAddress);
@@ -105,7 +105,7 @@ class DeliverySnapshotCreatorTest {
         new ShippingAddress(
             SHIPPING_ADDRESS_ID, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
     // 배송지 정본은 묶음이다 — 이 스텁이 없으면 목이 null 을 줘 조회가 죽는다.
-    given(participationBundleDomainService.shippingAddressIdOf(any()))
+    given(participationBundleDomainService.requireShippingAddressIdOf(any()))
         .willReturn(SHIPPING_ADDRESS_ID);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(shippingAddress);

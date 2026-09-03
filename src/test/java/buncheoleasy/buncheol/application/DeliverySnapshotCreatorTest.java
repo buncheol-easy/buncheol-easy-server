@@ -1,5 +1,8 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.exception.domain.BusinessException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -67,7 +70,7 @@ class DeliverySnapshotCreatorTest {
 
   private void givenSnapshotSources() {
     // 배송지 정본은 묶음이다 — 이 스텁이 없으면 목이 null 을 줘 조회가 죽는다.
-    given(participationBundleDomainService.shippingAddressIdOf(any()))
+    given(participationBundleDomainService.requireShippingAddressIdOf(any()))
         .willReturn(SHIPPING_ADDRESS_ID);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(

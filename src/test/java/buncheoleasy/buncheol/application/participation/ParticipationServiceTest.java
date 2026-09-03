@@ -926,7 +926,7 @@ class ParticipationServiceTest {
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
-          .when(participationBundleDomainService.shippingAddressIdOf(existing))
+          .when(participationBundleDomainService.requireShippingAddressIdOf(existing))
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
@@ -1140,7 +1140,7 @@ class ParticipationServiceTest {
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
-          .when(participationBundleDomainService.shippingAddressIdOf(existing))
+          .when(participationBundleDomainService.requireShippingAddressIdOf(existing))
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 

@@ -315,7 +315,11 @@ public class ParticipationService {
       // 🔴 상속하는 값의 출처는 참여 사본이 아니라 <b>그 참여의 묶음</b>이다. participations 의 두 칸은
       // 정본이 아니고(배송비 #170 · 배송지 이 PR) P4 에서 사라진다 — 사본을 읽으면 신규 행에서 NULL 이
       // 새 묶음에 각인되고, updatable=false 라 코드로 되돌릴 수 없다.
-      shippingAddressId = participationBundleDomainService.shippingAddressIdOf(existing.get());
+      // 🔴 여기서 null 이 흘러가면 shipping_address_id = NULL 인 <b>새 묶음이 조용히 커밋된다</b>
+      // (ParticipationBundle.open 은 이 값을 검증하지 않는다). updatable=false 라 코드로 복구 불가라,
+      // 읽기 실패(500)보다 <b>더 비가역</b>이다. 배송 스냅샷과 같은 규약으로 닫는다.
+      shippingAddressId =
+          participationBundleDomainService.requireShippingAddressIdOf(existing.get());
       shippingFee = 0L;
     } else {
       ShippingAddress shippingAddress =

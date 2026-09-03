@@ -72,10 +72,21 @@ public class Participation extends TimestampedEntity {
   @Column(name = "participant_id", nullable = false, updatable = false)
   private Long participantId;
 
-  // 참여 시 선택한 배송지 (shipping_addresses.id). 배송 방법·수령 지점이 여기서 도출된다. 참여 후에는 변경할 수 없다(updatable=false).
-  // 종료(취소·만료)된 참여가 참조하던 배송지를 사용자가 삭제하면 FK ON DELETE SET NULL 로 이 값이 NULL 이 된다
-  // (활성 참여가 참조 중이면 앱에서 삭제를 막으므로, 활성 참여의 배송지가 NULL 이 되는 일은 없다).
-  @Column(name = "shipping_address_id", updatable = false)
+  // ⚠️ DEPRECATED — <b>정본은 participation_bundles.shipping_address_id 다.</b> 택배 1개 = 묶음 1개라
+  // 주소도 묶음당 하나다. 참여 INSERT 에서 뺐으므로 <b>신규 행은 전부 NULL</b> 이고, 값이 있는 것은
+  // 그 이전에 만들어진 행뿐이다. 읽기는 ParticipationBundleDomainService#shippingAddressIdOf 하나로 모여 있다.
+  //
+  // 🔴 <b>「NULL = 이상」 판정을 여기에 세우지 말 것.</b> 특히 배송지 삭제 가드가 이 칸만 보면 신규 행에서
+  // 전 건 false 가 되어 <b>배송 대기 중인 주소가 지워지고</b> FK ON DELETE SET NULL 이 정본까지 비운다.
+  // (그래서 가드는 묶음 항과 사본 항을 OR 로 합성한다 — JpaParticipationRepository 참고.)
+  //
+  // 🔴 {@code insertable = false} 인 이유: 참여 생성은 지금 raw INSERT 하나뿐이고 거기서 이 컬럼을 뺐다.
+  // 누군가 JPA persist 경로를 하나 추가하면 값이 <b>조용히 되살아나</b> 「새 행은 항상 NULL」이라는 전제가
+  // 깨지고, 그 전제 위에 선 폴백 판정 두 곳(shippingAddressIdOf · 어드민 목록 CASE WHEN)이 옛 행과
+  // 새 행을 구분하지 못한다. shipping_fee·flow_type 이 같은 이유로 같은 처방을 쓴다.
+  //
+  // 인메모리 값은 여전히 필요하다 — attach() 로 흘러가 <b>묶음의 배송지를 만든다</b>. P4 에서 컬럼과 함께 사라진다.
+  @Column(name = "shipping_address_id", insertable = false, updatable = false)
   private Long shippingAddressId;
 
   // 멤버 금액(굿즈 가격). 점유 시점 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다. 배송비는 shippingFee 로 분리 보관한다.

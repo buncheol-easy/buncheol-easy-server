@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
@@ -44,6 +45,9 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public final class ShippingFeeAttribution {
+
+  /** 폴백 경고에 남길 묶음 id 상한. 대량 조회에서 로그 한 줄이 터무니없이 길어지지 않게 한다. */
+  private static final int WARN_BUNDLE_ID_LIMIT = 20;
 
   private static final ShippingFeeAttribution EMPTY =
       new ShippingFeeAttribution(Map.of(), Map.of());
@@ -122,6 +126,19 @@ public final class ShippingFeeAttribution {
       final Collection<Participation> allSlots,
       final Map<Long, ParticipationBundle> bundleById,
       final Map<Long, Long> carrierByBundleId) {
+    // 🔴 건수만 남기면 로그를 보고도 조사 시작점이 없다 — 어느 묶음인지 함께 찍는다.
+    // 상한을 두는 이유는 대량 조회에서 로그 한 줄이 터무니없이 길어지지 않게 하기 위함이다.
+    List<Long> fallbackBundleIds =
+        allSlots.stream()
+            .filter(p -> p.getBundleId() != null && p.getId() != null)
+            .filter(
+                p ->
+                    bundleById.get(p.getBundleId()) == null
+                        || carrierByBundleId.get(p.getBundleId()) == null)
+            .map(Participation::getBundleId)
+            .distinct()
+            .limit(WARN_BUNDLE_ID_LIMIT)
+            .toList();
     long fallbackCount =
         allSlots.stream()
             .filter(p -> p.getBundleId() != null && p.getId() != null)
@@ -132,9 +149,12 @@ public final class ShippingFeeAttribution {
             .count();
     if (fallbackCount > 0) {
       log.warn(
-          "배송비 귀속 폴백 {}건 — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것. slots={}",
+          "배송비 귀속 폴백 {}건 — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것."
+              + " slots={}, bundleIds(최대 {}개)={}",
           fallbackCount,
-          allSlots.size());
+          allSlots.size(),
+          WARN_BUNDLE_ID_LIMIT,
+          fallbackBundleIds);
     }
   }
 

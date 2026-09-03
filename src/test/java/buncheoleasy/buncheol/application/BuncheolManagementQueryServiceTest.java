@@ -583,7 +583,7 @@ class BuncheolManagementQueryServiceTest {
       assertThat(target.depositorName()).isNull();
     }
 
-    // C2C 회귀 방지 — isFree() 는 슬롯 판정인데 C2C 통장 대조는 묶음(같은 사람) 단위다. 배송비가 첫 슬롯에만
+    // C2C 회귀 방지 — 0원 판정은 슬롯 단위인데 C2C 통장 대조는 묶음(같은 사람) 단위다. 배송비가 첫 슬롯에만
     // 붙고 멤버 가격 0 도 허용돼 "0원 슬롯 + 유상 슬롯" 이 한 묶음이 될 수 있는데, 그 0원 행의 예금주를 지우면
     // 이체 1건에 대조 키가 갈린다. C2C 가 0원 슬롯에도 계좌를 요구하는 이유가 그것이다.
     @Test

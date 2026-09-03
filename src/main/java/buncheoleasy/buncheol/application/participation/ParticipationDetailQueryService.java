@@ -78,7 +78,7 @@ public class ParticipationDetailQueryService {
     // 🔴 환급 판정보다 <b>위</b>에 둔다. 대상 판정도 이 귀속을 봐야 「자격은 있는데 환급액은 0」이 안 생긴다.
     // 위에서 이미 읽은 묶음을 넘겨 형제 슬롯만 1회 더 읽는다(같은 묶음을 두 번 조회하던 것을 없앤다).
     ShippingFeeAttribution shippingFees =
-        participationBundleDomainService.shippingFeeAttributionOf(bundle);
+        participationBundleDomainService.shippingFeeAttributionOf(bundle, participation);
 
     // 택배 1개 = 묶음 1개 — 다슬롯 묶음은 슬롯들이 배송 1건을 공유한다.
     Delivery delivery =

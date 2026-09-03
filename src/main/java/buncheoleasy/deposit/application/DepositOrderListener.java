@@ -61,7 +61,7 @@ public class DepositOrderListener {
       // 매칭이 실패한다. 묶음 원값을 더하면 다슬롯에서 곱해지므로 귀속 판정을 쓴다.
       long paymentAmount =
           participationBundleDomainService
-              .shippingFeeAttributionOf(bundle)
+              .shippingFeeAttributionOf(bundle, participation)
               .totalAmountOf(participation);
       if (paymentAmount == 0) {
         return;

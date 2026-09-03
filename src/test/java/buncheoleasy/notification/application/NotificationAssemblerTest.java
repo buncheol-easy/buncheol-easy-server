@@ -1,6 +1,8 @@
 package buncheoleasy.notification.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -64,7 +66,7 @@ class NotificationAssemblerTest {
       given(participation.getShippingFee()).willReturn(3_000L);
       given(participationDomainService.getParticipation(1L)).willReturn(participation);
       // 묶음이 없는 경우(미연결) — 조립기는 읽어 둔 묶음을 그대로 넘긴다.
-      given(participationBundleDomainService.shippingFeeAttributionOf(null))
+      given(participationBundleDomainService.shippingFeeAttributionOf(eq(null), any()))
           .willReturn(ShippingFeeAttribution.empty());
 
       Buncheol buncheol = mock(Buncheol.class);
@@ -121,7 +123,7 @@ class NotificationAssemblerTest {
           ShippingFeeAttribution.ofAllSlots(List.of(participation), Map.of(bundleId, bundle));
       given(participationBundleDomainService.findByParticipation(participation))
           .willReturn(java.util.Optional.of(bundle));
-      given(participationBundleDomainService.shippingFeeAttributionOf(bundle))
+      given(participationBundleDomainService.shippingFeeAttributionOf(eq(bundle), any()))
           .willReturn(attribution);
 
       Buncheol buncheol = mock(Buncheol.class);

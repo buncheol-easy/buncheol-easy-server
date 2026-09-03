@@ -127,11 +127,16 @@ class ParticipationTest {
       assertThat(participation.getPaybackAmount()).isEqualTo(SHIPPING_FEE);
     }
 
-    // 🔴 이 PR 이 새로 만든 유일한 돈 관련 분기를 고정한다.
+    // 첫 스냅샷 보존 가드를 고정한다.
     //
-    // deriveStatus 는 저장 상태가 NONE 이 아니면 isEventTarget 을 건너뛴다 — 즉 재신청은 「배송비 > 0」
-    // 재검증을 받지 않는다. 그 경로로 0 이 내려오면 이미 확정된 환급액이 0 으로 덮여 어드민 검수 화면과
-    // 알림톡 「환급금액」이 0원으로 나간다.
+    // ⚠️ <b>지금은 도달 불가다.</b> 환급은 LEGACY 전용이고 LEGACY 는 묶음당 슬롯이 1개라, 그 슬롯이
+    // 활성이든 취소든 언제나 carrier 여서 귀속값이 0 이 될 수 없다. 아래 헬퍼가 <b>LEGACY 에 존재할 수 없는
+    // 다슬롯 묶음</b>을 인위로 만들어야 재현된다 — 즉 이건 「지금 일어나는 일」이 아니라
+    // <b>환급이 다슬롯(C2C)으로 열리면 유효해지는 방어</b>다.
+    //
+    // 그때 무엇을 막는가: deriveStatus 는 저장 상태가 NONE 이 아니면 isEventTarget 을 건너뛴다 — 재신청은
+    // 「배송비 > 0」 재검증을 받지 않는다. 그 경로로 0 이 내려오면 확정된 환급액이 0 으로 덮여 어드민 검수
+    // 화면과 알림톡 「환급금액」이 0원으로 나간다.
     @Test
     void 재신청에서_배송비가_0_으로_내려와도_첫_환급액_스냅샷을_지킨다() {
       Participation participation = newParticipation();
@@ -139,7 +144,7 @@ class ParticipationTest {
       assertThat(participation.getPaybackAmount()).isEqualTo(SHIPPING_FEE);
 
       // 형제 슬롯이 취소되는 등으로 이 슬롯이 carrier 가 아니게 된 상태 = 귀속값 0
-      participation.requestPayback(TWEET_URL, NOW.plusSeconds(600), zeroFees(participation));
+      participation.requestPayback(TWEET_URL, NOW.plusSeconds(600), giveCarrierToSibling(participation));
 
       assertThat(participation.getPaybackAmount()).isEqualTo(SHIPPING_FEE);
     }
@@ -148,7 +153,7 @@ class ParticipationTest {
     @Test
     void 재신청에서_배송비가_있으면_최신_귀속값으로_덮는다() {
       Participation participation = newParticipation();
-      participation.requestPayback(TWEET_URL, NOW, zeroFees(participation));
+      participation.requestPayback(TWEET_URL, NOW, giveCarrierToSibling(participation));
       assertThat(participation.getPaybackAmount()).isZero();
 
       participation.requestPayback(TWEET_URL, NOW.plusSeconds(600), fees);
@@ -157,12 +162,15 @@ class ParticipationTest {
     }
 
     /**
-     * 이 참여가 carrier 가 <b>아닌</b> 판정 — {@code shippingFeeOf} 가 0 을 낸다.
+     * 형제 슬롯에게 carrier 를 넘겨 이 참여의 귀속 배송비를 0 으로 만든다.
      *
      * <p>{@code empty()} 로는 만들 수 없다. 그건 저장값(SHIPPING_FEE)을 그대로 돌려주는 폴백이라
      * 「귀속이 0 인 상태」와 구분되지 않는다. 묶음은 있고 <b>형제 슬롯이 carrier 를 가져간</b> 상태로 만든다.
+     *
+     * <p>⚠️ <b>인자를 변형한다</b> — 넘긴 참여에 id·bundleId·status·createdAt 을 심는다. 그러지 않으면
+     * 같은 묶음의 슬롯으로 인식되지 않아 carrier 판정 자체가 성립하지 않는다.
      */
-    private ShippingFeeAttribution zeroFees(final Participation participation) {
+    private ShippingFeeAttribution giveCarrierToSibling(final Participation participation) {
       setField(participation, "id", 999L);
       setField(participation, "bundleId", BUNDLE_ID);
       setField(participation, "status", ParticipationStatus.AWAITING_PAYMENT);

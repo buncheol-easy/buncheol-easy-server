@@ -56,8 +56,30 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   boolean existsByBuncheolIdAndParticipantIdAndStatusIn(
       Long buncheolId, Long participantId, Collection<ParticipationStatus> statuses);
 
-  boolean existsByShippingAddressIdAndStatusIn(
-      Long shippingAddressId, Collection<ParticipationStatus> statuses);
+  /**
+   * 배송지 삭제 가드 — 이 배송지를 쓰는 <b>묶음</b>에 활성 슬롯이 있는가. 정본이 묶음이므로 묶음을 타고 찾고, 미연결 옛
+   * 행({@code bundle_id IS NULL})만 참여 사본으로 함께 본다.
+   *
+   * <p>🔴 <b>파생 쿼리({@code existsByShippingAddressIdAndStatusIn})로 되돌리면 안 된다.</b> 참여 INSERT 에서 배송지를 뺀 뒤
+   * 신규 행의 그 칸은 항상 NULL 이라, 그 이름으로 찾으면 이 가드가 <b>전 건에 false 를 내는 무력한 통과 장치</b>가 된다.
+   * 그러면 배송 대기 중인 배송지가 사용자 손으로 지워지고, {@code ON DELETE SET NULL} 이 <b>정본까지</b> NULL 로 만든다 —
+   * 두 칸 모두 {@code updatable = false} 라 코드로는 복구가 불가능하다.
+   *
+   * <p>⚠️ 사본 항(OR 뒤쪽)을 지우지 말 것. <b>가드는 비대칭이다</b> — 과탐(삭제를 막음)은 재시도로 끝나지만 미탐은 비가역이다.
+   * P4 에서 참여 컬럼을 DROP 할 때 함께 지운다.
+   *
+   * <p>판정 축은 묶음의 {@code closed_at} 이 아니라 <b>슬롯 상태</b>를 그대로 쓴다. 묶음 닫기가 늦거나 실패한 「시체 묶음」에
+   * 가드를 매달면 실제로는 끝난 배송지를 영원히 못 지운다.
+   */
+  @Query(
+      "SELECT COUNT(p) > 0 FROM Participation p "
+          + "LEFT JOIN ParticipationBundle b ON b.id = p.bundleId "
+          + "WHERE p.status IN :statuses "
+          + "AND (b.shippingAddressId = :shippingAddressId "
+          + "  OR (p.bundleId IS NULL AND p.shippingAddressId = :shippingAddressId))")
+  boolean existsActiveByShippingAddress(
+      @Param("shippingAddressId") Long shippingAddressId,
+      @Param("statuses") Collection<ParticipationStatus> statuses);
 
   boolean existsByBuncheolMemberIdAndStatusIn(
       Long buncheolMemberId, Collection<ParticipationStatus> statuses);

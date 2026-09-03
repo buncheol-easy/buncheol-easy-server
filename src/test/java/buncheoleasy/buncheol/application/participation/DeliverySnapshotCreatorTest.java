@@ -2,12 +2,14 @@ package buncheoleasy.buncheol.application.participation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.delivery.domain.Delivery;
@@ -36,12 +38,14 @@ class DeliverySnapshotCreatorTest {
   @InjectMocks private DeliverySnapshotCreator deliverySnapshotCreator;
 
   @Mock private DeliveryDomainService deliveryDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ShippingAddressDomainService shippingAddressDomainService;
   @Mock private UserDomainService userDomainService;
 
   private static final Long PARTICIPATION_ID = 1L;
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long SHIPPING_ADDRESS_ID = 200L;
+  private static final Long STALE_COPY_ADDRESS_ID = 999L;
 
   @Test
   void 참여_배송지_유저_정보를_그_시점_값으로_배송_스냅샷에_담는다() {
@@ -59,6 +63,9 @@ class DeliverySnapshotCreatorTest {
     ShippingAddress shippingAddress =
         new ShippingAddress(
             SHIPPING_ADDRESS_ID, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
+    // 배송지 정본은 묶음이다 — 이 스텁이 없으면 목이 null 을 줘 조회가 죽는다.
+    given(participationBundleDomainService.shippingAddressIdOf(any()))
+        .willReturn(SHIPPING_ADDRESS_ID);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(shippingAddress);
 
@@ -97,6 +104,9 @@ class DeliverySnapshotCreatorTest {
     ShippingAddress shippingAddress =
         new ShippingAddress(
             SHIPPING_ADDRESS_ID, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남점", null, false);
+    // 배송지 정본은 묶음이다 — 이 스텁이 없으면 목이 null 을 줘 조회가 죽는다.
+    given(participationBundleDomainService.shippingAddressIdOf(any()))
+        .willReturn(SHIPPING_ADDRESS_ID);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(shippingAddress);
 

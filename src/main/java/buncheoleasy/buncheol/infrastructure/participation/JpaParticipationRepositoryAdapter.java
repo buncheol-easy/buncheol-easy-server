@@ -198,7 +198,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsActiveByShippingAddressId(final Long shippingAddressId) {
-    return jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
+    return jpaParticipationRepository.existsActiveByShippingAddress(
         shippingAddressId, ParticipationStatus.active());
   }
 

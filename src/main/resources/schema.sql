@@ -357,9 +357,12 @@ CREATE TABLE IF NOT EXISTS participations
     participant_id               BIGINT       NOT NULL COMMENT '참여자',
     -- 소속 묶음 (docs/70 §3). P1 은 추가만 — 아직 아무도 읽지 않는다. 백필 후 NOT NULL 로 조인다.
     bundle_id                    BIGINT       NULL COMMENT '소속 묶음',
-    shipping_address_id          BIGINT       NULL COMMENT '선택한 배송지 (참조 배송지 삭제 시 NULL — 종료된 참여 한정)',
+    -- 🔴 배송지·배송비도 죽은 컬럼이다 — 정본이 participation_bundles 로 옮겨갔고 INSERT 목록에서 빠졌다.
+    -- ⚠️ "NULL = 이상"·"0 = 무료" 판정을 여기에 세우지 말 것. 특히 배송지 삭제 가드가 이 칸만 보면
+    -- 신규 행에서 전 건 false 가 되어 배송 대기 중인 주소가 지워지고, ON DELETE SET NULL 이 정본까지 비운다.
+    shipping_address_id          BIGINT       NULL COMMENT '[P4 에서 삭제] 선택한 배송지 — 정본은 participation_bundles. 신규 행은 전부 NULL',
     amount                       BIGINT       NOT NULL COMMENT '멤버 금액 (굿즈 가격, 배송비 제외)',
-    shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '배송비 (묶음당 1회. 같은 사람이라도 묶음이 다르면 각각 >0 — 추가 모집은 새 묶음이다). 입금 총액 = amount + shipping_fee',
+    shipping_fee                 BIGINT       NOT NULL DEFAULT 0 COMMENT '[P4 에서 삭제] 배송비 — 정본은 participation_bundles. 신규 행은 전부 0',
     -- 🔴 P2-c 이후 이 세 칸은 죽은 컬럼이다 — 정본이 participation_bundles 로 옮겨갔고 INSERT 목록에서 빠졌다.
     -- **신규 행은 전부 NULL 이다.** 값이 있는 것은 P2-c 배포 이전에 만들어진 행뿐이다.
     -- ⚠️ 그러므로 "NULL = 이상" 이라는 판정을 여기에 세우지 말 것. 계좌를 확인하려면 묶음을 봐야 한다.

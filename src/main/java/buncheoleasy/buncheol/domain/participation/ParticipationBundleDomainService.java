@@ -132,6 +132,30 @@ public class ParticipationBundleDomainService {
    * <p>묶음이 없는 옛 행(P2-b 배포선 창)만 사본으로 폴백한다 — prod·staging 실측 0건이고 P4 의 {@code bundle_id NOT NULL}
    * 승격과 함께 사라진다. 폴백이 도는 것 자체가 그 행을 찾아야 한다는 신호라 경고를 남긴다.
    */
+  /**
+   * 이 참여의 배송지 — <b>없으면 이름을 가지고 실패한다.</b>
+   *
+   * <p>{@link #shippingAddressIdOf} 가 null 을 돌려주는 것은 「참조 배송지가 하드 삭제됐다」는 뜻이고, 그건 운영 개입이
+   * 필요한 데이터 파손이다. 삭제 가드가 정상이면 도달 불가에 가깝지만, <b>가드가 뚫렸을 때 조용히 흘러가면 안 된다</b> —
+   * 읽기 쪽은 {@code findById(null)} 이 안내 문구 없는 500 으로 죽고, 쓰기 쪽은 {@code shipping_address_id = NULL} 인
+   * 새 묶음이 커밋된다({@code updatable = false} 라 <b>코드로 복구 불가</b>). 뒤쪽이 더 비가역이라 두 호출부가 같은 규약을
+   * 쓰게 여기 모아 둔다.
+   *
+   * <p>어느 참여인지 로그에 남긴다 — 못 찍으면 예외를 보고도 할 일이 없다.
+   */
+  public Long requireShippingAddressIdOf(final Participation participation) {
+    Long shippingAddressId = shippingAddressIdOf(participation);
+    if (shippingAddressId == null) {
+      log.warn(
+          "활성 참여가 참조하던 배송지가 사라졌다 — 삭제 가드가 뚫렸을 수 있다."
+              + " participationId={}, bundleId={}",
+          participation.getId(),
+          participation.getBundleId());
+      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
+    return shippingAddressId;
+  }
+
   public Long shippingAddressIdOf(final Participation participation) {
     ParticipationBundle bundle = findByParticipation(participation).orElse(null);
     if (bundle == null) {

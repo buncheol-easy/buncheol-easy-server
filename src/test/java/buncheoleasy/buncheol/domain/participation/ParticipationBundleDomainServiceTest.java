@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
 import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
@@ -234,6 +235,33 @@ class ParticipationBundleDomainServiceTest {
       assertThat(participationBundleDomainService.shippingAddressIdOf(participation))
           .isEqualTo(STALE_COPY_ADDRESS_ID);
       then(participationBundleRepository).should(never()).findById(any());
+    }
+
+    // 🔴 참여 INSERT 에서 배송지를 뺀 뒤(#175) null 이 실제로 흐를 수 있게 된다.
+    // 읽기 쪽은 findById(null) 이 안내 없는 500 으로 죽고, <b>쓰기 쪽은 배송지가 NULL 인 새 묶음이
+    // 조용히 커밋된다</b>(updatable=false 라 코드로 복구 불가) — 뒤쪽이 더 비가역이라 두 호출부가
+    // 같은 규약을 쓰게 모아 뒀다.
+    @Test
+    void 정본_배송지가_없으면_이름을_가진_예외로_닫는다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findById(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(null)));
+
+      assertThatThrownBy(
+              () -> participationBundleDomainService.requireShippingAddressIdOf(participation))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
+
+    @Test
+    void 정본_배송지가_있으면_그대로_돌려준다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findById(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(BUNDLE_ADDRESS_ID)));
+
+      assertThat(participationBundleDomainService.requireShippingAddressIdOf(participation))
+          .isEqualTo(BUNDLE_ADDRESS_ID);
     }
 
     private Participation linked() {

@@ -745,7 +745,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " ②에서 선택 UI 를 그리면 유저가 고른 뒤 서버에 거부당한다")
                                 .optional(),
                             fieldWithPath("myParticipation.inheritedShippingAddress.shippingMethod")
-                                .description("배송 방법 (GS25_HALF | CU_ALTTLE)")
+                                .description("배송방법 (GS25_HALF | CU_HALF)")
                                 .optional(),
                             fieldWithPath("myParticipation.inheritedShippingAddress.storeName")
                                 .description("편의점 지점명")

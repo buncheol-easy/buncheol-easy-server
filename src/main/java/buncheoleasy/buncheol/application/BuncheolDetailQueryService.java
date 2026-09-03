@@ -15,6 +15,10 @@ import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -42,6 +46,9 @@ public class BuncheolDetailQueryService {
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
+  private final ShippingAddressRepository shippingAddressRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -120,7 +127,7 @@ public class BuncheolDetailQueryService {
                             && userId.equals(p.getParticipantId()))
                 .toList();
     MyParticipationSummaryResponse myParticipation =
-        userId == null ? null : toMyParticipation(myActiveParticipations);
+        userId == null ? null : toMyParticipation(buncheol, userId, myActiveParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
 
     // 오픈채팅 링크는 개최자·활성 참여자에게만 싣는다. 이 조회는 비로그인도 열려 있어서
@@ -221,6 +228,8 @@ public class BuncheolDetailQueryService {
   }
 
   private MyParticipationSummaryResponse toMyParticipation(
+      final Buncheol buncheol,
+      final Long userId,
       final List<Participation> myActiveParticipations) {
     List<MyParticipationItemResponse> items =
         myActiveParticipations.stream()
@@ -229,6 +238,27 @@ public class BuncheolDetailQueryService {
                     new MyParticipationItemResponse(
                         p.getId(), p.getBuncheolMemberId(), p.getStatus()))
             .toList();
-    return new MyParticipationSummaryResponse(items.size(), items);
+    return new MyParticipationSummaryResponse(
+        items.size(), items, inheritedShippingAddress(buncheol, userId));
+  }
+
+  /**
+   * 자리를 더 신청하면 <b>상속될</b> 배송지. 화면은 이 값이 있으면 그대로 보여 주고 배송지 선택을 감춘다.
+   *
+   * <p>🔴 판정을 여기서 새로 짜지 않고 {@link ParticipationDomainService#findInheritanceSource} 를 부른다 —
+   * 신청을 처리하는 쪽과 <b>같은</b> 메서드다. "모집중이면 상속" 을 여기 한 번 더 쓰면 조건이 갈리는 순간
+   * 화면이 약속한 주소와 실제로 각인되는 주소가 달라지고, 배송지는 {@code updatable=false} 라 되돌릴 수 없다.
+   *
+   * <p>상속 원본은 있는데 배송지를 못 읽는 경우(지워졌다) 는 {@code null} 을 낸다 — 상세 조회 전체를 500 으로
+   * 떨어뜨릴 일이 아니고, 실제 신청 시점에 쓰기 경로의 {@code requireShippingAddressIdOf} 가 막는다.
+   */
+  private RequestedShippingAddressResponse inheritedShippingAddress(
+      final Buncheol buncheol, final Long userId) {
+    return participationDomainService
+        .findInheritanceSource(buncheol.getId(), buncheol.getStatus(), userId)
+        .map(participationBundleDomainService::shippingAddressIdOf)
+        .flatMap(shippingAddressRepository::findById)
+        .map(RequestedShippingAddressResponse::from)
+        .orElse(null);
   }
 }

@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
@@ -35,6 +36,46 @@ class ParticipationDomainServiceTest {
 
   private static Participation newParticipation() {
     return Participation.create(1L, 10L, 100L, 200L, 30_000L, 0L, DUE_AT);
+  }
+
+  @Nested
+  @DisplayName("상속 원본 판정 테스트")
+  class FindInheritanceSourceTest {
+
+    // 🔴 이 판정 하나를 쓰기 경로(participateSingle)와 읽기 경로(분철 상세 응답)가 공유한다.
+    // 조건을 두 벌 세우면 화면이 "이 배송지로 갑니다" 라고 약속한 주소와 서버가 실제로 각인하는 주소가
+    // 갈리고, 배송지는 updatable=false 라 되돌릴 수 없다. 그래서 게이트를 여기서 검증한다.
+    @Test
+    void 모집중이면_내_첫_활성_참여를_상속_원본으로_준다() {
+      Participation mine = newParticipation();
+      given(participationRepository.findActiveByBuncheolId(10L)).willReturn(List.of(mine));
+
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  10L, BuncheolStatus.RECRUITING, mine.getParticipantId()))
+          .contains(mine);
+    }
+
+    // 성사 확정 뒤 추가 모집은 별도 이체·별도 택배다 (docs/80 결정 11).
+    // 🔴 <b>조회 자체를 하지 않는다</b> — 추가 모집에서 상속은 구조적으로 불가능하므로 헛쿼리다.
+    @Test
+    void 추가_모집이면_조회도_하지_않고_비어_있다() {
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  10L, BuncheolStatus.PAYMENT_COLLECTING, 100L))
+          .isEmpty();
+
+      then(participationRepository).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 모집중이어도_내_활성_참여가_없으면_비어_있다() {
+      given(participationRepository.findActiveByBuncheolId(10L))
+          .willReturn(List.of(newParticipation()));
+
+      assertThat(participationDomainService.findInheritanceSource(10L, BuncheolStatus.RECRUITING, 999L))
+          .isEmpty();
+    }
   }
 
   @Nested

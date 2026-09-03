@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.domain.participation;
 
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
@@ -32,6 +33,22 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId).stream()
         .filter(participation -> participation.getParticipantId().equals(participantId))
         .findFirst();
+  }
+
+  /**
+   * 모집중 재참여가 배송지·배송비·입금자명·묶음을 <b>상속할 원본 참여</b>. 상속은 모집중에만 적용된다 — 성사 확정 뒤
+   * 추가 모집은 별도 이체·별도 택배라 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6).
+   *
+   * <p>🔴 <b>쓰기 경로와 읽기 경로가 이 하나를 공유해야 한다.</b> 신청을 처리하는 쪽({@code
+   * ParticipationService#participateSingle})과 화면에 "이 배송지로 갑니다" 를 그리는 쪽(분철 상세 응답)이 조건을
+   * 두 벌 세우면, 화면이 약속한 주소와 서버가 실제로 각인하는 주소가 갈린다. 배송지는 {@code updatable=false} 라
+   * 어긋난 뒤에는 코드로 되돌릴 수 없다.
+   */
+  public Optional<Participation> findInheritanceSource(
+      final Long buncheolId, final BuncheolStatus buncheolStatus, final Long participantId) {
+    return buncheolStatus == BuncheolStatus.RECRUITING
+        ? findFirstActiveInBuncheol(buncheolId, participantId)
+        : Optional.empty();
   }
 
   public Participation getParticipation(final Long id) {

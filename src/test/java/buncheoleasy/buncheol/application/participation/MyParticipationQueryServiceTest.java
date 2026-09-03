@@ -5,9 +5,11 @@ import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainServi
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
@@ -26,6 +28,9 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.dto.response.HostAccountResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
@@ -66,6 +71,7 @@ class MyParticipationQueryServiceTest {
   @Mock private UserRepository userRepository;
   @Mock private ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
+  @Mock private ShippingAddressRepository shippingAddressRepository;
 
   // Instant.now(clock) 가 실제 시각을 돌려주도록 고정 Clock 을 @Spy 로 주입한다 (mock Clock 은 NPE).
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
@@ -112,6 +118,78 @@ class MyParticipationQueryServiceTest {
   @Nested
   @DisplayName("내 참여 목록 조회 테스트")
   class GetMyParticipationsTest {
+
+    // 🔴 배송지 정본은 <b>묶음</b>이다. 화면의 「배송지 고정 · 변경 불가」 자리에 이 값이 들어가므로,
+    // 서버가 안 내려주면 화면이 유저의 기본 배송지로 폴백해 <b>틀린 주소를 확신에 차서</b> 보여 준다.
+    // 참여 사본에 다른 값(999)을 심어 둔다 — 같은 값이면 사본을 읽어도 초록이라 이관을 검증 못 한다.
+    @Test
+    void 배송지는_참여_사본이_아니라_묶음_정본에서_읽는다() {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Buncheol buncheol = buncheol(10L, "C2C 분철", deadline, BuncheolStatus.RECRUITING);
+      Participation participation =
+          participation(
+              233L, 10L, 101L, 10_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+      setField(participation, "bundleId", 9999L);
+      setField(participation, "shippingAddressId", 999L); // 사본 — 읽히면 안 된다
+
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(participation));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(groupMemberRepository.findAllByIds(List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "해린")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      // 묶음 정본이 가리키는 배송지는 200 이다.
+      given(participationBundleDomainService.shippingAddressIdOf(participation)).willReturn(200L);
+      given(shippingAddressRepository.findAllByIds(List.of(200L)))
+          .willReturn(
+              List.of(
+                  new ShippingAddress(
+                      200L, PARTICIPANT_ID, ShippingMethod.GS25_HALF, "GS25 강남역점", null, true)));
+
+      List<MyParticipationResponse> result =
+          myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).requestedShippingAddress())
+          .isEqualTo(new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점"));
+      // 사본(999)을 조회하지 않았다 — 조회했다면 이관이 안 된 것이다.
+      then(shippingAddressRepository).should(never()).findAllByIds(List.of(999L));
+    }
+
+    // 🔴 <b>기본 배송지로 폴백하지 않는다.</b> 「변경 불가」 라벨이 붙는 자리라, 실제로 가지 않을 주소를
+    // 확신에 차서 보여 주는 것이 "정보 없음" 보다 나쁘다. null 을 내려 화면이 빈 상태로 그리게 한다.
+    @Test
+    void 묶음_배송지를_못_읽으면_대체값_없이_null_을_내린다() {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+      Buncheol buncheol = buncheol(10L, "C2C 분철", deadline, BuncheolStatus.RECRUITING);
+      Participation participation =
+          participation(
+              233L, 10L, 101L, 10_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+      setField(participation, "bundleId", 9999L);
+
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(participation));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(groupMemberRepository.findAllByIds(List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "해린")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L)))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(participationBundleDomainService.shippingAddressIdOf(participation)).willReturn(null);
+
+      List<MyParticipationResponse> result =
+          myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+      assertThat(result.get(0).requestedShippingAddress()).isNull();
+      // 배송지 조회 자체를 하지 않는다 — 빈 목록으로 부르면 IS NULL 조회가 되어 남의 주소가 걸린다.
+      then(shippingAddressRepository).shouldHaveNoInteractions();
+    }
 
     @Test
     void 참여_내역이_없으면_빈_리스트를_반환한다() {

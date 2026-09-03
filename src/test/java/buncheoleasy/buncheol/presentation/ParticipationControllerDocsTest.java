@@ -365,7 +365,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                         + " 변경 불가」 자리라 틀린 주소가 확신에 차서 뜬다. 못 읽으면 null")
                                 .optional(),
                             fieldWithPath("[].requestedShippingAddress.shippingMethod")
-                                .description("배송 방법 (GS25_HALF | CU_HALF)")
+                                .description("배송방법 (GS25_HALF | CU_HALF)")
                                 .optional(),
                             fieldWithPath("[].requestedShippingAddress.storeName")
                                 .description("편의점 지점명")

@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -16,17 +17,17 @@ import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainServi
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
-import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.request.ShippingFeePaybackRequest;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.util.List;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -117,6 +118,11 @@ class ShippingFeePaybackServiceTest {
     then(participationDomainService)
         .should()
         .requestPayback(eq(participation), eq(PaybackTweetUrl.parse(TWEET_URL)), eq(NOW), same(fees));
+    // 🔴 same(fees) 만으로는 부족하다 — 스텁이 모든 호출에 같은 인스턴스를 주므로, 서비스가 판정을
+    // <b>두 번 만들어</b> 각각 넘겨도 통과한다. 그게 정확히 이번 이관이 없앤 옛 형태다.
+    then(participationBundleDomainService)
+        .should(times(1))
+        .shippingFeeAttributionOf(any(), any());
     then(eventPublisher)
         .should()
         .publishEvent(new ShippingFeePaybackRequestedEvent(PARTICIPATION_ID));

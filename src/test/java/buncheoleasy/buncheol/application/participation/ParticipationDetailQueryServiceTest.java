@@ -5,11 +5,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.never;
-import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
@@ -162,7 +163,11 @@ class ParticipationDetailQueryServiceTest {
         .should()
         .submitDeadline(eq(participation), eq(FlowType.LEGACY), isNull(), same(fees));
     // ② 묶음은 한 번만 읽는다 (계좌·귀속이 같은 조회를 나눠 쓴다)
-    then(participationBundleDomainService).should().findByParticipation(participation);
+    then(participationBundleDomainService).should(times(1)).findByParticipation(participation);
+    // 🔴 귀속 판정도 한 번만 만든다 — 두 번 만들면 그 안의 findAllByBundleIds 가 두 번 나간다.
+    then(participationBundleDomainService)
+        .should(times(1))
+        .shippingFeeAttributionOf(eq(bundle), any());
     then(participationBundleDomainService)
         .should(never())
         .shippingFeeAttributionFor(any(Participation.class));

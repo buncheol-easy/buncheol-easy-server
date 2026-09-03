@@ -110,7 +110,9 @@ class DepositOrderListenerTest {
     Participation participation = participation(50_000L, 3_000L);
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.empty());
-    given(participationBundleDomainService.shippingFeeAttributionOf(isNull(), any()))
+    // 🔴 진단 파라미터를 고정한다. any() 로 두면 호출부가 <b>엉뚱한 참여</b>(형제 슬롯 등)를 넘겨도
+    // 통과하고, 경고가 틀린 participationId 를 가리켜 이 파라미터를 넣은 목적이 무너진다.
+    given(participationBundleDomainService.shippingFeeAttributionOf(isNull(), eq(PARTICIPATION_ID)))
         .willReturn(ShippingFeeAttribution.empty());
 
     listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));

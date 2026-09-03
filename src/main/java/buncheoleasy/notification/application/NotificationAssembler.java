@@ -53,7 +53,7 @@ public class NotificationAssembler {
     // 알림은 수신자 수만큼 반복되므로 그 배수가 그대로 늘어난다.
     long paymentAmount =
         participationBundleDomainService
-            .shippingFeeAttributionOf(bundle, participation)
+            .shippingFeeAttributionOf(bundle, participation.getId())
             .totalAmountOf(participation);
     return new ParticipationView(
         participation, bundle, buncheol, memberName, participant, host, paymentAmount);

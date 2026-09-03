@@ -3,6 +3,7 @@ package buncheoleasy.notification.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -59,6 +60,7 @@ class NotificationAssemblerTest {
     @DisplayName("참여·분철·멤버명·참여자·개최자·입금액(배송비 포함 총액)을 조립한다")
     void loadsParticipationView() {
       Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(1L);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
       given(participation.getParticipantId()).willReturn(PARTICIPANT_ID);
       given(participation.getBuncheolMemberId()).willReturn(101L);
@@ -66,7 +68,9 @@ class NotificationAssemblerTest {
       given(participation.getShippingFee()).willReturn(3_000L);
       given(participationDomainService.getParticipation(1L)).willReturn(participation);
       // 묶음이 없는 경우(미연결) — 조립기는 읽어 둔 묶음을 그대로 넘긴다.
-      given(participationBundleDomainService.shippingFeeAttributionOf(eq(null), any()))
+      // 🔴 진단 파라미터를 고정한다 — any() 로 두면 엉뚱한 참여를 넘겨도 통과하고, 경고가 틀린
+      // participationId 를 가리켜 이 파라미터를 넣은 목적이 무너진다.
+      given(participationBundleDomainService.shippingFeeAttributionOf(isNull(), eq(1L)))
           .willReturn(ShippingFeeAttribution.empty());
 
       Buncheol buncheol = mock(Buncheol.class);

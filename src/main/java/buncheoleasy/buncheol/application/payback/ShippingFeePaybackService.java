@@ -61,7 +61,7 @@ public class ShippingFeePaybackService {
     // 대상 판정(deriveStatus)과 환급액 스냅샷(requestPayback)이 물리적으로 같은 객체를 쓰므로
     // 「자격은 있다는데 환급액은 0」이 구조적으로 불가능하다.
     ShippingFeeAttribution shippingFees =
-        participationBundleDomainService.shippingFeeAttributionOf(bundle, participation);
+        participationBundleDomainService.shippingFeeAttributionOf(bundle, participation.getId());
 
     // 택배 1개 = 묶음 1개 — 다슬롯 묶음은 슬롯들이 배송 1건을 공유한다.
     Delivery delivery =

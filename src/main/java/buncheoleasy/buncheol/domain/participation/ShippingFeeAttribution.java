@@ -126,36 +126,35 @@ public final class ShippingFeeAttribution {
       final Collection<Participation> allSlots,
       final Map<Long, ParticipationBundle> bundleById,
       final Map<Long, Long> carrierByBundleId) {
-    // 🔴 건수만 남기면 로그를 보고도 조사 시작점이 없다 — 어느 묶음인지 함께 찍는다.
-    // 상한을 두는 이유는 대량 조회에서 로그 한 줄이 터무니없이 길어지지 않게 하기 위함이다.
-    List<Long> fallbackBundleIds =
-        allSlots.stream()
-            .filter(p -> p.getBundleId() != null && p.getId() != null)
-            .filter(
-                p ->
-                    bundleById.get(p.getBundleId()) == null
-                        || carrierByBundleId.get(p.getBundleId()) == null)
-            .map(Participation::getBundleId)
-            .distinct()
-            .limit(WARN_BUNDLE_ID_LIMIT)
-            .toList();
-    long fallbackCount =
-        allSlots.stream()
-            .filter(p -> p.getBundleId() != null && p.getId() != null)
-            .filter(
-                p ->
-                    bundleById.get(p.getBundleId()) == null
-                        || carrierByBundleId.get(p.getBundleId()) == null)
-            .count();
-    if (fallbackCount > 0) {
-      log.warn(
-          "배송비 귀속 폴백 {}건 — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것."
-              + " slots={}, bundleIds(최대 {}개)={}",
-          fallbackCount,
-          allSlots.size(),
-          WARN_BUNDLE_ID_LIMIT,
-          fallbackBundleIds);
+    if (!log.isWarnEnabled()) {
+      return;
     }
+    // 🔴 단일 패스 + 조기 반환. 폴백 0건인 <b>정상 경로가 대부분</b>이고 호출부가 목록 조립이라
+    // 목록 크기가 그대로 비용이 된다. 술어를 두 스트림에 복붙하면 한쪽만 고쳤을 때 건수와 id 집합이
+    // 조용히 어긋나므로 한 번만 거른다.
+    List<Participation> fallbacks =
+        allSlots.stream()
+            .filter(p -> p.getBundleId() != null && p.getId() != null)
+            .filter(
+                p ->
+                    bundleById.get(p.getBundleId()) == null
+                        || carrierByBundleId.get(p.getBundleId()) == null)
+            .toList();
+    if (fallbacks.isEmpty()) {
+      return;
+    }
+    // 🔴 distinct <b>총개수</b>를 함께 찍는다. id 를 상한까지만 남기므로, 총개수가 없으면 로그 한 줄로
+    // 남은 작업량(P4 승격을 막는 행이 몇 묶음인지)을 판단할 수 없다.
+    List<Long> bundleIds =
+        fallbacks.stream().map(Participation::getBundleId).distinct().toList();
+    log.warn(
+        "배송비 귀속 폴백 {}건(묶음 {}개) — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것."
+            + " slots={}, bundleIds(앞 {}개)={}",
+        fallbacks.size(),
+        bundleIds.size(),
+        allSlots.size(),
+        WARN_BUNDLE_ID_LIMIT,
+        bundleIds.stream().limit(WARN_BUNDLE_ID_LIMIT).toList());
   }
 
   // createdAt 이 같으면 id 로 가른다. id 는 AUTO_INCREMENT 라 실무상 생성 순서와 같지만,

@@ -215,8 +215,12 @@ public class BuncheolManagementQueryService {
         ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
     // 🔴 <b>입금확인된 슬롯만</b> 배송을 문다. 배송은 이제 묶음에 붙어 있어(택배 1개 = 묶음 1개) 같은
     // 묶음의 미입금 슬롯도 키가 맞는데, 그대로 물리면 <b>입금하지도 않은 슬롯에 "배송중" 과 운송장</b>이
-    // 뜬다. 한 묶음에 확정·미확정이 섞이는 건 실제로 도달 가능하다 — 슬롯 단위 입금확인
-    // ({@code ParticipationService#confirmPayment})과 어드민 벌크 확인(건별 트랜잭션 순회)이 열려 있다.
+    // 뜬다.
+    //
+    // ⚠️ <b>이 가드를 지우지 마라.</b> 슬롯 단위 입금확인·어드민 벌크가 만들던 혼합 묶음은 막혔지만
+    // (ParticipationService#requireLegacy), 그게 이 가드를 불필요하게 만들지 않는다 — <b>취소된 슬롯</b>이
+    // 남는다. 한 명이 취소하고 다른 명이 확정된 묶음에서 취소분까지 배송을 물면 같은 문제가 그대로다.
+    // 즉 근거는 "혼합 확정이 가능해서"가 아니라 "확정되지 않은 슬롯은 언제나 존재할 수 있어서"다.
     //
     // ⚠️ 맵을 조회하기 전에 null 도 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
     // null 키 조회에서 NPE 다. (ShippingFeeAttribution 과 같은 함정)

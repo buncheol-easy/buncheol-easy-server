@@ -148,17 +148,6 @@ public class ParticipationDomainService {
   }
 
   /**
-   * C2C 개최자 수동 입금확인 (AWAITING_PAYMENT·PAYMENT_SENT → CONFIRMED, 기한 경과 무관 — docs/46 §3-6). 실패 시
-   * 상태 위반 예외.
-   */
-  public void confirmPaymentPayable(final Long participationId, final Instant now) {
-    if (participationRepository.confirmPaymentIfPayable(participationId, now)) {
-      return;
-    }
-    throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-  }
-
-  /**
    * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). 호출 측
    * {@code @Transactional} 필수.
    *

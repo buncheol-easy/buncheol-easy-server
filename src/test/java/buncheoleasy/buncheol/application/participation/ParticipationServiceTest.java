@@ -551,6 +551,52 @@ class ParticipationServiceTest {
   @DisplayName("호스트 입금확인 테스트")
   class ConfirmPaymentTest {
 
+    // 🔴 C2C 의 돈 단위는 참여 한 건이 아니라 묶음이다(이체 1회·배송비 1회·택배 1개). 슬롯 하나만 확정되면
+    // 「제외」·자동만료·「입금 수집 종료」·묶음 확정이 동시에 전부 닫혀 그 묶음은 DB 로만 되살릴 수 있다.
+    // 확정 자체가 막히는지뿐 아니라 **부수효과가 하나도 안 일어나는지**까지 본다 — 스냅샷·이벤트가 먼저
+    // 나가면 차단해도 흔적이 남는다.
+    @Test
+    void C2C_는_슬롯_단위_입금확인을_거부한다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+
+      assertThatThrownBy(() -> participationService.confirmPayment(HOST_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNDLE_CONFIRM_REQUIRED);
+
+      // 소유자 검증은 가드보다 먼저다 — 남의 분철이면 그쪽 사유로 막혀야 하고, 플로우를 알려 주면 안 된다.
+      then(buncheol).should().validateOwner(HOST_ID);
+      then(participationDomainService).should(never()).confirmPayment(anyLong(), any());
+      then(deliverySnapshotCreator).should(never()).create(any());
+      then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    // 어드민 벌크 확인은 참여 id 배열을 건별 독립 트랜잭션으로 돈다 — 중간 한 건이 실패해도 앞 건은 커밋된
+    // 뒤다. 즉 운영자가 대시보드에서 한 번 잘못 고르는 것만으로 위 상태가 만들어진다.
+    @Test
+    void C2C_는_어드민_슬롯_단위_입금확인도_거부한다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isC2c()).willReturn(true);
+
+      assertThatThrownBy(() -> participationService.confirmPaymentByAdmin(PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNDLE_CONFIRM_REQUIRED);
+
+      then(participationDomainService).should(never()).confirmPayment(anyLong(), any());
+      then(deliverySnapshotCreator).should(never()).create(any());
+      then(eventPublisher).shouldHaveNoInteractions();
+    }
+
     @Test
     void 입금확인에_성공하면_배송_스냅샷을_만들고_입금확인_이벤트를_발행한다() {
       Participation participation = mock(Participation.class);

@@ -430,8 +430,9 @@ public class ParticipationService {
    *
    * <p>락 순서 규약: 이 경로는 분철 행(X) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
    * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
-   * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 뿐 아니라 C2C 도 {@code confirmPaymentPayable} 뒤에
-   * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
+   * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 는 슬롯 확인 뒤
+   * {@code confirmIfAllSlotsConfirmed} 로, C2C 는 {@code ParticipationBundleService#confirmPayment} 가 묶음
+   * 확정 뒤 {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
    * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
    *
    * <p><b>P2-b 가 세 번째 방향을 더했다 — 참여 행 → 묶음 행 → 참여 행.</b> 묶음 종료 CAS 가 활성 슬롯 존재를 UPDATE 의
@@ -522,21 +523,32 @@ public class ParticipationService {
   /**
    * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를
    * 스냅샷(Delivery)으로 박제한다. 이 입금확인으로 분철의 모든 멤버 슬롯이 입금확인되면(매진+전원확정) deadline 전이라도 분철을 진행확정으로 조기 전이한다.
+   *
+   * <p>🔴 <b>LEGACY 전용이다.</b> C2C 는 {@link ParticipationBundleService#confirmPayment} 만 쓴다 —
+   * 이유는 {@link #requireLegacy} 참고.
    */
   @Transactional
   public void confirmPayment(final Long hostId, final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     buncheol.validateOwner(hostId);
+    requireLegacy(buncheol);
 
     doConfirmPayment(participation, buncheol);
   }
 
-  /** 관리자(운영자)의 입금확인. 개최자 소유권 검증 없이 모든 분철의 참여를 확인할 수 있다는 점만 다르다. */
+  /**
+   * 관리자(운영자)의 입금확인. 개최자 소유권 검증 없이 모든 분철의 참여를 확인할 수 있다는 점만 다르다.
+   *
+   * <p>🔴 여기도 LEGACY 전용이다. 어드민 벌크 확인은 참여 id 배열을 <b>건별 독립 트랜잭션</b>으로 순회하므로
+   * (AdminPaymentCommandService), 중간 한 건이 실패해도 앞 건은 이미 커밋된다. C2C 를 허용하면 운영자가
+   * 대시보드에서 한 번 잘못 고르는 것만으로 되살릴 수 없는 묶음이 생긴다.
+   */
   @Transactional
   public void confirmPaymentByAdmin(final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    requireLegacy(buncheol);
 
     doConfirmPayment(participation, buncheol);
   }
@@ -573,40 +585,33 @@ public class ParticipationService {
     return SystemPaymentConfirmResult.CONFIRMED;
   }
 
+  /**
+   * 슬롯 단위 입금확인의 공통부. 두 진입점이 모두 {@link #requireLegacy} 를 통과시키므로 <b>LEGACY 만 도달한다</b> —
+   * C2C 의 "보냈어요 상태도 확인 대상 · 기한 경과 무시" 규칙(docs/46 §3-6)은 묶음 경로가 그대로 이어받았다.
+   */
   private void doConfirmPayment(final Participation participation, final Buncheol buncheol) {
     final Instant now = Instant.now(clock);
-    if (buncheol.isC2c()) {
-      // C2C 는 "보냈어요"(PAYMENT_SENT) 상태도 확인 대상이고, 개최자 확인이 늦어도 유효하도록 기한 경과 검사를
-      // 하지 않는다 (docs/46 §3-6).
-      participationDomainService.confirmPaymentPayable(participation.getId(), now);
-    } else {
-      participationDomainService.confirmPayment(participation.getId(), now);
-    }
+    participationDomainService.confirmPayment(participation.getId(), now);
     applyPaymentConfirmed(participation, buncheol, now);
   }
 
-  /** 입금확인 CAS 성공 이후의 부수효과. 수동·자동 확인이 공유한다. */
+  /**
+   * 슬롯 단위 입금확인 CAS 성공 이후의 부수효과. 개최자 수동·어드민·웹훅 자동 확인이 공유한다.
+   *
+   * <p><b>여기 오는 것은 LEGACY 뿐이다.</b> 진입점은 <b>네 곳</b>이고 걸러 내는 장치가 서로 다르다 —
+   * 개최자·어드민 확인은 {@link #requireLegacy}, 웹훅 자동확인은 {@code NOT_CONFIRMABLE} 조기 반환,
+   * 0원 참여 즉시확정({@code confirmFreeParticipation})은 {@code participateSingle} 의 플로우 분기다.
+   * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는 묶음을 다
+   * 확정한 <b>뒤 1회만</b> 돌아야 해서 {@link ParticipationBundleService#confirmPayment} 안에 있다 — 슬롯마다
+   * 부르면 같은 판정을 N 번 돌린다.
+   */
   private void applyPaymentConfirmed(
       final Participation participation, final Buncheol buncheol, final Instant now) {
     // 입금확인 시점에 배송지를 스냅샷으로 확정한다. 배송지는 참여 후 변경 불가(updatable=false)라 참여 시점 값이 그대로 유효하다.
     deliverySnapshotCreator.create(participation);
     eventPublisher.publishEvent(new PaymentConfirmedEvent(participation.getId()));
 
-    if (buncheol.isC2c()) {
-      confirmBuncheolIfAllCollected(buncheol, now);
-    } else {
-      confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
-    }
-  }
-
-  /**
-   * C2C: 이 입금확인으로 미확정 활성 참여가 더 없으면(전원 입금확인) 분철을 PAYMENT_COLLECTING → CONFIRMED 로 전이한다 (docs/46
-   * §4.3). 판정·전이는 CAS 서브쿼리로 원자화돼 마지막 두 건을 동시에 확인하는 경합에서도 한쪽만 후속(진행확정 알림)을 수행한다.
-   */
-  private void confirmBuncheolIfAllCollected(final Buncheol buncheol, final Instant now) {
-    if (buncheolDomainService.confirmIfAllCollected(buncheol.getId(), now)) {
-      buncheolConfirmedFinalizer.finalizeConfirmed(buncheol.getId());
-    }
+    confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
   }
 
   // --- C2C 참여자·개최자 액션 (docs/46 §4.2·§4.4·§4.5) ---
@@ -743,6 +748,55 @@ public class ParticipationService {
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+  }
+
+  /**
+   * 🔴 <b>슬롯 단위 입금확인 가드 — C2C 는 묶음 단위로만 확정한다.</b>
+   *
+   * <p>C2C 의 돈 단위는 참여 한 건이 아니라 <b>묶음</b>이다(이체 1회 · 배송비 1회 · 택배 1개). 그래서 확정도 묶음
+   * 통째로여야 하고, 그 경로가 {@link ParticipationBundleService#confirmPayment} 다 — 잠금 조회로 대상을 고정한 뒤
+   * 전부 아니면 전무로 CAS 한다.
+   *
+   * <p>이 가드가 없으면 슬롯 하나만 CONFIRMED 인 <b>혼합 묶음</b>을 만들 수 있고, 그 묶음은 되살릴 방법이 없다.
+   * 출구가 동시에 전부 닫히기 때문이다:
+   *
+   * <ol>
+   *   <li>「제외」 — {@code BundleReleasability.of} 가 슬롯 하나라도 CONFIRMED 면 {@code HAS_CONFIRMED} 를 내
+   *       {@code requireReleasable} 가 막는다. <b>기한이 아무리 지나도 열리지 않는다.</b>
+   *   <li>자동 만료 — C2C 는 만료 폴링 대상에서 아예 빠진다(LEGACY 등가조건).
+   *   <li>「입금 수집 종료」 — {@code confirmIfAllCollected} 가 "미확정 활성 참여 없음"을 요구하므로, 남은 미확정
+   *       슬롯이 분철을 「입금 수집중」에 붙잡아 둔다.
+   *   <li>묶음 입금확인 — {@code payableStatuses} 집합이 이미 확정된 슬롯을 빼므로 {@code expectedSlotIds} 대조가
+   *       어긋나 409 다.
+   * </ol>
+   *
+   * <p>⚠️ <b>「제외」 게이트를 푸는 방향으로 고치지 마라.</b> 확정분을 개최자가 임의로 뺄 수 없게 한 것은 의도된
+   * 결정이다(docs/70 결정 8). 막을 곳은 출구가 아니라 <b>혼합 상태가 생기는 입구</b>다.
+   *
+   * <p>⚠️ <b>엔드포인트 자체를 지우지도 마라.</b> LEGACY(운영진 개최) 개최 관리 화면이 아직 이 API 를 쓴다.
+   * "C2C 만 409" 가 정확한 처방이다.
+   *
+   * <p>🔴 <b>미연결 행(bundle_id = NULL)을 예외로 빼지 않았다 — 의도된 선택이다.</b> 슬롯 단위 「보냈어요」를
+   * 안 막은 이유("배포선 창에서 생긴 행의 마지막 통로")가 확인 쪽에는 적용되지 않는다. 그런 C2C 행은 이 가드
+   * 뒤에 <b>모든 출구가 닫힌다</b> — 묶음 확인·「제외」는 {@code bundleId} 를 인자로 받아 호출 자체가 불가고,
+   * 자동 만료는 C2C 를 안 보며, 자발 취소도 그 상태에선 막힌다. 그럼에도 빼지 않은 근거는 둘이다:
+   *
+   * <ol>
+   *   <li><b>없다</b> — {@code flow_type='C2C' AND bundle_id IS NULL} 인 행이 prod·staging 모두 <b>0건</b>
+   *       (2026-09-03 실측, 상태 무관 전 건).
+   *   <li><b>생길 수 없다</b> — 참여 생성 트랜잭션에서 {@code linkBundle} 이 실패하면 예외를 던져 <b>참여
+   *       INSERT 까지 통째로 롤백된다</b>({@code ParticipationBundleDomainService}). 즉 커밋된 C2C 행은 항상
+   *       묶음을 갖는다.
+   * </ol>
+   *
+   * <p>이 전제가 깨지면(P4 이전에 미연결 행이 다시 관측되면) 카브아웃이 아니라 <b>백필</b>이 답이다 — 그 행에
+   * 묶음을 붙이면 묶음 경로가 그대로 열린다. 카브아웃하면 {@code confirmPaymentPayable} 체인을 되살려야 하고,
+   * 그건 "슬롯 단위 C2C 확정"을 다시 배선 가능한 상태로 만든다.
+   */
+  private void requireLegacy(final Buncheol buncheol) {
+    if (buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNDLE_CONFIRM_REQUIRED);
     }
   }
 

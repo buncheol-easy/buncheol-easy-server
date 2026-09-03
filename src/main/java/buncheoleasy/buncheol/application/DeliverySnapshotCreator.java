@@ -4,6 +4,8 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.shipping.ShippingAddress;
@@ -48,9 +50,16 @@ public class DeliverySnapshotCreator {
 
     // 🔴 주소의 정본은 묶음이다 — 이 클래스는 이미 묶음 단위로 중복을 판정하는데(위 findByBundleId)
     // 주소만 참여 사본을 보고 있어 축이 어긋나 있었다. 사본은 P4 에서 사라진다.
+    Long shippingAddressId = participationBundleDomainService.shippingAddressIdOf(participation);
+    // 🔴 null 은 「참조 배송지가 삭제됐다」는 뜻이다(정본이 NULL 이면 사본으로 폴백하지 않는다 —
+    // shippingAddressIdOf 참고). 그대로 넘기면 findById(null) 이 안내 문구 없는 500 으로 죽으므로
+    // 명시적 ErrorCode 로 닫는다. 삭제 가드(existsActiveByShippingAddressId)가 정상 동작하면
+    // 도달 불가에 가깝지만, 가드가 뚫렸을 때 <b>조용히</b>가 아니라 <b>이름을 가지고</b> 실패해야 한다.
+    if (shippingAddressId == null) {
+      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
     ShippingAddress shippingAddress =
-        shippingAddressDomainService.getShippingAddress(
-            participationBundleDomainService.shippingAddressIdOf(participation));
+        shippingAddressDomainService.getShippingAddress(shippingAddressId);
     User user = userDomainService.getUser(participation.getParticipantId());
     // 참여 진입 가드 도입 전에 생성된 가입 미완료(Guest) 참여가 입금확인되면 아래 phoneNumber
     // 접근에서 NPE(500)가 난다. 명시적 403 으로 바꿔 레거시 데이터의 잔여 위험을 닫는다.

@@ -1,5 +1,8 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.exception.domain.BusinessException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -134,4 +137,17 @@ class DeliverySnapshotCreatorTest {
       throw new IllegalStateException(e);
     }
   }
+  // 🔴 참여 INSERT 에서 배송지를 뺀 뒤(#175) null 이 실제로 흐를 수 있게 된다. 그대로 넘기면
+  // findById(null) 이 안내 문구 없는 500 으로 죽는다 — 이름을 가진 실패로 닫혔는지 고정한다.
+  @Test
+  void 정본_배송지가_없으면_안내되는_예외로_닫는다() {
+    Participation participation = participation(BUNDLE_ID);
+    given(participationBundleDomainService.shippingAddressIdOf(any())).willReturn(null);
+
+    assertThatThrownBy(() -> deliverySnapshotCreator.create(participation))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+  }
+
 }

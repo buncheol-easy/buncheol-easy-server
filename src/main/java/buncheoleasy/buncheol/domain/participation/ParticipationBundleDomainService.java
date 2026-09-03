@@ -119,6 +119,55 @@ public class ParticipationBundleDomainService {
   }
 
   /**
+   * 이 참여의 배송지. <b>정본은 묶음</b>이다 — 택배 1개 = 묶음 1개라 주소도 묶음당 하나다.
+   *
+   * <p>🔴 <b>참여 사본({@code participations.shipping_address_id})으로 판정하면 안 된다.</b> 참여 INSERT 에서 그 컬럼을 뺀 뒤
+   * 신규 행의 값은 <b>항상 NULL</b> 이다. 사본을 읽으면 배송 스냅샷이 주소 없이 만들어지고, 상속은 NULL 을 새 묶음에 각인한다 —
+   * 두 칸 모두 {@code updatable = false} 라 코드로 되돌릴 수 없다.
+   *
+   * <p>⚠️ <b>묶음이 있는데 그 주소가 NULL 이면 그대로 NULL 을 돌려준다 — 사본으로 폴백하지 않는다.</b> 그 상태는 참조 배송지가
+   * 삭제됐다는 뜻이고, 사본의 id 는 이미 없는 행을 가리킨다. 되살리면 FK 위반이다. 호출부는 시끄럽게 실패하는 쪽이 맞다.
+   * ({@code Optional.map(...).orElseGet(...)} 로 쓰면 매퍼가 null 을 줄 때 empty 가 되어 <b>정확히 이 금지된 폴백</b>을 한다.)
+   *
+   * <p>묶음이 없는 옛 행(P2-b 배포선 창)만 사본으로 폴백한다 — prod·staging 실측 0건이고 P4 의 {@code bundle_id NOT NULL}
+   * 승격과 함께 사라진다. 폴백이 도는 것 자체가 그 행을 찾아야 한다는 신호라 경고를 남긴다.
+   */
+  /**
+   * 이 참여의 배송지 — <b>없으면 이름을 가지고 실패한다.</b>
+   *
+   * <p>{@link #shippingAddressIdOf} 가 null 을 돌려주는 것은 「참조 배송지가 하드 삭제됐다」는 뜻이고, 그건 운영 개입이
+   * 필요한 데이터 파손이다. 삭제 가드가 정상이면 도달 불가에 가깝지만, <b>가드가 뚫렸을 때 조용히 흘러가면 안 된다</b> —
+   * 읽기 쪽은 {@code findById(null)} 이 안내 문구 없는 500 으로 죽고, 쓰기 쪽은 {@code shipping_address_id = NULL} 인
+   * 새 묶음이 커밋된다({@code updatable = false} 라 <b>코드로 복구 불가</b>). 뒤쪽이 더 비가역이라 두 호출부가 같은 규약을
+   * 쓰게 여기 모아 둔다.
+   *
+   * <p>어느 참여인지 로그에 남긴다 — 못 찍으면 예외를 보고도 할 일이 없다.
+   */
+  public Long requireShippingAddressIdOf(final Participation participation) {
+    Long shippingAddressId = shippingAddressIdOf(participation);
+    if (shippingAddressId == null) {
+      log.warn(
+          "활성 참여가 참조하던 배송지가 사라졌다 — 삭제 가드가 뚫렸을 수 있다."
+              + " participationId={}, bundleId={}",
+          participation.getId(),
+          participation.getBundleId());
+      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
+    return shippingAddressId;
+  }
+
+  public Long shippingAddressIdOf(final Participation participation) {
+    ParticipationBundle bundle = findByParticipation(participation).orElse(null);
+    if (bundle == null) {
+      log.warn(
+          "묶음 없는 참여의 배송지를 사본에서 읽는다(옛 행 전용 경로). participationId={}",
+          participation.getId());
+      return participation.getShippingAddressId();
+    }
+    return bundle.getShippingAddressId();
+  }
+
+  /**
    * 참여 목록의 묶음을 한 번에 읽어 {@code 묶음 id → 묶음} 으로 돌려준다 (목록 화면 N+1 방지).
    *
    * <p>미연결 참여는 결과에 없다 — 호출부는 {@code map.get(bundleId)} 가 {@code null} 일 수 있음을 전제할 것.
@@ -185,10 +234,17 @@ public class ParticipationBundleDomainService {
    *
    * <p>{@code bundle} 이 {@code null}(미연결 참여)이면 조회 없이 빈 판정을 주고 <b>경고를 남긴다</b> — 새 행에서 그 판정은
    * 곧 「배송비 0」이라 입금 자동확인 금액이 조용히 어긋난다({@link ShippingFeeAttribution#empty()} 참고).
+   *
+   * <p>🔴 {@code participationId} 는 <b>진단 전용</b>이다 — 판정에 쓰이지 않고 경고에만 실린다. 엔티티가 아니라 id 를 받는
+   * 이유가 그것이다. 이 경고의 존재 이유가 P4 의 {@code bundle_id NOT NULL} 승격을 위해 <b>미연결 행을 찾아 없애는
+   * 것</b>이라, 어느 참여인지 못 찍으면 로그를 보고도 할 일이 없다.
    */
-  public ShippingFeeAttribution shippingFeeAttributionOf(final ParticipationBundle bundle) {
+  public ShippingFeeAttribution shippingFeeAttributionOf(
+      final ParticipationBundle bundle, final Long participationId) {
     if (bundle == null) {
-      log.warn("묶음 없는 참여의 배송비 귀속 — 저장값을 쓴다. 새 행이면 그 값은 0 이다.");
+      log.warn(
+          "묶음 없는 참여의 배송비 귀속 — 저장값을 쓴다. 새 행이면 그 값은 0 이다. participationId={}",
+          participationId);
       return ShippingFeeAttribution.empty();
     }
     return ShippingFeeAttribution.ofBundle(

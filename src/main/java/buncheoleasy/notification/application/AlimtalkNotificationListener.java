@@ -78,7 +78,7 @@ public class AlimtalkNotificationListener {
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentConfirmed(final PaymentConfirmedEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    // 🔴 게이트와 문안이 같은 숫자를 봐야 한다. Participation#isFree() 는 <b>저장</b> 총액이라, 배송비를 지던
+    // 🔴 게이트와 문안이 같은 숫자를 봐야 한다. <b>저장</b> 총액으로 판정하면, 배송비를 지던
     // 형제 슬롯이 취소돼 이 0원 슬롯이 배송비를 이어받은 경우(C2C 는 "0원 슬롯 + 유상 슬롯"이 한 묶음일 수 있다)
     // 실제로는 낼 돈이 있는데 발송이 통째로 스킵된다 — 참여자는 보냈는데 확인 알림이 오지 않는다.
     if (view.paymentAmount() == 0) {

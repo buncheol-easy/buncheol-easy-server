@@ -3,6 +3,7 @@ package buncheoleasy.deposit.application;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
@@ -66,7 +67,7 @@ class DepositOrderListenerTest {
     if (refundAccount != null) {
       setField(bundle, "refundAccount", refundAccount);
     }
-    given(participationBundleDomainService.shippingFeeAttributionOf(bundle))
+    given(participationBundleDomainService.shippingFeeAttributionOf(eq(bundle), any()))
         .willReturn(ShippingFeeAttribution.ofBundle(bundle, List.of(slot)));
     return bundle;
   }
@@ -109,7 +110,9 @@ class DepositOrderListenerTest {
     Participation participation = participation(50_000L, 3_000L);
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.empty());
-    given(participationBundleDomainService.shippingFeeAttributionOf(null))
+    // 🔴 진단 파라미터를 고정한다. any() 로 두면 호출부가 <b>엉뚱한 참여</b>(형제 슬롯 등)를 넘겨도
+    // 통과하고, 경고가 틀린 participationId 를 가리켜 이 파라미터를 넣은 목적이 무너진다.
+    given(participationBundleDomainService.shippingFeeAttributionOf(isNull(), eq(PARTICIPATION_ID)))
         .willReturn(ShippingFeeAttribution.empty());
 
     listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));

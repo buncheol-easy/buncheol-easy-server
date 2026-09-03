@@ -3,10 +3,12 @@ package buncheoleasy.buncheol.application.payback;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -15,8 +17,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainServi
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.PaybackStatus;
 import buncheoleasy.buncheol.domain.participation.PaybackTweetUrl;
-import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.dto.request.ShippingFeePaybackRequest;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryRepository;
@@ -25,6 +27,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +44,18 @@ import org.springframework.context.ApplicationEventPublisher;
 @DisplayName("ShippingFeePaybackService 테스트")
 class ShippingFeePaybackServiceTest {
 
-  private final ShippingFeeAttribution fees = ShippingFeeAttribution.empty();
+  /**
+   * 🔴 {@code empty()} 를 쓰면 안 된다. 그건 <b>싱글턴</b>이라, 서비스가 {@code deriveStatus} 와 {@code requestPayback}
+   * 에 <b>서로 다른</b> 판정을 넘겨도 {@code same()} 검증이 통과한다. 이 서비스가 내세우는 성질이 바로 「두 곳이 물리적으로
+   * 같은 객체를 쓴다」(그래야 「자격은 있는데 환급액 0」이 불가능하다)이므로, 매번 새로 만들어지는 인스턴스여야 한다.
+   */
+  private final ShippingFeeAttribution fees = ShippingFeeAttribution.ofBundle(bundleForFees(), List.of());
+
+  private static ParticipationBundle bundleForFees() {
+    ParticipationBundle b = mock(ParticipationBundle.class);
+    given(b.getId()).willReturn(BUNDLE_ID);
+    return b;
+  }
 
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long PARTICIPATION_ID = 500L;
@@ -82,7 +96,7 @@ class ShippingFeePaybackServiceTest {
     given(participation.getBuncheolId()).willReturn(1L);
     given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
     // 환급 입금 계좌의 정본은 묶음이다 (P2-c).
-    given(participationBundleDomainService.shippingFeeAttributionOf(any())).willReturn(fees);
+    given(participationBundleDomainService.shippingFeeAttributionOf(any(), any())).willReturn(fees);
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.of(mock(ParticipationBundle.class)));
     // 배송 조회 키는 묶음이다 (택배 1개 = 묶음 1개).
@@ -103,7 +117,12 @@ class ShippingFeePaybackServiceTest {
     then(participation).should().validateOwnedBy(PARTICIPANT_ID);
     then(participationDomainService)
         .should()
-        .requestPayback(eq(participation), eq(PaybackTweetUrl.parse(TWEET_URL)), eq(NOW), any());
+        .requestPayback(eq(participation), eq(PaybackTweetUrl.parse(TWEET_URL)), eq(NOW), same(fees));
+    // 🔴 same(fees) 만으로는 부족하다 — 스텁이 모든 호출에 같은 인스턴스를 주므로, 서비스가 판정을
+    // <b>두 번 만들어</b> 각각 넘겨도 통과한다. 그게 정확히 이번 이관이 없앤 옛 형태다.
+    then(participationBundleDomainService)
+        .should(times(1))
+        .shippingFeeAttributionOf(any(), any());
     then(eventPublisher)
         .should()
         .publishEvent(new ShippingFeePaybackRequestedEvent(PARTICIPATION_ID));
@@ -118,7 +137,7 @@ class ShippingFeePaybackServiceTest {
 
     then(participationDomainService)
         .should()
-        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW), any());
+        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW), same(fees));
   }
 
   @Test
@@ -167,7 +186,7 @@ class ShippingFeePaybackServiceTest {
 
     then(participationDomainService)
         .should()
-        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW), any());
+        .requestPayback(eq(participation), any(PaybackTweetUrl.class), eq(NOW), same(fees));
     then(eventPublisher)
         .should()
         .publishEvent(new ShippingFeePaybackRequestedEvent(PARTICIPATION_ID));

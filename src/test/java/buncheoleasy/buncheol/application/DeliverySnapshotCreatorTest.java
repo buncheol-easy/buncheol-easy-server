@@ -1,13 +1,17 @@
 package buncheoleasy.buncheol.application;
 
+import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.exception.domain.BusinessException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.user.domain.Nickname;
@@ -42,10 +46,12 @@ class DeliverySnapshotCreatorTest {
   private static final Long BUNDLE_ID = 900L;
   private static final Long PARTICIPANT_ID = 100L;
   private static final Long SHIPPING_ADDRESS_ID = 200L;
+  private static final Long STALE_COPY_ADDRESS_ID = 999L;
 
   @InjectMocks private DeliverySnapshotCreator deliverySnapshotCreator;
 
   @Mock private DeliveryDomainService deliveryDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ShippingAddressDomainService shippingAddressDomainService;
   @Mock private UserDomainService userDomainService;
 
@@ -55,12 +61,17 @@ class DeliverySnapshotCreatorTest {
     Participation participation = newInstance(Participation.class);
     setField(participation, "id", PARTICIPATION_ID);
     setField(participation, "participantId", PARTICIPANT_ID);
-    setField(participation, "shippingAddressId", SHIPPING_ADDRESS_ID);
+    // 🔴 참여 사본에는 <b>다른 값</b>을 심는다. 같은 값이면 묶음을 읽든 사본을 읽든 초록이라
+    // 이관이 됐는지 테스트가 말해 주지 못한다. 사본은 신규 행에서 어차피 NULL 이 된다.
+    setField(participation, "shippingAddressId", STALE_COPY_ADDRESS_ID);
     setField(participation, "bundleId", bundleId);
     return participation;
   }
 
   private void givenSnapshotSources() {
+    // 배송지 정본은 묶음이다 — 이 스텁이 없으면 목이 null 을 줘 조회가 죽는다.
+    given(participationBundleDomainService.requireShippingAddressIdOf(any()))
+        .willReturn(SHIPPING_ADDRESS_ID);
     given(shippingAddressDomainService.getShippingAddress(SHIPPING_ADDRESS_ID))
         .willReturn(
             new ShippingAddress(

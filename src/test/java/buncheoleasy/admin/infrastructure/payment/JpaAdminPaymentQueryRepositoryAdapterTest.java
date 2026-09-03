@@ -226,9 +226,11 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       assertThat(view.group().getName()).isEqualTo("관리자 테스트 그룹");
       assertThat(view.member().getName()).isEqualTo("관리자 테스트 멤버");
       assertThat(view.participant().getNickname().value()).isEqualTo("Guestadminbuyer");
-      // 금액은 이제 뷰가 아니라 귀속 판정이 낸다(AdminPaymentQueryService 와 같은 계산).
-      assertThat(view.participation().getAmount() + view.participation().getShippingFee())
-          .isEqualTo(13000);
+      // 🔴 이 테스트는 <b>리포지토리가 행을 어떻게 읽어 오는가</b>만 말한다. 화면 금액은 여기가 아니라
+      // AdminPaymentQueryService 의 귀속 판정이 낸다 — 저장값 합을 단언하면 이관 이후의 새 행(0)에서는
+      // 아무것도 검증하지 못하므로, 두 칸을 따로 본다.
+      assertThat(view.participation().getAmount()).isEqualTo(10_000);
+      assertThat(view.participation().getShippingFee()).isEqualTo(3_000);
       assertThat(view.delivery()).isNull();
       // 픽스처가 배송지를 지정하지 않았으므로 LEFT JOIN 으로 행이 보존되고 배송지는 null 이다.
       assertThat(view.shippingAddress()).isNull();
@@ -249,10 +251,16 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       Long participationId =
           insertParticipation(
               buncheolId, slotId, participantId, 10000, 0, "AWAITING_PAYMENT", null, BASE_TIME);
+      // 🔴 배송지 정본은 <b>묶음</b>이다. 사본에만 심으면 이관이 됐는지 테스트가 말해 주지 못한다 —
+      // 사본은 신규 행에서 어차피 NULL 이 된다. 묶음에 심고 사본은 비워, 이관 후의 실제 모양을 만든다.
+      // ⚠️ H2 는 MySQL 식 UPDATE ... JOIN 을 못 쓴다 — 서브쿼리로 쓴다.
       jdbcTemplate.update(
-          "UPDATE participations SET shipping_address_id = ? WHERE id = ?",
+          "UPDATE participation_bundles SET shipping_address_id = ?"
+              + " WHERE id = (SELECT bundle_id FROM participations WHERE id = ?)",
           addressId,
           participationId);
+      jdbcTemplate.update(
+          "UPDATE participations SET shipping_address_id = NULL WHERE id = ?", participationId);
       em.clear();
 
       AdminPaymentView view = findAll().getFirst();

@@ -78,11 +78,12 @@ class JpaParticipationRepositoryAdapterBindingTest {
 
   private void assertSqlShape(final String buncheolCondition) {
     assertThat(capturedSql).doesNotContain("shipping_fee");
+    assertThat(capturedSql).doesNotContain("shipping_address_id");
     // 🔴 컬럼 수 == 값 수. 어긋나면 MySQL 1136 으로 즉사한다 — 실제로 <b>양쪽을 세어</b> 비교한다.
     // (`?` 총개수만 보면 컬럼 목록에만 항목을 더하는 전형적 1136 오식이 그대로 통과한다.)
     assertThat(countColumns()).isEqualTo(countSelectExpressions());
-    // 바인딩 개수와도 맞는다 — WHERE 의 ? 1개를 포함해 8.
-    assertThat(capturedSql.chars().filter(c -> c == '?').count()).isEqualTo(8);
+    // 바인딩 개수와도 맞는다 — WHERE 의 ? 1개를 포함해 7.
+    assertThat(capturedSql.chars().filter(c -> c == '?').count()).isEqualTo(7);
     // 두 SQL 이 실제로 갈리는지. 없으면 saveIfCollecting 이 모집중 SQL 을 써도 초록이다.
     assertThat(capturedSql).contains(buncheolCondition);
   }
@@ -106,15 +107,18 @@ class JpaParticipationRepositoryAdapterBindingTest {
     order.verify(preparedStatement).setLong(1, BUNCHEOL_ID);
     order.verify(preparedStatement).setLong(2, BUNCHEOL_MEMBER_ID);
     order.verify(preparedStatement).setLong(3, PARTICIPANT_ID);
-    order.verify(preparedStatement).setLong(4, SHIPPING_ADDRESS_ID);
-    order.verify(preparedStatement).setLong(5, AMOUNT);
-    order.verify(preparedStatement).setTimestamp(eq(6), any(), any());
-    order.verify(preparedStatement).setString(7, status);
-    order.verify(preparedStatement).setLong(8, BUNCHEOL_ID); // WHERE id = ?
+    order.verify(preparedStatement).setLong(4, AMOUNT);
+    order.verify(preparedStatement).setTimestamp(eq(5), any(), any());
+    order.verify(preparedStatement).setString(6, status);
+    order.verify(preparedStatement).setLong(7, BUNCHEOL_ID); // WHERE id = ?
 
-    // 🔴 배송비가 어느 칸으로도 새 나가지 않는다. amount 줄을 잘못 지우고 당기면 여기서 죽는다 —
-    // 둘 다 setLong 이라 드라이버 타입 검사로는 안 잡히는 유일한 오식이다.
+    // 🔴 배송비·배송지가 어느 칸으로도 새 나가지 않는다. 지울 줄을 잘못 골라 amount 를 지우고 당기면
+    // 여기서 죽는다 — 셋 다 setLong 이라 드라이버 타입 검사로는 안 잡히는 오식이다.
+    //
+    // ⚠️ 배송지 제거는 배송비 때보다 위험하다. 배송비는 삭제 칸이 setLong 구간의 <b>마지막</b>이라
+    // 뒤로 밀리는 게 전부 다른 타입(시각·문자)이었지만, 배송지(?4)는 뒤에 amount(long)가 따라온다.
     then(preparedStatement).should(never()).setLong(anyInt(), eq(SHIPPING_FEE));
+    then(preparedStatement).should(never()).setLong(anyInt(), eq(SHIPPING_ADDRESS_ID));
   }
 
   private JpaParticipationRepositoryAdapter adapterCapturingSql() throws Exception {

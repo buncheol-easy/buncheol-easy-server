@@ -77,10 +77,16 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       // 🔴 <b>shipping_fee 가 0 인 것을 「무료 참여」로 읽으면 안 된다.</b> 상품 0원 + 배송비만 내는 참여가
       // 실재한다(0원 이벤트 분철). 판정은 반드시 ShippingFeeAttribution 을 거친다 — #170 이 읽기를 전부
       // 그쪽으로 옮겼고, 되돌아오지 못하게 Participation#isFree()·#getTotalAmount() 를 삭제했다.
+      //
+      // 🔴 <b>배송지도 싣지 않는다</b>(#174 가 읽기를 전부 묶음으로 옮겼다). 배송비와 달리 이 컬럼은
+      // NULL 허용에 기본값이 없어 새 행은 <b>NULL</b> 이 된다 — 그 칸으로 판정하는 코드가 하나라도 남아
+      // 있으면 「사용 중인 배송지」 가드가 전 건 false 가 되어 <b>배송 대기 중인 주소가 지워지고</b>
+      // ON DELETE SET NULL 이 정본까지 비운다. 정본 읽기는 ParticipationBundleDomainService
+      // #shippingAddressIdOf 하나로 모여 있다.
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-          + " shipping_address_id, amount,"
+          + " amount,"
           + " due_at, status, flow_type, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+          + "SELECT ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
 
   /**
    * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
@@ -123,15 +129,14 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(1, participation.getBuncheolId());
                 ps.setLong(2, participation.getBuncheolMemberId());
                 ps.setLong(3, participation.getParticipantId());
-                ps.setLong(4, participation.getShippingAddressId());
-                ps.setLong(5, participation.getAmount());
+                ps.setLong(4, participation.getAmount());
                 // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
                 ps.setTimestamp(
-                    6,
+                    5,
                     participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
                     UTC);
-                ps.setString(7, participation.getStatus().name());
-                ps.setLong(8, participation.getBuncheolId()); // WHERE id = ?
+                ps.setString(6, participation.getStatus().name());
+                ps.setLong(7, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
               },
               keyHolder);
@@ -198,8 +203,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public boolean existsActiveByShippingAddressId(final Long shippingAddressId) {
-    return jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
-        shippingAddressId, ParticipationStatus.active());
+    // 정본(묶음) 항과 사본 항을 OR 로 합성한다. 나눈 이유는 각각 배송지 FK 인덱스로 진입시키기 위함이고,
+    // 앞이 참이면 뒤는 아예 돌지 않는다. 사본 항은 신규 행에서 절대 매칭되지 않으므로 과탐이 늘지 않는다 —
+    // 정본과 어긋난 옛 행만 fail-closed 로 덮는다.
+    return jpaParticipationRepository.existsActiveByBundleShippingAddress(
+            shippingAddressId, ParticipationStatus.active())
+        || jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
+            shippingAddressId, ParticipationStatus.active());
   }
 
   @Override

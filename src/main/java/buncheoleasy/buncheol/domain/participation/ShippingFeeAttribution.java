@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
@@ -44,6 +45,9 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public final class ShippingFeeAttribution {
+
+  /** 폴백 경고에 남길 묶음 id 상한. 대량 조회에서 로그 한 줄이 터무니없이 길어지지 않게 한다. */
+  private static final int WARN_BUNDLE_ID_LIMIT = 20;
 
   private static final ShippingFeeAttribution EMPTY =
       new ShippingFeeAttribution(Map.of(), Map.of());
@@ -122,20 +126,35 @@ public final class ShippingFeeAttribution {
       final Collection<Participation> allSlots,
       final Map<Long, ParticipationBundle> bundleById,
       final Map<Long, Long> carrierByBundleId) {
-    long fallbackCount =
+    if (!log.isWarnEnabled()) {
+      return;
+    }
+    // 🔴 단일 패스 + 조기 반환. 폴백 0건인 <b>정상 경로가 대부분</b>이고 호출부가 목록 조립이라
+    // 목록 크기가 그대로 비용이 된다. 술어를 두 스트림에 복붙하면 한쪽만 고쳤을 때 건수와 id 집합이
+    // 조용히 어긋나므로 한 번만 거른다.
+    List<Participation> fallbacks =
         allSlots.stream()
             .filter(p -> p.getBundleId() != null && p.getId() != null)
             .filter(
                 p ->
                     bundleById.get(p.getBundleId()) == null
                         || carrierByBundleId.get(p.getBundleId()) == null)
-            .count();
-    if (fallbackCount > 0) {
-      log.warn(
-          "배송비 귀속 폴백 {}건 — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것. slots={}",
-          fallbackCount,
-          allSlots.size());
+            .toList();
+    if (fallbacks.isEmpty()) {
+      return;
     }
+    // 🔴 distinct <b>총개수</b>를 함께 찍는다. id 를 상한까지만 남기므로, 총개수가 없으면 로그 한 줄로
+    // 남은 작업량(P4 승격을 막는 행이 몇 묶음인지)을 판단할 수 없다.
+    List<Long> bundleIds =
+        fallbacks.stream().map(Participation::getBundleId).distinct().toList();
+    log.warn(
+        "배송비 귀속 폴백 {}건(묶음 {}개) — 저장값을 쓴다. 호출부가 묶음/형제 슬롯을 다 넘겼는지 확인할 것."
+            + " slots={}, bundleIds(앞 {}개)={}",
+        fallbacks.size(),
+        bundleIds.size(),
+        allSlots.size(),
+        WARN_BUNDLE_ID_LIMIT,
+        bundleIds.stream().limit(WARN_BUNDLE_ID_LIMIT).toList());
   }
 
   // createdAt 이 같으면 id 로 가른다. id 는 AUTO_INCREMENT 라 실무상 생성 순서와 같지만,

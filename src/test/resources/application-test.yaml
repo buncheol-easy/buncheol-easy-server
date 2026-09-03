@@ -45,6 +45,9 @@ admin:
     password: ""
 
 app:
+  cookie:
+    # 운영과 같은 형태(프록시 프리픽스 포함)로 고정해 설정값이 쿠키 Path 로 실제 반영되는지 검증한다.
+    refresh-path: /api/backend/v1/auth
   buncheol:
     # 테스트에서는 자동 마감 스케줄러를 비활성화 (의도치 않은 마감/낙찰 트리거 방지)
     auto-close:

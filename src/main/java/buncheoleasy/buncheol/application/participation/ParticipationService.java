@@ -430,8 +430,9 @@ public class ParticipationService {
    *
    * <p>락 순서 규약: 이 경로는 분철 행(X) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
    * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
-   * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 뿐 아니라 C2C 도 {@code confirmPaymentPayable} 뒤에
-   * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
+   * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 는 슬롯 확인 뒤
+   * {@code confirmIfAllSlotsConfirmed} 로, C2C 는 {@code ParticipationBundleService#confirmPayment} 가 묶음
+   * 확정 뒤 {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
    * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
    *
    * <p><b>P2-b 가 세 번째 방향을 더했다 — 참여 행 → 묶음 행 → 참여 행.</b> 묶음 종료 CAS 가 활성 슬롯 존재를 UPDATE 의
@@ -597,8 +598,10 @@ public class ParticipationService {
   /**
    * 슬롯 단위 입금확인 CAS 성공 이후의 부수효과. 개최자 수동·어드민·웹훅 자동 확인이 공유한다.
    *
-   * <p>세 진입점이 모두 C2C 를 막으므로(개최자·어드민은 {@link #requireLegacy}, 웹훅은 {@code NOT_CONFIRMABLE}
-   * 조기 반환) <b>여기 오는 것은 LEGACY 뿐이다.</b> C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는 묶음을 다
+   * <p><b>여기 오는 것은 LEGACY 뿐이다.</b> 진입점은 <b>네 곳</b>이고 걸러 내는 장치가 서로 다르다 —
+   * 개최자·어드민 확인은 {@link #requireLegacy}, 웹훅 자동확인은 {@code NOT_CONFIRMABLE} 조기 반환,
+   * 0원 참여 즉시확정({@code confirmFreeParticipation})은 {@code participateSingle} 의 플로우 분기다.
+   * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는 묶음을 다
    * 확정한 <b>뒤 1회만</b> 돌아야 해서 {@link ParticipationBundleService#confirmPayment} 안에 있다 — 슬롯마다
    * 부르면 같은 판정을 N 번 돌린다.
    */
@@ -773,10 +776,27 @@ public class ParticipationService {
    *
    * <p>⚠️ <b>엔드포인트 자체를 지우지도 마라.</b> LEGACY(운영진 개최) 개최 관리 화면이 아직 이 API 를 쓴다.
    * "C2C 만 409" 가 정확한 처방이다.
+   *
+   * <p>🔴 <b>미연결 행(bundle_id = NULL)을 예외로 빼지 않았다 — 의도된 선택이다.</b> 슬롯 단위 「보냈어요」를
+   * 안 막은 이유("배포선 창에서 생긴 행의 마지막 통로")가 확인 쪽에는 적용되지 않는다. 그런 C2C 행은 이 가드
+   * 뒤에 <b>모든 출구가 닫힌다</b> — 묶음 확인·「제외」는 {@code bundleId} 를 인자로 받아 호출 자체가 불가고,
+   * 자동 만료는 C2C 를 안 보며, 자발 취소도 그 상태에선 막힌다. 그럼에도 빼지 않은 근거는 둘이다:
+   *
+   * <ol>
+   *   <li><b>없다</b> — {@code flow_type='C2C' AND bundle_id IS NULL} 인 행이 prod·staging 모두 <b>0건</b>
+   *       (2026-09-03 실측, 상태 무관 전 건).
+   *   <li><b>생길 수 없다</b> — 참여 생성 트랜잭션에서 {@code linkBundle} 이 실패하면 예외를 던져 <b>참여
+   *       INSERT 까지 통째로 롤백된다</b>({@code ParticipationBundleDomainService}). 즉 커밋된 C2C 행은 항상
+   *       묶음을 갖는다.
+   * </ol>
+   *
+   * <p>이 전제가 깨지면(P4 이전에 미연결 행이 다시 관측되면) 카브아웃이 아니라 <b>백필</b>이 답이다 — 그 행에
+   * 묶음을 붙이면 묶음 경로가 그대로 열린다. 카브아웃하면 {@code confirmPaymentPayable} 체인을 되살려야 하고,
+   * 그건 "슬롯 단위 C2C 확정"을 다시 배선 가능한 상태로 만든다.
    */
   private void requireLegacy(final Buncheol buncheol) {
     if (buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+      throw new BusinessException(ErrorCode.BUNDLE_CONFIRM_REQUIRED);
     }
   }
 

@@ -177,9 +177,6 @@ public interface ParticipationRepository {
    */
   boolean linkBundle(Long participationId, Long bundleId, Instant now);
 
-  /** C2C 개최자 수동 입금확인 CAS — AWAITING_PAYMENT·PAYMENT_SENT 에서 기한 경과와 무관하게 CONFIRMED 로 전이. */
-  boolean confirmPaymentIfPayable(Long participationId, Instant now);
-
   /**
    * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1).
    *

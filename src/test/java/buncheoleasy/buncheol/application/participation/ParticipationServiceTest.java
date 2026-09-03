@@ -567,7 +567,7 @@ class ParticipationServiceTest {
 
       assertThatThrownBy(() -> participationService.confirmPayment(HOST_ID, PARTICIPATION_ID))
           .isInstanceOf(BusinessException.class)
-          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNDLE_CONFIRM_REQUIRED);
 
       // 소유자 검증은 가드보다 먼저다 — 남의 분철이면 그쪽 사유로 막혀야 하고, 플로우를 알려 주면 안 된다.
       then(buncheol).should().validateOwner(HOST_ID);
@@ -590,7 +590,7 @@ class ParticipationServiceTest {
 
       assertThatThrownBy(() -> participationService.confirmPaymentByAdmin(PARTICIPATION_ID))
           .isInstanceOf(BusinessException.class)
-          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+          .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNDLE_CONFIRM_REQUIRED);
 
       then(participationDomainService).should(never()).confirmPayment(anyLong(), any());
       then(deliverySnapshotCreator).should(never()).create(any());

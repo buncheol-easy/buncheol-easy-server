@@ -1982,7 +1982,9 @@ class JpaParticipationRepositoryAdapterTest {
       Participation awaiting = participationRepository.findById(id).orElseThrow();
       assertThat(awaiting.getVisiblePaymentRejectedAt()).isNotNull();
 
-      participationRepository.confirmPaymentIfPayable(id, Instant.now());
+      // 확정 수단은 이 테스트의 관심사가 아니다 — 상태가 CONFIRMED 가 되기만 하면 된다.
+      // (C2C 슬롯 단위 확정 CAS 는 혼합 묶음 차단과 함께 제거됐다.)
+      participationRepository.confirmPaymentIfAwaiting(id, Instant.now());
       em.clear();
 
       Participation confirmed = participationRepository.findById(id).orElseThrow();

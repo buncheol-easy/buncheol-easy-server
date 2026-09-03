@@ -226,9 +226,11 @@ class JpaAdminPaymentQueryRepositoryAdapterTest {
       assertThat(view.group().getName()).isEqualTo("관리자 테스트 그룹");
       assertThat(view.member().getName()).isEqualTo("관리자 테스트 멤버");
       assertThat(view.participant().getNickname().value()).isEqualTo("Guestadminbuyer");
-      // 금액은 이제 뷰가 아니라 귀속 판정이 낸다(AdminPaymentQueryService 와 같은 계산).
-      assertThat(view.participation().getAmount() + view.participation().getShippingFee())
-          .isEqualTo(13000);
+      // 🔴 이 테스트는 <b>리포지토리가 행을 어떻게 읽어 오는가</b>만 말한다. 화면 금액은 여기가 아니라
+      // AdminPaymentQueryService 의 귀속 판정이 낸다 — 저장값 합을 단언하면 이관 이후의 새 행(0)에서는
+      // 아무것도 검증하지 못하므로, 두 칸을 따로 본다.
+      assertThat(view.participation().getAmount()).isEqualTo(10_000);
+      assertThat(view.participation().getShippingFee()).isEqualTo(3_000);
       assertThat(view.delivery()).isNull();
       // 픽스처가 배송지를 지정하지 않았으므로 LEFT JOIN 으로 행이 보존되고 배송지는 null 이다.
       assertThat(view.shippingAddress()).isNull();

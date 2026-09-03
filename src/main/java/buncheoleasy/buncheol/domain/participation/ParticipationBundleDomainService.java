@@ -185,10 +185,17 @@ public class ParticipationBundleDomainService {
    *
    * <p>{@code bundle} 이 {@code null}(미연결 참여)이면 조회 없이 빈 판정을 주고 <b>경고를 남긴다</b> — 새 행에서 그 판정은
    * 곧 「배송비 0」이라 입금 자동확인 금액이 조용히 어긋난다({@link ShippingFeeAttribution#empty()} 참고).
+   *
+   * <p>🔴 {@code participationId} 는 <b>진단 전용</b>이다 — 판정에 쓰이지 않고 경고에만 실린다. 엔티티가 아니라 id 를 받는
+   * 이유가 그것이다. 이 경고의 존재 이유가 P4 의 {@code bundle_id NOT NULL} 승격을 위해 <b>미연결 행을 찾아 없애는
+   * 것</b>이라, 어느 참여인지 못 찍으면 로그를 보고도 할 일이 없다.
    */
-  public ShippingFeeAttribution shippingFeeAttributionOf(final ParticipationBundle bundle) {
+  public ShippingFeeAttribution shippingFeeAttributionOf(
+      final ParticipationBundle bundle, final Long participationId) {
     if (bundle == null) {
-      log.warn("묶음 없는 참여의 배송비 귀속 — 저장값을 쓴다. 새 행이면 그 값은 0 이다.");
+      log.warn(
+          "묶음 없는 참여의 배송비 귀속 — 저장값을 쓴다. 새 행이면 그 값은 0 이다. participationId={}",
+          participationId);
       return ShippingFeeAttribution.empty();
     }
     return ShippingFeeAttribution.ofBundle(

@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -49,6 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 @DisplayName("JpaParticipationRepositoryAdapter 테스트")
 class JpaParticipationRepositoryAdapterTest {
+
+  private final ShippingFeeAttribution fees = ShippingFeeAttribution.empty();
 
   private static final RefundAccount REFUND_ACCOUNT = RefundAccount.of("국민", "12345678", "홍길동");
 
@@ -1643,7 +1646,7 @@ class JpaParticipationRepositoryAdapterTest {
 
     private Participation requestPayback(final Long participationId, final String tweetUrl) {
       Participation participation = participationRepository.findById(participationId).orElseThrow();
-      participation.requestPayback(PaybackTweetUrl.parse(tweetUrl), Instant.now());
+      participation.requestPayback(PaybackTweetUrl.parse(tweetUrl), Instant.now(), fees);
       participationRepository.savePaybackRequest(participation);
       return participation;
     }
@@ -1667,7 +1670,7 @@ class JpaParticipationRepositoryAdapterTest {
       requestPayback(ids[0], TWEET_URL);
 
       Participation second = participationRepository.findById(ids[1]).orElseThrow();
-      second.requestPayback(PaybackTweetUrl.parse(TWEET_URL), Instant.now());
+      second.requestPayback(PaybackTweetUrl.parse(TWEET_URL), Instant.now(), fees);
 
       assertThatThrownBy(() -> participationRepository.savePaybackRequest(second))
           .isInstanceOf(BusinessException.class)
@@ -1772,7 +1775,7 @@ class JpaParticipationRepositoryAdapterTest {
       assertThatThrownBy(
               () ->
                   completed.requestPayback(
-                      PaybackTweetUrl.parse("https://x.com/fan/status/456"), Instant.now()))
+                      PaybackTweetUrl.parse("https://x.com/fan/status/456"), Instant.now(), fees))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PAYBACK_STATE_TRANSITION_INVALID);

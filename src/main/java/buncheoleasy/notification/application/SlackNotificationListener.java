@@ -68,9 +68,12 @@ public class SlackNotificationListener {
       return;
     }
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    // 0원 참여는 안내할 입금액도 기한도 없어 같은 블록으로 조립할 수 없다. 판정은 반드시 금액(isFree)으로 한다 —
+    // 0원 참여는 안내할 입금액도 기한도 없어 같은 블록으로 조립할 수 없다. 판정은 반드시 금액으로 한다 —
     // 계좌 유무로 바꾸면 안 된다. 참여 계좌 강제(PR #151) 이후로는 0원 참여도 계좌를 갖는다(docs/80 결정 1).
-    if (view.participation().isFree()) {
+    // 🔴 게이트와 본문이 같은 숫자를 본다. 입금 예정 금액 필드는 이미 paymentAmount(귀속값)를 쓰고 있어,
+    // 저장값으로 판정하면 「게이트는 저장값 · 본문은 귀속값」인 비대칭이 된다.
+    // AlimtalkNotificationListener 가 같은 이유로 이미 이렇게 되어 있다 — 두 채널을 맞춘다.
+    if (view.paymentAmount() == 0) {
       sendFreeParticipation(view);
       return;
     }

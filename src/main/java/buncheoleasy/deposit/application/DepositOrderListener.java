@@ -51,19 +51,25 @@ public class DepositOrderListener {
     try {
       Participation participation =
           participationDomainService.getParticipation(event.participationId());
-      // 0원 참여는 매칭할 입금이 없다. 판정은 금액(isFree)으로 한다 — 참여 계좌 강제(PR #151) 이후 0원 참여도 계좌를
+      // 🔴 묶음을 먼저 읽는다. 아래 두 판정(0원 게이트 · 입금자명)이 같은 묶음을 봐야 한다.
+      ParticipationBundle bundle =
+          participationBundleDomainService.findByParticipation(participation).orElse(null);
+      // 0원 참여는 매칭할 입금이 없다. 판정은 금액으로 한다 — 참여 계좌 강제(PR #151) 이후 0원 참여도 계좌를
       // 가지므로, 계좌 유무로 바꾸면 0원 참여가 페이액션에 등록되어 금액만으로 오매칭될 수 있다(docs/80 §6-4).
-      if (participation.isFree()) {
+      // 🔴 게이트와 등록 금액이 같은 숫자를 봐야 한다. 저장 총액을 쓰면 ① 배송비만 내는 0원 이벤트 참여가
+      // 「무료」로 잡혀 등록이 통째로 빠지고 ② 유상 참여는 배송비만큼 적은 금액으로 등록돼 실입금과 어긋나
+      // 매칭이 실패한다. 묶음 원값을 더하면 다슬롯에서 곱해지므로 귀속 판정을 쓴다.
+      long paymentAmount =
+          participationBundleDomainService
+              .shippingFeeAttributionOf(bundle)
+              .totalAmountOf(participation);
+      if (paymentAmount == 0) {
         return;
       }
       // 입금자명의 정본은 묶음이다 (P2-c). 🔴 없으면 등록을 스킵한다 — 빈 입금자명으로 등록하면 금액만으로
       // 오매칭되어 남의 입금이 남의 참여를 확정시킬 수 있다(docs/80 §6-4). 자동확인만 못 하고 운영자가
       // 슬랙 신규 참여 알림을 보고 수동 확인한다.
-      RefundAccount refundAccount =
-          participationBundleDomainService
-              .findByParticipation(participation)
-              .map(ParticipationBundle::getRefundAccount)
-              .orElse(null);
+      RefundAccount refundAccount = bundle == null ? null : bundle.getRefundAccount();
       if (refundAccount == null) {
         log.warn(
             "묶음 계좌가 없어 페이액션 주문 등록을 건너뛴다 - participationId={}", participation.getId());
@@ -71,7 +77,7 @@ public class DepositOrderListener {
       }
       payActionClient.registerOrder(
           participation.getId(),
-          participation.getTotalAmount(),
+          paymentAmount,
           refundAccount.holder(),
           participation.getCreatedAt(),
           participation.getDueAt());

@@ -190,10 +190,16 @@ public class ParticipationService {
     // C2C 는 이미 같은 규칙이다(아래 participateC2c).
     RefundAccount refundAccount = refundAccountSnapshot(participantId);
 
+    // 🔴 「이 참여가 0원인가」의 단일 판정. 이 메서드가 두 번 쓴다(여기 · 아래 조기 확정 분기).
+    // 저장된 행으로 판정하면 안 된다 — participations.shipping_fee 쓰기를 빼면 그 컬럼은 새 행에서
+    // 항상 0 이라, 「상품 0원 + 배송비만 내는」 참여가 전부 무료로 뒤집혀 입금 없이 즉시 확정된다.
+    // 방금 이 메서드가 정한 두 값으로만 판정한다.
+    final boolean free = member.getPrice() == 0L && shippingFee == 0L;
+
     // 0원 참여는 아래에서 분철 조기 확정 CAS(X 락)까지 간다. 참여 INSERT 가 buncheols 에 공유 락을
     // 걸므로 그대로 두면 한 트랜잭션 안에서 S→X 업그레이드가 생겨 동시 참여끼리 데드락이 난다.
     // C2C 와 같은 방향(분철 → 참여)으로 X 를 선취해 업그레이드를 없앤다.
-    if (member.getPrice() == 0L && shippingFee == 0L) {
+    if (free) {
       buncheolDomainService.getBuncheolForUpdate(buncheolId);
     }
 
@@ -223,13 +229,13 @@ public class ParticipationService {
     eventPublisher.publishEvent(
         new ParticipationCreatedEvent(participation.getId(), FlowType.LEGACY));
 
-    if (participation.isFree()) {
+    if (free) {
       return confirmFreeParticipation(participation, buncheol, now);
     }
 
     BankAccount hostAccount = userDomainService.getUser(buncheol.getHostId()).getBankAccount();
     return ParticipateResult.single(
-        participation.getId(), participation.getTotalAmount(), dueAt, hostAccount);
+        participation.getId(), participation.getAmount() + shippingFee, dueAt, hostAccount);
   }
 
   /**
@@ -403,8 +409,11 @@ public class ParticipationService {
     if (checkFull) {
       publishFullIfAllSlotsApplied(buncheol);
     }
+    // 🔴 배송비는 반드시 이 메서드가 받은 shippingFee 파라미터여야 한다(묶음의 원값이 아니라).
+    // 모집중 재참여면 호출부가 이 값을 0 으로 눌러 넘긴다 — 묶음 원값을 읽으면 2번째 슬롯부터도
+    // 만액이 되고, 다슬롯 신청의 합산이 그걸 슬롯 수만큼 곱한다.
     return ParticipateResult.single(
-        participation.getId(), participation.getTotalAmount(), null, null);
+        participation.getId(), participation.getAmount() + shippingFee, null, null);
   }
 
   /**
@@ -497,7 +506,10 @@ public class ParticipationService {
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
     return ParticipateResult.single(
-        participation.getId(), participation.getTotalAmount(), dueAt, buncheol.getPaymentAccount());
+        participation.getId(),
+        participation.getAmount() + shippingFee,
+        dueAt,
+        buncheol.getPaymentAccount());
   }
 
   /**

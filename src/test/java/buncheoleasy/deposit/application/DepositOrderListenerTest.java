@@ -8,18 +8,20 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
-
+import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
+import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
-import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
-import buncheoleasy.buncheol.domain.BuncheolDomainService;
-import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 
 /**
  * 🔴 이 PR 에서 <b>돈에 가장 가까운 분기</b>를 고정한다.
@@ -40,6 +43,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class DepositOrderListenerTest {
 
   private static final Long PARTICIPATION_ID = 500L;
+  private static final Long BUNDLE_ID = 77L;
 
   @InjectMocks private DepositOrderListener listener;
 
@@ -47,6 +51,25 @@ class DepositOrderListenerTest {
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private PayActionClient payActionClient;
   @Mock private BuncheolDomainService buncheolDomainService;
+
+  /**
+   * 묶음 배송비로 귀속 판정을 실제로 만들어 스텁한다. 목으로 금액을 고정하면 「묶음 원값을 그대로 더해
+   * 다슬롯에서 곱하는」 회귀를 못 잡는다 — 판정 객체가 실물이어야 그 성질이 테스트에 걸린다.
+   */
+  private ParticipationBundle bundleWith(
+      final Participation slot, final long bundleShippingFee, final RefundAccount refundAccount) {
+    setField(slot, "bundleId", BUNDLE_ID);
+    setField(slot, "status", ParticipationStatus.AWAITING_PAYMENT);
+    ParticipationBundle bundle = newInstance(ParticipationBundle.class);
+    setField(bundle, "id", BUNDLE_ID);
+    setField(bundle, "shippingFee", bundleShippingFee);
+    if (refundAccount != null) {
+      setField(bundle, "refundAccount", refundAccount);
+    }
+    given(participationBundleDomainService.shippingFeeAttributionOf(bundle))
+        .willReturn(ShippingFeeAttribution.ofBundle(bundle, List.of(slot)));
+    return bundle;
+  }
 
   private Participation participation(final long amount, final long shippingFee) {
     given(payActionClient.isEnabled()).willReturn(true);
@@ -62,9 +85,9 @@ class DepositOrderListenerTest {
 
   @Test
   void 묶음의_예금주로_주문을_등록한다() {
-    Participation participation = participation(50_000L, 3_000L);
-    ParticipationBundle bundle = mock(ParticipationBundle.class);
-    given(bundle.getRefundAccount()).willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.of(bundle));
 
@@ -86,21 +109,47 @@ class DepositOrderListenerTest {
     Participation participation = participation(50_000L, 3_000L);
     given(participationBundleDomainService.findByParticipation(participation))
         .willReturn(Optional.empty());
+    given(participationBundleDomainService.shippingFeeAttributionOf(null))
+        .willReturn(ShippingFeeAttribution.empty());
 
     listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
 
     then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
   }
 
-  // 0원 참여는 매칭할 입금이 없다. 판정은 계좌 유무가 아니라 금액이다.
+  // 🔴 이 PR 이 막는 사고를 직접 고정한다.
+  //
+  // 참여 행의 배송비 쓰기를 없애면 새 행은 shipping_fee = 0 이다. 그때 「상품 0원 + 배송비만 내는」
+  // 참여(0원 이벤트 분철)를 저장값으로 판정하면 <b>무료로 뒤집혀</b> 페이액션 등록이 통째로 빠지고,
+  // 참여자는 배송비를 보냈는데 자동 입금확인이 영영 오지 않는다. prod LEGACY 참여의 절반이 이 모양이다.
   @Test
-  void _0원_참여는_묶음이_있어도_등록하지_않는다() {
-    participation(0L, 0L);
+  void 상품이_0원이어도_묶음_배송비가_있으면_등록한다() {
+    Participation participation = participation(0L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
 
     listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
 
+    then(payActionClient)
+        .should()
+        .registerOrder(eq(PARTICIPATION_ID), eq(3_000L), eq("홍길동"), any(), any());
+  }
+
+  // 0원 참여는 매칭할 입금이 없다. 판정은 계좌 유무가 아니라 금액이다.
+  @Test
+  void _0원_참여는_묶음이_있어도_등록하지_않는다() {
+    Participation participation = participation(0L, 0L);
+    ParticipationBundle bundle = bundleWith(participation, 0L, null);
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    // 묶음을 게이트보다 먼저 읽게 됐다(0원 판정이 묶음 배송비를 봐야 하므로). 돈을 지키는 성질은
+    // 「등록되지 않는다」이고 그건 위 단언이 지킨다.
     then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
-    then(participationBundleDomainService).should(never()).findByParticipation(any());
   }
 
   private static <T> T newInstance(final Class<T> type) {

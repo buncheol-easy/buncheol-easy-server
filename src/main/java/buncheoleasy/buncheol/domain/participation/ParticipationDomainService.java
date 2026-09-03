@@ -189,8 +189,11 @@ public class ParticipationDomainService {
    * ErrorCode#PAYBACK_TWEET_URL_DUPLICATE} 로 던진다. 호출 측 {@code @Transactional} 필수.
    */
   public void requestPayback(
-      final Participation participation, final PaybackTweetUrl tweetUrl, final Instant now) {
-    participation.requestPayback(tweetUrl, now);
+      final Participation participation,
+      final PaybackTweetUrl tweetUrl,
+      final Instant now,
+      final ShippingFeeAttribution shippingFees) {
+    participation.requestPayback(tweetUrl, now, shippingFees);
     participationRepository.savePaybackRequest(participation);
   }
 

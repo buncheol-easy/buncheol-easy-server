@@ -70,12 +70,17 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   // flow_type 은 buncheols 에서 복사해 비정규화한다 — LEGACY 전용 1인 1참여 유니크
   // (uq_participations_legacy_active_participant)의 generated column 이 참조하기 위함.
   private static final String INSERT_COLUMNS_SQL =
-      // refund_* 는 더 이상 싣지 않는다 — 정본이 participation_bundles 로 옮겨갔다 (P2-c).
-      // 컬럼은 P4 에서 삭제될 때까지 남고 그 사이 새 행은 NULL 이다(세 칸 모두 NULL 이라 조회도 안전하다).
+      // refund_* 와 shipping_fee 는 더 이상 싣지 않는다 — 정본이 participation_bundles 로 옮겨갔다
+      // (계좌는 P2-c, 배송비는 #170). 컬럼은 P4 에서 삭제될 때까지 남고 그 사이 새 행은
+      // refund_* = NULL · shipping_fee = 0(NOT NULL DEFAULT 0)이다.
+      //
+      // 🔴 <b>shipping_fee 가 0 인 것을 「무료 참여」로 읽으면 안 된다.</b> 상품 0원 + 배송비만 내는 참여가
+      // 실재한다(0원 이벤트 분철). 판정은 반드시 ShippingFeeAttribution 을 거친다 — #170 이 읽기를 전부
+      // 그쪽으로 옮겼고, 되돌아오지 못하게 Participation#isFree()·#getTotalAmount() 를 삭제했다.
       "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-          + " shipping_address_id, amount, shipping_fee,"
+          + " shipping_address_id, amount,"
           + " due_at, status, flow_type, created_at, updated_at) "
-          + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
+          + "SELECT ?, ?, ?, ?, ?, ?, ?, flow_type, UTC_TIMESTAMP(), UTC_TIMESTAMP() ";
 
   /**
    * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
@@ -120,14 +125,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(3, participation.getParticipantId());
                 ps.setLong(4, participation.getShippingAddressId());
                 ps.setLong(5, participation.getAmount());
-                ps.setLong(6, participation.getShippingFee());
                 // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
                 ps.setTimestamp(
-                    7,
+                    6,
                     participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
                     UTC);
-                ps.setString(8, participation.getStatus().name());
-                ps.setLong(9, participation.getBuncheolId()); // WHERE id = ?
+                ps.setString(7, participation.getStatus().name());
+                ps.setLong(8, participation.getBuncheolId()); // WHERE id = ?
                 return ps;
               },
               keyHolder);

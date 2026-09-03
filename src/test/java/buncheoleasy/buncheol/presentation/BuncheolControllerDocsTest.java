@@ -38,6 +38,7 @@ import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
@@ -551,7 +552,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 1,
                 List.of(
                     new MyParticipationItemResponse(
-                        601L, 101L, ParticipationStatus.AWAITING_PAYMENT))), FlowType.LEGACY, null, null);
+                        601L, 101L, ParticipationStatus.AWAITING_PAYMENT)),
+                  true,
+                  new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점")),
+              FlowType.LEGACY,
+              null,
+              null);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -593,6 +599,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - 로그인 유저 한정: `myParticipation.participations[]` 는 내 활성 참여 목록 (멤버 슬롯별 1건)
                             - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 멤버 슬롯 수
                             - `myParticipation.participations[].participationId` 는 참여 취소·상세 조회 API 호출에 사용
+                            - `myParticipation.inheritanceApplies` 가 `true` 면 <b>자리 추가 신청 시 배송지를 고를 수 없다</b> — 첫 신청의 묶음을 재사용하므로 그 주소로 함께 배송된다. 화면은 `inheritedShippingAddress` 를 보여 주고 선택 UI 를 감춘다 (주소가 `null` 이면 빈 상태로 그리되 <b>선택 UI 를 되살리지 말 것</b>)
 
                             **응답 예시**
                             ```json
@@ -641,7 +648,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 "participatedMemberCount": 1,
                                 "participations": [
                                   {"participationId": 601, "buncheolMemberId": 101, "status": "AWAITING_PAYMENT"}
-                                ]
+                                ],
+                                "inheritanceApplies": true,
+                                "inheritedShippingAddress": {"shippingMethod": "GS25_HALF", "storeName": "GS25 강남역점"}
                               }
                             }
                             ```
@@ -720,6 +729,26 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("myParticipation.participations[].status")
                                 .description("참여 상태 (AWAITING_PAYMENT | CONFIRMED)")
+                                .optional(),
+                            fieldWithPath("myParticipation.inheritanceApplies")
+                                .description(
+                                    "지금 자리를 더 신청하면 첫 신청의 묶음을 재사용하는가. true 면 배송지를 고를"
+                                        + " 수 없어 화면이 선택 UI 를 감춘다. false 면 평소대로 고른다"
+                                        + " (회사 개최 · 성사 확정 뒤 추가 모집 · 활성 참여 없음)")
+                                .optional(),
+                            fieldWithPath("myParticipation.inheritedShippingAddress")
+                                .description(
+                                    "그때 상속될 배송지. <b>inheritanceApplies 와 함께 읽어야 한다</b> —"
+                                        + " 이 값이 null 인 경우가 둘이고 화면에서 정반대다:"
+                                        + " ① 상속 구간이 아니라서(고를 수 있다)"
+                                        + " ② 상속인데 배송지를 못 읽어서(고정인데 값이 없다)."
+                                        + " ②에서 선택 UI 를 그리면 유저가 고른 뒤 서버에 거부당한다")
+                                .optional(),
+                            fieldWithPath("myParticipation.inheritedShippingAddress.shippingMethod")
+                                .description("배송 방법 (GS25_HALF | CU_ALTTLE)")
+                                .optional(),
+                            fieldWithPath("myParticipation.inheritedShippingAddress.storeName")
+                                .description("편의점 지점명")
                                 .optional(),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),

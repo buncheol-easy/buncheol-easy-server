@@ -15,6 +15,10 @@ import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -25,6 +29,7 @@ import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -42,6 +47,9 @@ public class BuncheolDetailQueryService {
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
+  private final ShippingAddressRepository shippingAddressRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -120,7 +128,9 @@ public class BuncheolDetailQueryService {
                             && userId.equals(p.getParticipantId()))
                 .toList();
     MyParticipationSummaryResponse myParticipation =
-        userId == null ? null : toMyParticipation(myActiveParticipations);
+        userId == null
+            ? null
+            : toMyParticipation(buncheol, userId, myActiveParticipations, activeParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
 
     // 오픈채팅 링크는 개최자·활성 참여자에게만 싣는다. 이 조회는 비로그인도 열려 있어서
@@ -221,7 +231,10 @@ public class BuncheolDetailQueryService {
   }
 
   private MyParticipationSummaryResponse toMyParticipation(
-      final List<Participation> myActiveParticipations) {
+      final Buncheol buncheol,
+      final Long userId,
+      final List<Participation> myActiveParticipations,
+      final List<Participation> activeParticipations) {
     List<MyParticipationItemResponse> items =
         myActiveParticipations.stream()
             .map(
@@ -229,6 +242,20 @@ public class BuncheolDetailQueryService {
                     new MyParticipationItemResponse(
                         p.getId(), p.getBuncheolMemberId(), p.getStatus()))
             .toList();
-    return new MyParticipationSummaryResponse(items.size(), items);
+    // 🔴 상속 원본을 <b>한 번만</b> 뽑아 두 필드가 같은 판정에서 나오게 한다. 따로 계산하면
+    // "상속인데 주소는 null" 과 "상속이 아니라 null" 이 갈릴 수 있고, 그 둘은 화면에서 정반대의 UI 다.
+    Optional<Participation> inheritanceSource =
+        participationDomainService.findInheritanceSource(buncheol, userId, activeParticipations);
+    return new MyParticipationSummaryResponse(
+        items.size(),
+        items,
+        inheritanceSource.isPresent(),
+        inheritanceSource
+            .map(participationBundleDomainService::shippingAddressIdOf)
+            .flatMap(shippingAddressRepository::findById)
+            .map(RequestedShippingAddressResponse::from)
+            .orElse(null));
   }
+
+
 }

@@ -26,6 +26,9 @@ import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -50,6 +53,7 @@ public class MyParticipationQueryService {
   private final UserRepository userRepository;
   private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
   private final ParticipationBundleDomainService participationBundleDomainService;
+  private final ShippingAddressRepository shippingAddressRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -118,6 +122,10 @@ public class MyParticipationQueryService {
     // 한 묶음의 슬롯이 전부 이 안에 들어온다 — ofAllSlots 의 전제.
     ShippingFeeAttribution shippingFees =
         ShippingFeeAttribution.ofAllSlots(participations, bundleById);
+    // 배송지도 정본이 묶음이다. 참여마다 읽으면 N+1 이라 id 를 모아 한 번에 조회한다.
+    // ⚠️ 삭제 가드가 있어도 null 이 올 수 있다 — 옛 행은 묶음이 없고, 가드 이전에 지워진 주소도 있다.
+    Map<Long, ShippingAddress> shippingAddressById =
+        findShippingAddresses(participations, bundleById);
 
     final Instant now = Instant.now(clock);
     return participations.stream()
@@ -134,8 +142,52 @@ public class MyParticipationQueryService {
                     hostAccountByHostId,
                     bundleById,
                     shippingFees,
+                    shippingAddressById,
                     now))
         .toList();
+  }
+
+  /**
+   * 이 참여가 속한 묶음의 배송지. 화면의 「배송지 고정 · 변경 불가」 자리에 그대로 들어간다.
+   *
+   * <p>{@code null} 이 될 수 있는 경우는 둘이다 — 묶음이 없는 옛 행이고 사본도 비었거나, 참조하던 배송지가
+   * 지워졌거나. 둘 다 <b>정상 경로가 아니고</b>, 그렇다고 500 을 낼 일도 아니다(목록 전체가 안 뜬다). 화면이
+   * "확인 중" 빈 상태로 그리게 null 을 내려보낸다 — <b>기본 배송지로 폴백하면 안 된다.</b> 그러면 「변경 불가」
+   * 라벨이 붙은 자리에 실제로 가지 않을 주소가 확신에 차서 뜬다.
+   */
+  private static RequestedShippingAddressResponse requestedShippingAddressOf(
+      final Participation participation,
+      final Map<Long, ParticipationBundle> bundleById,
+      final Map<Long, ShippingAddress> shippingAddressById) {
+    Long shippingAddressId =
+        ParticipationBundleDomainService.shippingAddressIdOf(bundleById, participation);
+    if (shippingAddressId == null) {
+      return null;
+    }
+    ShippingAddress shippingAddress = shippingAddressById.get(shippingAddressId);
+    return shippingAddress == null ? null : RequestedShippingAddressResponse.from(shippingAddress);
+  }
+
+  /**
+   * 참여들이 물고 있는 묶음 배송지를 한 번에 읽는다. 정본은 묶음이고, 묶음이 없는 옛 행만 사본으로 폴백한다
+   * ({@code shippingAddressIdOf} 가 그 규약을 갖고 있다).
+   *
+   * <p>이미 읽어 둔 {@code bundleById} 에서 id 를 꺼내므로 <b>참여당 0 쿼리</b>가 보장된다 — 단건 메서드를
+   * 쓰면 호출 순서에 기대게 되고, 순서가 바뀌는 순간 조용히 2N 이 된다.
+   */
+  private Map<Long, ShippingAddress> findShippingAddresses(
+      final List<Participation> participations,
+      final Map<Long, ParticipationBundle> bundleById) {
+    List<Long> ids =
+        participations.stream()
+            .map(p -> ParticipationBundleDomainService.shippingAddressIdOf(bundleById, p))
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+    return ids.isEmpty()
+        ? Map.of()
+        : shippingAddressRepository.findAllByIds(ids).stream()
+            .collect(Collectors.toMap(ShippingAddress::getId, a -> a));
   }
 
   // 참여 상세와 동일한 규칙: 입금확인중(AWAITING_PAYMENT) 참여에만 개최자 계좌를 노출한다.
@@ -169,6 +221,7 @@ public class MyParticipationQueryService {
       final Map<Long, HostAccountResponse> hostAccountByHostId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
+      final Map<Long, ShippingAddress> shippingAddressById,
       final Instant now) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려간다. 백필이 채우면 다음 조회부터 나온다.
@@ -179,8 +232,10 @@ public class MyParticipationQueryService {
         slotCountByBuncheolId.getOrDefault(participation.getBuncheolId(), 0L).intValue();
     // 🔴 <b>입금확인된 슬롯만</b> 배송을 문다. 배송은 이제 묶음에 붙어 있어(택배 1개 = 묶음 1개) 같은
     // 묶음의 미입금 슬롯도 키가 맞는데, 그대로 물리면 <b>입금하지도 않은 슬롯에 "배송중" 과 운송장</b>이
-    // 뜬다. 한 묶음에 확정·미확정이 섞이는 건 실제로 도달 가능하다 — 슬롯 단위 입금확인
-    // ({@code ParticipationService#confirmPayment})과 어드민 벌크 확인(건별 트랜잭션 순회)이 열려 있다.
+    // 뜬다.
+    //
+    // ⚠️ <b>이 가드를 지우지 마라.</b> 슬롯 단위 확정이 만들던 혼합 묶음은 막혔지만(#177), 그게 이 가드를
+    // 불필요하게 만들지 않는다 — <b>취소된 슬롯</b>이 남는다. 확정되지 않은 슬롯은 언제나 존재할 수 있다.
     //
     // ⚠️ 맵을 조회하기 전에 null 도 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
     // null 키 조회에서 NPE 다. (ShippingFeeAttribution 과 같은 함정)
@@ -222,6 +277,7 @@ public class MyParticipationQueryService {
         hostAccount,
         refundHolder,
         delivery == null ? null : MyParticipationDeliveryResponse.from(delivery),
+        requestedShippingAddressOf(participation, bundleById, shippingAddressById),
         // 이미 배치 로딩된 배송 스냅샷으로 파생하므로 추가 쿼리가 없다.
         ShippingFeePaybackResponse.of(
             participation,

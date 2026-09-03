@@ -1,5 +1,7 @@
 package buncheoleasy.buncheol.domain.participation;
 
+import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Instant;
@@ -32,6 +34,59 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId).stream()
         .filter(participation -> participation.getParticipantId().equals(participantId))
         .findFirst();
+  }
+
+  /**
+   * 재참여가 배송지·배송비·입금자명·묶음을 <b>상속하는 구간인가</b>. 게이트가 <b>둘</b>이고, 둘 다 여기 있어야 한다.
+   *
+   * <ol>
+   *   <li><b>C2C 여야 한다.</b> LEGACY 는 1인 1활성슬롯이라 묶음이 곧 참여다 — 묶을 것이 애초에 없어 항상 새로
+   *       열고({@code attach(.., null, ..)}), 애초에 추가 신청 자체가 {@code
+   *       PARTICIPATION_ALREADY_JOINED_BUNCHEOL} 로 막힌다.
+   *   <li><b>모집중이어야 한다.</b> 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라 배송지를 새로 고르고 배송비를
+   *       다시 부과한다 (docs/80 결정 11 · §3-6).
+   * </ol>
+   *
+   * <p>🔴 <b>게이트를 하나라도 호출부에 남기지 마라.</b> 쓰기 경로는 {@code participateSingle} 이 먼저
+   * {@code isC2c()} 로 갈라져 있어 우연히 맞지만, 읽기 경로(분철 상세 응답)는 그 분기를 거치지 않는다. 실제로
+   * ①을 빼 두었더니 <b>LEGACY 분철에 상속 배송지가 실렸다</b> — 화면은 「이 주소로 함께 배송 · 변경 불가」를
+   * 그리는데 서버에는 그 약속을 이행할 경로가 없는, 이 판정을 합치려던 이유 그 자체인 어긋남이다.
+   */
+  public static boolean inheritanceAppliesTo(final Buncheol buncheol) {
+    return buncheol.isC2c() && buncheol.getStatus() == BuncheolStatus.RECRUITING;
+  }
+
+  /**
+   * 재참여가 <b>상속할 원본 참여</b>. 게이트는 {@link #inheritanceAppliesTo}.
+   *
+   * <p>🔴 <b>쓰기 경로와 읽기 경로가 이 하나를 공유해야 한다.</b> 신청을 처리하는 쪽({@code
+   * ParticipationService#participateSingle})과 화면에 "이 배송지로 갑니다" 를 그리는 쪽(분철 상세 응답)이 조건을
+   * 두 벌 세우면, 화면이 약속한 주소와 서버가 실제로 각인하는 주소가 갈린다. 배송지는 {@code updatable=false} 라
+   * 어긋난 뒤에는 코드로 되돌릴 수 없다.
+   */
+  public Optional<Participation> findInheritanceSource(
+      final Buncheol buncheol, final Long participantId) {
+    return inheritanceAppliesTo(buncheol)
+        ? findFirstActiveInBuncheol(buncheol.getId(), participantId)
+        : Optional.empty();
+  }
+
+  /**
+   * 활성 참여를 <b>이미 읽어 둔</b> 호출부용 — 게이트는 위와 같고 조회만 생략한다. 분철 상세는 활성 참여 전체를
+   * 이미 손에 들고 있어, 같은 쿼리를 다시 내보내면 비로그인도 열리는 트래픽 많은 엔드포인트에서 헛쿼리가 된다.
+   *
+   * <p>⚠️ 호출부가 {@code isEmpty()} 같은 조건을 대신 판정하지 말 것 — 그게 게이트를 한 조각 복사하는 것이고,
+   * 이 메서드가 존재하는 이유와 정면으로 어긋난다.
+   */
+  public Optional<Participation> findInheritanceSource(
+      final Buncheol buncheol,
+      final Long participantId,
+      final List<Participation> knownActiveInBuncheol) {
+    return inheritanceAppliesTo(buncheol)
+        ? knownActiveInBuncheol.stream()
+            .filter(participation -> participation.getParticipantId().equals(participantId))
+            .findFirst()
+        : Optional.empty();
   }
 
   public Participation getParticipation(final Long id) {

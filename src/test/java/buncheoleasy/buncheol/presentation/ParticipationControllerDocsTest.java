@@ -28,6 +28,7 @@ import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.docs.DocsTestSupport;
@@ -229,6 +230,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 "GS25 강남점",
                 "1234567890",
                 DeliveryStatus.DELIVERED),
+            new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점"),
             new ShippingFeePaybackResponse(
                 PaybackStatus.ELIGIBLE,
                 Instant.parse("2026-06-12T13:00:00Z"),
@@ -260,6 +262,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
             new HostAccountResponse("국민은행", "98765432", "개최자"),
             "홍길동",
             null,
+            new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점"),
             new ShippingFeePaybackResponse(
                   PaybackStatus.NONE,
                   null,
@@ -354,6 +357,18 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].delivery.status")
                                 .description(
                                     "배송 상태 (SNAPSHOTTED | SHIPPING | DELIVERED | RECEIVED)")
+                                .optional(),
+                            fieldWithPath("[].requestedShippingAddress")
+                                .description(
+                                    "이 참여가 속한 묶음의 배송지. 입금확인 전에도 내려간다. 화면은 이 값을 그대로"
+                                        + " 보여야 하고 <b>유저의 기본 배송지로 폴백하면 안 된다</b> — 「배송지 고정 ·"
+                                        + " 변경 불가」 자리라 틀린 주소가 확신에 차서 뜬다. 못 읽으면 null")
+                                .optional(),
+                            fieldWithPath("[].requestedShippingAddress.shippingMethod")
+                                .description("배송 방법 (GS25_HALF | CU_ALTTLE)")
+                                .optional(),
+                            fieldWithPath("[].requestedShippingAddress.storeName")
+                                .description("편의점 지점명")
                                 .optional(),
                             fieldWithPath("[].payback")
                                 .description("오픈 이벤트 배송비 환급(배송비 돌려받기) 상태. 비대상이어도 항상 내려간다"),

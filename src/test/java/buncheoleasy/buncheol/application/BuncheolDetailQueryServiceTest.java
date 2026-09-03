@@ -3,7 +3,11 @@ package buncheoleasy.buncheol.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
@@ -23,6 +27,11 @@ import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.user.domain.shipping.ShippingAddress;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.Group;
@@ -57,6 +66,9 @@ class BuncheolDetailQueryServiceTest {
   @Mock private ParticipationRepository participationRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private GroupMemberRepository groupMemberRepository;
+  @Mock private ParticipationDomainService participationDomainService;
+  @Mock private ParticipationBundleDomainService participationBundleDomainService;
+  @Mock private ShippingAddressRepository shippingAddressRepository;
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
@@ -200,6 +212,51 @@ class BuncheolDetailQueryServiceTest {
       assertThat(response.members().get(0).paymentDueAt()).isEqualTo(PAYMENT_DUE_AT);
       // 다른 유저의 선점이므로 내 참여 아님.
       assertThat(response.members().get(0).participatedByMe()).isFalse();
+    }
+
+    // 🔴 사용자 요구: "확정 전 추가 참여할 때 어떤 배송지로 신청했는지 까먹을 수 있으니 다시 보여 달라".
+    // 모집중 재참여는 첫 신청의 묶음을 재사용해 배송지를 고를 수 없으므로, 화면이 "이 주소로 갑니다" 를
+    // 그리려면 서버가 그 주소를 내려야 한다 — 유저의 기본 배송지로 폴백하면 틀린 주소를 확신에 차서 보여 준다.
+    @Test
+    void 모집중_재참여가_상속할_배송지를_내려준다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, ShippingFeePolicy.of(3000, null));
+      stubEmptyDetailCollaborators();
+      Participation mine = active(601L, 101L, ME, ParticipationStatus.AWAITING_PAYMENT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(mine));
+      // 🔴 판정은 쓰기 경로와 같은 메서드다 — 여기서 조건을 새로 짜면 화면의 약속과 실제 각인이 갈린다.
+      given(participationDomainService.findInheritanceSource(any(), eq(ME), anyList()))
+          .willReturn(java.util.Optional.of(mine));
+      given(participationBundleDomainService.shippingAddressIdOf(mine)).willReturn(200L);
+      given(shippingAddressRepository.findById(200L))
+          .willReturn(
+              java.util.Optional.of(
+                  new ShippingAddress(
+                      200L, ME, ShippingMethod.GS25_HALF, "GS25 강남역점", null, true)));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.myParticipation().inheritanceApplies()).isTrue();
+      assertThat(response.myParticipation().inheritedShippingAddress())
+          .isEqualTo(new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점"));
+    }
+
+    // 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라 배송지를 새로 고른다 (docs/80 결정 11).
+    // 여기서 옛 주소를 내려보내면 화면이 고를 수 있는 자리에 "고정" 을 그려 버린다.
+    @Test
+    void 상속_구간이_아니면_배송지를_내리지_않는다() {
+      stubBasicBuncheol(BuncheolStatus.PAYMENT_COLLECTING, ShippingFeePolicy.of(3000, null));
+      stubEmptyDetailCollaborators();
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(active(601L, 101L, ME, ParticipationStatus.AWAITING_PAYMENT)));
+      given(participationDomainService.findInheritanceSource(any(), eq(ME), anyList()))
+          .willReturn(java.util.Optional.empty());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      // 🔴 불리언까지 본다 — null 만 보면 "고를 수 있다" 와 "고정인데 값을 못 읽었다" 가 구분되지 않는다.
+      assertThat(response.myParticipation().inheritanceApplies()).isFalse();
+      assertThat(response.myParticipation().inheritedShippingAddress()).isNull();
+      then(shippingAddressRepository).shouldHaveNoInteractions();
     }
 
     @Test
@@ -571,6 +628,15 @@ class BuncheolDetailQueryServiceTest {
   }
 
   // flow_type 은 NOT NULL 컬럼이라 프로덕션에 null 은 없다 — 기본값을 LEGACY 로 둔다.
+  /** 이 두 테스트의 관심사는 배송지 하나뿐이라, 나머지 조회는 빈 결과로 채운다. */
+  private void stubEmptyDetailCollaborators() {
+    given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID)).willReturn(List.of());
+    given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+        .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L, 40_000L)));
+    given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+  }
+
   private void stubBasicBuncheol(final BuncheolStatus status, final ShippingFeePolicy policy) {
     stubBasicBuncheol(status, policy, FlowType.LEGACY);
   }

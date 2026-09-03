@@ -968,7 +968,14 @@ class ParticipationServiceTest {
     private void givenExistingActive(final Long bundleId) {
       Participation existing = existingActive(bundleId);
       lenient()
-          .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .when(
+              // 🔴 any() 로 두면 추가 모집(PAYMENT_COLLECTING)까지 상속 원본을 받아 버린다 —
+              // 실제로 그렇게 뒀다가 "추가 모집은 재사용하지 않는다" 테스트 2건이 깨졌다.
+              // 스텁의 조건을 실제 게이트와 같게 맞춘다.
+              participationDomainService.findInheritanceSource(
+                  argThat(
+                      b -> b != null && b.isC2c() && b.getStatus() == BuncheolStatus.RECRUITING),
+                  eq(PARTICIPANT_ID)))
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
@@ -1052,7 +1059,8 @@ class ParticipationServiceTest {
       given(buncheolMemberDomainService.getBuncheolMember(SECOND_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE));
       // 첫 슬롯은 활성 참여가 없고, 둘째 슬롯은 첫 슬롯을 상속한다(같은 묶음 · 배송비 0).
-      given(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+      given(
+              participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty())
           .willReturn(Optional.of(existingActive(EXISTING_BUNDLE_ID)));
       givenAppliedInsert();
@@ -1076,7 +1084,8 @@ class ParticipationServiceTest {
     void C2C_첫_신청은_새_묶음을_연다() {
       Buncheol buncheol = stubC2c(BuncheolStatus.RECRUITING);
       givenFirstParticipation(buncheol);
-      given(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+      given(
+              participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty());
       givenAppliedInsert();
 
@@ -1182,7 +1191,14 @@ class ParticipationServiceTest {
       setField(existing, "shippingAddressId", STALE_COPY_ADDRESS_ID);
       setField(existing, "bundleId", INHERITED_BUNDLE_ID);
       lenient()
-          .when(participationDomainService.findFirstActiveInBuncheol(BUNCHEOL_ID, PARTICIPANT_ID))
+          .when(
+              // 🔴 any() 로 두면 추가 모집(PAYMENT_COLLECTING)까지 상속 원본을 받아 버린다 —
+              // 실제로 그렇게 뒀다가 "추가 모집은 재사용하지 않는다" 테스트 2건이 깨졌다.
+              // 스텁의 조건을 실제 게이트와 같게 맞춘다.
+              participationDomainService.findInheritanceSource(
+                  argThat(
+                      b -> b != null && b.isC2c() && b.getStatus() == BuncheolStatus.RECRUITING),
+                  eq(PARTICIPANT_ID)))
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
@@ -1239,7 +1255,10 @@ class ParticipationServiceTest {
                       PARTICIPANT_ACCOUNT.holder())),
               eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
               eq(NOW));
-      // 상속 조회 자체를 하지 않는다 — 추가 모집에서 상속은 구조적으로 불가능하다.
+      // 추가 모집에서 상속은 구조적으로 불가능하다. 그 판정은 이제 findInheritanceSource 안에 있고
+      // (쓰기·읽기 공유), 거기서 RECRUITING 이 아니면 조회 없이 empty 를 낸다 —
+      // ParticipationDomainServiceTest 가 그 계약을 지킨다. 여기서는 게이트를 <b>거쳤는지</b>만 본다.
+      then(participationDomainService).should().findInheritanceSource(buncheol, PARTICIPANT_ID);
       then(participationDomainService)
           .should(never())
           .findFirstActiveInBuncheol(anyLong(), anyLong());
@@ -1269,10 +1288,8 @@ class ParticipationServiceTest {
 
       then(participationShippingAddressResolver).should(never()).resolve(any(), any(), any());
       then(userDomainService).should(never()).getUser(anyLong());
-      // 상속 조회도 헛돌지 않는다.
-      then(participationDomainService)
-          .should(never())
-          .findFirstActiveInBuncheol(anyLong(), anyLong());
+      // 상속 조회도 헛돌지 않는다 — 상태 예외가 그보다 먼저다.
+      then(participationDomainService).should(never()).findInheritanceSource(any(), anyLong());
     }
 
     // 모집중 재참여는 한 번의 이체·한 개의 택배다 — 상속과 0원이 유지돼야 한다(회귀 방지).

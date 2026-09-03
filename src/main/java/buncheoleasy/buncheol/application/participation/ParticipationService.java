@@ -219,6 +219,9 @@ public class ParticipationService {
     }
 
     // LEGACY 는 1인 1활성슬롯이라 묶음이 곧 참여다 — 묶을 것이 애초에 없어 항상 새로 연다(백필 STEP 1 과 같은 규칙).
+    // 🔴 "LEGACY 는 상속하지 않는다" 는 판정은 여기 인라인이 아니라 {@code
+    // ParticipationDomainService#inheritanceAppliesTo} 가 갖고 있다 — 화면(분철 상세 응답)도 같은 판정을 써야
+    // 하므로 게이트를 여기서 다시 세우지 마라.
     participationBundleDomainService.attach(
         participation, null, shippingAddress.getId(), shippingFee, refundAccount, dueAt, now);
 
@@ -305,10 +308,10 @@ public class ParticipationService {
     // ⚠️ 배송지·배송비·입금자명·묶음 재사용 넷이 <b>이 existing 하나</b>에서 나와야 한다. 조건을 두 벌 세우면
     // "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기고, 그러면 새 택배에 배송비가 0원으로 굳는다
     // — shipping_fee 와 shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
+    // 🔴 판정을 여기 인라인으로 두지 마라 — 분철 상세 응답이 "이 배송지로 갑니다" 를 그릴 때 같은 판정을
+    // 써야 하고, 두 벌이면 화면의 약속과 실제 각인이 갈린다 (findInheritanceSource javadoc).
     Optional<Participation> existing =
-        status == BuncheolStatus.RECRUITING
-            ? participationDomainService.findFirstActiveInBuncheol(buncheol.getId(), participantId)
-            : Optional.empty();
+        participationDomainService.findInheritanceSource(buncheol, participantId);
     final Long shippingAddressId;
     final long shippingFee;
     if (existing.isPresent()) {

@@ -101,7 +101,11 @@ public class ParticipationDetailQueryService {
         shippingFees.totalAmountOf(participation),
         participation.getStatus(),
         participation.getCancelReason(),
-        participation.getDueAt(),
+        // C2C 의 입금 기한 정본은 묶음이다 — 위에서 읽어 둔 bundle 을 그대로 쓴다.
+        // LEGACY 는 자리 값이 수동 입금확인·자동 취소의 판정 조건이라 건드리지 않는다.
+        buncheol.isC2c() && bundle != null && bundle.getDueAt() != null
+            ? bundle.getDueAt()
+            : participation.getDueAt(),
         participation.getConfirmedAt(),
         hostAccount,
         payback,

@@ -310,6 +310,32 @@ public class ParticipationBundleDomainService {
   }
 
   /**
+   * 이 참여의 <b>입금 기한</b> — C2C 의 정본은 묶음이다. 이체가 한 번이므로 기한도 하나다.
+   *
+   * <p>🔴 <b>C2C 한정이다.</b> LEGACY 의 자리 {@code due_at} 은 표시값이 아니라 <b>살아 있는 판정
+   * 조건</b>이다 — 수동 입금확인 CAS 의 {@code p.dueAt >= :now} 게이트와 자동 취소의
+   * {@code p.dueAt <= :now} 가 그 값을 피연산자로 쓴다. 구분 없이 묶음 값으로 바꾸면 LEGACY 수동
+   * 입금확인이 전건 실패하고 자동 취소가 조용히 멈춘다.
+   *
+   * <p>값이 비면 사본으로 폴백한다 — 「보냈어요」 시각과 같은 이유다(성사 확정 전 C2C 묶음은 기한이
+   * 아직 없고, 그 구간의 자리 값도 NULL 이라 결과가 같다).
+   */
+  public static Instant dueAtOf(
+      final Map<Long, ParticipationBundle> bundleById,
+      final Participation participation,
+      final boolean c2c) {
+    if (!c2c) {
+      return participation.getDueAt();
+    }
+    ParticipationBundle bundle =
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+
+    return bundle == null || bundle.getDueAt() == null
+        ? participation.getDueAt()
+        : bundle.getDueAt();
+  }
+
+  /**
    * 이 참여의 「보냈어요」 시각 — 정본은 <b>묶음</b>이고, 값이 비면 사본으로 폴백한다.
    *
    * <p>🔴 <b>이 필드만 「값 단위」 폴백이다.</b> 배송비·배송지는 묶음을 열 때 각인되므로 모든 묶음이

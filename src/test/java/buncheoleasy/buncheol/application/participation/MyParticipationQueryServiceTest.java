@@ -194,6 +194,67 @@ class MyParticipationQueryServiceTest {
     assertThat(result.get(0).paymentSentAt()).isEqualTo(사본시각);
   }
 
+  // 🔴 C2C 의 입금 기한 정본은 묶음이다. 사본에 다른 값을 심어 어느 쪽을 읽는지 드러나게 한다.
+  @Test
+  void C2C_입금기한은_묶음_정본에서_읽는다() {
+    Instant 사본기한 = Instant.parse("2026-09-01T00:00:00Z");
+    Instant 정본기한 = Instant.parse("2026-09-10T00:00:00Z");
+    Participation participation = 기한_픽스처(true, 사본기한, 정본기한);
+
+    List<MyParticipationResponse> result =
+        myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+    assertThat(participation).isNotNull();
+    assertThat(result.get(0).dueAt()).isEqualTo(정본기한);
+  }
+
+  // 🔴 LEGACY 는 자리 값 그대로다. 자리 due_at 은 표시값이 아니라 <b>살아 있는 판정 조건</b>이다 —
+  // 수동 입금확인 CAS 의 p.dueAt >= :now 와 자동 취소의 p.dueAt <= :now 가 그 값을 쓴다.
+  // 구분 없이 묶음 값으로 바꾸면 LEGACY 수동 입금확인이 전건 실패하고 자동 취소가 조용히 멈춘다.
+  @Test
+  void LEGACY_입금기한은_묶음을_보지_않는다() {
+    Instant 자리기한 = Instant.parse("2026-09-01T00:00:00Z");
+    Instant 묶음기한 = Instant.parse("2026-09-10T00:00:00Z");
+    기한_픽스처(false, 자리기한, 묶음기한);
+
+    List<MyParticipationResponse> result =
+        myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+    assertThat(result.get(0).dueAt()).isEqualTo(자리기한);
+  }
+
+  /** 자리와 묶음에 <b>다른</b> 기한을 심는다 — 같은 값이면 어느 쪽을 읽는지 드러나지 않는다. */
+  private Participation 기한_픽스처(
+      final boolean c2c, final Instant 자리기한, final Instant 묶음기한) {
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Buncheol buncheol =
+        buncheol(10L, c2c ? "C2C 분철" : "LEGACY 분철", deadline, BuncheolStatus.RECRUITING);
+    setField(buncheol, "flowType", c2c ? FlowType.C2C : FlowType.LEGACY);
+    Participation participation =
+        participation(
+            233L, 10L, 101L, 10_000L, ParticipationStatus.AWAITING_PAYMENT, 자리기한, null, null);
+    setField(participation, "bundleId", 9999L);
+
+    given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+        .willReturn(List.of(participation));
+    given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+    given(groupMemberRepository.findAllByIds(List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "해린")));
+    given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+    given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+    ParticipationBundle bundle = mock(ParticipationBundle.class);
+    lenient().when(bundle.getId()).thenReturn(9999L);
+    lenient().when(bundle.getDueAt()).thenReturn(묶음기한);
+    lenient().when(bundle.getShippingFee()).thenReturn(0L);
+    lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+    given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+        .willReturn(Map.of(9999L, bundle));
+
+    return participation;
+  }
+
   /** 「보냈어요」 시각을 심은 묶음 목. 사본과 다른 값을 줘야 이관 여부가 드러난다. */
   private static ParticipationBundle bundleWithPaymentSentAt(
       final Long bundleId, final Instant paymentSentAt) {

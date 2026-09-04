@@ -247,7 +247,7 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         view.memberName(),
         view.paymentAmount(),
-        view.participation().getDueAt());
+        view.paymentDueAt());
   }
 
   /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 분철당 1회만 발송한다(인메모리 가드). */
@@ -401,7 +401,7 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_PAYMENT_RECHECK,
         view.memberName(),
         view.paymentAmount(),
-        view.participation().getDueAt());
+        view.paymentDueAt());
   }
 
   // 다슬롯 참여자에게는 멤버명 나열·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).

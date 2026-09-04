@@ -327,7 +327,18 @@ public class BuncheolManagementQueryService {
     if (!c2c && paymentAmount == 0) {
       return false;
     }
+    // 🔴 <b>「돈이 들어왔다」의 유일한 증거는 개최자의 입금확인이다.</b> 「보냈어요」는 참여자가 누르는
+    // 자기신고라 통장 대조를 거치지 않는다 — 한 푼도 안 낸 사람이 눌러도 시각이 찍히고, 기한이 지나
+    // 「제외」되면 <b>그 사람 계좌가 개최자에게 노출</b>된다. 개최자가 착각해 송금할 수도 있다.
+    //
+    // 약관도 같은 선을 긋는다 — "성사 확정 전에 취소되거나 입금 기한 내에 입금하지 않으면 <b>입금이
+    // 없었으므로 환불 절차가 없다</b>", "이미 입금한 뒤 취소되면 개최자에게 반환을 요구할 수 있다".
+    // 실제로 보냈는데 확인을 못 받은 경우는 약관이 "개최자에게 반환 요구 → 고객문의" 경로로 이미 정해 뒀다.
+    //
+    // ⚠️ LEGACY 는 영향이 없다. markPaymentSent 가 requireC2c 가드로 막혀 있어 LEGACY 행의
+    // payment_sent_at 은 구조적으로 항상 NULL 이다(prod 42건·staging 48건 전건 실측). 즉 LEGACY 는
+    // 이미 실질적으로 confirmedAt 하나로 판정하고 있었다.
     return participation.getStatus() == ParticipationStatus.CANCELLED
-        && (participation.getPaymentSentAt() != null || participation.getConfirmedAt() != null);
+        && participation.getConfirmedAt() != null;
   }
 }

@@ -290,6 +290,48 @@ public class ParticipationBundleDomainService {
     participationBundleRepository.extendDueAt(bundleId, dueAt, now);
   }
 
+  /**
+   * 「보냈어요」 시각을 묶음에 기록한다 — <b>이 값이 정본</b>이다. 이체가 한 번이므로 신고도 한 번이다.
+   *
+   * <p>자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸이다) 그건 사본이고, 읽기가 전부 이쪽으로
+   * 옮겨진 뒤 제거한다 — 배송비·배송지와 같은 순서다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void markPaymentSent(final Long bundleId, final Instant now) {
+    if (bundleId == null) {
+      // 배포선 창에서 생긴 미연결 행 — 쓸 묶음이 없다. 사본이 폴백을 받아 준다(closeIfEmpty 와 같은 규약).
+      return;
+    }
+    if (participationBundleRepository.markPaymentSent(bundleId, now) == 0) {
+      // CAS 에 closedAt IS NULL 이 붙어 있어, 슬롯 마킹은 성공했는데 묶음 쓰기가 0행인 조합이
+      // 원리적으로 가능하다. 그 결과가 「상태는 PAYMENT_SENT 인데 정본 시각이 없는」 행이다.
+      // 조용히 넘어가면 배포 후에야 발견된다 — 시끄럽게 남긴다(attach 의 linkBundle 과 같은 규약).
+      log.warn("묶음 「보냈어요」 시각 기록이 0행이다 — 묶음이 이미 닫혔을 수 있다. bundleId={}", bundleId);
+    }
+  }
+
+  /**
+   * 이 참여의 「보냈어요」 시각 — 정본은 <b>묶음</b>이고, 값이 비면 사본으로 폴백한다.
+   *
+   * <p>🔴 <b>이 필드만 「값 단위」 폴백이다.</b> 배송비·배송지는 묶음을 열 때 각인되므로 모든 묶음이
+   * 값을 갖지만, 이 값은 <b>시간이 지나며 쓰인다</b> — 이관 시점에 이미 마킹돼 있던 참여는
+   * {@code bundle != null && bundle.paymentSentAt == null} 이라 「묶음 없음」 폴백을 못 탄다.
+   * 그대로 두면 배포 즉시 기존 마킹이 화면에서 전부 사라지고, 재마킹도 CAS 0행이라 <b>스스로 낫지
+   * 않는다.</b>
+   *
+   * <p>배송지에서 값 단위 폴백을 금지한 이유(묶음 값 {@code NULL} = 참조 배송지 하드 삭제라는 별개
+   * 의미)가 여기엔 <b>없다</b> — 새 쓰기는 두 칸에 같은 시각을 찍고, 반려·철회는 양쪽 모두 보존하며,
+   * 묶음 값을 {@code NULL} 로 되돌리는 경로가 없다. 사본이 정본과 다른 값을 갖는 상태 자체가 안 생긴다.
+   */
+  public static Instant paymentSentAtOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    ParticipationBundle bundle =
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+
+    return bundle == null || bundle.getPaymentSentAt() == null
+        ? participation.getPaymentSentAt()
+        : bundle.getPaymentSentAt();
+  }
+
   /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */
   public int assignDueAtByBuncheolId(
       final Long buncheolId, final Instant dueAt, final Instant now) {

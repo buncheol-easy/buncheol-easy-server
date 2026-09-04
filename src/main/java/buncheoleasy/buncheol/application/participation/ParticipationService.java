@@ -631,6 +631,10 @@ public class ParticipationService {
     requireC2c(participation);
 
     if (participationDomainService.markPaymentSent(participationId, now)) {
+      // 🔴 정본은 묶음이다. 이 슬롯 단위 경로도 같이 써야 한다 — 안 쓰면 상태는 PAYMENT_SENT 인데
+      // 읽기 세 곳이 전부 null 을 내려 <b>마킹이 화면에서 통째로 사라진다.</b>
+      // (rejectPaymentSent 가 슬롯 상태를 되돌리며 묶음 기한을 같이 미는 것과 같은 패턴이다.)
+      participationBundleDomainService.markPaymentSent(participation.getBundleId(), now);
       // 실제 전이 시에만 발행 — 멱등 리턴 경로로 옮기면 개최자 알림이 중복된다.
       eventPublisher.publishEvent(new PaymentSentEvent(participationId));
       return;

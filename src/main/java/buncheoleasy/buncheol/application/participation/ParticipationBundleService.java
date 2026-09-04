@@ -138,6 +138,13 @@ public class ParticipationBundleService {
 
     int marked = participationRepository.markBundlePaymentSent(bundleId, now);
 
+    // 🔴 「보냈어요」 시각의 정본은 묶음이다 — 이체가 한 번이므로 신고도 한 번이다.
+    // 자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸) 그건 사본이고, 읽기가 전부 이쪽으로
+    // 옮겨진 뒤 제거한다. 자리 마킹이 실제로 일어났을 때만 기록해 더블탭이 시각을 밀지 않게 한다.
+    if (marked > 0) {
+      participationBundleDomainService.markPaymentSent(bundleId, now);
+    }
+
     // 🔴 <b>잠금 조회로 다시 읽는다.</b> 평범한 SELECT 는 REPEATABLE READ 라 트랜잭션 첫 읽기 시점의 스냅샷을
     // 본다 — 동시 더블탭에서 A 가 먼저 커밋하면 B 의 UPDATE 는 current read 로 0행이 되는데, 이어지는 일반
     // 조회는 <b>아직 마킹 전으로 보여</b> "마킹할 게 없다" 며 409 를 낸다. 이 기능이 막으려던 더블탭이 정확히

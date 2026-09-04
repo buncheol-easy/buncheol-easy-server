@@ -287,7 +287,8 @@ public class MyParticipationQueryService {
                 participation, buncheol.getFlowType(), delivery, shippingFees),
             refundAccount),
         buncheol.getFlowType(),
-        participation.getPaymentSentAt(),
+        // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
+        ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
         participation.getVisiblePaymentRejectedAt(),
         buncheol.getOpenChatUrl(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).

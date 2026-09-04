@@ -249,7 +249,8 @@ public class BuncheolManagementQueryService {
         participation.getConfirmedAt(),
         refundAccountFor(participation, refundAccount, c2c, paymentAmount),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
-        participation.getPaymentSentAt(),
+        // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
+        ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
         participation.getBundleId() == null
             ? null
             : releasabilityByBundleId.get(participation.getBundleId()),

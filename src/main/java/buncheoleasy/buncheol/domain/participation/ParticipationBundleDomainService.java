@@ -290,6 +290,39 @@ public class ParticipationBundleDomainService {
     participationBundleRepository.extendDueAt(bundleId, dueAt, now);
   }
 
+  /**
+   * 「보냈어요」 시각을 묶음에 기록한다 — <b>이 값이 정본</b>이다. 이체가 한 번이므로 신고도 한 번이다.
+   *
+   * <p>자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸이다) 그건 사본이고, 읽기가 전부 이쪽으로
+   * 옮겨진 뒤 제거한다 — 배송비·배송지와 같은 순서다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void markPaymentSent(final Long bundleId, final Instant now) {
+    participationBundleRepository.markPaymentSent(bundleId, now);
+  }
+
+  /**
+   * 이 참여의 「보냈어요」 시각 — 정본은 <b>묶음</b>이다.
+   *
+   * <p>묶음이 없는 옛 행만 사본으로 폴백한다. 배송비·배송지와 같은 규약이다.
+   *
+   * <p>⚠️ {@code Optional.map(...).orElseGet(...)} 로 쓰지 마라 — 묶음은 있는데 값이 {@code null} 인
+   * 정상 상태(아직 안 보냄)에서 <b>사본으로 떨어져</b> 옛 값을 되살린다.
+   */
+  public Instant paymentSentAtOf(final Participation participation) {
+    ParticipationBundle bundle = findByParticipation(participation).orElse(null);
+
+    return bundle == null ? participation.getPaymentSentAt() : bundle.getPaymentSentAt();
+  }
+
+  /** 배치 조회 결과에서 꺼내는 형태. 목록 경로는 반드시 이쪽을 써라 — 단건은 참여마다 조회가 된다. */
+  public static Instant paymentSentAtOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    ParticipationBundle bundle =
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+
+    return bundle == null ? participation.getPaymentSentAt() : bundle.getPaymentSentAt();
+  }
+
   /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */
   public int assignDueAtByBuncheolId(
       final Long buncheolId, final Instant dueAt, final Instant now) {

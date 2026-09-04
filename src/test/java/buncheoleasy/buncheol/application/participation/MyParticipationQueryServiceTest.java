@@ -126,6 +126,50 @@ class MyParticipationQueryServiceTest {
     return bundle;
   }
 
+  // 🔴 「보냈어요」 시각의 정본은 묶음이다. 사본에 <b>다른 값</b>을 심어야 어느 쪽을 읽는지 드러난다 —
+  // 같은 값이면 사본을 읽어도 초록이라 이관을 검증하지 못한다(배송비 이관에서 겪은 함정).
+  @Test
+  void 보냈어요_시각은_참여_사본이_아니라_묶음_정본에서_읽는다() {
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant 사본시각 = Instant.parse("2020-01-01T00:00:00Z");
+    Instant 정본시각 = Instant.parse("2026-09-04T10:00:00Z");
+    Buncheol buncheol = buncheol(10L, "C2C 분철", deadline, BuncheolStatus.RECRUITING);
+    Participation participation =
+        participation(
+            233L, 10L, 101L, 10_000L, ParticipationStatus.PAYMENT_SENT, DUE_AT, null, null);
+    setField(participation, "bundleId", 9999L);
+    setField(participation, "paymentSentAt", 사본시각); // 읽히면 안 된다
+
+    given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+        .willReturn(List.of(participation));
+    given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+    given(groupMemberRepository.findAllByIds(List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "해린")));
+    given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+    given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+    ParticipationBundle bundle = bundleWithPaymentSentAt(9999L, 정본시각);
+    given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+        .willReturn(Map.of(9999L, bundle));
+
+    List<MyParticipationResponse> result =
+        myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+    assertThat(result.get(0).paymentSentAt()).isEqualTo(정본시각);
+  }
+
+  /** 「보냈어요」 시각을 심은 묶음 목. 사본과 다른 값을 줘야 이관 여부가 드러난다. */
+  private static ParticipationBundle bundleWithPaymentSentAt(
+      final Long bundleId, final Instant paymentSentAt) {
+    ParticipationBundle bundle = mock(ParticipationBundle.class);
+    lenient().when(bundle.getId()).thenReturn(bundleId);
+    lenient().when(bundle.getPaymentSentAt()).thenReturn(paymentSentAt);
+    lenient().when(bundle.getShippingFee()).thenReturn(0L);
+    lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+    return bundle;
+  }
+
   @Nested
   @DisplayName("내 참여 목록 조회 테스트")
   class GetMyParticipationsTest {

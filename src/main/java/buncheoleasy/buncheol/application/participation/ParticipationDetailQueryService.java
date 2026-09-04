@@ -106,7 +106,8 @@ public class ParticipationDetailQueryService {
         hostAccount,
         payback,
         buncheol.getFlowType(),
-        participation.getPaymentSentAt(),
+        // 「보냈어요」 시각의 정본은 묶음이다 — 위에서 이미 읽어 둔 bundle 을 그대로 쓴다.
+        bundle == null ? participation.getPaymentSentAt() : bundle.getPaymentSentAt(),
         participation.getVisiblePaymentRejectedAt(),
         buncheol.getOpenChatUrl(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).

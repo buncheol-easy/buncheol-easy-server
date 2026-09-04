@@ -247,7 +247,7 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         view.memberName(),
         view.paymentAmount(),
-        view.participation().getDueAt());
+        view.paymentDueAt());
   }
 
   /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 분철당 1회만 발송한다(인메모리 가드). */
@@ -401,7 +401,7 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_PAYMENT_RECHECK,
         view.memberName(),
         view.paymentAmount(),
-        view.participation().getDueAt());
+        view.paymentDueAt());
   }
 
   // 다슬롯 참여자에게는 멤버명 나열·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).
@@ -413,7 +413,10 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         mergedMemberName(group),
         totalAmount,
-        first.buncheol().getPaymentDueAt());
+        // 묶음 값을 쓴다. 다슬롯이라 first 를 고르지만 assignDueAtByBuncheolId 가 그 분철의 활성 묶음
+        // 「전부」에 같은 값을 심으므로 어느 것을 골라도 같다. 분철 값을 읽으면 반려 연장을 못 받는
+        // 별개 칸이라 이 알림만 「제외」 게이트와 다른 기한을 말하게 된다.
+        first.paymentDueAt());
   }
 
   // 다건 이벤트의 뷰 조립은 건별로 격리한다 — 참여·분철·멤버슬롯·유저 중 하나만 결손이어도(예: group_members 누락)

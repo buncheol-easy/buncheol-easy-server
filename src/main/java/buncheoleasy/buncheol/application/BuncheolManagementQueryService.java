@@ -245,7 +245,8 @@ public class BuncheolManagementQueryService {
         paymentAmount,
         shippingFees.shippingFeeOf(participation),
         participation.getStatus(),
-        participation.getDueAt(),
+        // C2C 의 입금 기한 정본은 묶음이다(이체 1회 = 기한 1개). LEGACY 는 자리 값이 판정 조건이라 그대로다.
+        ParticipationBundleDomainService.dueAtOf(bundleById, participation, c2c),
         participation.getConfirmedAt(),
         refundAccountFor(participation, refundAccount, c2c, paymentAmount),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),

@@ -310,6 +310,41 @@ public class ParticipationBundleDomainService {
   }
 
   /**
+   * 이 참여의 <b>입금 기한</b> — C2C 의 정본은 묶음이다. 이체가 한 번이므로 기한도 하나다.
+   *
+   * <p>🔴 <b>C2C 한정이다.</b> LEGACY 의 자리 {@code due_at} 은 표시값이 아니라 <b>살아 있는 판정
+   * 조건</b>이다 — 수동 입금확인 CAS 의 {@code p.dueAt >= :now} 게이트와 자동 취소의
+   * {@code p.dueAt <= :now} 가 그 값을 피연산자로 쓴다. 구분 없이 묶음 값으로 바꾸면 LEGACY 수동
+   * 입금확인이 전건 실패하고 자동 취소가 조용히 멈춘다.
+   *
+   * <p>값이 비면 사본으로 폴백한다 — 「보냈어요」 시각과 같은 이유다(성사 확정 전 C2C 묶음은 기한이
+   * 아직 없고, 그 구간의 자리 값도 NULL 이라 결과가 같다).
+   */
+  public static Instant dueAtOf(
+      final ParticipationBundle bundle, final Participation participation, final boolean c2c) {
+    return !c2c || bundle == null || bundle.getDueAt() == null
+        ? participation.getDueAt()
+        : bundle.getDueAt();
+  }
+
+  /**
+   * 배치 조회 결과에서 꺼내는 형태. 목록 경로는 반드시 이쪽을 써라.
+   *
+   * <p>⚠️ 판정은 위 오버로드 <b>한 벌</b>이다 — 호출부마다 3항 연산을 흩뿌리면 규칙이 바뀔 때 한 곳만
+   * 고치고 끝난다. 그 어긋남이 곧 「화면과 문자가 다른 기한을 말하는」 상태이고, 이 이관이 없애려던
+   * 결함 그 자체다 ({@code refundAccountOf} 가 같은 이유로 같은 처방을 쓴다).
+   */
+  public static Instant dueAtOf(
+      final Map<Long, ParticipationBundle> bundleById,
+      final Participation participation,
+      final boolean c2c) {
+    return dueAtOf(
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId()),
+        participation,
+        c2c);
+  }
+
+  /**
    * 이 참여의 「보냈어요」 시각 — 정본은 <b>묶음</b>이고, 값이 비면 사본으로 폴백한다.
    *
    * <p>🔴 <b>이 필드만 「값 단위」 폴백이다.</b> 배송비·배송지는 묶음을 열 때 각인되므로 모든 묶음이
@@ -324,9 +359,14 @@ public class ParticipationBundleDomainService {
    */
   public static Instant paymentSentAtOf(
       final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
-    ParticipationBundle bundle =
-        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+    return paymentSentAtOf(
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId()),
+        participation);
+  }
 
+  /** 묶음을 이미 손에 들고 있는 호출부용. 판정은 여기 한 벌뿐이다. */
+  public static Instant paymentSentAtOf(
+      final ParticipationBundle bundle, final Participation participation) {
     return bundle == null || bundle.getPaymentSentAt() == null
         ? participation.getPaymentSentAt()
         : bundle.getPaymentSentAt();

@@ -101,13 +101,15 @@ public class ParticipationDetailQueryService {
         shippingFees.totalAmountOf(participation),
         participation.getStatus(),
         participation.getCancelReason(),
-        participation.getDueAt(),
+        // 판정은 한 벌이다 — 여기서 3항으로 다시 쓰면 규칙이 바뀔 때 한 곳만 고치고 끝난다.
+        ParticipationBundleDomainService.dueAtOf(bundle, participation, buncheol.isC2c()),
         participation.getConfirmedAt(),
         hostAccount,
         payback,
         buncheol.getFlowType(),
-        // 「보냈어요」 시각의 정본은 묶음이다 — 위에서 이미 읽어 둔 bundle 을 그대로 쓴다.
-        bundle == null ? participation.getPaymentSentAt() : bundle.getPaymentSentAt(),
+        // 「보냈어요」 시각도 판정은 한 벌이다 — 인라인 3항은 값 단위 폴백을 빠뜨려
+        // 「묶음은 있는데 값이 null」인 이관 전 참여가 이 화면에서만 시각을 잃었다.
+        ParticipationBundleDomainService.paymentSentAtOf(bundle, participation),
         participation.getVisiblePaymentRejectedAt(),
         buncheol.getOpenChatUrl(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).

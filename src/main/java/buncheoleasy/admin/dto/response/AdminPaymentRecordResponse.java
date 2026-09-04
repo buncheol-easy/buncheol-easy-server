@@ -42,6 +42,8 @@ public record AdminPaymentRecordResponse(
   /**
    * @param refundAccount 환불 계좌. <b>정본은 묶음</b>이라 호출부가 배치로 조회해 넘긴다 (P2-c). 미연결 참여는
    *     {@code null} 일 수 있다
+   * @param dueAt 입금 기한. <b>C2C 정본은 묶음</b>이라 호출부가 배치로 조회해 넘긴다 — 저장값으로 내면
+   *     개최 관리 화면과 갈린다(부분 반려가 슬롯 하나만 밀고 묶음 전체를 연장하므로 형제 슬롯에서 실제로 갈린다)
    * @param totalAmount 입금 총액. <b>저장값이 아니라 배송비 귀속 판정을 거친 값</b>이라 호출부가 계산해 넘긴다 —
    *     저장값으로 내면 개최 관리 화면과 갈리는데, 운영자가 통장 대사에 쓰는 화면이라 갈리면 안 된다
    */
@@ -49,7 +51,8 @@ public record AdminPaymentRecordResponse(
       final AdminPaymentView view,
       final long confirmedCount,
       final RefundAccount refundAccount,
-      final long totalAmount) {
+      final long totalAmount,
+      final Instant dueAt) {
     return new AdminPaymentRecordResponse(
         view.participation().getId(),
         view.participant() == null ? null : view.participant().getNickname().value(),
@@ -59,7 +62,7 @@ public record AdminPaymentRecordResponse(
         AdminPaymentStatus.from(view.participation()),
         view.participation().getStatus(),
         view.participation().getCancelReason(),
-        view.participation().getDueAt(),
+        dueAt,
         view.participation().getConfirmedAt(),
         RefundAccountResponse.from(refundAccount),
         view.delivery() == null ? null : ManagementDeliveryResponse.from(view.delivery()),

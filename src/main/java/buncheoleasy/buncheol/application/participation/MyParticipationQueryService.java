@@ -270,7 +270,8 @@ public class MyParticipationQueryService {
         participation.getCancelReason(),
         buncheol.getStatus(),
         buncheol.getDeadline(),
-        participation.getDueAt(),
+        // C2C 의 입금 기한 정본은 묶음이다. LEGACY 는 자리 값이 판정 조건이라 그대로다.
+        ParticipationBundleDomainService.dueAtOf(bundleById, participation, buncheol.isC2c()),
         participation.getConfirmedAt(),
         thumbnailByBuncheolId.get(participation.getBuncheolId()),
         ShippingOptionResponse.listFrom(buncheol.getShippingFeePolicy()),

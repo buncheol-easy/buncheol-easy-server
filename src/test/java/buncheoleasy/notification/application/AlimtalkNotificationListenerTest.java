@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -57,6 +58,7 @@ class AlimtalkNotificationListenerTest {
   @Mock private NotificationInboxRecorder inboxRecorder;
 
   private static final Long PARTICIPATION_ID = 50L;
+  private static final Instant BUNDLE_DUE_AT = Instant.parse("2026-08-09T00:00:00Z");
   private static final Long OTHER_PARTICIPATION_ID = 51L;
   private static final Long BUNCHEOL_ID = 7L;
   private static final Long DELIVERY_ID = 10L;
@@ -427,7 +429,9 @@ class AlimtalkNotificationListenerTest {
       assertThat(variables)
           .containsEntry("멤버명", "호시, 우지")
           .containsEntry("입금금액", "55,000")
-          .containsEntry("은행명", "국민은행");
+          .containsEntry("은행명", "국민은행")
+          // 기한의 정본은 묶음이다 — 분철 칸(8/2)을 읽으면 「제외」 게이트와 갈린다.
+          .containsEntry("입금기한", "8월 9일(일) 09:00");
       verify(inboxRecorder)
           .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED), any());
     }
@@ -461,7 +465,12 @@ class AlimtalkNotificationListenerTest {
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
       given(buncheol.getPaymentAccount())
           .willReturn(BankAccount.of("국민은행", "12345678", "홍길동"));
-      given(buncheol.getPaymentDueAt()).willReturn(Instant.parse("2026-08-02T00:00:00Z"));
+      lenient().when(buncheol.isC2c()).thenReturn(true);
+      // 🔴 분철 칸에는 「옛 값」을 심는다 — 이 칸은 반려 연장을 못 받는 별개 칸이라, 알림이 여기를 읽으면
+      // 「제외」 게이트와 다른 기한을 말한다. 값을 같게 두면 테스트가 그 갈림에 눈이 먼다.
+      lenient()
+          .when(buncheol.getPaymentDueAt())
+          .thenReturn(Instant.parse("2026-08-02T00:00:00Z"));
       return buncheol;
     }
 
@@ -469,8 +478,10 @@ class AlimtalkNotificationListenerTest {
         final Buncheol buncheol, final String memberName, final User participant, final long amount) {
       Participation participation = mock(Participation.class);
       given(participation.getStatus()).willReturn(ParticipationStatus.AWAITING_PAYMENT);
+      ParticipationBundle bundle = mock(ParticipationBundle.class);
+      lenient().when(bundle.getDueAt()).thenReturn(BUNDLE_DUE_AT);
       return new ParticipationView(
-          participation, null, buncheol, memberName, participant, mock(User.class), amount);
+          participation, bundle, buncheol, memberName, participant, mock(User.class), amount);
     }
   }
 

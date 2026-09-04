@@ -48,11 +48,22 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AdminPaymentQueryServiceTest {
 
   private static final Instant BASE_TIME = Instant.parse("2026-07-01T00:00:00Z");
+  private static final Instant BUNDLE_DUE_AT = Instant.parse("2026-07-08T00:00:00Z");
 
   @InjectMocks private AdminPaymentQueryService adminPaymentQueryService;
 
   @Mock private AdminPaymentQueryRepository adminPaymentQueryRepository;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
+
+  /** C2C 뷰 — 자리에는 「옛 기한」을, 묶음에는 정본을 심어 어느 쪽을 읽는지 드러나게 한다. */
+  private AdminPaymentView c2cView(
+      final long participationId, final long buncheolId, final Long bundleId, final Instant 자리기한) {
+    AdminPaymentView base = view(participationId, buncheolId, BASE_TIME);
+    ReflectionTestUtils.setField(base.participation(), "bundleId", bundleId);
+    ReflectionTestUtils.setField(base.participation(), "dueAt", 자리기한);
+    ReflectionTestUtils.setField(base.buncheol(), "flowType", FlowType.C2C);
+    return base;
+  }
 
   private AdminPaymentView view(
       final long participationId, final long buncheolId, final Instant createdAt) {
@@ -104,6 +115,8 @@ class AdminPaymentQueryServiceTest {
                 lenient()
                     .when(bundle.getRefundAccount())
                     .thenReturn(RefundAccount.of("국민", "12345678", "홍길동"));
+                // 🔴 자리 값과 「다른」 기한을 심는다 — 같게 두면 이관 회귀를 못 잡는다.
+                lenient().when(bundle.getDueAt()).thenReturn(BUNDLE_DUE_AT);
                 byId.put(participation.getBundleId(), bundle);
               }
               return byId;
@@ -113,6 +126,40 @@ class AdminPaymentQueryServiceTest {
   @Nested
   @DisplayName("getPayments 테스트")
   class GetPaymentsTest {
+
+    // 🔴 운영자가 통장 대사에 쓰는 화면이라 개최 관리와 갈리면 안 된다 — totalAmount 와 같은 이유다.
+    // 부분 반려가 슬롯 하나만 밀고 묶음 전체를 연장하므로 형제 슬롯에서 실제로 두 값이 갈린다.
+    @Test
+    void C2C_결제목록의_기한은_묶음_정본을_읽는다() {
+      Instant 자리기한 = BASE_TIME.plus(1, ChronoUnit.DAYS);
+      given(adminPaymentQueryRepository.findPayments(isNull(), isNull(), any(Cursor.class), eq(2)))
+          .willReturn(List.of(c2cView(1L, 10L, 900L, 자리기한)));
+      given(adminPaymentQueryRepository.countConfirmedByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(new BuncheolConfirmedCount(10L, 1)));
+
+      CursorResponse<AdminPaymentRecordResponse> response =
+          adminPaymentQueryService.getPayments(null, null, Cursor.firstPage(), 1);
+
+      assertThat(response.items().get(0).dueAt()).isEqualTo(BUNDLE_DUE_AT).isNotEqualTo(자리기한);
+    }
+
+    // LEGACY 는 묶음이 있어도 자리 값을 쓴다 — 이 구분이 무너지면 수동 입금확인·자동 취소가 멈춘다.
+    @Test
+    void LEGACY_결제목록은_묶음_기한을_보지_않는다() {
+      Instant 자리기한 = BASE_TIME.plus(1, ChronoUnit.DAYS);
+      AdminPaymentView legacy = view(1L, 10L, BASE_TIME);
+      ReflectionTestUtils.setField(legacy.participation(), "bundleId", 900L);
+      ReflectionTestUtils.setField(legacy.participation(), "dueAt", 자리기한);
+      given(adminPaymentQueryRepository.findPayments(isNull(), isNull(), any(Cursor.class), eq(2)))
+          .willReturn(List.of(legacy));
+      given(adminPaymentQueryRepository.countConfirmedByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(new BuncheolConfirmedCount(10L, 1)));
+
+      CursorResponse<AdminPaymentRecordResponse> response =
+          adminPaymentQueryService.getPayments(null, null, Cursor.firstPage(), 1);
+
+      assertThat(response.items().get(0).dueAt()).isEqualTo(자리기한);
+    }
 
     @Test
     void size보다_많이_조회되면_hasNext와_다음_커서를_돌려준다() {

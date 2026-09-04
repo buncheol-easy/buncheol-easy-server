@@ -104,8 +104,11 @@ public class BuncheolDetailQueryService {
     boolean openForNewParticipation = buncheol.acceptsNewParticipation(Instant.now(clock));
     // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 그 값이 「제외」 게이트가 보는 값이고,
     // 카드 계약이 "이 시각이 지나면 슬롯이 공석으로 풀린다" 이기 때문이다. 배치 1회로 붙인다.
+    // LEGACY 는 dueAtOf 가 조기 반환이라 이 맵을 한 번도 읽지 않는다. 공개 엔드포인트라 헛쿼리를 안 낸다.
     Map<Long, ParticipationBundle> bundleById =
-        participationBundleDomainService.findAllByParticipations(activeParticipations);
+        buncheol.isC2c()
+            ? participationBundleDomainService.findAllByParticipations(activeParticipations)
+            : Map.of();
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
             .map(
@@ -219,7 +222,8 @@ public class BuncheolDetailQueryService {
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
       case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
-      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정 — 단 만료 면제라 dueAt 카운트다운은 노출하지 않는다.
+      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정. AWAITING_PAYMENT 로 접히므로 기한도 함께 뜨는데,
+      // 「제외」 게이트가 CONFIRMED 만 막고 PAYMENT_SENT 는 뺄 수 있어 "이 시각이 지나면 풀린다" 가 맞다.
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).

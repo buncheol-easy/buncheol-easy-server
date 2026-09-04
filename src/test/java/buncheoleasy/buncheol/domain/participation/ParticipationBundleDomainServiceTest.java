@@ -291,7 +291,6 @@ class ParticipationBundleDomainServiceTest {
     return participation;
   }
 
-
   @Nested
   @DisplayName("입금 기한 정본 판정 (dueAtOf)")
   class DueAtOfTest {
@@ -343,8 +342,9 @@ class ParticipationBundleDomainServiceTest {
 
     @Test
     void 묶음이_없는_옛_행은_사본을_쓴다() {
-      assertThat(ParticipationBundleDomainService.dueAtOf(
-                  (ParticipationBundle) null, participation(자리기한), true))
+      ParticipationBundle 미연결 = null;
+
+      assertThat(ParticipationBundleDomainService.dueAtOf(미연결, participation(자리기한), true))
           .isEqualTo(자리기한);
     }
   }

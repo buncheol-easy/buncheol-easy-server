@@ -193,6 +193,32 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants()).isEmpty();
     }
 
+    // 🔴 이관 검증 — 자리와 묶음에 「다른 기한」을 심어 어느 쪽을 읽는지 드러나게 한다.
+    // 같은 값을 심으면 테스트가 이관에 눈이 먼다(#182 리뷰 지적).
+    @Test
+    void C2C_참여자_목록의_기한은_묶음_정본을_읽는다() {
+      Instant 묶음기한 = Instant.parse("2026-06-09T12:00:00Z");
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation awaiting =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.AWAITING_PAYMENT);
+      stubBundleDueAt(awaiting, 묶음기한);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(awaiting));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants().get(0).dueAt()).isEqualTo(묶음기한).isNotEqualTo(DUE_AT);
+    }
+
     @Test
     void 입금확인중_참여는_입금자명과_dueAt이_노출되고_계좌와_배송은_null() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING);
@@ -848,6 +874,21 @@ class BuncheolManagementQueryServiceTest {
     setField(user, "id", id);
     setField(user, "nickname", Nickname.of(nickname));
     return user;
+  }
+
+  /** 이 참여의 묶음에만 기한을 심는다. 공용 stubBundles 를 이 호출 뒤에 덮어쓰므로 순서가 중요하다. */
+  private void stubBundleDueAt(final Participation participation, final Instant dueAt) {
+    ParticipationBundle bundle = mock(ParticipationBundle.class);
+    lenient().when(bundle.getId()).thenReturn(participation.getBundleId());
+    lenient().when(bundle.getShippingFee()).thenReturn(participation.getShippingFee());
+    lenient().when(bundle.getRefundAccount()).thenReturn(REFUND_ACCOUNT);
+    lenient().when(bundle.getDueAt()).thenReturn(dueAt);
+    // ⚠️ doReturn 이어야 한다 — when(mock.method(any())) 는 @BeforeEach 의 thenAnswer 를 실제로 한 번
+    // 호출해 버려서(인자 null) NPE 가 난다.
+    lenient()
+        .doReturn(Map.of(participation.getBundleId(), bundle))
+        .when(participationBundleDomainService)
+        .findAllByParticipations(any());
   }
 
   private Participation participation(

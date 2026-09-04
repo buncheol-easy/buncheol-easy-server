@@ -359,9 +359,14 @@ public class ParticipationBundleDomainService {
    */
   public static Instant paymentSentAtOf(
       final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
-    ParticipationBundle bundle =
-        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+    return paymentSentAtOf(
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId()),
+        participation);
+  }
 
+  /** 묶음을 이미 손에 들고 있는 호출부용. 판정은 여기 한 벌뿐이다. */
+  public static Instant paymentSentAtOf(
+      final ParticipationBundle bundle, final Participation participation) {
     return bundle == null || bundle.getPaymentSentAt() == null
         ? participation.getPaymentSentAt()
         : bundle.getPaymentSentAt();

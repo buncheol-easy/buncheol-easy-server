@@ -413,9 +413,10 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         mergedMemberName(group),
         totalAmount,
-        // ⚠️ 여기만 분철 값을 읽는다 — 다슬롯을 사람 단위로 합산해 1통을 보내므로 특정 묶음을 고를 수
-        // 없다. 성사 확정 시 assignDueAtByBuncheolId 가 같은 값을 묶음에 심으므로 값은 같다.
-        first.buncheol().getPaymentDueAt());
+        // 묶음 값을 쓴다. 다슬롯이라 first 를 고르지만 assignDueAtByBuncheolId 가 그 분철의 활성 묶음
+        // 「전부」에 같은 값을 심으므로 어느 것을 골라도 같다. 분철 값을 읽으면 반려 연장을 못 받는
+        // 별개 칸이라 이 알림만 「제외」 게이트와 다른 기한을 말하게 된다.
+        first.paymentDueAt());
   }
 
   // 다건 이벤트의 뷰 조립은 건별로 격리한다 — 참여·분철·멤버슬롯·유저 중 하나만 결손이어도(예: group_members 누락)

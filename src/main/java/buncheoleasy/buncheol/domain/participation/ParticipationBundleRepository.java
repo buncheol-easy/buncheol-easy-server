@@ -61,8 +61,8 @@ public interface ParticipationBundleRepository {
   int closeEmptyByBuncheolId(Long buncheolId, Instant now);
 
   /** 성사 확정 시 분철의 활성 묶음에 입금 기한을 일괄로 채운다 (기한 없이 열린 C2C 신청 묶음 대상). 반환은 채워진 묶음 수. */
-  /** 「보냈어요」 시각을 묶음에 기록한다 — 정본. 자리 칸은 사본이고 나중에 제거한다. */
-  int markPaymentSent(Long bundleId, Instant now);
-
   int assignDueAtByBuncheolId(Long buncheolId, Instant dueAt, Instant now);
+
+  /** 「보냈어요」 시각을 묶음에 기록한다 — 정본. 자리 칸은 사본이고 나중에 제거한다. 반환은 영향 행 수. */
+  int markPaymentSent(Long bundleId, Instant now);
 }

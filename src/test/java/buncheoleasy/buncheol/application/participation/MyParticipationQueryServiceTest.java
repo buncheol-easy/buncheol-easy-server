@@ -159,6 +159,41 @@ class MyParticipationQueryServiceTest {
     assertThat(result.get(0).paymentSentAt()).isEqualTo(정본시각);
   }
 
+  // 🔴 이관 시점에 <b>이미 마킹돼 있던</b> 참여 — 묶음은 달려 있는데 묶음 시각만 비어 있다.
+  // 이 필드는 시간이 지나며 쓰이므로 배송비·배송지와 달리 「묶음 없음」 폴백을 못 탄다.
+  // 값 단위 폴백이 없으면 배포 즉시 기존 마킹이 화면에서 전부 사라지고, 재마킹도 CAS 0행이라
+  // 스스로 낫지 않는다.
+  @Test
+  void 묶음_시각이_비면_사본으로_폴백한다() {
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS);
+    Instant 사본시각 = Instant.parse("2026-09-01T12:00:00Z");
+    Buncheol buncheol = buncheol(10L, "C2C 분철", deadline, BuncheolStatus.RECRUITING);
+    Participation participation =
+        participation(
+            233L, 10L, 101L, 10_000L, ParticipationStatus.PAYMENT_SENT, DUE_AT, null, null);
+    setField(participation, "bundleId", 9999L);
+    setField(participation, "paymentSentAt", 사본시각);
+
+    given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+        .willReturn(List.of(participation));
+    given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+    given(groupMemberRepository.findAllByIds(List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "해린")));
+    given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+    given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+    // 묶음은 있는데 시각만 NULL — 이관 직후의 모든 기존 행이 이 모양이다.
+    ParticipationBundle bundle = bundleWithPaymentSentAt(9999L, null);
+    given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+        .willReturn(Map.of(9999L, bundle));
+
+    List<MyParticipationResponse> result =
+        myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+    assertThat(result.get(0).paymentSentAt()).isEqualTo(사본시각);
+  }
+
   /** 「보냈어요」 시각을 심은 묶음 목. 사본과 다른 값을 줘야 이관 여부가 드러난다. */
   private static ParticipationBundle bundleWithPaymentSentAt(
       final Long bundleId, final Instant paymentSentAt) {

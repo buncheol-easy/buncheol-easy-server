@@ -34,11 +34,24 @@ public enum ParticipationCancelReason {
    * 사유가 이미 답을 갖고 있으므로 여기서 축을 갈라 둔다.
    */
   public boolean isCancelledByParticipant() {
-    return this == USER_CANCELLED;
+    return switch (this) {
+      case USER_CANCELLED -> true;
+      case PAYMENT_TIMEOUT, BUNCHEOL_CANCELLED, HOST_RELEASED -> false;
+    };
   }
 
-  /** 개최자·시스템이 한 취소. 참여자가 스스로 뺀 것이 아니다. */
-  public boolean isCancelledByHost() {
+  /**
+   * 개최자 <b>또는 시스템</b>이 한 취소. 참여자가 스스로 뺀 것이 아니다.
+   *
+   * <p>이름에 「시스템」을 넣은 이유 — 실제로 개최자가 한 것은 {@code HOST_RELEASED} 하나뿐이다.
+   * {@code PAYMENT_TIMEOUT} 은 만료 스케줄러, {@code BUNCHEOL_CANCELLED} 는 개최자 취소 <b>또는</b>
+   * 최소 인원 미달 자동 취소다. 호출부는 이름만 보고 판단하므로 이름이 분류를 담아야 한다.
+   *
+   * <p>⚠️ 위를 부정으로 정의하지 않고 <b>exhaustive switch</b> 로 둔다 — 사유가 늘면 컴파일 단계에서
+   * 드러난다. 부정으로 두면 참여자 측 사유가 하나 늘어도 조용히 「개최자」로 분류된다.
+   * ({@code AdminPaymentStatus.from} 이 같은 이유로 같은 처방을 쓴다.)
+   */
+  public boolean isCancelledByHostOrSystem() {
     return !isCancelledByParticipant();
   }
 }

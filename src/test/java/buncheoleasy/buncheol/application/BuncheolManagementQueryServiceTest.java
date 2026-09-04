@@ -476,7 +476,7 @@ class BuncheolManagementQueryServiceTest {
     // ("이미 입금한 뒤 취소되면 개최자에게 반환을 요구할 수 있다 → 안 되면 고객문의").
     @Test
     void 보냈어요_마킹만_있는_취소분은_계좌를_내리지_않는다() {
-      stubBasicBuncheol(BuncheolStatus.CANCELLED);
+      stubBasicBuncheol(BuncheolStatus.CANCELLED, FlowType.C2C);
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember(101L, 1001L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
@@ -507,7 +507,7 @@ class BuncheolManagementQueryServiceTest {
     // 참여 전건의 계좌가 새는데, 그 회귀를 잡는 테스트가 없었다.
     @Test
     void 확정된_활성_참여에는_계좌를_내리지_않는다() {
-      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember(101L, 1001L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
@@ -518,8 +518,10 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(active));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
-      // 활성 참여는 묶음을 가지므로 배송 조회에 그 묶음 id 가 실린다.
-      given(deliveryRepository.findAllByBundleIds(anyList())).willReturn(List.of());
+      // 활성 참여는 묶음을 가지므로 배송 조회에 그 묶음 id 가 실린다 — 참여 픽스처와 같은 규칙이다.
+      // 정확히 단정해 "확정 슬롯의 묶음 id 로만 배송을 찾는다" 규약까지 함께 지킨다.
+      given(deliveryRepository.findAllByBundleIds(List.of(BUNDLE_ID_BASE + 601L)))
+          .willReturn(List.of());
       given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
           .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
 
@@ -535,7 +537,7 @@ class BuncheolManagementQueryServiceTest {
     // 개최자가 통장을 보고 확인한 뒤 취소된 건 — 실제로 돈이 들어왔으므로 계좌가 나와야 한다.
     @Test
     void 입금확인을_거친_취소분은_계좌를_내린다() {
-      stubBasicBuncheol(BuncheolStatus.CANCELLED);
+      stubBasicBuncheol(BuncheolStatus.CANCELLED, FlowType.C2C);
       given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember(101L, 1001L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))

@@ -3,6 +3,7 @@ package buncheoleasy.notification.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.user.domain.User;
 import java.time.Instant;
 
@@ -31,10 +32,6 @@ public record ParticipationView(
    * 판정 조건이다.
    */
   public Instant paymentDueAt() {
-    if (!buncheol.isC2c() || bundle == null || bundle.getDueAt() == null) {
-      return participation.getDueAt();
-    }
-
-    return bundle.getDueAt();
+    return ParticipationBundleDomainService.dueAtOf(bundle, participation, buncheol.isC2c());
   }
 }

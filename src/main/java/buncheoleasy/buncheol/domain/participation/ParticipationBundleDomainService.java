@@ -321,18 +321,27 @@ public class ParticipationBundleDomainService {
    * 아직 없고, 그 구간의 자리 값도 NULL 이라 결과가 같다).
    */
   public static Instant dueAtOf(
+      final ParticipationBundle bundle, final Participation participation, final boolean c2c) {
+    return !c2c || bundle == null || bundle.getDueAt() == null
+        ? participation.getDueAt()
+        : bundle.getDueAt();
+  }
+
+  /**
+   * 배치 조회 결과에서 꺼내는 형태. 목록 경로는 반드시 이쪽을 써라.
+   *
+   * <p>⚠️ 판정은 위 오버로드 <b>한 벌</b>이다 — 호출부마다 3항 연산을 흩뿌리면 규칙이 바뀔 때 한 곳만
+   * 고치고 끝난다. 그 어긋남이 곧 「화면과 문자가 다른 기한을 말하는」 상태이고, 이 이관이 없애려던
+   * 결함 그 자체다 ({@code refundAccountOf} 가 같은 이유로 같은 처방을 쓴다).
+   */
+  public static Instant dueAtOf(
       final Map<Long, ParticipationBundle> bundleById,
       final Participation participation,
       final boolean c2c) {
-    if (!c2c) {
-      return participation.getDueAt();
-    }
-    ParticipationBundle bundle =
-        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
-
-    return bundle == null || bundle.getDueAt() == null
-        ? participation.getDueAt()
-        : bundle.getDueAt();
+    return dueAtOf(
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId()),
+        participation,
+        c2c);
   }
 
   /**

@@ -291,4 +291,61 @@ class ParticipationBundleDomainServiceTest {
     return participation;
   }
 
+
+  @Nested
+  @DisplayName("입금 기한 정본 판정 (dueAtOf)")
+  class DueAtOfTest {
+
+    private static final Instant 자리기한 = Instant.parse("2026-09-01T00:00:00Z");
+    private static final Instant 묶음기한 = Instant.parse("2026-09-10T00:00:00Z");
+
+    private Participation participation(final Instant dueAt) {
+      Participation p = newInstance(Participation.class);
+      setField(p, "id", 233L);
+      setField(p, "bundleId", 9999L);
+      setField(p, "dueAt", dueAt);
+      return p;
+    }
+
+    private ParticipationBundle bundle(final Instant dueAt) {
+      ParticipationBundle b = newInstance(ParticipationBundle.class);
+      setField(b, "id", 9999L);
+      setField(b, "dueAt", dueAt);
+      return b;
+    }
+
+    @Test
+    void C2C_는_묶음_기한을_쓴다() {
+      assertThat(
+              ParticipationBundleDomainService.dueAtOf(
+                  bundle(묶음기한), participation(자리기한), true))
+          .isEqualTo(묶음기한)
+          .isNotEqualTo(자리기한);
+    }
+
+    // 🔴 LEGACY 의 자리 due_at 은 표시값이 아니라 살아 있는 판정 조건이다 — 수동 입금확인 CAS 의
+    // p.dueAt >= :now 와 자동 취소의 p.dueAt <= :now 가 그 값을 쓴다. 묶음을 보면 안 된다.
+    @Test
+    void LEGACY_는_묶음을_보지_않는다() {
+      assertThat(
+              ParticipationBundleDomainService.dueAtOf(
+                  bundle(묶음기한), participation(자리기한), false))
+          .isEqualTo(자리기한);
+    }
+
+    // 성사 확정 전 C2C 묶음은 기한이 아직 없다. 그 구간의 자리 값도 NULL 이라 결과가 같다.
+    @Test
+    void 묶음_기한이_비면_사본으로_폴백한다() {
+      assertThat(
+              ParticipationBundleDomainService.dueAtOf(bundle(null), participation(자리기한), true))
+          .isEqualTo(자리기한);
+    }
+
+    @Test
+    void 묶음이_없는_옛_행은_사본을_쓴다() {
+      assertThat(ParticipationBundleDomainService.dueAtOf(
+                  (ParticipationBundle) null, participation(자리기한), true))
+          .isEqualTo(자리기한);
+    }
+  }
 }

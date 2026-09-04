@@ -413,6 +413,8 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         mergedMemberName(group),
         totalAmount,
+        // ⚠️ 여기만 분철 값을 읽는다 — 다슬롯을 사람 단위로 합산해 1통을 보내므로 특정 묶음을 고를 수
+        // 없다. 성사 확정 시 assignDueAtByBuncheolId 가 같은 값을 묶음에 심으므로 값은 같다.
         first.buncheol().getPaymentDueAt());
   }
 

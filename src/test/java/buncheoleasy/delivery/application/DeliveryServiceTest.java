@@ -115,8 +115,32 @@ class DeliveryServiceTest {
       then(deliveryDomainService).should(never()).registerTracking(anyLong(), anyString(), any());
     }
 
+    // 🔴 C2C 는 분철 상태를 보지 않는다 — 배송이 존재한다는 것 자체가 「그 자리는 입금확인됐고, 그래서
+    // 개최자 취소가 BLOCKED_BY_CONFIRMED_PAYMENT 로 막혔다」는 뜻이다. 분철 확정에 묶어 두면 다른 자리가
+    // 입금 전이라는 이유로 이미 돈을 낸 사람의 배송이 잠기고, 추가 모집 1건에 다시 잠긴다.
     @Test
-    void 분철이_진행확정_전이면_예외가_발생한다() {
+    void C2C_는_분철이_입금수집중이어도_운송장을_등록한다() {
+      Delivery delivery = createSnapshotDelivery();
+      Participation participation = mock(Participation.class);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+
+      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      willDoNothing().given(buncheol).validateOwner(HOST_ID);
+
+      deliveryService.registerTracking(HOST_ID, DELIVERY_ID, "TRACK123");
+
+      then(deliveryDomainService).should().registerTracking(DELIVERY_ID, "TRACK123", NOW);
+      // 분철 상태를 아예 읽지 않는다 — 읽는 순간 다시 결합된다.
+      then(buncheol).should(never()).getStatus();
+    }
+
+    @Test
+    void LEGACY_는_분철이_진행확정_전이면_예외가_발생한다() {
       // 모집중 발송을 허용하면 마감 시점 취소(최소 인원 미달)와 이미 발송된 물건이 모순되므로 막는다.
       Delivery delivery = createSnapshotDelivery();
       Participation participation = mock(Participation.class);

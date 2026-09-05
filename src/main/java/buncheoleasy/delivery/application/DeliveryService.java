@@ -59,11 +59,25 @@ public class DeliveryService {
     return buncheolDomainService.getBuncheol(participation.getBuncheolId());
   }
 
-  // 운송장 등록(발송 시작)은 분철 진행확정(CONFIRMED) 후에만 허용한다. 모집중 발송을 허용하면 마감 시점 최소 인원
-  // 미달로 분철이 취소될 때 이미 발송된 물건과 환불·배송 스냅샷 정리(취소 cascade)가 모순되기 때문이다. 관리자 경로도
-  // 동일하게 막아 "모집중엔 배송중 참여가 없다"는 불변식을 보장한다. CONFIRMED 는 이후 RECRUITING 으로 되돌아가지
-  // 않으므로 check-then-act 갭이 없다.
+  /**
+   * 발송을 시작해도 되는지. <b>LEGACY 만 분철 진행확정(CONFIRMED)을 요구한다.</b>
+   *
+   * <p>이 가드가 막으려던 것은 "이미 보낸 물건이 있는데 분철이 나중에 취소되는" 모순이다. LEGACY 는 마감 판정에서
+   * 최소 인원에 미달하면 입금확인된 자리가 있어도 CANCELLED 로 가므로 그 위험이 실재한다.
+   *
+   * <p>🔴 <b>C2C 에서는 그 위험이 구조적으로 없다.</b> 입금확인이 1건이라도 있으면 개최자 취소가 {@code
+   * BLOCKED_BY_CONFIRMED_PAYMENT} 로 막히고(직거래라 확인된 돈은 이미 개최자 계좌에 있다), {@code
+   * PAYMENT_COLLECTING} 에는 자동취소 경로가 없다. 배송 스냅샷은 입금확인 시점에만 생기므로 <b>운송장을 넣을 수
+   * 있는 배송이 존재한다는 것 자체가 분철 취소가 막혔다는 뜻</b>이다.
+   *
+   * <p>그래서 C2C 는 분철 전체가 아니라 <b>그 자리의 입금확인</b>만 본다. 분철 상태에 묶어 두면 다른 자리가 아직
+   * 입금 전이라는 이유로 이미 돈을 낸 사람의 배송이 잠기고, 추가 모집 참여자가 한 명 들어오는 순간 등록할 수 있던
+   * 운송장이 다시 잠긴다 (2026-09-05 사용자 결정).
+   */
   private void validateBuncheolConfirmed(final Buncheol buncheol) {
+    if (buncheol.isC2c()) {
+      return;
+    }
     if (buncheol.getStatus() != BuncheolStatus.CONFIRMED) {
       throw new BusinessException(ErrorCode.DELIVERY_BUNCHEOL_NOT_CONFIRMED);
     }

@@ -54,6 +54,10 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class BuncheolManagementQueryService {
 
+  // 🔴 문구 안의 공백이 안전장치다 — Nickname 은 ^[가-힣a-zA-Z0-9]+$ 로 공백을 막으므로 이 값은
+  // 실사용자 닉네임과 절대 충돌하지 않는다. 공백 없는 문구로 다듬는 순간 그 구분이 사라진다.
+  static final String WITHDRAWN_PARTICIPANT_NICKNAME = "탈퇴한 사용자";
+
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
@@ -238,7 +242,11 @@ public class BuncheolManagementQueryService {
         participation.getId(),
         participation.getBundleId(),
         participation.getParticipantId(),
-        participant == null ? null : participant.getNickname().value(),
+        // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다. null 로 내리면 클라 파서가
+        // 별칭 폴백을 훑다 예금주 실명(depositorName)을 닉네임 자리에 채운다 — 고정 문구로 막는다.
+        participant == null
+            ? WITHDRAWN_PARTICIPANT_NICKNAME
+            : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
         depositorNameOf(participation, refundAccount, c2c, paymentAmount),

@@ -41,6 +41,10 @@ import java.time.Instant;
  * <p>{@code amount} 는 <b>배송비를 포함한 입금 총액</b>이고 {@code shippingFee} 는 그중 배송비다. 배송비는 <b>묶음당 1회</b>라
  * 같은 묶음의 두 번째 슬롯은 0 이고, 참여자별 총액이 서로 달라진다 — 합계만 보면 개최자가 그 차이를 설명할 수 없다 (docs/53 Q-22).
  * ⚠️ 성사 확정 후 추가 모집은 <b>새 묶음</b>이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다.
+  *
+ * <p>{@code participantNickname} 은 <b>항상 채워진다</b> — 탈퇴(soft delete) 회원은 조회에서 빠지므로
+ * 「탈퇴한 사용자」 고정 문구로 내린다. 클라는 null 폴백을 둘 필요가 없다(두면 별칭 폴백이 예금주
+ * 실명을 닉네임 자리에 채우는, 실명이 새는 경로가 된다).
  */
 public record BuncheolManagementParticipantResponse(
     Long participationId,

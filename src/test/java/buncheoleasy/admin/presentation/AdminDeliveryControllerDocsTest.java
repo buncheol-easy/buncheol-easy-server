@@ -56,7 +56,8 @@ class AdminDeliveryControllerDocsTest extends DocsTestSupport {
                             """
                             같은 묶음배송의 여러 배송 건에 동일한 운송장 번호를 한 번에 등록한다 (ROLE_ADMIN 전용).
                             개최자 소유권 검증 없이 전체 배송에 적용되며, 건별 독립 처리라 일부 실패가 나머지 성공을 되돌리지 않는다.
-                            분철이 진행확정(CONFIRMED) 전인 배송 건은 건별로 `DLV-009` (`DELIVERY_BUNCHEOL_NOT_CONFIRMED`) 실패가 돌아온다.""")
+                            등록 조건은 개최자 경로와 같다 — C2C 는 그 자리의 입금확인만 보고(미확인이면 건별 `DLV-007`),
+                            LEGACY 는 분철 진행확정(CONFIRMED) 전이면 건별로 `DLV-009` (`DELIVERY_BUNCHEOL_NOT_CONFIRMED`) 실패가 돌아온다.""")
                         .requestHeaders(adminAuthorizationHeader())
                         .requestSchema(Schema.schema("AdminTrackingRegistrationRequest"))
                         .requestFields(

@@ -238,7 +238,9 @@ public class BuncheolManagementQueryService {
         participation.getId(),
         participation.getBundleId(),
         participation.getParticipantId(),
-        participant == null ? null : participant.getNickname().value(),
+        // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다. null 로 내리면 클라 파서가
+        // 별칭 폴백을 훑다 예금주 실명(depositorName)을 닉네임 자리에 채운다 — 고정 문구로 막는다.
+        participant == null ? "탈퇴한 사용자" : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
         depositorNameOf(participation, refundAccount, c2c, paymentAmount),

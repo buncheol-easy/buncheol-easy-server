@@ -43,8 +43,9 @@ class DeliveryControllerDocsTest extends DocsTestSupport {
                             """
                             개최자(운영자)가 확정 참여자의 배송 건에 운송장 번호를 등록한다. 등록 시 배송 상태가
                             `SNAPSHOTTED` → `SHIPPING` 으로 전이되고, 참여자에게 운송장 등록 알림(알림톡)이 발송된다.
-                            분철이 진행확정(CONFIRMED)된 뒤에만 등록할 수 있다 — 모집중 발송을 허용하면 마감 시점
-                            취소(최소 인원 미달)와 이미 발송된 물건이 모순되기 때문.
+                            등록 조건은 플로우마다 다르다 — **C2C 는 그 자리(참여)가 입금확인(CONFIRMED)되면 분철
+                            상태와 무관하게 등록할 수 있고**, LEGACY 는 분철이 진행확정(CONFIRMED)된 뒤에만
+                            등록할 수 있다(모집중 발송을 허용하면 마감 시점 취소와 이미 발송된 물건이 모순).
 
                             이미 `SHIPPING` 상태인 배송 건에 다시 호출하면 상태 전이 없이 운송장 번호만 갱신된다
                             (재등록 허용, 참여자에게 운송장 등록 알림이 다시 발송된다).
@@ -57,7 +58,8 @@ class DeliveryControllerDocsTest extends DocsTestSupport {
                             | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `trackingNumber` 누락/공백 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 분철 개최자가 아님 |
                             | 404 | `DLV-006` (`DELIVERY_NOT_FOUND`) | 존재하지 않는 배송 정보 |
-                            | 409 | `DLV-009` (`DELIVERY_BUNCHEOL_NOT_CONFIRMED`) | 분철이 아직 진행확정 전 |
+                            | 409 | `DLV-009` (`DELIVERY_BUNCHEOL_NOT_CONFIRMED`) | (LEGACY) 분철이 아직 진행확정 전 |
+                            | 409 | `DLV-007` (`DELIVERY_STATE_TRANSITION_INVALID`) | (C2C) 그 자리가 아직 입금확인 전 |
                             | 409 | `DLV-007` (`DELIVERY_STATE_TRANSITION_INVALID`) | 현재 배송 상태에서 운송장을 등록할 수 없음 |
                             """)
                         .requestHeaders(userAuthorizationHeader())

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -35,8 +36,8 @@ class BuncheolConfirmedFinalizerTest {
   private Participation participationWithBundle(final Long id, final Long bundleId) {
     Participation p = mock(Participation.class);
     // 제외된 참여는 getId 까지 안 간다 — strict stubbing 이 그걸 결함으로 오인하지 않게 lenient.
-    org.mockito.Mockito.lenient().when(p.getId()).thenReturn(id);
-    org.mockito.Mockito.lenient().when(p.getBundleId()).thenReturn(bundleId);
+    lenient().when(p.getId()).thenReturn(id);
+    lenient().when(p.getBundleId()).thenReturn(bundleId);
     return p;
   }
 
@@ -64,6 +65,39 @@ class BuncheolConfirmedFinalizerTest {
       finalizer.finalizeConfirmed(BUNCHEOL_ID);
 
       assertThat(captureEvent().participationIds()).containsExactly(12L);
+    }
+
+    // PR 본문이 보장한 성질 — 같은 사람이 발송 묶음·대기 묶음을 둘 다 가지면 대기 몫은 그대로 간다.
+    @Test
+    @DisplayName("같은 사람의 발송 묶음은 빼고 대기 묶음 몫은 남긴다")
+    void keepsWaitingBundleOfSamePerson() {
+      Participation shippedSlot = participationWithBundle(21L, 901L);
+      Participation waitingSlot = participationWithBundle(22L, 902L);
+      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(shippedSlot, waitingSlot));
+      Delivery shipped = mock(Delivery.class);
+      given(shipped.getTrackingNumber()).willReturn("111122223333");
+      given(shipped.getBundleId()).willReturn(901L);
+      given(deliveryRepository.findAllByBundleIds(List.of(901L, 902L)))
+          .willReturn(List.of(shipped));
+
+      finalizer.finalizeConfirmed(BUNCHEOL_ID);
+
+      assertThat(captureEvent().participationIds()).containsExactly(22L);
+    }
+
+    // 미연결 옛 행(bundleId null)은 발송 판정 대상이 아니다 — 알림은 그대로 간다.
+    @Test
+    @DisplayName("묶음이 없는 옛 참여는 알림 대상에 남는다")
+    void keepsLegacyRowsWithoutBundle() {
+      Participation legacyRow = participationWithBundle(31L, null);
+      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(legacyRow));
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+
+      finalizer.finalizeConfirmed(BUNCHEOL_ID);
+
+      assertThat(captureEvent().participationIds()).containsExactly(31L);
     }
 
     @Test

@@ -39,20 +39,26 @@ public class BuncheolConfirmedFinalizer {
     // 입금확인 즉시 운송장을 등록할 수 있어(DeliveryService#validateShippable), 그 참여자는 「발송되었어요」를
     // 이미 받았다 — 그 뒤에 「이제 상품 준비가 시작돼요. 발송되면 운송장과 함께 알려드릴게요」가 가면
     // 시간이 거꾸로 가는 안내가 된다.
-    Set<Long> shippedBundleIds =
-        deliveryRepository
-            .findAllByBundleIds(
-                confirmed.stream().map(Participation::getBundleId).filter(Objects::nonNull).toList())
-            .stream()
-            .filter(delivery -> delivery.getTrackingNumber() != null)
-            .map(Delivery::getBundleId)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
+    Set<Long> shippedBundleIds = shippedBundleIds(confirmed);
     List<Long> confirmedIds =
         confirmed.stream()
             .filter(p -> p.getBundleId() == null || !shippedBundleIds.contains(p.getBundleId()))
             .map(Participation::getId)
             .toList();
     eventPublisher.publishEvent(new BuncheolConfirmedEvent(buncheolId, confirmedIds));
+  }
+
+  private Set<Long> shippedBundleIds(final List<Participation> confirmed) {
+    return deliveryRepository
+        .findAllByBundleIds(
+            confirmed.stream()
+                .map(Participation::getBundleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList())
+        .stream()
+        .filter(delivery -> delivery.getTrackingNumber() != null)
+        .map(Delivery::getBundleId)
+        .collect(Collectors.toSet());
   }
 }

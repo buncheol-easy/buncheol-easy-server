@@ -219,6 +219,30 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants().get(0).dueAt()).isEqualTo(묶음기한).isNotEqualTo(DUE_AT);
     }
 
+    // 🔴 탈퇴 회원(조회에서 빠짐)은 null 이 아니라 고정 문구다 — null 로 내리면 클라 별칭 폴백이
+    // 예금주 실명을 닉네임 자리에 채운다(실명 노출 경로).
+    @Test
+    void 탈퇴한_참여자의_닉네임은_고정_문구로_내린다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation awaiting =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.AWAITING_PAYMENT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(awaiting));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      // @SQLRestriction(deleted_at IS NULL) — 탈퇴 회원은 조회 결과에서 빠진다.
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER))).willReturn(List.of());
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants().get(0).participantNickname()).isEqualTo("탈퇴한 사용자");
+    }
+
     @Test
     void 입금확인중_참여는_입금자명과_dueAt이_노출되고_계좌와_배송은_null() {
       stubBasicBuncheol(BuncheolStatus.RECRUITING);

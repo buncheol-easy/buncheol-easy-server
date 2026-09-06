@@ -55,6 +55,7 @@ public record AdminPaymentRecordResponse(
       final Instant dueAt) {
     return new AdminPaymentRecordResponse(
         view.participation().getId(),
+        // 개최 관리와 달리 null 을 유지한다 — 어드민 클라 폴백은 「참여자#id」라 실명이 샐 경로가 없다.
         view.participant() == null ? null : view.participant().getNickname().value(),
         view.participant() == null ? null : view.participant().getName(),
         view.member() == null ? null : view.member().getName(),

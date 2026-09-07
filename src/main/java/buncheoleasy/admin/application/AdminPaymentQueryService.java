@@ -73,7 +73,9 @@ public class AdminPaymentQueryService {
                         confirmedCountByBuncheolId.getOrDefault(view.buncheol().getId(), 0L),
                         ParticipationBundleDomainService.refundAccountOf(
                             bundleById, view.participation()),
-                        shippingFees.totalAmountOf(view.participation())))
+                        shippingFees.totalAmountOf(view.participation()),
+                        ParticipationBundleDomainService.dueAtOf(
+                            bundleById, view.participation(), view.buncheol().isC2c())))
             .toList();
 
     final var lastParticipation = visible.getLast().participation();

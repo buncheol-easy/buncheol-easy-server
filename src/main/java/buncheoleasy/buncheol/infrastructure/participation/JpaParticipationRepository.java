@@ -376,21 +376,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 
-  /**
-   * C2C 개최자 수동 입금확인 CAS — 입금 대기(AWAITING_PAYMENT·PAYMENT_SENT)면 기한 경과와 무관하게 CONFIRMED 로 전이한다
-   * (개최자 확인이 늦어도 유효 — docs/46 §3-6).
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Participation p "
-          + "SET p.status = :confirmedStatus, p.confirmedAt = :now, p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.status IN :payableStatuses")
-  int confirmPaymentIfPayable(
-      @Param("id") Long id,
-      @Param("payableStatuses") Collection<ParticipationStatus> payableStatuses,
-      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
-      @Param("now") Instant now);
-
   /** C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

@@ -143,6 +143,22 @@ public class ParticipationBundleDomainService {
    *
    * <p>어느 참여인지 로그에 남긴다 — 못 찍으면 예외를 보고도 할 일이 없다.
    */
+  /**
+   * 배치 조회 결과({@code findAllByParticipations})에서 이 참여의 배송지 id 를 꺼낸다. 규약은 {@link
+   * #shippingAddressIdOf(Participation)} 와 같다 — 정본은 묶음이고, 묶음이 없는 옛 행만 사본으로 폴백한다.
+   *
+   * <p>🔴 <b>목록 경로는 반드시 이쪽을 써라.</b> 단건 메서드는 {@code findById} 를 타므로 참여마다 조회가 되고,
+   * 지금 그게 안 터지는 건 앞선 배치 조회가 영속성 컨텍스트를 채워 둔 <b>우연한 호출 순서</b> 덕이다. 순서가
+   * 바뀌거나 트랜잭션 경계가 달라지면 조용히 2N 쿼리가 된다. 경고 로그도 부르는 횟수만큼 중복돼 미연결 행
+   * 건수 파악(P4 선행)이 흐려진다.
+   */
+  public static Long shippingAddressIdOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    ParticipationBundle bundle =
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId());
+    return bundle == null ? participation.getShippingAddressId() : bundle.getShippingAddressId();
+  }
+
   public Long requireShippingAddressIdOf(final Participation participation) {
     Long shippingAddressId = shippingAddressIdOf(participation);
     if (shippingAddressId == null) {
@@ -272,6 +288,88 @@ public class ParticipationBundleDomainService {
       return;
     }
     participationBundleRepository.extendDueAt(bundleId, dueAt, now);
+  }
+
+  /**
+   * 「보냈어요」 시각을 묶음에 기록한다 — <b>이 값이 정본</b>이다. 이체가 한 번이므로 신고도 한 번이다.
+   *
+   * <p>자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸이다) 그건 사본이고, 읽기가 전부 이쪽으로
+   * 옮겨진 뒤 제거한다 — 배송비·배송지와 같은 순서다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void markPaymentSent(final Long bundleId, final Instant now) {
+    if (bundleId == null) {
+      // 배포선 창에서 생긴 미연결 행 — 쓸 묶음이 없다. 사본이 폴백을 받아 준다(closeIfEmpty 와 같은 규약).
+      return;
+    }
+    if (participationBundleRepository.markPaymentSent(bundleId, now) == 0) {
+      // CAS 에 closedAt IS NULL 이 붙어 있어, 슬롯 마킹은 성공했는데 묶음 쓰기가 0행인 조합이
+      // 원리적으로 가능하다. 그 결과가 「상태는 PAYMENT_SENT 인데 정본 시각이 없는」 행이다.
+      // 조용히 넘어가면 배포 후에야 발견된다 — 시끄럽게 남긴다(attach 의 linkBundle 과 같은 규약).
+      log.warn("묶음 「보냈어요」 시각 기록이 0행이다 — 묶음이 이미 닫혔을 수 있다. bundleId={}", bundleId);
+    }
+  }
+
+  /**
+   * 이 참여의 <b>입금 기한</b> — C2C 의 정본은 묶음이다. 이체가 한 번이므로 기한도 하나다.
+   *
+   * <p>🔴 <b>C2C 한정이다.</b> LEGACY 의 자리 {@code due_at} 은 표시값이 아니라 <b>살아 있는 판정
+   * 조건</b>이다 — 수동 입금확인 CAS 의 {@code p.dueAt >= :now} 게이트와 자동 취소의
+   * {@code p.dueAt <= :now} 가 그 값을 피연산자로 쓴다. 구분 없이 묶음 값으로 바꾸면 LEGACY 수동
+   * 입금확인이 전건 실패하고 자동 취소가 조용히 멈춘다.
+   *
+   * <p>값이 비면 사본으로 폴백한다 — 「보냈어요」 시각과 같은 이유다(성사 확정 전 C2C 묶음은 기한이
+   * 아직 없고, 그 구간의 자리 값도 NULL 이라 결과가 같다).
+   */
+  public static Instant dueAtOf(
+      final ParticipationBundle bundle, final Participation participation, final boolean c2c) {
+    return !c2c || bundle == null || bundle.getDueAt() == null
+        ? participation.getDueAt()
+        : bundle.getDueAt();
+  }
+
+  /**
+   * 배치 조회 결과에서 꺼내는 형태. 목록 경로는 반드시 이쪽을 써라.
+   *
+   * <p>⚠️ 판정은 위 오버로드 <b>한 벌</b>이다 — 호출부마다 3항 연산을 흩뿌리면 규칙이 바뀔 때 한 곳만
+   * 고치고 끝난다. 그 어긋남이 곧 「화면과 문자가 다른 기한을 말하는」 상태이고, 이 이관이 없애려던
+   * 결함 그 자체다 ({@code refundAccountOf} 가 같은 이유로 같은 처방을 쓴다).
+   */
+  public static Instant dueAtOf(
+      final Map<Long, ParticipationBundle> bundleById,
+      final Participation participation,
+      final boolean c2c) {
+    return dueAtOf(
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId()),
+        participation,
+        c2c);
+  }
+
+  /**
+   * 이 참여의 「보냈어요」 시각 — 정본은 <b>묶음</b>이고, 값이 비면 사본으로 폴백한다.
+   *
+   * <p>🔴 <b>이 필드만 「값 단위」 폴백이다.</b> 배송비·배송지는 묶음을 열 때 각인되므로 모든 묶음이
+   * 값을 갖지만, 이 값은 <b>시간이 지나며 쓰인다</b> — 이관 시점에 이미 마킹돼 있던 참여는
+   * {@code bundle != null && bundle.paymentSentAt == null} 이라 「묶음 없음」 폴백을 못 탄다.
+   * 그대로 두면 배포 즉시 기존 마킹이 화면에서 전부 사라지고, 재마킹도 CAS 0행이라 <b>스스로 낫지
+   * 않는다.</b>
+   *
+   * <p>배송지에서 값 단위 폴백을 금지한 이유(묶음 값 {@code NULL} = 참조 배송지 하드 삭제라는 별개
+   * 의미)가 여기엔 <b>없다</b> — 새 쓰기는 두 칸에 같은 시각을 찍고, 반려·철회는 양쪽 모두 보존하며,
+   * 묶음 값을 {@code NULL} 로 되돌리는 경로가 없다. 사본이 정본과 다른 값을 갖는 상태 자체가 안 생긴다.
+   */
+  public static Instant paymentSentAtOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    return paymentSentAtOf(
+        participation.getBundleId() == null ? null : bundleById.get(participation.getBundleId()),
+        participation);
+  }
+
+  /** 묶음을 이미 손에 들고 있는 호출부용. 판정은 여기 한 벌뿐이다. */
+  public static Instant paymentSentAtOf(
+      final ParticipationBundle bundle, final Participation participation) {
+    return bundle == null || bundle.getPaymentSentAt() == null
+        ? participation.getPaymentSentAt()
+        : bundle.getPaymentSentAt();
   }
 
   /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */

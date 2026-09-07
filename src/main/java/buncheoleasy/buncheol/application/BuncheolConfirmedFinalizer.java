@@ -2,7 +2,12 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.DeliveryRepository;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -20,6 +25,7 @@ import org.springframework.stereotype.Component;
 public class BuncheolConfirmedFinalizer {
 
   private final ParticipationDomainService participationDomainService;
+  private final DeliveryRepository deliveryRepository;
   private final ApplicationEventPublisher eventPublisher;
 
   /**
@@ -27,10 +33,32 @@ public class BuncheolConfirmedFinalizer {
    * CANCELLED(PAYMENT_TIMEOUT) 전이·알림을 단독으로 처리해 알림 중복을 막는다.
    */
   public void finalizeConfirmed(final Long buncheolId) {
+    List<Participation> confirmed =
+        participationDomainService.findConfirmedByBuncheolId(buncheolId);
+    // 🔴 운송장이 이미 등록된 묶음은 알림 대상에서 뺀다 (2026-09-06 사용자 결정). C2C 는 진행확정 전에도
+    // 입금확인 즉시 운송장을 등록할 수 있어(DeliveryService#validateShippable), 그 참여자는 「발송되었어요」를
+    // 이미 받았다 — 그 뒤에 「이제 상품 준비가 시작돼요. 발송되면 운송장과 함께 알려드릴게요」가 가면
+    // 시간이 거꾸로 가는 안내가 된다.
+    Set<Long> shippedBundleIds = shippedBundleIds(confirmed);
     List<Long> confirmedIds =
-        participationDomainService.findConfirmedByBuncheolId(buncheolId).stream()
+        confirmed.stream()
+            .filter(p -> p.getBundleId() == null || !shippedBundleIds.contains(p.getBundleId()))
             .map(Participation::getId)
             .toList();
     eventPublisher.publishEvent(new BuncheolConfirmedEvent(buncheolId, confirmedIds));
+  }
+
+  private Set<Long> shippedBundleIds(final List<Participation> confirmed) {
+    return deliveryRepository
+        .findAllByBundleIds(
+            confirmed.stream()
+                .map(Participation::getBundleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList())
+        .stream()
+        .filter(delivery -> delivery.getTrackingNumber() != null)
+        .map(Delivery::getBundleId)
+        .collect(Collectors.toSet());
   }
 }

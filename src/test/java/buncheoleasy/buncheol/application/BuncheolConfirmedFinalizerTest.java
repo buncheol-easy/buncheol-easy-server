@@ -2,11 +2,14 @@ package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.DeliveryRepository;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -25,13 +28,77 @@ class BuncheolConfirmedFinalizerTest {
   @InjectMocks private BuncheolConfirmedFinalizer finalizer;
 
   @Mock private ParticipationDomainService participationDomainService;
+  @Mock private DeliveryRepository deliveryRepository;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   private static final Long BUNCHEOL_ID = 7L;
 
+  private Participation participationWithBundle(final Long id, final Long bundleId) {
+    Participation p = mock(Participation.class);
+    // 제외된 참여는 getId 까지 안 간다 — strict stubbing 이 그걸 결함으로 오인하지 않게 lenient.
+    lenient().when(p.getId()).thenReturn(id);
+    lenient().when(p.getBundleId()).thenReturn(bundleId);
+    return p;
+  }
+
   @Nested
   @DisplayName("진행확정 알림 발행(finalizeConfirmed)")
   class FinalizeConfirmed {
+
+    // 🔴 C2C 는 진행확정 전에도 운송장이 나갈 수 있다 — 「발송되었어요」를 받은 사람에게
+    // 「이제 준비를 시작해요」가 뒤늦게 가면 시간이 거꾸로 가는 안내다 (2026-09-06 사용자 결정).
+    @Test
+    @DisplayName("운송장이 이미 등록된 묶음의 참여는 진행확정 알림에서 뺀다")
+    void excludesAlreadyShippedBundles() {
+      Participation shipped = participationWithBundle(11L, 901L);
+      Participation waiting = participationWithBundle(12L, 902L);
+      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(shipped, waiting));
+      Delivery shippedDelivery = mock(Delivery.class);
+      given(shippedDelivery.getTrackingNumber()).willReturn("123456789012");
+      given(shippedDelivery.getBundleId()).willReturn(901L);
+      Delivery waitingDelivery = mock(Delivery.class);
+      given(waitingDelivery.getTrackingNumber()).willReturn(null);
+      given(deliveryRepository.findAllByBundleIds(List.of(901L, 902L)))
+          .willReturn(List.of(shippedDelivery, waitingDelivery));
+
+      finalizer.finalizeConfirmed(BUNCHEOL_ID);
+
+      assertThat(captureEvent().participationIds()).containsExactly(12L);
+    }
+
+    // PR 본문이 보장한 성질 — 같은 사람이 발송 묶음·대기 묶음을 둘 다 가지면 대기 몫은 그대로 간다.
+    @Test
+    @DisplayName("같은 사람의 발송 묶음은 빼고 대기 묶음 몫은 남긴다")
+    void keepsWaitingBundleOfSamePerson() {
+      Participation shippedSlot = participationWithBundle(21L, 901L);
+      Participation waitingSlot = participationWithBundle(22L, 902L);
+      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(shippedSlot, waitingSlot));
+      Delivery shipped = mock(Delivery.class);
+      given(shipped.getTrackingNumber()).willReturn("111122223333");
+      given(shipped.getBundleId()).willReturn(901L);
+      given(deliveryRepository.findAllByBundleIds(List.of(901L, 902L)))
+          .willReturn(List.of(shipped));
+
+      finalizer.finalizeConfirmed(BUNCHEOL_ID);
+
+      assertThat(captureEvent().participationIds()).containsExactly(22L);
+    }
+
+    // 미연결 옛 행(bundleId null)은 발송 판정 대상이 아니다 — 알림은 그대로 간다.
+    @Test
+    @DisplayName("묶음이 없는 옛 참여는 알림 대상에 남는다")
+    void keepsLegacyRowsWithoutBundle() {
+      Participation legacyRow = participationWithBundle(31L, null);
+      given(participationDomainService.findConfirmedByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(legacyRow));
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+
+      finalizer.finalizeConfirmed(BUNCHEOL_ID);
+
+      assertThat(captureEvent().participationIds()).containsExactly(31L);
+    }
 
     @Test
     @DisplayName("입금확인된 참여 전체를 한 이벤트에 실어 1건만 발행한다")

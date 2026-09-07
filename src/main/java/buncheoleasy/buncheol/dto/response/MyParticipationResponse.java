@@ -50,6 +50,10 @@ public record MyParticipationResponse(
     HostAccountResponse hostAccount,
     String refundHolder,
     MyParticipationDeliveryResponse delivery,
+    // 이 참여가 속한 묶음의 배송지. 입금확인 전에도 "어디로 받는지" 를 화면이 서버 값으로 그릴 수 있게 한다 —
+    // 화면이 유저의 기본 배송지로 폴백하면 「배송지 고정 · 변경 불가」 자리에 틀린 주소가 확신에 차서 뜬다.
+    // 묶음이 없는 옛 행이나 배송지가 지워진 경우 null 이므로, 화면은 null 을 "확인 중" 빈 상태로 그려야 한다.
+    RequestedShippingAddressResponse requestedShippingAddress,
     ShippingFeePaybackResponse payback,
     FlowType flowType,
     Instant paymentSentAt,

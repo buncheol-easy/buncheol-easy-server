@@ -2,10 +2,14 @@ package buncheoleasy.buncheol.domain.participation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.buncheol.domain.Buncheol;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Field;
@@ -35,6 +39,93 @@ class ParticipationDomainServiceTest {
 
   private static Participation newParticipation() {
     return Participation.create(1L, 10L, 100L, 200L, 30_000L, 0L, DUE_AT);
+  }
+
+  private static Buncheol buncheol(final boolean c2c, final BuncheolStatus status) {
+    Buncheol buncheol = mock(Buncheol.class);
+    lenient().when(buncheol.getId()).thenReturn(10L);
+    lenient().when(buncheol.isC2c()).thenReturn(c2c);
+    lenient().when(buncheol.getStatus()).thenReturn(status);
+    return buncheol;
+  }
+
+  @Nested
+  @DisplayName("상속 원본 판정 테스트")
+  class FindInheritanceSourceTest {
+
+    // 🔴 이 판정 하나를 쓰기 경로(participateSingle)와 읽기 경로(분철 상세 응답)가 공유한다.
+    // 조건을 두 벌 세우면 화면이 "이 배송지로 갑니다" 라고 약속한 주소와 서버가 실제로 각인하는 주소가
+    // 갈리고, 배송지는 updatable=false 라 되돌릴 수 없다. 그래서 게이트를 여기서 검증한다.
+    @Test
+    void C2C_모집중이면_내_첫_활성_참여를_상속_원본으로_준다() {
+      Participation mine = newParticipation();
+      given(participationRepository.findActiveByBuncheolId(10L)).willReturn(List.of(mine));
+
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.RECRUITING), mine.getParticipantId()))
+          .contains(mine);
+    }
+
+    // 🔴 게이트가 둘인데 하나(RECRUITING)만 넣었다가 실제로 터진 버그다. LEGACY 는 1인 1활성슬롯이라
+    // 묶음 재사용이 구조적으로 없고(attach(.., null, ..)) 추가 신청 자체가 막히는데, 상속 원본을 주면
+    // 화면이 「이 주소로 함께 배송 · 변경 불가」를 그린다 — 서버에 그 약속을 이행할 경로가 없다.
+    @Test
+    void LEGACY_는_모집중이어도_상속하지_않는다() {
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(false, BuncheolStatus.RECRUITING), 100L))
+          .isEmpty();
+
+      then(participationRepository).shouldHaveNoInteractions();
+    }
+
+    // 이미 읽어 둔 목록으로 판정하는 오버로드도 <b>같은</b> 게이트를 통과해야 한다.
+    // 게이트를 한쪽에만 넣으면 조회를 아끼려다 판정이 갈린다.
+    @Test
+    void 목록을_넘겨받는_경로도_같은_게이트를_쓴다() {
+      Participation mine = newParticipation();
+
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.RECRUITING), mine.getParticipantId(), List.of(mine)))
+          .contains(mine);
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(false, BuncheolStatus.RECRUITING), mine.getParticipantId(), List.of(mine)))
+          .isEmpty();
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.PAYMENT_COLLECTING),
+                  mine.getParticipantId(),
+                  List.of(mine)))
+          .isEmpty();
+      // 조회는 한 번도 나가지 않는다 — 이 오버로드의 존재 이유다.
+      then(participationRepository).shouldHaveNoInteractions();
+    }
+
+    // 성사 확정 뒤 추가 모집은 별도 이체·별도 택배다 (docs/80 결정 11).
+    // 🔴 <b>조회 자체를 하지 않는다</b> — 추가 모집에서 상속은 구조적으로 불가능하므로 헛쿼리다.
+    @Test
+    void 추가_모집이면_조회도_하지_않고_비어_있다() {
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.PAYMENT_COLLECTING), 100L))
+          .isEmpty();
+
+      then(participationRepository).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 모집중이어도_내_활성_참여가_없으면_비어_있다() {
+      given(participationRepository.findActiveByBuncheolId(10L))
+          .willReturn(List.of(newParticipation()));
+
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.RECRUITING), 999L))
+          .isEmpty();
+    }
   }
 
   @Nested

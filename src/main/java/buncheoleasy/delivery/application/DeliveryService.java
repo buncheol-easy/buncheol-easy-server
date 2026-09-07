@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -32,9 +33,11 @@ public class DeliveryService {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
 
     // 참여 → 분철 → 개최자 검증
-    Buncheol buncheol = getBuncheolOf(delivery);
+    Participation participation =
+        participationDomainService.getParticipation(delivery.getParticipationId());
+    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
     buncheol.validateOwner(hostId);
-    validateBuncheolConfirmed(buncheol);
+    validateShippable(buncheol, participation);
 
     // 웹훅 자동 전이(DELIVERED/RECEIVED)와 겹칠 수 있으므로 전이는 CAS 로만 한다. 위에서 조회한
     // 엔티티는 검증용 데이터 홀더일 뿐 in-memory 로 바꾸지 않는다 (더티체킹 + CAS 혼용 금지).
@@ -47,23 +50,41 @@ public class DeliveryService {
   public void registerTrackingByAdmin(final Long deliveryId, final String trackingNumber) {
     Delivery delivery = deliveryDomainService.getDelivery(deliveryId);
 
-    validateBuncheolConfirmed(getBuncheolOf(delivery));
+    Participation adminPathParticipation =
+        participationDomainService.getParticipation(delivery.getParticipationId());
+    validateShippable(
+        buncheolDomainService.getBuncheol(adminPathParticipation.getBuncheolId()),
+        adminPathParticipation);
 
     deliveryDomainService.registerTracking(deliveryId, trackingNumber, Instant.now(clock));
     eventPublisher.publishEvent(new TrackingRegisteredEvent(deliveryId));
   }
 
-  private Buncheol getBuncheolOf(final Delivery delivery) {
-    Participation participation =
-        participationDomainService.getParticipation(delivery.getParticipationId());
-    return buncheolDomainService.getBuncheol(participation.getBuncheolId());
-  }
-
-  // 운송장 등록(발송 시작)은 분철 진행확정(CONFIRMED) 후에만 허용한다. 모집중 발송을 허용하면 마감 시점 최소 인원
-  // 미달로 분철이 취소될 때 이미 발송된 물건과 환불·배송 스냅샷 정리(취소 cascade)가 모순되기 때문이다. 관리자 경로도
-  // 동일하게 막아 "모집중엔 배송중 참여가 없다"는 불변식을 보장한다. CONFIRMED 는 이후 RECRUITING 으로 되돌아가지
-  // 않으므로 check-then-act 갭이 없다.
-  private void validateBuncheolConfirmed(final Buncheol buncheol) {
+  /**
+   * 발송을 시작해도 되는지 — 플로우마다 규칙이 다르다.
+   *
+   * <p><b>C2C 는 그 자리의 입금확인만 본다</b> (2026-09-05 사용자 결정 — 다른 자리 상태와 무관).
+   * 「이미 보낸 물건이 있는데 분철이 나중에 취소되는」 모순이 C2C 엔 구조적으로 없기 때문이다:
+   * 입금확인이 1건이라도 있으면 개최자 취소가 {@code BLOCKED_BY_CONFIRMED_PAYMENT} 로 막히고,
+   * {@code PAYMENT_COLLECTING} 의 자동취소({@code cancelIfCollectingAndEmpty})는 <b>활성 참여가
+   * 0건일 때만</b> 도는데 입금확인된 참여는 {@code ParticipationStatus.ACTIVE} 에 포함되므로
+   * 배송이 있는 분철에는 성립하지 않는다.
+   *
+   * <p>「배송이 존재한다 = 그 자리는 입금확인됐다」를 암묵 전제로 두지 않고 여기서 직접 확인한다 —
+   * 생성 경로가 {@code DeliverySnapshotCreator} 하나라는 사실에 기대면, P4(묶음 단위 배송 승격)나
+   * 백필로 구조가 바뀌는 순간 조용히 fail-open 이 된다.
+   *
+   * <p><b>LEGACY 는 분철 진행확정(CONFIRMED)을 요구한다.</b> 마감 판정에서 최소 인원 미달이면
+   * 입금확인된 자리가 있어도 CANCELLED 로 가므로 위 모순이 실재한다. CONFIRMED 는 이후
+   * RECRUITING 으로 되돌아가지 않으므로 check-then-act 갭이 없다.
+   */
+  private void validateShippable(final Buncheol buncheol, final Participation participation) {
+    if (buncheol.isC2c()) {
+      if (participation.getStatus() != ParticipationStatus.CONFIRMED) {
+        throw new BusinessException(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+      }
+      return;
+    }
     if (buncheol.getStatus() != BuncheolStatus.CONFIRMED) {
       throw new BusinessException(ErrorCode.DELIVERY_BUNCHEOL_NOT_CONFIRMED);
     }

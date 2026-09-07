@@ -35,11 +35,16 @@ import java.time.Instant;
  *
  * <p><b>계좌 노출 범위</b>(docs/70 결정 21) — 개최자가 통장을 대조하는 데 필요한 것은 <b>입금자명뿐</b>이므로 평시에는 {@code
  * depositorName} 만 내리고 {@code refundAccount} 는 {@code null} 이다. 계좌번호는 <b>개최자가 실제로 환불해야 하는 건</b>, 즉
- * 취소분 중 입금 흔적(마킹·입금확인)이 있는 건에만 채운다 — 직거래라 환불 주체가 개최자다.
+ * 취소분 중 <b>개최자가 입금확인한</b> 건에만 채운다 — 직거래라 환불 주체가 개최자다.
+ * 「보냈어요」 마킹은 참여자 자기신고라 근거가 되지 않는다(안 낸 사람이 눌러도 찍힌다).
  *
  * <p>{@code amount} 는 <b>배송비를 포함한 입금 총액</b>이고 {@code shippingFee} 는 그중 배송비다. 배송비는 <b>묶음당 1회</b>라
  * 같은 묶음의 두 번째 슬롯은 0 이고, 참여자별 총액이 서로 달라진다 — 합계만 보면 개최자가 그 차이를 설명할 수 없다 (docs/53 Q-22).
  * ⚠️ 성사 확정 후 추가 모집은 <b>새 묶음</b>이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다.
+  *
+ * <p>{@code participantNickname} 은 <b>항상 채워진다</b> — 탈퇴(soft delete) 회원은 조회에서 빠지므로
+ * 「탈퇴한 사용자」 고정 문구로 내린다. 클라는 null 폴백을 둘 필요가 없다(두면 별칭 폴백이 예금주
+ * 실명을 닉네임 자리에 채우는, 실명이 새는 경로가 된다).
  */
 public record BuncheolManagementParticipantResponse(
     Long participationId,

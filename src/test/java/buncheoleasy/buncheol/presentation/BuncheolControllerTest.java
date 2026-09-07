@@ -41,6 +41,7 @@ import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.ManagementDeliveryResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
@@ -881,7 +882,12 @@ class BuncheolControllerTest {
                   1,
                   List.of(
                       new MyParticipationItemResponse(
-                          601L, 101L, ParticipationStatus.AWAITING_PAYMENT))), FlowType.LEGACY, null, null);
+                          601L, 101L, ParticipationStatus.AWAITING_PAYMENT)),
+                  true,
+                  new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점")),
+              FlowType.LEGACY,
+              null,
+              null);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc

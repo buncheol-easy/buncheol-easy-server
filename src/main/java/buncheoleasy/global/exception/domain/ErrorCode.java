@@ -169,8 +169,9 @@ public enum ErrorCode {
   BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
       "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
   // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등
-  // C2C 전용 액션 6곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서 엉뚱한
-  // 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
+  // C2C 전용 액션 <b>8곳</b>이 공유하므로(BuncheolService 2 · ParticipationService 3 ·
+  // ParticipationBundleService 3, 2026-09-03 실측), 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
+  // 엉뚱한 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
   PARTICIPATION_CANCEL_NOT_SUPPORTED(
       "BCH-091",
       "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
@@ -239,6 +240,13 @@ public enum ErrorCode {
       "BCH-115", "그 사이 참여 구성이 바뀌었어요. 새로고침 후 다시 확인해 주세요.", HttpStatus.CONFLICT),
   BUNDLE_CONFIRM_NOT_ALLOWED(
       "BCH-116", "입금 확인할 참여가 없어요. 이미 확인되었거나 취소된 참여입니다.", HttpStatus.CONFLICT),
+  // 범용 플로우 가드(BCH-084)와 분리한다 — 이 코드를 실제로 보는 사람은 어드민 대시보드에서 C2C 행을
+  // 고른 <b>운영자</b>이고(C2C 행을 쿼리에서 걸러 내지 않기로 했다), 그 사람에게 필요한 것은 "지원하지
+  // 않는다"가 아니라 <b>어디로 가야 하는가</b>다. BCH-090 을 BCH-085 에서 분리한 것과 같은 이유다.
+  BUNDLE_CONFIRM_REQUIRED(
+      "BCH-117",
+      "회원 개최 분철은 참여 묶음 단위로만 입금 확인할 수 있어요. 묶음 화면에서 한 번에 확인해 주세요.",
+      HttpStatus.CONFLICT),
   
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

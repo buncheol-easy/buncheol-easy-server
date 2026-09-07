@@ -3,7 +3,9 @@ package buncheoleasy.notification.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.user.domain.User;
+import java.time.Instant;
 
 /**
  * 알림 변수 조립에 필요한 참여 단건 스냅샷. {@code paymentAmount} 는 멤버 금액 + 배송비(실제 입금액).
@@ -18,4 +20,18 @@ public record ParticipationView(
     String memberName,
     User participant,
     User host,
-    long paymentAmount) {}
+    long paymentAmount) {
+
+  /**
+   * 알림톡에 실을 <b>입금 기한</b>. C2C 의 정본은 묶음이다 — 이체가 한 번이므로 기한도 하나다.
+   *
+   * <p>🔴 화면과 문자가 <b>같은 값</b>을 말해야 한다. 응답만 묶음으로 옮기고 여기를 두면, 참여자가
+   * 방금 받은 문자와 화면이 서로 다른 기한을 말한다.
+   *
+   * <p>LEGACY 는 자리 값 그대로다 — 그쪽에서는 이 값이 표시값이 아니라 수동 입금확인·자동 취소의
+   * 판정 조건이다.
+   */
+  public Instant paymentDueAt() {
+    return ParticipationBundleDomainService.dueAtOf(bundle, participation, buncheol.isC2c());
+  }
+}

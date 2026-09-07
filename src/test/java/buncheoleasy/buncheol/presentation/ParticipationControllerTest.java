@@ -30,6 +30,7 @@ import buncheoleasy.buncheol.dto.response.MyParticipationResponse;
 import buncheoleasy.buncheol.dto.response.ParticipationDetailResponse;
 import buncheoleasy.buncheol.dto.response.RefundAccountResponse;
 import buncheoleasy.buncheol.dto.response.ShippingFeePaybackResponse;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -281,6 +282,7 @@ class ParticipationControllerTest {
               null,
               new MyParticipationDeliveryResponse(
                   900L, ShippingMethod.GS25_HALF, "GS25 강남점", "1234567890", DeliveryStatus.SHIPPING),
+              new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점"),
               new ShippingFeePaybackResponse(
                   PaybackStatus.NONE,
                   null,

@@ -9,6 +9,7 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
@@ -45,12 +46,17 @@ import org.springframework.transaction.annotation.Transactional;
  * 단일 응답으로 조립한다. 입금확인·환불은 운영자가 이 화면을 보고 처리한다. 취소된 참여는 슬롯을 점유하지 않아 참여자 목록과 분리해 담는다.
  *
  * <p><b>계좌는 평시에 내려가지 않는다</b> — 통장 대조에 필요한 것은 입금자명뿐이라 활성 참여에는 {@code depositorName} 만 붙고,
- * 계좌번호는 개최자가 실제로 환불해야 하는 건(취소분 중 입금 흔적이 있는 것)에만 채운다 ({@link #refundAccountFor}).
+ * 계좌번호는 개최자가 실제로 환불해야 하는 건(취소분 중 <b>입금확인을 거친 것</b>)에만 채운다
+ * ({@link #refundAccountFor}).
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class BuncheolManagementQueryService {
+
+  // 🔴 문구 안의 공백이 안전장치다 — Nickname 은 ^[가-힣a-zA-Z0-9]+$ 로 공백을 막으므로 이 값은
+  // 실사용자 닉네임과 절대 충돌하지 않는다. 공백 없는 문구로 다듬는 순간 그 구분이 사라진다.
+  static final String WITHDRAWN_PARTICIPANT_NICKNAME = "탈퇴한 사용자";
 
   private final BuncheolRepository buncheolRepository;
   private final BuncheolMemberRepository buncheolMemberRepository;
@@ -215,8 +221,12 @@ public class BuncheolManagementQueryService {
         ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
     // 🔴 <b>입금확인된 슬롯만</b> 배송을 문다. 배송은 이제 묶음에 붙어 있어(택배 1개 = 묶음 1개) 같은
     // 묶음의 미입금 슬롯도 키가 맞는데, 그대로 물리면 <b>입금하지도 않은 슬롯에 "배송중" 과 운송장</b>이
-    // 뜬다. 한 묶음에 확정·미확정이 섞이는 건 실제로 도달 가능하다 — 슬롯 단위 입금확인
-    // ({@code ParticipationService#confirmPayment})과 어드민 벌크 확인(건별 트랜잭션 순회)이 열려 있다.
+    // 뜬다.
+    //
+    // ⚠️ <b>이 가드를 지우지 마라.</b> 슬롯 단위 입금확인·어드민 벌크가 만들던 혼합 묶음은 막혔지만
+    // (ParticipationService#requireLegacy), 그게 이 가드를 불필요하게 만들지 않는다 — <b>취소된 슬롯</b>이
+    // 남는다. 한 명이 취소하고 다른 명이 확정된 묶음에서 취소분까지 배송을 물면 같은 문제가 그대로다.
+    // 즉 근거는 "혼합 확정이 가능해서"가 아니라 "확정되지 않은 슬롯은 언제나 존재할 수 있어서"다.
     //
     // ⚠️ 맵을 조회하기 전에 null 도 걸러야 한다 — 취소분 렌더링은 Map.of() 를 넘기는데, 불변 맵은
     // null 키 조회에서 NPE 다. (ShippingFeeAttribution 과 같은 함정)
@@ -232,18 +242,24 @@ public class BuncheolManagementQueryService {
         participation.getId(),
         participation.getBundleId(),
         participation.getParticipantId(),
-        participant == null ? null : participant.getNickname().value(),
+        // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다. null 로 내리면 클라 파서가
+        // 별칭 폴백을 훑다 예금주 실명(depositorName)을 닉네임 자리에 채운다 — 고정 문구로 막는다.
+        participant == null
+            ? WITHDRAWN_PARTICIPANT_NICKNAME
+            : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
         depositorNameOf(participation, refundAccount, c2c, paymentAmount),
         paymentAmount,
         shippingFees.shippingFeeOf(participation),
         participation.getStatus(),
-        participation.getDueAt(),
+        // C2C 의 입금 기한 정본은 묶음이다(이체 1회 = 기한 1개). LEGACY 는 자리 값이 판정 조건이라 그대로다.
+        ParticipationBundleDomainService.dueAtOf(bundleById, participation, c2c),
         participation.getConfirmedAt(),
         refundAccountFor(participation, refundAccount, c2c, paymentAmount),
         delivery == null ? null : ManagementDeliveryResponse.from(delivery),
-        participation.getPaymentSentAt(),
+        // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
+        ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
         participation.getBundleId() == null
             ? null
             : releasabilityByBundleId.get(participation.getBundleId()),
@@ -297,10 +313,14 @@ public class BuncheolManagementQueryService {
 
   /**
    * 개최자에게 내려줄 환불 계좌 (docs/70 결정 21). 통장 대조에 필요한 것은 입금자명뿐이라 평시에는 계좌를 내리지 않는다. 계좌번호가 필요한
-   * 유일한 상황은 <b>개최자가 직접 환불해야 하는 건</b>이고, 그건 취소분 중 입금 흔적이 남은 건뿐이다.
+   * 유일한 상황은 <b>개최자가 직접 환불해야 하는 건</b>이고, 그건 취소분 중 <b>입금확인을 거친</b> 건뿐이다.
    *
-   * <p>판정 키({@code paymentSentAt} 또는 {@code confirmedAt})는 개최 관리 화면의 "환불이 필요한 참여" 목록 필터와 같은
-   * 기준이다 — 둘이 갈리면 목록에는 뜨는데 계좌가 비는 행이 생긴다.
+   * <p>판정 키는 {@code confirmedAt} <b>하나</b>다. 개최 관리 화면의 "환불이 필요한 참여" 목록 필터가
+   * 같은 키를 써야 한다 — 갈리면 목록에는 뜨는데 계좌가 비는 행이 생긴다.
+   *
+   * <p>이건 새 규칙이 아니라 <b>운영자 화면과 축을 맞추는 것</b>이다 — {@code AdminPaymentStatus.from} 은
+   * 처음부터 {@code confirmedAt} 단독으로 {@code REFUND_REQUIRED} 를 판정해 왔다. 두 화면의 환불 대상
+   * 정의가 갈려 있었고, 앞으로 한쪽만 바꾸면 다시 갈린다.
    */
   private static RefundAccountResponse refundAccountFor(
       final Participation participation,
@@ -318,12 +338,37 @@ public class BuncheolManagementQueryService {
     // 이제는 계좌가 채워져 있어 이 조건이 없으면 취소 시 개최자에게 계좌번호까지 내려간다 — 0원 코드 참여는 생성 즉시
     // CONFIRMED 라 취소되면 아래 뒷 조건을 항상 만족한다.
     // C2C 를 제외하는 이유는 depositorNameOf 와 같다(슬롯 판정 ≠ 묶음 판정). 게다가 FE 의 "환불이 필요한 참여"
-    // 목록 필터에는 금액 조건이 없어(HostedBuncheolManage.tsx — confirmedAt||paymentSentAt), C2C 0원 취소분을
-    // 여기서 지우면 목록에는 뜨는데 계좌가 비는 행이 된다 — 아래 판정 키 규약이 경고하는 바로 그 상태다.
+    // 목록 필터에는 <b>금액 조건이 없어</b>, C2C 0원 취소분을 여기서 지우면 목록에는 뜨는데 계좌가 비는
+    // 행이 된다 — 아래 판정 키 규약이 경고하는 바로 그 상태다.
+    // ⚠️ 이 가드의 근거는 <b>금액</b>이지 판정 키가 아니다. 판정 키가 confirmedAt 단독으로 좁아져도
+    // 이 줄은 그대로 필요하다 — 지우면 0원 코드 참여의 계좌번호가 취소 시 개최자에게 내려간다.
     if (!c2c && paymentAmount == 0) {
       return false;
     }
-    return participation.getStatus() == ParticipationStatus.CANCELLED
-        && (participation.getPaymentSentAt() != null || participation.getConfirmedAt() != null);
+    // 🔴 <b>「돈이 들어왔다」의 유일한 증거는 개최자의 입금확인이다.</b> 「보냈어요」는 참여자가 누르는
+    // 자기신고라 통장 대조를 거치지 않는다 — 한 푼도 안 낸 사람이 눌러도 시각이 찍히고, 기한이 지나
+    // 「제외」되면 <b>그 사람 계좌가 개최자에게 노출</b>된다. 개최자가 착각해 송금할 수도 있다.
+    //
+    // 약관도 같은 선을 긋는다 — "성사 확정 전에 취소되거나 입금 기한 내에 입금하지 않으면 <b>입금이
+    // 없었으므로 환불 절차가 없다</b>", "이미 입금한 뒤 취소되면 개최자에게 반환을 요구할 수 있다".
+    // 실제로 보냈는데 확인을 못 받은 경우는 약관이 "개최자에게 반환 요구 → 고객문의" 경로로 이미 정해 뒀다.
+    //
+    // ⚠️ LEGACY 는 영향이 없다. markPaymentSent 가 requireC2c 가드로 막혀 있어 LEGACY 행의
+    // payment_sent_at 은 구조적으로 항상 NULL 이다(prod 42건·staging 48건 전건 실측). 즉 LEGACY 는
+    // 이미 실질적으로 confirmedAt 하나로 판정하고 있었다.
+    if (participation.getStatus() != ParticipationStatus.CANCELLED) {
+      return false;
+    }
+    // 🔴 참여자가 스스로 뺀 건은 <b>구조적으로</b> 돌려줄 돈이 없다. 자발 취소는 APPLIED·AWAITING_PAYMENT
+    // 에서만 열리므로(ParticipationCancellability) confirmedAt 이 있을 수 없다 — 즉 아래 시각 검사만으로도
+    // 이미 걸러진다. 그래도 축을 명시하는 이유는 <b>왜 걸러지는지</b>가 코드에 남아야 하기 때문이다.
+    // 시각은 "언제" 를 말하지 "누가 왜" 를 말하지 않는다.
+    ParticipationCancelReason reason = participation.getCancelReason();
+
+    if (reason != null && reason.isCancelledByParticipant()) {
+      return false;
+    }
+    // 「돈이 들어왔다」의 유일한 증거는 개최자의 입금확인이다.
+    return participation.getConfirmedAt() != null;
   }
 }

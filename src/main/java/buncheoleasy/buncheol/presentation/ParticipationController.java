@@ -46,8 +46,13 @@ public class ParticipationController {
   }
 
   /**
-   * 개최자 수동 입금확인 API. LEGACY 는 입금확인중(AWAITING_PAYMENT) 참여를 입금 기한 내에, C2C 는 보냈어요(PAYMENT_SENT) 포함
-   * 기한 경과와 무관하게 CONFIRMED 로 전환한다 (docs/46 §4.3).
+   * 개최자 수동 입금확인 API — <b>LEGACY(운영진 개최) 전용</b>. 입금확인중(AWAITING_PAYMENT) 참여를 입금 기한 내에
+   * CONFIRMED 로 전환한다 (docs/46 §4.3).
+   *
+   * <p>🔴 <b>C2C 는 409(BUNCHEOL_FLOW_NOT_SUPPORTED) 다.</b> C2C 의 돈 단위는 참여 한 건이 아니라 묶음이라
+   * (이체 1회·배송비 1회·택배 1개) 확정도 묶음 통째로여야 한다 — {@code POST
+   * /v1/participation-bundles/{bundleId}/confirm} 을 쓴다. 슬롯 하나만 확정된 혼합 묶음은 「제외」·자동만료·
+   * 「입금 수집 종료」·묶음 확정이 동시에 닫혀 되살릴 수 없다.
    */
   @PostMapping("/{participationId}/confirm")
   public ResponseEntity<Void> confirmPayment(

@@ -399,16 +399,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public boolean confirmPaymentIfPayable(final Long participationId, final Instant now) {
-    return jpaParticipationRepository.confirmPaymentIfPayable(
-            participationId,
-            Set.of(ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT),
-            ParticipationStatus.CONFIRMED,
-            now)
-        > 0;
-  }
-
-  @Override
   public int startPaymentCollecting(final Long buncheolId, final Instant dueAt, final Instant now) {
     return jpaParticipationRepository.startPaymentCollecting(
         buncheolId,

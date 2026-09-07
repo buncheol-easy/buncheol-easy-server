@@ -62,6 +62,20 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       @Param("dueAt") Instant dueAt,
       @Param("now") Instant now);
 
+  /**
+   * 「보냈어요」 시각을 묶음에 기록한다 — <b>이 값이 정본</b>이다. 이체가 한 번이므로 신고도 한 번이다.
+   *
+   * <p>자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸이다) 그건 사본이고, 읽기가 전부 이쪽으로
+   * 옮겨진 뒤 제거한다 — 배송비·배송지와 같은 순서다.
+   *
+   * <p>재마킹(더블탭·부분 마킹)에서도 덮어쓴다. 자리 칸이 이미 "가장 최근 신고 시각" 이라 의미를 맞춘다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.paymentSentAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :bundleId AND b.closedAt IS NULL")
+  int markPaymentSent(@Param("bundleId") Long bundleId, @Param("now") Instant now);
+
   /** 성사 확정 시 기한 없이 열려 있던 활성 묶음에 입금 기한을 채운다. 이미 채워진 묶음은 건드리지 않는다. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

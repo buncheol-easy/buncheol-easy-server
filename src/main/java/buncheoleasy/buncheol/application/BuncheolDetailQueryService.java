@@ -15,6 +15,11 @@ import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberSaleStatus;
 import buncheoleasy.buncheol.dto.response.MyParticipationItemResponse;
 import buncheoleasy.buncheol.dto.response.MyParticipationSummaryResponse;
+import buncheoleasy.user.domain.shipping.ShippingAddressRepository;
+import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -25,6 +30,7 @@ import buncheoleasy.group.domain.member.GroupMemberRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -42,6 +48,9 @@ public class BuncheolDetailQueryService {
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final ParticipationDomainService participationDomainService;
+  private final ParticipationBundleDomainService participationBundleDomainService;
+  private final ShippingAddressRepository shippingAddressRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -93,6 +102,13 @@ public class BuncheolDetailQueryService {
 
     // 공석 슬롯을 "신청 가능"으로 내릴지의 기준 — 참여 가드와 같은 도메인 술어를 쓴다 (docs/53 Q-14).
     boolean openForNewParticipation = buncheol.acceptsNewParticipation(Instant.now(clock));
+    // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 그 값이 「제외」 게이트가 보는 값이고,
+    // 카드 계약이 "이 시각이 지나면 슬롯이 공석으로 풀린다" 이기 때문이다. 배치 1회로 붙인다.
+    // LEGACY 는 dueAtOf 가 조기 반환이라 이 맵을 한 번도 읽지 않는다. 공개 엔드포인트라 헛쿼리를 안 낸다.
+    Map<Long, ParticipationBundle> bundleById =
+        buncheol.isC2c()
+            ? participationBundleDomainService.findAllByParticipations(activeParticipations)
+            : Map.of();
     List<BuncheolMemberDetailResponse> memberResponses =
         buncheolMembers.stream()
             .map(
@@ -101,6 +117,8 @@ public class BuncheolDetailQueryService {
                         bm,
                         groupMemberByGroupMemberId,
                         activeByMemberId,
+                        bundleById,
+                        buncheol.isC2c(),
                         openForNewParticipation,
                         userId))
             .toList();
@@ -120,7 +138,9 @@ public class BuncheolDetailQueryService {
                             && userId.equals(p.getParticipantId()))
                 .toList();
     MyParticipationSummaryResponse myParticipation =
-        userId == null ? null : toMyParticipation(myActiveParticipations);
+        userId == null
+            ? null
+            : toMyParticipation(buncheol, userId, myActiveParticipations, activeParticipations);
     boolean hostedByMe = userId != null && buncheol.isHost(userId);
 
     // 오픈채팅 링크는 개최자·활성 참여자에게만 싣는다. 이 조회는 비로그인도 열려 있어서
@@ -161,6 +181,8 @@ public class BuncheolDetailQueryService {
       final BuncheolMember buncheolMember,
       final Map<Long, GroupMember> groupMemberByGroupMemberId,
       final Map<Long, Participation> activeByMemberId,
+      final Map<Long, ParticipationBundle> bundleById,
+      final boolean c2c,
       final boolean openForNewParticipation,
       final Long userId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
@@ -174,7 +196,9 @@ public class BuncheolDetailQueryService {
         groupMember == null ? null : groupMember.getImage(),
         buncheolMember.getPrice(),
         saleStatus,
-        saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT ? active.getDueAt() : null,
+        saleStatus == BuncheolMemberSaleStatus.AWAITING_PAYMENT
+            ? ParticipationBundleDomainService.dueAtOf(bundleById, active, c2c)
+            : null,
         // 슬롯을 점유한 참여가 있을 때만 true. 취소 참여를 제외해 "공석인데 내 참여" 조합이 생기지 않게 한다
         // (findActiveByBuncheolId 가 활성만 주므로 실제로는 도달하지 않는 방어 조건).
         isMine(active, userId));
@@ -198,7 +222,8 @@ public class BuncheolDetailQueryService {
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
       case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
-      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정 — 단 만료 면제라 dueAt 카운트다운은 노출하지 않는다.
+      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정. AWAITING_PAYMENT 로 접히므로 기한도 함께 뜨는데,
+      // 「제외」 게이트가 CONFIRMED 만 막고 PAYMENT_SENT 는 뺄 수 있어 "이 시각이 지나면 풀린다" 가 맞다.
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
@@ -221,7 +246,10 @@ public class BuncheolDetailQueryService {
   }
 
   private MyParticipationSummaryResponse toMyParticipation(
-      final List<Participation> myActiveParticipations) {
+      final Buncheol buncheol,
+      final Long userId,
+      final List<Participation> myActiveParticipations,
+      final List<Participation> activeParticipations) {
     List<MyParticipationItemResponse> items =
         myActiveParticipations.stream()
             .map(
@@ -229,6 +257,20 @@ public class BuncheolDetailQueryService {
                     new MyParticipationItemResponse(
                         p.getId(), p.getBuncheolMemberId(), p.getStatus()))
             .toList();
-    return new MyParticipationSummaryResponse(items.size(), items);
+    // 🔴 상속 원본을 <b>한 번만</b> 뽑아 두 필드가 같은 판정에서 나오게 한다. 따로 계산하면
+    // "상속인데 주소는 null" 과 "상속이 아니라 null" 이 갈릴 수 있고, 그 둘은 화면에서 정반대의 UI 다.
+    Optional<Participation> inheritanceSource =
+        participationDomainService.findInheritanceSource(buncheol, userId, activeParticipations);
+    return new MyParticipationSummaryResponse(
+        items.size(),
+        items,
+        inheritanceSource.isPresent(),
+        inheritanceSource
+            .map(participationBundleDomainService::shippingAddressIdOf)
+            .flatMap(shippingAddressRepository::findById)
+            .map(RequestedShippingAddressResponse::from)
+            .orElse(null));
   }
+
+
 }

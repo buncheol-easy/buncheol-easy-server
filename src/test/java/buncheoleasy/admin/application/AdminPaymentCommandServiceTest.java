@@ -71,6 +71,29 @@ class AdminPaymentCommandServiceTest {
                   ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID.getMessage()));
     }
 
+    // 🔴 이 서비스가 C2C 에 가장 위험한 지점이다 — 건별 독립 트랜잭션이라 중간이 실패해도 앞 건은
+    // 이미 커밋됐다. 운영자가 목록에서 C2C 행을 섞어 고르면 그 자리에서 되살릴 수 없는 혼합 묶음이
+    // 생겼다. 이제 C2C 는 서비스 가드에 막혀 실패 목록에 담기고, 같은 배열의 LEGACY 건은 정상 성공한다.
+    // 어드민 목록에서 C2C 행을 쿼리로 걸러 내지 않기로 했으므로 운영자는 이 코드를 실제로 보게 된다 —
+    // 그래서 범용 BCH-084 가 아니라 "묶음 화면에서 확인하라"고 말하는 전용 코드여야 한다.
+    @Test
+    void C2C_건은_실패로_모으고_같은_배열의_LEGACY_건은_정상_확인한다() {
+      willDoNothing().given(participationService).confirmPaymentByAdmin(1L);
+      willThrow(new BusinessException(ErrorCode.BUNDLE_CONFIRM_REQUIRED))
+          .given(participationService)
+          .confirmPaymentByAdmin(2L);
+
+      AdminBulkResultResponse result = adminPaymentCommandService.confirmPayments(List.of(1L, 2L));
+
+      assertThat(result.succeededIds()).containsExactly(1L);
+      assertThat(result.failures())
+          .containsExactly(
+              new AdminBulkResultResponse.Failure(
+                  2L,
+                  ErrorCode.BUNDLE_CONFIRM_REQUIRED.getCode(),
+                  ErrorCode.BUNDLE_CONFIRM_REQUIRED.getMessage()));
+    }
+
     @Test
     void 중복된_참여_ID는_한_번만_처리한다() {
       // given

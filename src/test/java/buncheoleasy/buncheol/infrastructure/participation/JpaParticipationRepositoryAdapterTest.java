@@ -717,6 +717,83 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(participationRepository.existsActiveByShippingAddressId(bundleAddr)).isTrue();
     }
 
+    // 🔴 이 가드가 고치는 결함의 본체 — CONFIRMED 는 종착 상태라 무조건 막으면 배송까지 받은
+    // 참여가 배송지를 「영원히」 잠근다(5개 상한과 결합해 새 배송지를 못 넣게 된다).
+    // 옛 쿼리(활성 4상태 무조건)로는 이 테스트가 실패한다 — 그 자체가 돌연변이 검증이다.
+    @Test
+    void 배송이_끝난_확정_참여만_남으면_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "완주매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "RECEIVED");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isFalse();
+    }
+
+    @Test
+    void 배송이_아직_안_끝난_확정_참여는_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "배송중매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "SHIPPING");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    // 배송 행이 아예 없는 CONFIRMED 는 fail-closed 로 막는다 — NOT EXISTS 가 참이 된다.
+    @Test
+    void 배송_행이_없는_확정_참여는_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "배송행없음매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    /** 그 참여의 묶음에 배송 스냅샷을 붙인다 — 가드가 배송을 묶음(bundle_id)으로 찾기 때문. */
+    private void insertDeliveryOnBundle(final Long participationId, final String deliveryStatus) {
+      jdbcTemplate.update(
+          "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
+              + " receiver_nickname, receiver_phone_number, status)"
+              + " SELECT p.id, p.bundle_id, 'GS25_HALF', '매장', '닉', '01012345678', ?"
+              + " FROM participations p WHERE p.id = ?",
+          deliveryStatus,
+          participationId);
+    }
+
     /** 묶음을 만들어 붙이고 그 묶음에 배송지를 심는다. */
     private void attachBundleWithAddress(final Long participationId, final Long addressId) {
       jdbcTemplate.update(

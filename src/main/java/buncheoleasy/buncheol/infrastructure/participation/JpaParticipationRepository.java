@@ -65,14 +65,26 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
    *
    * <p>판정 축은 묶음의 {@code closed_at} 이 아니라 <b>슬롯 상태</b>를 그대로 쓴다. 묶음 닫기가 늦거나 실패한 「시체 묶음」에
    * 가드를 매달면 실제로는 끝난 배송지를 영원히 못 지운다.
+   *
+   * <p>🔴 <b>CONFIRMED 는 배송이 끝나기 전까지만 막는다</b> — 종착 상태라 무조건 막으면 배송까지 받은 참여가
+   * 그 배송지를 <b>영원히</b> 잠근다(배송지 5개 상한과 결합해 새 배송지를 못 넣게 된다). 탈퇴 가드
+   * ({@link #existsUnfinishedByParticipantId})와 같은 제외항이다. 배송 행이 없는 CONFIRMED 는
+   * NOT EXISTS 가 참이라 fail-closed 로 막힌다.
    */
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
           + "JOIN ParticipationBundle b ON b.id = p.bundleId "
-          + "WHERE b.shippingAddressId = :shippingAddressId AND p.status IN :statuses")
+          + "WHERE b.shippingAddressId = :shippingAddressId "
+          + "AND (p.status IN :pendingStatuses "
+          + "  OR (p.status = :confirmedStatus "
+          + "    AND NOT EXISTS ("
+          + "      SELECT d FROM Delivery d "
+          + "      WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses)))")
   boolean existsActiveByBundleShippingAddress(
       @Param("shippingAddressId") Long shippingAddressId,
-      @Param("statuses") Collection<ParticipationStatus> statuses);
+      @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 
   /**
    * 배송지 삭제 가드 <b>사본 항</b> — 참여 행에 남은 옛 배송지 값으로 찾는다.
@@ -86,8 +98,19 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
    * 절대 매칭되지 않으므로 과탐이 늘지도 않는다. 정본과 사본이 어긋난 옛 행만 fail-closed 로 덮는 항이고,
    * P4 에서 참여 컬럼을 DROP 할 때 함께 지운다.
    */
+  @Query(
+      "SELECT COUNT(p) > 0 FROM Participation p "
+          + "WHERE p.shippingAddressId = :shippingAddressId "
+          + "AND (p.status IN :pendingStatuses "
+          + "  OR (p.status = :confirmedStatus "
+          + "    AND NOT EXISTS ("
+          + "      SELECT d FROM Delivery d "
+          + "      WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses)))")
   boolean existsByShippingAddressIdAndStatusIn(
-      Long shippingAddressId, Collection<ParticipationStatus> statuses);
+      @Param("shippingAddressId") Long shippingAddressId,
+      @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
+      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
+      @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
 
   boolean existsByBuncheolMemberIdAndStatusIn(
       Long buncheolMemberId, Collection<ParticipationStatus> statuses);

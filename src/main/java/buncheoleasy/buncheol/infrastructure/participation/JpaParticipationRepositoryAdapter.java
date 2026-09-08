@@ -206,10 +206,23 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
     // 정본(묶음) 항과 사본 항을 OR 로 합성한다. 나눈 이유는 각각 배송지 FK 인덱스로 진입시키기 위함이고,
     // 앞이 참이면 뒤는 아예 돌지 않는다. 사본 항은 신규 행에서 절대 매칭되지 않으므로 과탐이 늘지 않는다 —
     // 정본과 어긋난 옛 행만 fail-closed 로 덮는다.
+    // CONFIRMED 는 배송 종료 전까지만 막는다 — 무조건 막으면 완주한 참여가 배송지를 영원히 잠근다
+    // (탈퇴 가드와 같은 제외항, 2026-09-08).
+    Set<ParticipationStatus> pending =
+        Set.of(
+            ParticipationStatus.APPLIED,
+            ParticipationStatus.AWAITING_PAYMENT,
+            ParticipationStatus.PAYMENT_SENT);
     return jpaParticipationRepository.existsActiveByBundleShippingAddress(
-            shippingAddressId, ParticipationStatus.active())
+            shippingAddressId,
+            pending,
+            ParticipationStatus.CONFIRMED,
+            DeliveryStatus.finished())
         || jpaParticipationRepository.existsByShippingAddressIdAndStatusIn(
-            shippingAddressId, ParticipationStatus.active());
+            shippingAddressId,
+            pending,
+            ParticipationStatus.CONFIRMED,
+            DeliveryStatus.finished());
   }
 
   @Override

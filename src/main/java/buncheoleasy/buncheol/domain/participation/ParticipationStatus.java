@@ -45,6 +45,18 @@ public enum ParticipationStatus {
     return RELEASABLE;
   }
 
+  // 아직 확정 전이라 무조건 「끝나지 않음」인 상태들. 확정(CONFIRMED)은 종착 상태라 배송 종료까지
+  // 봐야 하므로 가드(탈퇴·배송지 삭제)가 따로 판정한다. 집합은 RELEASABLE 과 같지만 의미가 다르다 —
+  // 「제외」 정책이 바뀌어도 가드가 흔들리면 안 되므로 이름을 공유하지 않고 파생 방식만 같게 간다.
+  private static final Set<ParticipationStatus> UNCONFIRMED_ACTIVE =
+      ACTIVE.stream()
+          .filter(status -> status != CONFIRMED)
+          .collect(Collectors.toUnmodifiableSet());
+
+  public static Set<ParticipationStatus> unconfirmedActive() {
+    return UNCONFIRMED_ACTIVE;
+  }
+
   // 개최자가 입금확인할 수 있는 상태. C2C 는 「보냈어요」 마킹 여부와 무관하게 확인 가능하다 — 마킹은 단서일
   // 뿐이고 실제 판단 근거는 개최자 통장이다 (docs/46 §3-6).
   private static final Set<ParticipationStatus> PAYABLE = Set.of(AWAITING_PAYMENT, PAYMENT_SENT);

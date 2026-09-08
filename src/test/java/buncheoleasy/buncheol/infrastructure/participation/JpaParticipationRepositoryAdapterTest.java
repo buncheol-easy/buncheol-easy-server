@@ -623,7 +623,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("existsActiveByShippingAddressId — 배송지 삭제 가드용(활성만)")
+  @DisplayName("existsActiveByShippingAddressId — 배송지 삭제 가드용(미확정 활성 + 배송 미종료 확정)")
   class ExistsActiveByShippingAddressIdTest {
 
     @Test
@@ -739,6 +739,98 @@ class JpaParticipationRepositoryAdapterTest {
       insertDeliveryOnBundle(participationId, "RECEIVED");
 
       assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isFalse();
+    }
+
+    // 수령 버튼을 안 누른 DELIVERED 가 실제로 더 흔한 종착이다 — RECEIVED 만으로 잠그지 않는다.
+    @Test
+    void 운송사_배송완료_DELIVERED_만으로도_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "배송완료매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "DELIVERED");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isFalse();
+    }
+
+    // 전환기 중복(묶음당 배송 2행 — prod 묶음 64)에서 하나만 종료돼도 열면 배송 중인 행이 남은 채
+    // 주소가 지워진다 — 「전 배송 행 종료」를 요구하는 fail-closed 를 고정한다.
+    @Test
+    void 배송_2행_중_하나만_종료면_여전히_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "중복배송매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "RECEIVED");
+      // 전환기 실데이터 형태 — 같은 묶음의 다른 슬롯이 배송을 하나 더 문다(배송 유니크는 참여 단위).
+      Long siblingSlotId =
+          createBuncheolMember(
+              buncheolId,
+              TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "중복배송형제멤버"));
+      // LEGACY 1인 1자리 유니크를 피해 형제 슬롯은 다른 유저로 — 가드 쿼리는 bundle_id·status·배송만 본다.
+      Long siblingId =
+          insertParticipation(
+              buncheolId,
+              siblingSlotId,
+              TestUserFixture.insertUser(jdbcTemplate, "sib_dup"),
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      jdbcTemplate.update(
+          "UPDATE participations SET bundle_id = (SELECT bundle_id FROM participations WHERE id = ?)"
+              + " WHERE id = ?",
+          participationId,
+          siblingId);
+      insertDeliveryOnBundle(siblingId, "SHIPPING");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    // 사본 항의 배송 판정도 「자기 주소」가 아니라 「그 참여의 묶음」을 본다 — 사본만 이 주소인
+    // 어긋난 옛 행이라도, 묶음 배송이 끝났으면 사본 쪽 가드도 열린다.
+    @Test
+    void 사본만_이_주소인_행도_묶음_배송이_끝나면_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long copyAddr = insertShippingAddress(participantId, "사본완주매장");
+      Long bundleAddr = insertShippingAddress(participantId, "묶음완주매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              copyAddr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, bundleAddr);
+      insertDeliveryOnBundle(participationId, "RECEIVED");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(copyAddr)).isFalse();
+      assertThat(participationRepository.existsActiveByShippingAddressId(bundleAddr)).isFalse();
     }
 
     @Test

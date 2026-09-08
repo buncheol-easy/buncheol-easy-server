@@ -59,7 +59,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   /**
    * 배송지 삭제 가드 <b>정본 항</b> — 이 배송지를 쓰는 <b>묶음</b>에 활성 슬롯이 있는가.
    *
-   * <p>🔴 <b>이 항만으로는 부족하다.</b> 어댑터가 사본 항({@link #existsByShippingAddressIdAndStatusIn})과 OR 로 합성한다 —
+   * <p>🔴 <b>이 항만으로는 부족하다.</b> 어댑터가 사본 항({@link #existsUnfinishedByParticipationShippingAddress})과 OR 로 합성한다 —
    * 두 질의를 나눈 이유는 <b>각각 배송지 FK 인덱스로 진입</b>시키기 위함이다. 한 JPQL 안에서 OR 로 묶으면 옵티마이저가
    * {@code Participation} 부터 읽어 활성 참여 전건을 훑는다(이 가드는 사용자 배송지 삭제 경로마다 돈다).
    *
@@ -67,9 +67,14 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
    * 가드를 매달면 실제로는 끝난 배송지를 영원히 못 지운다.
    *
    * <p>🔴 <b>CONFIRMED 는 배송이 끝나기 전까지만 막는다</b> — 종착 상태라 무조건 막으면 배송까지 받은 참여가
-   * 그 배송지를 <b>영원히</b> 잠근다(배송지 5개 상한과 결합해 새 배송지를 못 넣게 된다). 탈퇴 가드
-   * ({@link #existsUnfinishedByParticipantId})와 같은 제외항이다. 배송 행이 없는 CONFIRMED 는
-   * NOT EXISTS 가 참이라 fail-closed 로 막힌다.
+   * 그 배송지를 <b>영원히</b> 잠근다(배송지 5개 상한과 결합해 새 배송지를 못 넣게 된다).
+   *
+   * <p>배송 종료 판정은 탈퇴 가드({@link #existsUnfinishedByParticipantId})와 두 곳이 다르다 — 둘 다 의도다.
+   * ① <b>환급 검수(REQUESTED) 항은 일부러 넣지 않는다</b>: 환급 심사는 배송 스냅샷만 읽고 배송지 원본을
+   * 보지 않으므로 주소를 잠글 이유가 없다. ② <b>「전 배송 행 종료」를 요구한다</b>(탈퇴 가드는 종료 1건 존재):
+   * 전환기 중복으로 묶음당 배송이 2행인 곳이 실재해서(prod 묶음 64), 하나만 종료돼도 열면 아직 배송 중인
+   * 행이 남은 채 주소가 지워질 수 있다 — 가드는 fail-closed 다. P4 의 uq_deliveries_bundle 승격 후
+   * 자연히 같은 판정이 된다. 배송 행이 없는 CONFIRMED 도 같은 이유로 막힌다.
    */
   @Query(
       "SELECT COUNT(p) > 0 FROM Participation p "
@@ -77,10 +82,13 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE b.shippingAddressId = :shippingAddressId "
           + "AND (p.status IN :pendingStatuses "
           + "  OR (p.status = :confirmedStatus "
-          + "    AND NOT EXISTS ("
-          + "      SELECT d FROM Delivery d "
-          + "      WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses)))")
-  boolean existsActiveByBundleShippingAddress(
+          + "    AND (NOT EXISTS ("
+          + "        SELECT d FROM Delivery d WHERE d.bundleId = p.bundleId) "
+          + "      OR EXISTS ("
+          + "        SELECT d FROM Delivery d "
+          + "        WHERE d.bundleId = p.bundleId "
+          + "        AND d.status NOT IN :finishedDeliveryStatuses))))")
+  boolean existsUnfinishedByBundleShippingAddress(
       @Param("shippingAddressId") Long shippingAddressId,
       @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,
@@ -103,10 +111,13 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "WHERE p.shippingAddressId = :shippingAddressId "
           + "AND (p.status IN :pendingStatuses "
           + "  OR (p.status = :confirmedStatus "
-          + "    AND NOT EXISTS ("
-          + "      SELECT d FROM Delivery d "
-          + "      WHERE d.bundleId = p.bundleId AND d.status IN :finishedDeliveryStatuses)))")
-  boolean existsByShippingAddressIdAndStatusIn(
+          + "    AND (NOT EXISTS ("
+          + "        SELECT d FROM Delivery d WHERE d.bundleId = p.bundleId) "
+          + "      OR EXISTS ("
+          + "        SELECT d FROM Delivery d "
+          + "        WHERE d.bundleId = p.bundleId "
+          + "        AND d.status NOT IN :finishedDeliveryStatuses))))")
+  boolean existsUnfinishedByParticipationShippingAddress(
       @Param("shippingAddressId") Long shippingAddressId,
       @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
       @Param("confirmedStatus") ParticipationStatus confirmedStatus,

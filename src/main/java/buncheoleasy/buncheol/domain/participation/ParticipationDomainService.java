@@ -128,7 +128,7 @@ public class ParticipationDomainService {
         buncheolId, participantId);
   }
 
-  /** 해당 배송지를 참조하는 활성 참여가 있는지 (배송지 삭제 가드용). */
+  /** 해당 배송지를 「끝나지 않은」 참여가 참조하는지 (배송지 삭제 가드용 — 규칙은 포트 javadoc). */
   public boolean hasActiveParticipationByShippingAddress(final Long shippingAddressId) {
     return participationRepository.existsActiveByShippingAddressId(shippingAddressId);
   }

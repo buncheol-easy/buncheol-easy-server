@@ -47,8 +47,11 @@ public interface ParticipationRepository {
   boolean existsActiveByBuncheolIdAndParticipantId(Long buncheolId, Long participantId);
 
   /**
-   * 해당 배송지를 참조하는 활성({@link ParticipationStatus#active()}) 참여가 있는지 (배송지 삭제 가드용). 종료된 참여는 FK ON
-   * DELETE SET NULL 로 정리되므로 삭제를 막지 않는다.
+   * 해당 배송지를 아직 「끝나지 않은」 참여가 참조하는지 (배송지 삭제 가드용). 미확정 활성
+   * ({@link ParticipationStatus#unconfirmedActive()})은 무조건 막고, 확정(CONFIRMED)은 그 묶음의
+   * 배송이 <b>전부</b> 종료되기 전까지만 막는다 — 종착 상태를 무조건 막으면 완주한 참여가 배송지를
+   * 영원히 잠근다(5개 상한과 결합). 취소·만료·완주 참여만 남은 배송지는 삭제를 허용하고 FK ON
+   * DELETE SET NULL 이 그 참여들의 배송지값만 정리한다.
    */
   boolean existsActiveByShippingAddressId(Long shippingAddressId);
 

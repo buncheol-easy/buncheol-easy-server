@@ -28,6 +28,12 @@ public class UserRecentSearchCommandService {
     trim(userId);
   }
 
+  /** 사용자가 검색어 알약의 X 를 눌러 이력 1건을 지운다. 남의 id·이미 지워진 id 는 0행 — 멱등 성공. */
+  @Transactional
+  public void delete(final Long userId, final Long searchId) {
+    repository.deleteByIdAndUserId(searchId, userId);
+  }
+
   private void trim(final Long userId) {
     final List<Long> ids = repository.findIdsToTrim(userId, MAX_KEEP);
     repository.deleteAllByIdIn(ids);

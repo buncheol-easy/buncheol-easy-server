@@ -83,6 +83,18 @@ class JpaUserRecentSearchRepositoryAdapterTest {
   class DeleteByKeywordTest {
 
     @Test
+    void 본인_행은_id_로_지우고_남의_행은_0행이다() {
+      UserRecentSearch mine = userRecentSearchRepository.save(UserRecentSearch.create(userId, "내검색어"));
+      Long otherUser = TestUserFixture.insertUser(jdbcTemplate, "rs-other");
+      UserRecentSearch others = userRecentSearchRepository.save(UserRecentSearch.create(otherUser, "남검색어"));
+
+      assertThat(userRecentSearchRepository.deleteByIdAndUserId(mine.getId(), userId)).isEqualTo(1);
+      // 남의 id 는 0행 — 존재 여부가 새지 않는 멱등 삭제.
+      assertThat(userRecentSearchRepository.deleteByIdAndUserId(others.getId(), userId)).isZero();
+      assertThat(userRecentSearchRepository.deleteByIdAndUserId(mine.getId(), userId)).isZero();
+    }
+
+    @Test
     void 동일_키워드_행만_삭제한다() {
       userRecentSearchRepository.save(UserRecentSearch.create(userId, "뉴진스"));
       userRecentSearchRepository.save(UserRecentSearch.create(userId, "에스파"));

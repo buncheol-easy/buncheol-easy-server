@@ -12,6 +12,8 @@ interface JpaUserRecentSearchRepository extends JpaRepository<UserRecentSearch, 
 
   long deleteByUserIdAndKeyword(Long userId, String keyword);
 
+  long deleteByIdAndUserId(Long id, Long userId);
+
   // self-healing 정상 상태에선 0~1개. LIMIT 1000 은 일관성 깨진 사용자도 한 번에 정리할 안전 상한.
   @Query(
       value =

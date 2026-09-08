@@ -28,6 +28,11 @@ public class JpaUserRecentSearchRepositoryAdapter implements UserRecentSearchRep
   }
 
   @Override
+  public int deleteByIdAndUserId(final Long id, final Long userId) {
+    return (int) jpaUserRecentSearchRepository.deleteByIdAndUserId(id, userId);
+  }
+
+  @Override
   public List<Long> findIdsToTrim(final Long userId, final int keep) {
     return jpaUserRecentSearchRepository.findIdsToTrim(userId, keep);
   }

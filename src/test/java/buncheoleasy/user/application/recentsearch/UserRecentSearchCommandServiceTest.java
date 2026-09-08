@@ -33,7 +33,7 @@ class UserRecentSearchCommandServiceTest {
   void delete_는_소유자_조건으로_1건을_지운다() {
     commandService.delete(USER_ID, 42L);
 
-    Mockito.verify(repository).deleteByIdAndUserId(42L, USER_ID);
+    Mockito.verify(repository).deleteOwnedById(USER_ID, 42L);
   }
 
   @Test

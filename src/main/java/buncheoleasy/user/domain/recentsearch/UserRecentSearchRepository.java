@@ -22,5 +22,5 @@ public interface UserRecentSearchRepository {
    * 본인 소유 행 1건 삭제(사용자의 X 버튼). userId 를 조건에 함께 걸어 남의 id 로는 0행 —
    * 존재 여부가 응답으로 새지 않게 0행도 성공으로 다룬다(멱등).
    */
-  int deleteByIdAndUserId(Long id, Long userId);
+  int deleteOwnedById(Long userId, Long id);
 }

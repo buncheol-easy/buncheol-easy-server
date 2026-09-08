@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -82,6 +83,24 @@ class NoticeControllerTest {
     verify(noticeCommandService).createNotice(any(), imageCaptor.capture(), any());
     assertThat(imageCaptor.getValue()).isNotNull();
     assertThat(imageCaptor.getValue().originalFilename()).isEqualTo("notice.jpg");
+  }
+
+  @Test
+  void 허용되지_않은_확장자는_201_전에_400_FILE_002_로_거부된다() throws Exception {
+    // 핵심 회귀 지점은 레코드가 아니라 컨트롤러 — toImageFile 의 catch 가 IOException 을 넘어
+    // BusinessException 까지 삼키도록 넓어지면 ImageFileTest 는 초록인 채 조용히 회귀한다.
+    MockMultipartFile gif =
+        new MockMultipartFile("image", "banner.gif", MediaType.IMAGE_GIF_VALUE, new byte[] {1});
+
+    mockMvc
+        .perform(
+            multipart("/v1/notices")
+                .file(requestPart("{\"title\":\"제목\",\"description\":\"설명\",\"pinned\":false}"))
+                .file(gif))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("FILE-002"));
+
+    verify(noticeCommandService, never()).createNotice(any(), any(), any());
   }
 
   @Test

@@ -1,10 +1,10 @@
 package buncheoleasy.user.presentation;
 
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
+import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
-import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,7 +48,7 @@ class SearchKeywordControllerDocsTest extends DocsTestSupport {
                         .summary("최근 검색어 조회")
                         .description(
                             "로그인 사용자가 검색창에 친 텍스트를 최신순으로 최대 7개 반환한다. 비로그인 시 빈 배열. "
-                                + "프론트가 그룹·멤버 name → id 변환을 책임지므로 응답은 단일 텍스트 컬럼만 노출한다.")
+                                + "id 는 삭제 API(DELETE /v1/search-keywords/recent/{searchId})의 핸들이다.")
                         .requestHeaders(optionalUserAuthorizationHeader())
                         .responseSchema(Schema.schema("RecentSearchListResponse"))
                         .responseFields(

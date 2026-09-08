@@ -1,13 +1,16 @@
 package buncheoleasy.user.presentation;
 
 import static com.epages.restdocs.apispec.MockMvcRestDocumentationWrapper.document;
+import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithName;
 import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.global.docs.DocsTestSupport;
+import buncheoleasy.user.application.recentsearch.UserRecentSearchCommandService;
 import buncheoleasy.user.application.recentsearch.UserRecentSearchQueryService;
 import buncheoleasy.user.dto.response.RecentSearchResponse;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -21,6 +24,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class SearchKeywordControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private UserRecentSearchQueryService userRecentSearchQueryService;
+  @MockitoBean private UserRecentSearchCommandService userRecentSearchCommandService;
 
   @Test
   void 최근_검색어_조회() throws Exception {
@@ -44,12 +48,33 @@ class SearchKeywordControllerDocsTest extends DocsTestSupport {
                         .summary("최근 검색어 조회")
                         .description(
                             "로그인 사용자가 검색창에 친 텍스트를 최신순으로 최대 7개 반환한다. 비로그인 시 빈 배열. "
-                                + "프론트가 그룹·멤버 name → id 변환을 책임지므로 응답은 단일 텍스트 컬럼만 노출한다.")
+                                + "id 는 삭제 API(DELETE /v1/search-keywords/recent/{searchId})의 핸들이다.")
                         .requestHeaders(optionalUserAuthorizationHeader())
                         .responseSchema(Schema.schema("RecentSearchListResponse"))
                         .responseFields(
                             fieldWithPath("[].id").description("최근 검색 이력 ID"),
                             fieldWithPath("[].keyword").description("사용자가 검색창에 친 텍스트"))
+                        .build())));
+  }
+
+  @Test
+  void 최근_검색어_삭제() throws Exception {
+    mockMvc
+        .perform(delete("/v1/search-keywords/recent/{searchId}", 20L).with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "search-keywords-recent-delete",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("SearchKeyword")
+                        .summary("최근 검색어 삭제")
+                        .description(
+                            "검색어 알약의 X 버튼. 조회 응답의 id 로 1건을 지운다. 남의 id·이미 지워진 id 도 "
+                                + "204 — 존재 여부를 응답으로 흘리지 않는 멱등 삭제. 로그인 필수.")
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(
+                            parameterWithName("searchId").description("최근 검색어 조회 응답의 id"))
                         .build())));
   }
 }

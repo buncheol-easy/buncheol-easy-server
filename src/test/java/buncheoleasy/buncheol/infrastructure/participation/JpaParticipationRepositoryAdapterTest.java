@@ -623,7 +623,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("existsActiveByShippingAddressId — 배송지 삭제 가드용(활성만)")
+  @DisplayName("existsActiveByShippingAddressId — 배송지 삭제 가드용(미확정 활성 + 배송 미종료 확정)")
   class ExistsActiveByShippingAddressIdTest {
 
     @Test
@@ -715,6 +715,175 @@ class JpaParticipationRepositoryAdapterTest {
 
       assertThat(participationRepository.existsActiveByShippingAddressId(copyAddr)).isTrue();
       assertThat(participationRepository.existsActiveByShippingAddressId(bundleAddr)).isTrue();
+    }
+
+    // 🔴 이 가드가 고치는 결함의 본체 — CONFIRMED 는 종착 상태라 무조건 막으면 배송까지 받은
+    // 참여가 배송지를 「영원히」 잠근다(5개 상한과 결합해 새 배송지를 못 넣게 된다).
+    // 옛 쿼리(활성 4상태 무조건)로는 이 테스트가 실패한다 — 그 자체가 돌연변이 검증이다.
+    @Test
+    void 배송이_끝난_확정_참여만_남으면_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "완주매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "RECEIVED");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isFalse();
+    }
+
+    // 수령 버튼을 안 누른 DELIVERED 가 실제로 더 흔한 종착이다 — RECEIVED 만으로 잠그지 않는다.
+    @Test
+    void 운송사_배송완료_DELIVERED_만으로도_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "배송완료매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "DELIVERED");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isFalse();
+    }
+
+    // 전환기 중복(묶음당 배송 2행 — prod 묶음 64)에서 하나만 종료돼도 열면 배송 중인 행이 남은 채
+    // 주소가 지워진다 — 「전 배송 행 종료」를 요구하는 fail-closed 를 고정한다.
+    @Test
+    void 배송_2행_중_하나만_종료면_여전히_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "중복배송매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "RECEIVED");
+      // 전환기 실데이터 형태 — 같은 묶음의 다른 슬롯이 배송을 하나 더 문다(배송 유니크는 참여 단위).
+      Long siblingSlotId =
+          createBuncheolMember(
+              buncheolId,
+              TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "중복배송형제멤버"));
+      // LEGACY 1인 1자리 유니크를 피해 형제 슬롯은 다른 유저로 — 가드 쿼리는 bundle_id·status·배송만 본다.
+      Long siblingId =
+          insertParticipation(
+              buncheolId,
+              siblingSlotId,
+              TestUserFixture.insertUser(jdbcTemplate, "sib_dup"),
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      jdbcTemplate.update(
+          "UPDATE participations SET bundle_id = (SELECT bundle_id FROM participations WHERE id = ?)"
+              + " WHERE id = ?",
+          participationId,
+          siblingId);
+      insertDeliveryOnBundle(siblingId, "SHIPPING");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    // 사본 항의 배송 판정도 「자기 주소」가 아니라 「그 참여의 묶음」을 본다 — 사본만 이 주소인
+    // 어긋난 옛 행이라도, 묶음 배송이 끝났으면 사본 쪽 가드도 열린다.
+    @Test
+    void 사본만_이_주소인_행도_묶음_배송이_끝나면_false_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long copyAddr = insertShippingAddress(participantId, "사본완주매장");
+      Long bundleAddr = insertShippingAddress(participantId, "묶음완주매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              copyAddr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, bundleAddr);
+      insertDeliveryOnBundle(participationId, "RECEIVED");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(copyAddr)).isFalse();
+      assertThat(participationRepository.existsActiveByShippingAddressId(bundleAddr)).isFalse();
+    }
+
+    @Test
+    void 배송이_아직_안_끝난_확정_참여는_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "배송중매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+      insertDeliveryOnBundle(participationId, "SHIPPING");
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    // 배송 행이 아예 없는 CONFIRMED 는 fail-closed 로 막는다 — NOT EXISTS 가 참이 된다.
+    @Test
+    void 배송_행이_없는_확정_참여는_true_를_반환한다() {
+      Long buncheolId = createBuncheol();
+      Long buncheolMemberId = createBuncheolMember(buncheolId);
+      Long addr = insertShippingAddress(participantId, "배송행없음매장");
+      Long participationId =
+          insertParticipation(
+              buncheolId,
+              buncheolMemberId,
+              participantId,
+              addr,
+              30_000L,
+              Instant.now().plus(30, ChronoUnit.MINUTES),
+              ParticipationStatus.CONFIRMED,
+              null);
+      attachBundleWithAddress(participationId, addr);
+
+      assertThat(participationRepository.existsActiveByShippingAddressId(addr)).isTrue();
+    }
+
+    /** 그 참여의 묶음에 배송 스냅샷을 붙인다 — 가드가 배송을 묶음(bundle_id)으로 찾기 때문. */
+    private void insertDeliveryOnBundle(final Long participationId, final String deliveryStatus) {
+      jdbcTemplate.update(
+          "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
+              + " receiver_nickname, receiver_phone_number, status)"
+              + " SELECT p.id, p.bundle_id, 'GS25_HALF', '매장', '닉', '01012345678', ?"
+              + " FROM participations p WHERE p.id = ?",
+          deliveryStatus,
+          participationId);
     }
 
     /** 묶음을 만들어 붙이고 그 묶음에 배송지를 심는다. */

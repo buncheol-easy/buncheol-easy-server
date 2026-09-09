@@ -20,7 +20,7 @@ interface JpaAdminPaymentQueryRepository extends JpaRepository<Participation, Lo
    * 파생 상태 CASE 는 {@code AdminPaymentStatus} 의 이름 문자열과 일치해야 한다: 입금확인중 → AWAITING_CONFIRMATION,
    * 입금확인됨 → CONFIRMED, 취소됐지만 입금확인 이력이 있으면(분철 취소 cascade) → REFUND_REQUIRED, 그 외 취소 → CANCELLED.
    *
-   * <p>참여자(User)는 soft delete 될 수 있고, 배송 스냅샷·그룹 멤버·배송지 원본(종료된 참여 한정 삭제 가능)은 없을 수 있어
+   * <p>참여자(User)는 soft delete 될 수 있고, 배송 스냅샷·그룹 멤버·배송지 원본(끝난 참여 — 취소·만료·완주 — 한정 삭제 가능)은 없을 수 있어
    * LEFT JOIN 으로 행을 보존한다. 배송지(sa)는 입금확인 전에도 운영자가 "결제 요청 배송지" 를 확인할 수 있게 함께 내린다.
    */
   @Query(

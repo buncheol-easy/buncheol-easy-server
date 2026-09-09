@@ -30,6 +30,13 @@ class UserRecentSearchCommandServiceTest {
   @Mock private UserRecentSearchRepository repository;
 
   @Test
+  void delete_는_소유자_조건으로_1건을_지운다() {
+    commandService.delete(USER_ID, 42L);
+
+    Mockito.verify(repository).deleteOwnedById(USER_ID, 42L);
+  }
+
+  @Test
   void record_는_기존_삭제_후_저장하고_초과분을_정리한다() {
     given(repository.findIdsToTrim(USER_ID, 7)).willReturn(List.of(99L, 100L));
 

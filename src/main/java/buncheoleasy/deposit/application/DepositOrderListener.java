@@ -19,7 +19,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 참여 생명주기를 페이액션 주문에 반영한다. 참여가 접수되면 매칭 대기 주문을 등록하고, 입금 기한이 지나 자동 취소되면 매칭 대기를 해제한다 — 해제하지 않으면 취소된
+ * 참여 생명주기를 페이액션 주문에 반영한다. 참여가 접수되면 매칭 대기 주문을 등록하고, 입금 기한이 지나 자동 취소되면 주문을 취소한다 — 취소하지 않으면 취소된
  * 참여에 뒤늦은 입금이 매칭돼 불필요한 웹훅이 발생한다.
  *
  * <p>원 트랜잭션 커밋 후 비동기로 실행되며, 호출 실패는 로깅만 하고 참여 처리에 영향을 주지 않는다. 자동 입금확인은 보조 수단이고 운영자 수동 확인 경로가 그대로
@@ -87,18 +87,18 @@ public class DepositOrderListener {
     }
   }
 
-  /** 입금 기한 만료로 자동 취소됨 → 매칭 대기 해제. C2C 는 등록된 주문이 없어 스킵한다. */
+  /** 입금 기한 만료로 자동 취소됨 → 주문 취소. C2C 는 등록된 주문이 없어 스킵한다. */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentExpired(final PaymentExpiredEvent event) {
     if (isC2cParticipation(event.participationId())) {
       return;
     }
-    excludeQuietly(event.participationId());
+    cancelQuietly(event.participationId());
   }
 
   /**
-   * 분철 취소 cascade 로 참여가 취소됨 → 매칭 대기 해제. 해제하지 않으면 최대 dueAt 까지 주문이 살아 있어, 뒤늦은 입금이 매칭돼 불필요한 알림이 나가거나
+   * 분철 취소 cascade 로 참여가 취소됨 → 주문 취소. 취소하지 않으면 최대 dueAt 까지 주문이 살아 있어, 뒤늦은 입금이 매칭돼 불필요한 알림이 나가거나
    * 같은 사용자가 동일 금액으로 재참여했을 때 옛 주문이 매칭을 가져가 새 참여의 자동확정을 방해할 수 있다.
    */
   @Async
@@ -107,10 +107,10 @@ public class DepositOrderListener {
     if (isC2cParticipation(event.participationId())) {
       return;
     }
-    excludeQuietly(event.participationId());
+    cancelQuietly(event.participationId());
   }
 
-  // C2C 참여 여부 조회. 실패하면 LEGACY 로 간주해 기존 해제 경로를 태운다 — 주문이 없으면 해제도 무해한 no-op 이다.
+  // C2C 참여 여부 조회. 실패하면 LEGACY 로 간주해 취소 경로를 태운다 — 주문이 없으면 취소가 실패해 로그만 남는다.
   private boolean isC2cParticipation(final Long participationId) {
     try {
       Participation participation =
@@ -122,17 +122,17 @@ public class DepositOrderListener {
   }
 
   /**
-   * 매칭 대기 해제 실패는 무시한다. 해제되지 않은 주문에 입금이 매칭돼 웹훅이 오더라도 확정 CAS 가 막고 기한 경과 입금으로 운영자에게 알려지므로, 잘못 확정될
+   * 주문 취소 실패는 무시한다. 취소되지 않은 주문에 입금이 매칭돼 웹훅이 오더라도 확정 CAS 가 막고 기한 경과 입금으로 운영자에게 알려지므로, 잘못 확정될
    * 위험은 없다.
    */
-  private void excludeQuietly(final Long participationId) {
+  private void cancelQuietly(final Long participationId) {
     if (!payActionClient.isEnabled()) {
       return;
     }
     try {
-      payActionClient.excludeOrder(participationId);
+      payActionClient.cancelOrder(participationId);
     } catch (RuntimeException e) {
-      log.error("페이액션 매칭제외 실패 - participationId={}", participationId, e);
+      log.error("페이액션 주문 취소 실패 - participationId={}", participationId, e);
     }
   }
 }

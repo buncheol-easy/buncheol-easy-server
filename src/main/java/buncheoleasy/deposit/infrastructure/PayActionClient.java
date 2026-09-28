@@ -11,6 +11,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * 페이액션 주문 API 클라이언트. 참여가 생기면 "입금자명 + 입금액"을 주문으로 등록해두고, 페이액션이 은행 입출금 통지에서 같은 값을 발견하면 매칭 웹훅을 보낸다.
@@ -72,28 +73,42 @@ public class PayActionClient {
         orderNumber);
   }
 
-  /** 매칭 대기 해제. 참여가 취소·만료돼 더는 입금을 기다리지 않을 때 호출한다. */
-  public void excludeOrder(final Long orderNumber) {
+  /**
+   * 주문 전액 취소. 참여가 취소·만료돼 더는 입금을 기다리지 않을 때 호출한다. 본문이 없어야 전액 취소로 처리된다({@code cancel_amount}
+   * 를 실으면 부분 취소).
+   */
+  public void cancelOrder(final Long orderNumber) {
     if (!isEnabled()) {
-      log.debug("페이액션 미설정 - 매칭제외 건너뜀 - participationId={}", orderNumber);
+      log.debug("페이액션 미설정 - 주문 취소 건너뜀 - participationId={}", orderNumber);
       return;
     }
-    post("/order-exclude", new OrderExcludeRequest(String.valueOf(orderNumber)), orderNumber);
+    post("/orders/" + orderNumber + "/cancel", null, orderNumber);
   }
 
   private void post(final String path, final Object body, final Long orderNumber) {
     final PayActionResponse response;
     try {
-      response =
+      RestClient.RequestBodySpec request =
           restClient
               .post()
               .uri(properties.baseUrl() + path)
-              .contentType(MediaType.APPLICATION_JSON)
               .header("x-api-key", properties.apiKey())
-              .header("x-mall-id", properties.mallId())
-              .body(body)
-              .retrieve()
-              .body(PayActionResponse.class);
+              .header("x-mall-id", properties.mallId());
+      if (body != null) {
+        request.contentType(MediaType.APPLICATION_JSON).body(body);
+      }
+      response = request.retrieve().body(PayActionResponse.class);
+    } catch (RestClientResponseException e) {
+      // 엔드포인트 폐기(410)·인증 실패(400)도 여기로 온다. 사유가 본문에만 있어 그대로 남긴다.
+      log.error(
+          "페이액션 호출 거부 - path={} participationId={} status={} body={}",
+          path,
+          orderNumber,
+          e.getStatusCode().value(),
+          e.getResponseBodyAsString(),
+          e);
+      throw new PayActionSendException(
+          "페이액션 호출 거부: " + path + " - " + e.getStatusCode().value(), e);
     } catch (RestClientException e) {
       log.error("페이액션 호출 통신 오류 - path={} participationId={}", path, orderNumber, e);
       throw new PayActionSendException("페이액션 호출 통신 오류: " + path, e);
@@ -107,7 +122,7 @@ public class PayActionClient {
     if (response != null && SUCCESS_STATUS.equals(response.status())) {
       return;
     }
-    String message = response == null ? "응답 없음" : String.valueOf(response.response());
+    String message = response == null ? "응답 없음" : String.valueOf(response.reason());
     log.error("페이액션 호출 실패 - path={} participationId={} response={}", path, orderNumber, message);
     throw new PayActionSendException("페이액션 호출 실패: " + path + " - " + message);
   }
@@ -133,7 +148,11 @@ public class PayActionClient {
       @JsonProperty("billing_name") String billingName,
       @JsonProperty("orderer_name") String ordererName) {}
 
-  private record OrderExcludeRequest(@JsonProperty("order_number") String orderNumber) {}
+  /** 실패 사유는 API 마다 {@code response}(구 API) 또는 {@code error}(주문 취소 API) 에 담겨 온다. */
+  private record PayActionResponse(String status, Object response, Object error) {
 
-  private record PayActionResponse(String status, Object response) {}
+    Object reason() {
+      return error != null ? error : response;
+    }
+  }
 }

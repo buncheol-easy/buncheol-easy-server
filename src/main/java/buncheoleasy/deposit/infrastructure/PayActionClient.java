@@ -11,6 +11,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * 페이액션 주문 API 클라이언트. 참여가 생기면 "입금자명 + 입금액"을 주문으로 등록해두고, 페이액션이 은행 입출금 통지에서 같은 값을 발견하면 매칭 웹훅을 보낸다.
@@ -27,6 +28,10 @@ public class PayActionClient {
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX").withZone(ZoneId.of("Asia/Seoul"));
 
   private static final String SUCCESS_STATUS = "success";
+
+  private static final String ORDER_NOT_FOUND_CODE = "ORDER_NOT_FOUND";
+
+  private static final int MAX_LOGGED_BODY_LENGTH = 500;
 
   private final RestClient restClient;
   private final PayActionProperties properties;
@@ -72,28 +77,51 @@ public class PayActionClient {
         orderNumber);
   }
 
-  /** 매칭 대기 해제. 참여가 취소·만료돼 더는 입금을 기다리지 않을 때 호출한다. */
-  public void excludeOrder(final Long orderNumber) {
+  /**
+   * 주문 전액 취소. 참여가 취소·만료돼 더는 입금을 기다리지 않을 때 호출한다. 본문이 없어야 전액 취소로 처리된다({@code cancel_amount}
+   * 를 실으면 부분 취소).
+   */
+  public void cancelOrder(final Long orderNumber) {
     if (!isEnabled()) {
-      log.debug("페이액션 미설정 - 매칭제외 건너뜀 - participationId={}", orderNumber);
+      log.debug("페이액션 미설정 - 주문 취소 건너뜀 - participationId={}", orderNumber);
       return;
     }
-    post("/order-exclude", new OrderExcludeRequest(String.valueOf(orderNumber)), orderNumber);
+    try {
+      post("/orders/" + orderNumber + "/cancel", null, orderNumber);
+    } catch (OrderNotFoundException e) {
+      // 등록을 건너뛴 참여(0원·계좌 없음·등록 실패)의 정상 경로라 실패로 취급하지 않는다.
+      log.info("페이액션 주문 없음 - 취소 생략 - participationId={}", orderNumber);
+    }
   }
 
   private void post(final String path, final Object body, final Long orderNumber) {
     final PayActionResponse response;
     try {
-      response =
+      RestClient.RequestBodySpec request =
           restClient
               .post()
               .uri(properties.baseUrl() + path)
-              .contentType(MediaType.APPLICATION_JSON)
               .header("x-api-key", properties.apiKey())
-              .header("x-mall-id", properties.mallId())
-              .body(body)
-              .retrieve()
-              .body(PayActionResponse.class);
+              .header("x-mall-id", properties.mallId());
+      if (body != null) {
+        request = request.contentType(MediaType.APPLICATION_JSON).body(body);
+      }
+      response = request.retrieve().body(PayActionResponse.class);
+    } catch (RestClientResponseException e) {
+      String responseBody = e.getResponseBodyAsString();
+      if (e.getStatusCode().value() == 404 && responseBody.contains(ORDER_NOT_FOUND_CODE)) {
+        throw new OrderNotFoundException();
+      }
+      // 엔드포인트 폐기(410)·인증 실패(400)도 여기로 온다. 사유가 본문에만 있어 남기되, 게이트웨이 HTML 에러 페이지에 대비해 자른다.
+      log.error(
+          "페이액션 호출 거부 - path={} participationId={} status={} body={}",
+          path,
+          orderNumber,
+          e.getStatusCode().value(),
+          truncate(responseBody),
+          e);
+      throw new PayActionSendException(
+          "페이액션 호출 거부: " + path + " - " + e.getStatusCode().value(), e);
     } catch (RestClientException e) {
       log.error("페이액션 호출 통신 오류 - path={} participationId={}", path, orderNumber, e);
       throw new PayActionSendException("페이액션 호출 통신 오류: " + path, e);
@@ -107,9 +135,15 @@ public class PayActionClient {
     if (response != null && SUCCESS_STATUS.equals(response.status())) {
       return;
     }
-    String message = response == null ? "응답 없음" : String.valueOf(response.response());
+    String message = response == null ? "응답 없음" : String.valueOf(response.reason());
     log.error("페이액션 호출 실패 - path={} participationId={} response={}", path, orderNumber, message);
     throw new PayActionSendException("페이액션 호출 실패: " + path + " - " + message);
+  }
+
+  private static String truncate(final String value) {
+    return value.length() <= MAX_LOGGED_BODY_LENGTH
+        ? value
+        : value.substring(0, MAX_LOGGED_BODY_LENGTH) + "...";
   }
 
   private SimpleClientHttpRequestFactory createRequestFactory(
@@ -133,7 +167,18 @@ public class PayActionClient {
       @JsonProperty("billing_name") String billingName,
       @JsonProperty("orderer_name") String ordererName) {}
 
-  private record OrderExcludeRequest(@JsonProperty("order_number") String orderNumber) {}
+  /** 실패 사유는 API 마다 {@code response}(구 API) 또는 {@code error}(주문 취소 API) 에 담겨 온다. */
+  private static class OrderNotFoundException extends PayActionSendException {
 
-  private record PayActionResponse(String status, Object response) {}
+    OrderNotFoundException() {
+      super("페이액션 주문 없음");
+    }
+  }
+
+  private record PayActionResponse(String status, Object response, Object error) {
+
+    Object reason() {
+      return error != null ? error : response;
+    }
+  }
 }

@@ -1,6 +1,7 @@
 package buncheoleasy.deposit.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -101,19 +102,42 @@ class PayActionClientTest {
       assertThat(receivedApiKey).isEqualTo(API_KEY);
       assertThat(receivedMallId).isEqualTo(MALL_ID);
       assertThat(receivedBody).isEmpty();
+      // JDK HttpURLConnection 이 본문 없는 POST 에도 붙이는 기본값. 운영 API 가 이 헤더로도 취소를 처리함을 확인했다.
+      assertThat(receivedContentType).isEqualTo("application/x-www-form-urlencoded");
     }
 
+    // 등록을 건너뛴 참여(0원·계좌 없음·등록 실패)도 만료·취소 시 호출되므로 정상 경로다.
     @Test
-    void 주문이_없으면_예외를_던진다() {
+    void 주문이_없으면_예외_없이_넘어간다() {
       respond(
           404,
           """
           {"status":"error","error":{"code":"ORDER_NOT_FOUND","message":"취소할 주문을 찾을 수 없습니다."}}
           """);
 
-      assertThatThrownBy(() -> client.cancelOrder(999L))
+      assertThatCode(() -> client.cancelOrder(999L)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 코드가_다른_404_는_예외를_던진다() {
+      respond(404, "<html>Not Found</html>");
+
+      assertThatThrownBy(() -> client.cancelOrder(68L))
           .isInstanceOf(PayActionSendException.class)
           .hasMessageContaining("404");
+    }
+
+    @Test
+    void 엔드포인트가_폐기되면_예외를_던진다() {
+      respond(
+          410,
+          """
+          {"status":"error","response":{"message":"종료된 API입니다."}}
+          """);
+
+      assertThatThrownBy(() -> client.cancelOrder(68L))
+          .isInstanceOf(PayActionSendException.class)
+          .hasMessageContaining("410");
     }
 
     @Test

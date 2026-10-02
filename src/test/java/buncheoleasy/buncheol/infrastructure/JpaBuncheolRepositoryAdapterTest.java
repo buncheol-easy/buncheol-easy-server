@@ -645,16 +645,16 @@ class JpaBuncheolRepositoryAdapterTest {
       assertEnded(buncheolId, false);
     }
 
-    // 🔴 C2C 우려의 본체 — 진행확정 뒤에도 미확정 참여가 남아 있으면 개최자가 할 일이 남은 것이다.
-    // 다른 참여의 배송이 모두 끝났어도 「종료」로 보이면 안 된다.
+    // 진행확정 뒤에도 미확정 참여가 남아 있으면 개최자가 할 일이 남은 것이다 — 다른 참여의 배송이 모두 끝났어도
+    // 「종료」로 보이면 안 된다. 실제로는 LEGACY 진행확정에서 만료 스케줄러가 돌기 전에만 생기는 상태다(C2C 는 미확정
+    // 0건일 때만 진행확정되고 그 뒤 참여 생성이 막힌다). 판정식은 플로우를 보지 않으므로 공유 상수의 상태 전부를 돌린다.
     @ParameterizedTest
     @ValueSource(strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT"})
-    void C2C_진행확정에_미확정_참여가_남아_있으면_배송이_끝났어도_끝나지_않는다(
+    void 진행확정에_미확정_참여가_남아_있으면_배송이_끝났어도_끝나지_않는다(
         final String unconfirmedStatus) {
       Long buncheolId = persistConfirmedBuncheol();
       insertDelivery(insertConfirmedParticipation(buncheolId), "DELIVERED");
       insertParticipation(buncheolId, unconfirmedStatus);
-      markC2c(buncheolId);
 
       assertEnded(buncheolId, false);
     }
@@ -695,6 +695,21 @@ class JpaBuncheolRepositoryAdapterTest {
       Long sibling = insertConfirmedParticipation(buncheolId);
       linkBundle(sibling, bundleOf(carrier));
       insertDelivery(carrier, "DELIVERED");
+
+      assertEnded(buncheolId, true);
+    }
+
+    // 현재 동작 고정 — 묶음 정본 전환기에 배송 행이 2개 생긴 묶음은 1행만 끝나도 끝난 것으로 본다. 탈퇴 가드와 같은
+    // 규칙이고 배송지 삭제 가드(전 행 종료)와는 의도적으로 다르다. 여기를 바꾸려면 가드도 함께 바꿔야 한다.
+    @Test
+    void 전환기에_배송_행이_둘인_묶음은_한_행만_끝나도_끝난다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      Long carrier = insertConfirmedParticipation(buncheolId);
+      Long sibling = insertConfirmedParticipation(buncheolId);
+      linkBundle(sibling, bundleOf(carrier));
+      // id 가 작은 행은 아직 배송 중, 다른 행은 도착 — 같은 묶음에 걸린다.
+      insertDelivery(carrier, "SHIPPING");
+      insertDelivery(sibling, "DELIVERED");
 
       assertEnded(buncheolId, true);
     }

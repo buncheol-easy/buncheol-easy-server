@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BundleReleasability;
@@ -170,6 +171,12 @@ public class BuncheolManagementQueryService {
                         c2c))
             .toList();
 
+    // 「종료」는 개최 목록과 <b>같은 조회</b>를 분철 1개로 돌려 얻는다 — 위에서 읽은 참여·배송으로 다시 계산하면 식이
+    // 둘이 되어 목록 카드와 이 화면 머리가 갈릴 수 있다. 진행확정이 아니면 끝날 수 없으니 묻지 않는다.
+    boolean ended =
+        buncheol.getStatus() == BuncheolStatus.CONFIRMED
+            && buncheolRepository.findEndedIds(List.of(buncheolId)).contains(buncheolId);
+
     return new BuncheolManagementResponse(
         buncheol.getId(),
         buncheol.getTitle(),
@@ -184,7 +191,8 @@ public class BuncheolManagementQueryService {
         cancelledParticipants,
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
-        buncheol.getOpenChatUrl());
+        buncheol.getOpenChatUrl(),
+        ended);
   }
 
   // 멤버 슬롯 id → 그룹 멤버명. 멤버 슬롯 → 그룹 멤버 2단계로 해석한다. (group_members 누락 시 null 허용을 위해 HashMap 사용)

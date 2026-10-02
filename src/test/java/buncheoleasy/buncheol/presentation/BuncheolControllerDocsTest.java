@@ -65,6 +65,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   private static final String BUNDLE_ID_DESCRIPTION =
       "이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null — null 끼리 묶으면 서로 다른 사람의 슬롯이 한 행이 되므로 그룹핑 키로 쓰지 말 것";
 
+  // 개최 목록과 관리 화면이 같은 판정을 내리므로 문서도 한 문장을 공유한다.
+  private static final String ENDED_DESCRIPTION =
+      "분철이 완전히 끝났는지. true = 진행확정(CONFIRMED)이고, 신청·입금 확인 중·보냈어요 상태의 참여가 없고, 확정 참여 전원의 택배가 편의점에 도착(DELIVERED·RECEIVED)했다. 확정 참여가 0명인 진행확정도 true. 진행확정이 아니면 항상 false — 취소(CANCELLED)도 false 이므로 「종료」 묶음에 취소를 함께 담으려면 status 와 함께 판정할 것. 판정 기준은 회원탈퇴 가드와 같다";
+
   private static final Long HOST_ID = USER_ID;
 
   @MockitoBean private BuncheolService buncheolService;
@@ -284,7 +288,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             createdAt,
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             FlowType.LEGACY,
-            BuncheolHostCancellability.CANCELLABLE);
+            BuncheolHostCancellability.CANCELLABLE,
+            false);
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -323,7 +328,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     화면은 이 값만 보고 삭제 버튼을 노출하면 된다.
                                     CANCELLABLE: 취소 가능 |
                                     BLOCKED_BY_STATUS: 진행확정 이후·이미 취소됨 (BCH-050) |
-                                    BLOCKED_BY_CONFIRMED_PAYMENT: 입금확인 참여 1건 이상 (BCH-093)"""))
+                                    BLOCKED_BY_CONFIRMED_PAYMENT: 입금확인 참여 1건 이상 (BCH-093)"""),
+                            fieldWithPath("[].ended").description(ENDED_DESCRIPTION))
                         .build())));
   }
 
@@ -1015,7 +1021,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             List.of(cancelled),
             FlowType.LEGACY,
             null,
-            "https://open.kakao.com/o/gAbCdEf");
+            "https://open.kakao.com/o/gAbCdEf",
+            false);
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -1048,6 +1055,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               **취소분 중 입금 흔적(마킹·입금확인)이 있고 0원이 아닌 건**에만 채운다
                             - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
                             - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
+                            - `ended` = 분철이 완전히 끝났는지. 개최 목록(`GET /v1/buncheols/me`)의 `ended` 와 같은 조회로 판정한다
                             - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
                               개최자 계좌로 직접 입금되는 직거래라 개최자가 환불 주체). 환불이 실제로 필요한지는 개최자가 판단한다.
                               필드 구조는 `participants[]` 와 같고 `status` 는 항상 `CANCELLED`, `delivery` 는 취소 시 정리되어 항상 null.
@@ -1291,7 +1299,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "참여자 소통용 오픈채팅 링크. 등록하지 않았으면 null "
                                         + "(개최자가 이 화면에서 PATCH /v1/buncheols/{id}/open-chat-url 로 수정한다)")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("ended").description(ENDED_DESCRIPTION))
                         .build())));
   }
 }

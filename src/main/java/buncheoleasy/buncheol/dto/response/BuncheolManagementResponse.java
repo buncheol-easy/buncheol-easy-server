@@ -11,6 +11,8 @@ import java.util.List;
  * @param cancelledParticipants 취소된 참여(환불 계좌 확인용). {@code participants} 와 분리해 내려 참여 수 집계에 섞이지 않게
  *     한다 — 슬롯을 점유하지 않는다.
  * @param openChatUrl 참여자 소통용 오픈채팅 링크(없으면 null). 개최자가 이 화면에서 바로 등록·수정하므로 현재 값이 필요하다.
+ * @param ended 분철이 완전히 끝났는지 — 개최 목록({@code MyHostedBuncheolResponse#ended})과 <b>같은 조회</b>로 판정한다. 목록
+ *     카드와 관리 화면 머리가 다른 말을 하면 안 된다. 진행확정이 아니면 항상 {@code false}.
  */
 public record BuncheolManagementResponse(
     Long id,
@@ -26,4 +28,5 @@ public record BuncheolManagementResponse(
     List<BuncheolManagementParticipantResponse> cancelledParticipants,
     FlowType flowType,
     Instant paymentDueAt,
-    String openChatUrl) {}
+    String openChatUrl,
+    boolean ended) {}

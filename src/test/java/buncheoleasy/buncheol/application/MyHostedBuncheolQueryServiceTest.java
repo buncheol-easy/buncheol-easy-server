@@ -1,7 +1,10 @@
 package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
@@ -21,6 +24,7 @@ import java.lang.reflect.Field;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -227,6 +231,60 @@ class MyHostedBuncheolQueryServiceTest {
           myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
       assertThat(result).hasSize(1);
       return result;
+    }
+  }
+
+  @Nested
+  @DisplayName("종료 여부 노출 테스트")
+  class EndedTest {
+
+    private static final Instant DEADLINE = Instant.parse("2026-06-01T12:00:00Z");
+    private static final Instant CREATED_AT = Instant.parse("2026-05-01T09:00:00Z");
+
+    @Test
+    void 진행확정_분철만_한_번에_물어_그_결과로_ended를_채운다() {
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(
+              List.of(
+                  분철(10L, BuncheolStatus.CONFIRMED),
+                  분철(20L, BuncheolStatus.CONFIRMED),
+                  분철(30L, BuncheolStatus.RECRUITING),
+                  분철(40L, BuncheolStatus.PAYMENT_COLLECTING),
+                  분철(50L, BuncheolStatus.CANCELLED)));
+      // 판정 대상은 진행확정 두 건뿐이다 — 다른 id 가 섞여 넘어오면 strict stub 이 인자 불일치로 실패한다.
+      given(buncheolRepository.findEndedIds(List.of(10L, 20L))).willReturn(Set.of(10L));
+
+      List<MyHostedBuncheolResponse> result =
+          myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+
+      // 취소(CANCELLED)도 false 다 — 「종료」 탭이 취소를 담을지는 화면이 status 와 묶어 정한다.
+      assertThat(result)
+          .extracting(MyHostedBuncheolResponse::buncheolId, MyHostedBuncheolResponse::ended)
+          .containsExactly(
+              tuple(10L, true),
+              tuple(20L, false),
+              tuple(30L, false),
+              tuple(40L, false),
+              tuple(50L, false));
+      // 분철마다 묻지 않고 한 번에 묻는다 (N+1 금지).
+      verify(buncheolRepository).findEndedIds(anyList());
+    }
+
+    // 쿼리를 건너뛰는 것은 어댑터 몫이다 (countConfirmedByBuncheolIds 와 같은 분담) — 서비스는 빈 목록을 넘기면 된다.
+    @Test
+    void 진행확정_분철이_없으면_빈_대상을_넘기고_전부_false로_내린다() {
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(List.of(분철(30L, BuncheolStatus.RECRUITING), 분철(50L, BuncheolStatus.CANCELLED)));
+
+      List<MyHostedBuncheolResponse> result =
+          myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+
+      assertThat(result).extracting(MyHostedBuncheolResponse::ended).containsOnly(false);
+      verify(buncheolRepository).findEndedIds(List.of());
+    }
+
+    private Buncheol 분철(final Long id, final BuncheolStatus status) {
+      return buncheol(id, 100L, "분철 " + id, status, DEADLINE, CREATED_AT);
     }
   }
 

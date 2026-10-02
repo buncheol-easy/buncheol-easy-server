@@ -21,7 +21,7 @@ public record PayActionProperties(
     @NotNull Duration connectTimeout,
     @NotNull Duration readTimeout) {
 
-  /** 주문 등록·매칭제외를 호출할 수 있는 환경인지. 미설정 환경에서는 호출을 건너뛴다. */
+  /** 주문 등록·취소를 호출할 수 있는 환경인지. 미설정 환경에서는 호출을 건너뛴다. */
   public boolean outboundEnabled() {
     return isSet(baseUrl) && isSet(apiKey) && isSet(mallId);
   }

@@ -6,10 +6,16 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
+import buncheoleasy.buncheol.application.BuncheolCancelReason;
+import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
+import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -20,6 +26,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
+import buncheoleasy.deposit.infrastructure.PayActionSendException;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
@@ -153,6 +160,106 @@ class DepositOrderListenerTest {
     // 묶음을 게이트보다 먼저 읽게 됐다(0원 판정이 묶음 배송비를 봐야 하므로). 돈을 지키는 성질은
     // 「등록되지 않는다」이고 그건 위 단언이 지킨다.
     then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
+  }
+
+  // 등록·취소 리스너는 서로 다른 @Async 스레드라, 취소가 먼저 도달하면 뒤이어 등록된 주문이 살아남는다.
+  @Test
+  void 등록_후_재조회에서_이미_취소됐으면_주문을_취소한다() {
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+    Participation cancelled = newInstance(Participation.class);
+    setField(cancelled, "id", PARTICIPATION_ID);
+    setField(cancelled, "status", ParticipationStatus.CANCELLED);
+    given(participationDomainService.getParticipation(PARTICIPATION_ID))
+        .willReturn(participation, cancelled);
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should().registerOrder(eq(PARTICIPATION_ID), anyLong(), any(), any(), any());
+    then(payActionClient).should().cancelOrder(PARTICIPATION_ID);
+  }
+
+  @Test
+  void 등록_후에도_입금대기면_주문을_취소하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  @Test
+  void 입금_만료되면_주문을_취소한다() {
+    cancelTarget(false, null);
+
+    listener.onPaymentExpired(new PaymentExpiredEvent(PARTICIPATION_ID));
+
+    then(payActionClient).should().cancelOrder(PARTICIPATION_ID);
+  }
+
+  @Test
+  void C2C_참여가_만료되면_주문을_취소하지_않는다() {
+    cancelTarget(true, null);
+
+    listener.onPaymentExpired(new PaymentExpiredEvent(PARTICIPATION_ID));
+
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  @Test
+  void 분철_취소로_입금대기_참여가_취소되면_주문을_취소한다() {
+    cancelTarget(false, null);
+
+    listener.onBuncheolCancelled(
+        new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.HOST_CANCELLED));
+
+    then(payActionClient).should().cancelOrder(PARTICIPATION_ID);
+  }
+
+  // 입금확인된 주문은 이미 매칭이 끝났다. 결제 취소 성격의 API 로 건드리면 오프라인 환불과 기록이 어긋날 수 있다.
+  @Test
+  void 분철_취소로_입금확인됐던_참여가_취소되면_주문을_취소하지_않는다() {
+    cancelTarget(false, Instant.parse("2026-05-14T12:10:00Z"));
+
+    listener.onBuncheolCancelled(
+        new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.HOST_CANCELLED));
+
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  @Test
+  void 주문_취소_실패는_삼킨다() {
+    cancelTarget(false, null);
+    willThrow(new PayActionSendException("페이액션 호출 거부"))
+        .given(payActionClient)
+        .cancelOrder(PARTICIPATION_ID);
+
+    assertThatCode(() -> listener.onPaymentExpired(new PaymentExpiredEvent(PARTICIPATION_ID)))
+        .doesNotThrowAnyException();
+  }
+
+  private void cancelTarget(final boolean c2c, final Instant confirmedAt) {
+    Participation participation = newInstance(Participation.class);
+    setField(participation, "id", PARTICIPATION_ID);
+    setField(participation, "buncheolId", 1L);
+    setField(participation, "status", ParticipationStatus.CANCELLED);
+    setField(participation, "confirmedAt", confirmedAt);
+    given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
+    if (confirmedAt == null) {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(c2c);
+      given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
+      if (!c2c) {
+        given(payActionClient.isEnabled()).willReturn(true);
+      }
+    }
   }
 
   private static <T> T newInstance(final Class<T> type) {

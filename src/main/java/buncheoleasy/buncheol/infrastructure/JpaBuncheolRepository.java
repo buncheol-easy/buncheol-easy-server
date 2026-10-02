@@ -29,6 +29,10 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * 고치면 "탈퇴는 막히는데 화면은 「종료」" 같은 모순이 생기므로 식을 하나로 둔다. 두 쿼리는 이 식이 참조하는 이름 있는
    * 파라미터({@code pendingParticipationStatuses} · {@code confirmedParticipationStatus} · {@code
    * finishedDeliveryStatuses})를 같은 이름으로 받아야 한다.
+   *
+   * <p>⚠️ 묶음 정본 전환기에 배송 행이 2개 생긴 묶음은 1행만 끝나도 끝난 것으로 본다 — 배송지 삭제 가드(전 행 종료)와는
+   * 의도적으로 다르다. 해당 묶음은 2026-10-02 기준 staging 3·prod 1 로 닫힌 집합이며 P4 {@code uq_deliveries_bundle}
+   * 이후 사라진다.
    */
   String CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK =
       "EXISTS ("

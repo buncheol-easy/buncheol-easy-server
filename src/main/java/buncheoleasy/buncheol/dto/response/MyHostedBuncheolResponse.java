@@ -17,7 +17,7 @@ import java.time.Instant;
  * (docs/56 §21-4)을 다시 열기 때문이다.
  *
  * <p>{@code ended} 는 분철이 <b>완전히 끝났는지</b>다 — 진행확정이고, 미확정 참여가 없고, 확정 참여 전원의 택배가 편의점에 도착했다.
- * 판정은 회원탈퇴 가드와 같은 식이다({@code BuncheolRepository#findEndedIds}). 진행확정이 아니면 항상 {@code false} 다 —
+ * 확정 참여가 0명인 진행확정도 {@code true} 다. 판정은 회원탈퇴 가드와 같은 식이다({@code BuncheolRepository#findEndedIds}). 진행확정이 아니면 항상 {@code false} 다 —
  * 취소(CANCELLED)도 {@code false} 이므로, 화면의 「종료」 탭이 취소를 함께 담으려면 상태와 묶어서 판정해야 한다.
  */
 public record MyHostedBuncheolResponse(

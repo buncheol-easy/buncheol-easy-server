@@ -48,6 +48,10 @@ public interface BuncheolRepository {
    * 끝났다({@code DeliveryStatus#finished()} — 편의점 도착 이후). 확정 참여가 0명인 진행확정도 끝난 것으로 본다. 진행확정이
    * 아닌 분철은 결과에 나오지 않는다. 두 판정은 같은 식·같은 상태 상수를 공유한다.
    *
+   * <p>전환기(묶음 정본 전환 전)에 배송 행이 2개 생긴 묶음은 1행만 끝나도 끝난 것으로 본다 — 탈퇴 가드와 같은 규칙이고
+   * 배송지 삭제 가드(전 행)와는 의도적으로 다르다. 해당 묶음은 2026-10-02 기준 staging 3·prod 1 로 닫힌 집합이며 P4
+   * {@code uq_deliveries_bundle} 이후 사라진다.
+   *
    * <p>빈 목록이면 쿼리 없이 빈 집합을 반환한다.
    */
   Set<Long> findEndedIds(List<Long> buncheolIds);

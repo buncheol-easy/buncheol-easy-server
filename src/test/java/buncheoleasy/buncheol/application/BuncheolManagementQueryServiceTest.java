@@ -48,11 +48,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -841,6 +844,49 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants()).hasSize(1);
       assertThat(response.confirmedCount()).isEqualTo(1);
       assertThat(response.cancelledParticipants()).hasSize(1);
+    }
+  }
+
+  // 개최 목록 카드가 「종료」인데 관리 화면 머리가 「진행 확정」이면 한 곳만 고친 사고다 — 같은 조회를 쓰는지 본다.
+  @Nested
+  @DisplayName("종료 여부 노출")
+  class EndedTest {
+
+    @Test
+    void 진행확정_분철이_종료_조회에_나오면_true를_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of(BUNCHEOL_ID));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.ended()).isTrue();
+    }
+
+    @Test
+    void 진행확정_분철이라도_종료_조회에_없으면_false를_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of());
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.ended()).isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = "CONFIRMED",
+        mode = EnumSource.Mode.EXCLUDE)
+    void 진행확정이_아니면_종료_조회_없이_false를_내린다(final BuncheolStatus status) {
+      stubBasicBuncheol(status);
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.ended()).isFalse();
+      verify(buncheolRepository, never()).findEndedIds(anyList());
     }
   }
 

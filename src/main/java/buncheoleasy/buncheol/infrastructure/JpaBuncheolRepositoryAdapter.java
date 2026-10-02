@@ -142,6 +142,8 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         groupId, BuncheolStatus.recruitingGroup());
   }
 
+  // 🔴 아래 두 메서드는 판정식(JpaBuncheolRepository#CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK)과 그 식에 넘기는
+  // 상태 상수를 공유한다 — 탈퇴 가드와 「종료」 표시가 갈리지 않게 한쪽에만 상태를 하드코딩하지 않는다.
   @Override
   public boolean existsUnfinishedByHostId(Long hostId) {
     // C2C 입금 수집중(PAYMENT_COLLECTING) 분철도 개최자 탈퇴를 막는다 (docs/46 §4.7-D2).
@@ -149,12 +151,24 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         hostId,
         Set.of(BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING),
         BuncheolStatus.CONFIRMED,
-        Set.of(
-            ParticipationStatus.APPLIED,
-            ParticipationStatus.AWAITING_PAYMENT,
-            ParticipationStatus.PAYMENT_SENT),
+        ParticipationStatus.unconfirmedActive(),
         ParticipationStatus.CONFIRMED,
         DeliveryStatus.finished());
+  }
+
+  @Override
+  public Set<Long> findEndedIds(final List<Long> buncheolIds) {
+    // 진행확정이 없는 호스트(모집중·취소뿐)는 쿼리 0회로 끝낸다 — 빈 IN 목록을 DB 로 보내지 않는다.
+    if (buncheolIds.isEmpty()) {
+      return Set.of();
+    }
+    return Set.copyOf(
+        jpaBuncheolRepository.findEndedIds(
+            buncheolIds,
+            BuncheolStatus.CONFIRMED,
+            ParticipationStatus.unconfirmedActive(),
+            ParticipationStatus.CONFIRMED,
+            DeliveryStatus.finished()));
   }
 
   @Override

@@ -20,6 +20,34 @@ import org.springframework.data.repository.query.Param;
 
 interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
+  /**
+   * 진행확정 분철 {@code b} 에 아직 끝나지 않은 일이 남았는가 — 미확정 활성 참여가 있거나, 확정 참여 중 묶음 배송이
+   * 끝나지 않은 건이 있다(배송 행이 없는 확정 참여도 미종료).
+   *
+   * <p>🔴 <b>회원탈퇴 가드({@link #existsUnfinishedByHostId})와 개최 목록 「종료」 판정({@link #findEndedIds})이
+   * 이 문자열을 그대로 공유한다.</b> 가드는 {@code EXISTS}, 종료 판정은 {@code NOT EXISTS} 로 같은 식을 쓴다 — 한쪽만
+   * 고치면 "탈퇴는 막히는데 화면은 「종료」" 같은 모순이 생기므로 식을 하나로 둔다. 두 쿼리는 이 식이 참조하는 이름 있는
+   * 파라미터({@code pendingParticipationStatuses} · {@code confirmedParticipationStatus} · {@code
+   * finishedDeliveryStatuses})를 같은 이름으로 받아야 한다.
+   *
+   * <p>⚠️ 묶음 정본 전환기에 배송 행이 2개 생긴 묶음은 1행만 끝나도 끝난 것으로 본다 — 배송지 삭제 가드(전 행 종료)와는
+   * 의도적으로 다르다. 해당 묶음은 2026-10-02 기준 staging 3·prod 1 로 닫힌 집합이며 P4 {@code uq_deliveries_bundle}
+   * 이후 사라진다.
+   */
+  String CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK =
+      "EXISTS ("
+          + "  SELECT p FROM Participation p "
+          + "  WHERE p.buncheolId = b.id "
+          + "  AND (p.status IN :pendingParticipationStatuses "
+          + "    OR (p.status = :confirmedParticipationStatus "
+          + "      AND NOT EXISTS ("
+          + "        SELECT d FROM Delivery d "
+          // 배송은 묶음으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 배송 행이
+          // 아예 생기지 않는다. 참여 id 로 찾으면 그 슬롯이 영구히 "배송 미종료" 로 남아, 그 분철의
+          // 개최자가 영원히 탈퇴하지 못한다. 참여자 가드(JpaParticipationRepository)와 같은 수정이다.
+          + "        WHERE d.bundleId = p.bundleId "
+          + "        AND d.status IN :finishedDeliveryStatuses))))";
+
   long countByHostIdAndStatusIn(Long hostId, Set<BuncheolStatus> statuses);
 
   long countByGroupIdAndStatusIn(Long groupId, Collection<BuncheolStatus> statuses);
@@ -146,27 +174,41 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
    * {@code ParticipationBundleDomainService#attach} 를 부르며 그 연결 CAS 가 실패하면 예외로 전체 롤백된다
    * — 즉 <b>묶음 없는 참여를 만들 수 있는 코드 경로가 없다</b>. 참여 id 폴백을 남기지 않은 근거가 이것이다.
    * P4 가 {@code bundle_id} 를 NOT NULL 로 조이면 이 전제가 스키마로 굳는다.
+   *
+   * <p>진행확정 분기의 판정식은 {@link #CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK} 로 개최 목록 「종료」 판정과 공유한다.
    */
   @Query(
       "SELECT COUNT(b) > 0 FROM Buncheol b "
           + "WHERE b.hostId = :hostId "
           + "AND (b.status IN :openStatuses "
-          + "  OR (b.status = :confirmedStatus "
-          + "    AND EXISTS ("
-          + "      SELECT p FROM Participation p "
-          + "      WHERE p.buncheolId = b.id "
-          + "      AND (p.status IN :pendingParticipationStatuses "
-          + "        OR (p.status = :confirmedParticipationStatus "
-          + "          AND NOT EXISTS ("
-          + "            SELECT d FROM Delivery d "
-          // 배송은 묶음으로 찾는다 — 택배 1개 = 묶음 1개라 다슬롯 묶음의 두 번째 슬롯에는 배송 행이
-          // 아예 생기지 않는다. 참여 id 로 찾으면 그 슬롯이 영구히 "배송 미종료" 로 남아, 그 분철의
-          // 개최자가 영원히 탈퇴하지 못한다. 참여자 가드(JpaParticipationRepository)와 같은 수정이다.
-          + "            WHERE d.bundleId = p.bundleId "
-          + "            AND d.status IN :finishedDeliveryStatuses))))))")
+          + "  OR (b.status = :confirmedStatus AND "
+          + CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK
+          + "))")
   boolean existsUnfinishedByHostId(
       @Param("hostId") Long hostId,
       @Param("openStatuses") Set<BuncheolStatus> openStatuses,
+      @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("pendingParticipationStatuses") Set<ParticipationStatus> pendingParticipationStatuses,
+      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("finishedDeliveryStatuses") Set<DeliveryStatus> finishedDeliveryStatuses);
+
+  /**
+   * 주어진 분철 중 <b>끝난</b> 진행확정 분철 id (개최 목록·개최 관리 화면의 「종료」 표시). 회원탈퇴 가드의 진행확정 분기를 분철
+   * 단위로 뒤집은 것이다 — 같은 판정식({@link #CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK})을 {@code NOT EXISTS} 로 쓴다.
+   * 확정 참여가 0명인 진행확정은 끝난 것으로 나온다(가드도 그 분철로는 탈퇴를 막지 않는다).
+   *
+   * <p>"끝나지 않은 id" 가 아니라 <b>"끝난 id"</b> 를 돌려주는 이유: 진행확정이 아닌 분철과 조회에서 빠진 분철이 모두
+   * 자연히 "끝나지 않음" 으로 떨어진다. 반대로 미종료 id 를 받아 뒤집으면 조회가 비거나 대상이 새는 순간 전부 「종료」로
+   * 뒤집힌다 — 틀릴 때 지금 화면(「진행 확정」)으로 남는 쪽을 골랐다.
+   */
+  @Query(
+      "SELECT b.id FROM Buncheol b "
+          + "WHERE b.id IN :buncheolIds "
+          + "AND b.status = :confirmedStatus "
+          + "AND NOT "
+          + CONFIRMED_BUNCHEOL_HAS_UNFINISHED_WORK)
+  List<Long> findEndedIds(
+      @Param("buncheolIds") Collection<Long> buncheolIds,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
       @Param("pendingParticipationStatuses") Set<ParticipationStatus> pendingParticipationStatuses,
       @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,

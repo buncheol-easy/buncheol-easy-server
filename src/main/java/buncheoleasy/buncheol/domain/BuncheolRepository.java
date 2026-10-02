@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface BuncheolRepository {
 
@@ -38,6 +39,18 @@ public interface BuncheolRepository {
    * 참여 배송이 끝난 진행확정 분철은 탈퇴를 막지 않는다 (배송비 환급 진행 여부는 보지 않는다).
    */
   boolean existsUnfinishedByHostId(Long hostId);
+
+  /**
+   * 주어진 분철 중 <b>끝난</b> 분철 id — 개최 목록·개최 관리 화면의 「종료」 표시용.
+   *
+   * <p>끝남은 {@link #existsUnfinishedByHostId} 의 진행확정 분기를 분철 단위로 뒤집은 것이다: 진행확정({@link
+   * BuncheolStatus#CONFIRMED})이고, 미확정 활성 참여(신청·입금 확인 중·보냈어요)가 없고, 확정 참여 전원의 <b>묶음</b> 배송이
+   * 끝났다({@code DeliveryStatus#finished()} — 편의점 도착 이후). 확정 참여가 0명인 진행확정도 끝난 것으로 본다. 진행확정이
+   * 아닌 분철은 결과에 나오지 않는다. 두 판정은 같은 식·같은 상태 상수를 공유한다.
+   *
+   * <p>빈 목록이면 쿼리 없이 빈 집합을 반환한다.
+   */
+  Set<Long> findEndedIds(List<Long> buncheolIds);
 
   /**
    * 그룹의 모집중 그룹({@link BuncheolStatus#recruitingGroup()} — RECRUITING·PAYMENT_COLLECTING) 분철 수. 아티스트 페이지

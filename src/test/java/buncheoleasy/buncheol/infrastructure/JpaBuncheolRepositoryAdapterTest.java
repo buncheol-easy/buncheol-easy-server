@@ -17,10 +17,14 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -93,6 +97,107 @@ class JpaBuncheolRepositoryAdapterTest {
     em.flush();
     forceCreatedAt(b.getId(), createdAt);
     return b.getId();
+  }
+
+  // --- 탈퇴 가드·종료 판정 공용 픽스처 (두 판정이 같은 식을 쓰므로 같은 모양의 데이터로 검증한다) ---
+
+  private int fixtureSeq = 0;
+
+  // 분철에 지정 상태의 참여 한 건을 깔고 참여 id 를 반환한다. 슬롯·참여자는 매번 새로 만들어
+  // uq_buncheol_members_buncheol_member / uq_participations_active_* 유니크와 충돌하지 않게 한다.
+  private Long insertParticipation(final Long buncheolId, final String participationStatus) {
+    fixtureSeq++;
+    Long participantId = TestUserFixture.insertUser(jdbcTemplate, "guard_p" + fixtureSeq);
+    Long groupMemberId =
+        TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "가드멤버" + fixtureSeq);
+    jdbcTemplate.update(
+        "INSERT INTO buncheol_members (buncheol_id, member_id, price) VALUES (?, ?, ?)",
+        buncheolId,
+        groupMemberId,
+        30_000L);
+    Long buncheolMemberId =
+        jdbcTemplate.queryForObject(
+            "SELECT MAX(id) FROM buncheol_members WHERE buncheol_id = ? AND member_id = ?",
+            Long.class,
+            buncheolId,
+            groupMemberId);
+    jdbcTemplate.update(
+        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
+            + " amount, refund_bank, refund_account, refund_holder, due_at, status)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        buncheolId,
+        buncheolMemberId,
+        participantId,
+        30_000L,
+        "국민",
+        "12345678",
+        "홍길동",
+        Timestamp.from(Instant.now()),
+        participationStatus);
+    Long participationId =
+        jdbcTemplate.queryForObject(
+            "SELECT MAX(id) FROM participations WHERE buncheol_member_id = ?",
+            Long.class,
+            buncheolMemberId);
+    // 탈퇴 가드가 배송을 묶음으로 찾는다 — 참여마다 묶음을 하나 심는다.
+    linkNewBundle(buncheolId, participationId);
+    return participationId;
+  }
+
+  private Long insertBundle(final Long buncheolId, final Long participationId) {
+    Long owner =
+        jdbcTemplate.queryForObject(
+            "SELECT participant_id FROM participations WHERE id = ?", Long.class, participationId);
+    jdbcTemplate.update(
+        "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
+            + " refund_bank, refund_account, refund_holder) VALUES (?, ?, ?, ?, ?, ?)",
+        buncheolId,
+        owner,
+        0L,
+        "국민",
+        "12345678",
+        "홍길동");
+    return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
+  }
+
+  private Long linkNewBundle(final Long buncheolId, final Long participationId) {
+    Long bundleId = insertBundle(buncheolId, participationId);
+    linkBundle(participationId, bundleId);
+    return bundleId;
+  }
+
+  private void linkBundle(final Long participationId, final Long bundleId) {
+    jdbcTemplate.update(
+        "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, participationId);
+  }
+
+  private Long bundleOf(final Long participationId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
+  }
+
+  private Long insertConfirmedParticipation(final Long buncheolId) {
+    return insertParticipation(buncheolId, "CONFIRMED");
+  }
+
+  private void insertDelivery(final Long participationId, final String deliveryStatus) {
+    jdbcTemplate.update(
+        "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
+            + " receiver_nickname, receiver_phone_number, status)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        participationId,
+        bundleOf(participationId),
+        "GS25_HALF",
+        "매장",
+        "닉네임",
+        "01012345678",
+        deliveryStatus);
+  }
+
+  private Long persistConfirmedBuncheol() {
+    Buncheol confirmed = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+    forceStatus(confirmed.getId(), BuncheolStatus.CONFIRMED);
+    return confirmed.getId();
   }
 
   @Nested
@@ -376,105 +481,6 @@ class JpaBuncheolRepositoryAdapterTest {
   @DisplayName("호스트의 끝나지 않은 분철 존재 여부 테스트")
   class ExistsUnfinishedByHostIdTest {
 
-    private int fixtureSeq = 0;
-
-    // 분철에 지정 상태의 참여 한 건을 깔고 참여 id 를 반환한다. 슬롯·참여자는 매번 새로 만들어
-    // uq_buncheol_members_buncheol_member / uq_participations_active_* 유니크와 충돌하지 않게 한다.
-    private Long insertParticipation(final Long buncheolId, final String participationStatus) {
-      fixtureSeq++;
-      Long participantId = TestUserFixture.insertUser(jdbcTemplate, "guard_p" + fixtureSeq);
-      Long groupMemberId =
-          TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "가드멤버" + fixtureSeq);
-      jdbcTemplate.update(
-          "INSERT INTO buncheol_members (buncheol_id, member_id, price) VALUES (?, ?, ?)",
-          buncheolId,
-          groupMemberId,
-          30_000L);
-      Long buncheolMemberId =
-          jdbcTemplate.queryForObject(
-              "SELECT MAX(id) FROM buncheol_members WHERE buncheol_id = ? AND member_id = ?",
-              Long.class,
-              buncheolId,
-              groupMemberId);
-      jdbcTemplate.update(
-          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id,"
-              + " amount, refund_bank, refund_account, refund_holder, due_at, status)"
-              + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          buncheolId,
-          buncheolMemberId,
-          participantId,
-          30_000L,
-          "국민",
-          "12345678",
-          "홍길동",
-          Timestamp.from(Instant.now()),
-          participationStatus);
-      Long participationId =
-          jdbcTemplate.queryForObject(
-              "SELECT MAX(id) FROM participations WHERE buncheol_member_id = ?",
-              Long.class,
-              buncheolMemberId);
-      // 탈퇴 가드가 배송을 묶음으로 찾는다 — 참여마다 묶음을 하나 심는다.
-      linkNewBundle(buncheolId, participationId);
-      return participationId;
-    }
-
-    private Long insertBundle(final Long buncheolId, final Long participationId) {
-      Long owner =
-          jdbcTemplate.queryForObject(
-              "SELECT participant_id FROM participations WHERE id = ?", Long.class, participationId);
-      jdbcTemplate.update(
-          "INSERT INTO participation_bundles (buncheol_id, participant_id, shipping_fee,"
-              + " refund_bank, refund_account, refund_holder) VALUES (?, ?, ?, ?, ?, ?)",
-          buncheolId,
-          owner,
-          0L,
-          "국민",
-          "12345678",
-          "홍길동");
-      return jdbcTemplate.queryForObject("SELECT MAX(id) FROM participation_bundles", Long.class);
-    }
-
-    private Long linkNewBundle(final Long buncheolId, final Long participationId) {
-      Long bundleId = insertBundle(buncheolId, participationId);
-      linkBundle(participationId, bundleId);
-      return bundleId;
-    }
-
-    private void linkBundle(final Long participationId, final Long bundleId) {
-      jdbcTemplate.update(
-          "UPDATE participations SET bundle_id = ? WHERE id = ?", bundleId, participationId);
-    }
-
-    private Long bundleOf(final Long participationId) {
-      return jdbcTemplate.queryForObject(
-          "SELECT bundle_id FROM participations WHERE id = ?", Long.class, participationId);
-    }
-
-    private Long insertConfirmedParticipation(final Long buncheolId) {
-      return insertParticipation(buncheolId, "CONFIRMED");
-    }
-
-    private void insertDelivery(final Long participationId, final String deliveryStatus) {
-      jdbcTemplate.update(
-          "INSERT INTO deliveries (participation_id, bundle_id, shipping_method, store_name,"
-              + " receiver_nickname, receiver_phone_number, status)"
-              + " VALUES (?, ?, ?, ?, ?, ?, ?)",
-          participationId,
-          bundleOf(participationId),
-          "GS25_HALF",
-          "매장",
-          "닉네임",
-          "01012345678",
-          deliveryStatus);
-    }
-
-    private Long persistConfirmedBuncheol() {
-      Buncheol confirmed = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
-      forceStatus(confirmed.getId(), BuncheolStatus.CONFIRMED);
-      return confirmed.getId();
-    }
-
     @Test
     void 호스트의_분철이_없으면_false를_반환한다() {
       assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
@@ -584,6 +590,157 @@ class JpaBuncheolRepositoryAdapterTest {
       persistAndDetach(Buncheol.create(otherHostId, validParams(), Instant.now()));
 
       assertThat(buncheolRepository.existsUnfinishedByHostId(hostId)).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("끝난 진행확정 분철 조회 테스트 (개최 목록·관리 화면 「종료」)")
+  class FindEndedIdsTest {
+
+    // 「종료」는 탈퇴 가드의 진행확정 분기를 뒤집은 것이다. 진행확정 분철 하나만 가진 호스트라면 두 판정은 정확히
+    // 반대 답을 내야 한다 — 같은 식을 공유한다는 약속을 케이스마다 함께 확인한다.
+    private void assertEnded(final Long confirmedBuncheolId, final boolean expected) {
+      assertThat(buncheolRepository.findEndedIds(List.of(confirmedBuncheolId)))
+          .as("종료 판정")
+          .isEqualTo(expected ? Set.of(confirmedBuncheolId) : Set.of());
+      assertThat(buncheolRepository.existsUnfinishedByHostId(hostId))
+          .as("탈퇴 가드는 반대 답을 내야 한다")
+          .isEqualTo(!expected);
+    }
+
+    // 판정식은 flow_type 을 보지 않는다. C2C 픽스처는 실제 행과 같은 모양을 만들기 위한 것이다.
+    private void markC2c(final Long buncheolId) {
+      jdbcTemplate.update("UPDATE buncheols SET flow_type = 'C2C' WHERE id = ?", buncheolId);
+      jdbcTemplate.update(
+          "UPDATE participations SET flow_type = 'C2C' WHERE buncheol_id = ?", buncheolId);
+      em.clear();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"DELIVERED", "RECEIVED"})
+    void 확정_참여_전원의_배송이_편의점_도착_이후면_끝난다(final String finishedDeliveryStatus) {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), finishedDeliveryStatus);
+      insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
+
+      assertEnded(buncheolId, true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SNAPSHOTTED", "SHIPPING"})
+    void 확정_참여_중_하나라도_배송이_끝나지_않았으면_끝나지_않는다(final String unfinishedDeliveryStatus) {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
+      insertDelivery(insertConfirmedParticipation(buncheolId), unfinishedDeliveryStatus);
+
+      assertEnded(buncheolId, false);
+    }
+
+    @Test
+    void 배송_행이_없는_확정_참여가_있으면_끝나지_않는다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "DELIVERED");
+      insertConfirmedParticipation(buncheolId);
+
+      assertEnded(buncheolId, false);
+    }
+
+    // 🔴 C2C 우려의 본체 — 진행확정 뒤에도 미확정 참여가 남아 있으면 개최자가 할 일이 남은 것이다.
+    // 다른 참여의 배송이 모두 끝났어도 「종료」로 보이면 안 된다.
+    @ParameterizedTest
+    @ValueSource(strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT"})
+    void C2C_진행확정에_미확정_참여가_남아_있으면_배송이_끝났어도_끝나지_않는다(
+        final String unconfirmedStatus) {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "DELIVERED");
+      insertParticipation(buncheolId, unconfirmedStatus);
+      markC2c(buncheolId);
+
+      assertEnded(buncheolId, false);
+    }
+
+    @Test
+    void C2C_진행확정도_확정_참여_전원의_배송이_끝나면_끝난다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "DELIVERED");
+      insertDelivery(insertConfirmedParticipation(buncheolId), "RECEIVED");
+      markC2c(buncheolId);
+
+      assertEnded(buncheolId, true);
+    }
+
+    // 가드와 같은 답이다 — 확정 참여가 없으면 개최자가 보낼 택배도 없다.
+    @Test
+    void 확정_참여가_0명인_진행확정은_끝난다() {
+      Long buncheolId = persistConfirmedBuncheol();
+
+      assertEnded(buncheolId, true);
+    }
+
+    @Test
+    void 취소된_참여는_판정에서_무시한다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(buncheolId), "DELIVERED");
+      // 배송 행 없이 취소된 참여 — 확정 참여였다면 「배송 미종료」로 막혔을 모양이다.
+      insertParticipation(buncheolId, "CANCELLED");
+
+      assertEnded(buncheolId, true);
+    }
+
+    // 🔴 다슬롯 묶음은 택배가 하나라 두 번째 슬롯에는 배송 행이 없다. 참여 id 로 배송을 찾으면 영원히 안 끝난다.
+    @Test
+    void 한_묶음의_두_슬롯이_배송_1건을_공유하면_그_배송이_끝났을_때_끝난다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      Long carrier = insertConfirmedParticipation(buncheolId);
+      Long sibling = insertConfirmedParticipation(buncheolId);
+      linkBundle(sibling, bundleOf(carrier));
+      insertDelivery(carrier, "DELIVERED");
+
+      assertEnded(buncheolId, true);
+    }
+
+    @Test
+    void 한_묶음의_공유_배송이_아직_진행_중이면_끝나지_않는다() {
+      Long buncheolId = persistConfirmedBuncheol();
+      Long carrier = insertConfirmedParticipation(buncheolId);
+      Long sibling = insertConfirmedParticipation(buncheolId);
+      linkBundle(sibling, bundleOf(carrier));
+      insertDelivery(carrier, "SHIPPING");
+
+      assertEnded(buncheolId, false);
+    }
+
+    // 참여가 하나도 없는 분철이라 상태 조건이 빠지면 전부 「끝남」으로 새어 나온다 — 그 조건을 붙잡는 테스트다.
+    @ParameterizedTest
+    @EnumSource(value = BuncheolStatus.class, names = "CONFIRMED", mode = EnumSource.Mode.EXCLUDE)
+    void 진행확정이_아닌_분철은_결과에_나오지_않는다(final BuncheolStatus status) {
+      Buncheol buncheol = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      forceStatus(buncheol.getId(), status);
+
+      assertThat(buncheolRepository.findEndedIds(List.of(buncheol.getId()))).isEmpty();
+    }
+
+    @Test
+    void 여러_분철을_한_번에_물으면_넘긴_것_중_끝난_것만_돌려준다() {
+      Long ended = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(ended), "DELIVERED");
+      Long shipping = persistConfirmedBuncheol();
+      insertDelivery(insertConfirmedParticipation(shipping), "SHIPPING");
+      Long recruiting =
+          persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now())).getId();
+      // 끝났지만 묻지 않은 분철 — IN 목록 밖은 결과에 섞이지 않는다.
+      Long notAsked = persistConfirmedBuncheol();
+
+      assertThat(buncheolRepository.findEndedIds(List.of(ended, shipping, recruiting)))
+          .containsExactly(ended)
+          .doesNotContain(notAsked);
+    }
+
+    @Test
+    void 빈_목록이면_빈_집합을_반환한다() {
+      persistConfirmedBuncheol();
+
+      assertThat(buncheolRepository.findEndedIds(List.of())).isEmpty();
     }
   }
 

@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
@@ -107,6 +108,7 @@ class DepositOrderListenerTest {
     setField(participation, "id", PARTICIPATION_ID);
     setField(participation, "amount", amount);
     setField(participation, "shippingFee", shippingFee);
+    setField(participation, "status", ParticipationStatus.AWAITING_PAYMENT);
     setField(participation, "createdAt", Instant.parse("2026-05-14T12:00:00Z"));
     setField(participation, "dueAt", Instant.parse("2026-05-14T12:30:00Z"));
     given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
@@ -182,6 +184,32 @@ class DepositOrderListenerTest {
     // 묶음을 게이트보다 먼저 읽게 됐다(0원 판정이 묶음 배송비를 봐야 하므로). 돈을 지키는 성질은
     // 「등록되지 않는다」이고 그건 위 단언이 지킨다.
     then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
+  }
+
+  // 리스너가 밀린 사이 운영자가 확정한 참여다. 주문을 걸면 매칭 없이 남아 같은 금액의 중복 입금을 알림 없이 삼킨다.
+  @Test
+  void 첫_조회에서_이미_확정됐으면_주문을_등록하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    setField(participation, "status", ParticipationStatus.CONFIRMED);
+    setField(participation, "confirmedAt", Instant.parse("2026-05-14T12:01:00Z"));
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+    then(participationBundleDomainService).should(never()).findByParticipation(any());
+  }
+
+  @Test
+  void 첫_조회에서_이미_취소됐으면_주문을_등록하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    setField(participation, "status", ParticipationStatus.CANCELLED);
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+    then(participationBundleDomainService).should(never()).findByParticipation(any());
   }
 
   // 등록·취소 리스너는 서로 다른 @Async 스레드라, 취소가 먼저 도달하면 뒤이어 등록된 주문이 살아남는다.
@@ -302,7 +330,7 @@ class DepositOrderListenerTest {
                     new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY)))
         .doesNotThrowAnyException();
 
-    then(participationDomainService).should().getParticipation(PARTICIPATION_ID);
+    then(participationDomainService).should(times(1)).getParticipation(PARTICIPATION_ID);
     then(payActionClient).should(never()).cancelOrder(anyLong());
     assertThat(logMessages())
         .contains("페이액션 주문 등록 실패 - participationId=" + PARTICIPATION_ID)

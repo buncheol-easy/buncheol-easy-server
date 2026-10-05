@@ -57,6 +57,11 @@ public class DepositOrderListener {
   private boolean registerQuietly(final Long participationId) {
     try {
       Participation participation = participationDomainService.getParticipation(participationId);
+      // 입금 대기 참여만 등록한다. 리스너가 밀린 사이 운영자가 확정한 참여에 주문을 걸면 매칭 없이 dueAt 까지 남아,
+      // 같은 예금주·금액의 중복 입금이 ALREADY_CONFIRMED 로 알림 없이 묻힌다. 취소된 참여는 걸 이유가 없다.
+      if (participation.getStatus() != ParticipationStatus.AWAITING_PAYMENT) {
+        return false;
+      }
       // 🔴 묶음을 먼저 읽는다. 아래 두 판정(0원 게이트 · 입금자명)이 같은 묶음을 봐야 한다.
       ParticipationBundle bundle =
           participationBundleDomainService.findByParticipation(participation).orElse(null);

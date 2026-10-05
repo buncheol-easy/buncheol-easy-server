@@ -24,4 +24,16 @@ public record ManagementDeliveryResponse(
         delivery.getTrackingNumber(),
         delivery.getStatus());
   }
+
+  /** 탈퇴한 참여자의 배송. 지점·수령인은 참여자 개인정보라 비우고, 방법·운송장·상태는 개최자의 발송 기록이라 남긴다. */
+  public static ManagementDeliveryResponse fromWithdrawnReceiver(final Delivery delivery) {
+    return new ManagementDeliveryResponse(
+        delivery.getId(),
+        delivery.getShippingMethod(),
+        null,
+        null,
+        null,
+        delivery.getTrackingNumber(),
+        delivery.getStatus());
+  }
 }

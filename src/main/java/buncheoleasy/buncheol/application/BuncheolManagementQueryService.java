@@ -224,6 +224,9 @@ public class BuncheolManagementQueryService {
       final Map<Long, BundleReleasability> releasabilityByBundleId,
       final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
+    // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다. 탈퇴는 진행 중인 거래가 없어야 가능하므로(USR-029)
+    // 개최자에게 실명·연락처를 남길 이유가 없다.
+    boolean withdrawn = participant == null;
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
     RefundAccount refundAccount =
         ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
@@ -250,22 +253,24 @@ public class BuncheolManagementQueryService {
         participation.getId(),
         participation.getBundleId(),
         participation.getParticipantId(),
-        // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다. null 로 내리면 클라 파서가
-        // 별칭 폴백을 훑다 예금주 실명(depositorName)을 닉네임 자리에 채운다 — 고정 문구로 막는다.
-        participant == null
-            ? WITHDRAWN_PARTICIPANT_NICKNAME
-            : participant.getNickname().value(),
+        // null 로 내리면 클라 파서가 별칭 폴백을 훑다 예금주 실명을 닉네임 자리에 채운다 — 고정 문구로 막는다.
+        withdrawn ? WITHDRAWN_PARTICIPANT_NICKNAME : participant.getNickname().value(),
         participation.getBuncheolMemberId(),
         memberNameBySlotId.get(participation.getBuncheolMemberId()),
-        depositorNameOf(participation, refundAccount, c2c, paymentAmount),
+        withdrawn ? null : depositorNameOf(participation, refundAccount, c2c, paymentAmount),
         paymentAmount,
         shippingFees.shippingFeeOf(participation),
         participation.getStatus(),
         // C2C 의 입금 기한 정본은 묶음이다(이체 1회 = 기한 1개). LEGACY 는 자리 값이 판정 조건이라 그대로다.
         ParticipationBundleDomainService.dueAtOf(bundleById, participation, c2c),
         participation.getConfirmedAt(),
+        // 탈퇴 판정을 걸지 않는다 — 취소된 참여는 탈퇴를 막지 않아, 입금확인 뒤 취소된 참여자가 환불받기 전에 탈퇴할 수 있다.
         refundAccountFor(participation, refundAccount, c2c, paymentAmount),
-        delivery == null ? null : ManagementDeliveryResponse.from(delivery),
+        delivery == null
+            ? null
+            : withdrawn
+                ? ManagementDeliveryResponse.fromWithdrawnReceiver(delivery)
+                : ManagementDeliveryResponse.from(delivery),
         // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
         ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
         participation.getBundleId() == null

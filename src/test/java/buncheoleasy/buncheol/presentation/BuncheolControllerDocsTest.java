@@ -388,6 +388,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   @Test
   void 분철_목록_조회() throws Exception {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    Instant createdAt = Instant.parse("2026-05-15T08:00:00Z");
     BuncheolSummaryResponse item =
         new BuncheolSummaryResponse(
             10L,
@@ -402,7 +403,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             List.of("민지", "혜인"),
             List.of("혜인"),
             false,
-            true);
+            true,
+            createdAt);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -516,6 +518,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " 배송수단의 배송비가 모두 0원(등록하지 않은 배송수단은 판정에서 제외)."
                                         + " 카드의 \"배송비 0원 이벤트\" 배지 판정용. 일반 유저가 배송비를 0원으로"
                                         + " 잡은 C2C 분철은 제외"),
+                            fieldWithPath("items[].createdAt")
+                                .description("분철 개최 시각 (UTC ISO-8601). 카드의 \"신규\" 배지 판정용"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")

@@ -145,6 +145,40 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
+  @DisplayName("C2C 성사 확정(C2C_BUNCHEOL_FINALIZED)")
+  class C2cBuncheolFinalized {
+
+    // C2C 는 입금 기한이 지나도 자동 취소되지 않고, 개최자가 「제외」해야 참여가 빠진다(docs/70 결정 9).
+    @Test
+    @DisplayName("미입금 시 자동 취소가 아닌 개최자 취소를 안내하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "참여자닉",
+              "분철명", "세븐틴 미니 12집 분철",
+              "멤버명", "호시",
+              "입금금액", "25,000",
+              "은행명", "국민은행",
+              "계좌번호", "12345678",
+              "예금주", "홍길동",
+              "입금기한", "8월 9일(일) 09:00");
+
+      String rendered = AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED.render(variables);
+
+      assertThat(rendered)
+          .startsWith("참여자닉님, 신청하신 분철이 성사되었어요!")
+          .contains("▶ 입금 계좌: 국민은행 12345678 (예금주: 홍길동)")
+          .endsWith(
+              "▶ 입금 기한: 8월 9일(일) 09:00\n"
+                  + "\n"
+                  + "기한이 지나도록 입금이 확인되지 않으면 개최자가 참여를 취소할 수 있어요.\n"
+                  + "분철이지는 통신판매중개자이며, 대금은 개최자 계좌로 직접 입금됩니다.")
+          .doesNotContain("자동 취소")
+          .doesNotContain("#{");
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 입금 확인(C2C_PAYMENT_CONFIRMED)")
   class C2cPaymentConfirmed {
 
@@ -239,8 +273,9 @@ class AlimtalkTemplateTest {
   @DisplayName("C2C 입금 확인 요청(C2C_PAYMENT_SENT)")
   class C2cPaymentSent {
 
+    // 관리 화면에 반려 버튼이 없어(API 만 있음) 반려를 안내하면 개최자가 없는 버튼을 찾게 된다.
     @Test
-    @DisplayName("개최자 닉네임·참여자·입금자명·입금 금액을 치환하고 미치환 토큰을 남기지 않는다")
+    @DisplayName("반려는 안내하지 않고 참여자·입금자명·입금 금액을 치환하며 미치환 토큰을 남기지 않는다")
     void render() {
       Map<String, String> variables =
           Map.of(
@@ -250,8 +285,13 @@ class AlimtalkTemplateTest {
       String rendered = AlimtalkTemplate.C2C_PAYMENT_SENT.render(variables);
 
       assertThat(rendered)
-          .startsWith("개최자닉님, 참여자가 입금 완료를 알렸어요.")
-          .contains("'입금 확인'을 눌러주세요")
+          .startsWith(
+              "개최자닉님, 참여자가 입금 완료를 알렸어요.\n"
+                  + "\n"
+                  + "입금 내역을 확인하신 뒤 분철 관리에서 '입금 확인'을 눌러주세요.\n"
+                  + "\n"
+                  + "▶ 분철명: 세븐틴 미니 12집 분철\n")
+          .doesNotContain("반려")
           .contains("▶ 참여 멤버: 호시")
           .contains("▶ 참여자: 참여자닉")
           .contains("▶ 입금자명: 홍길동")

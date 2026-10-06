@@ -34,6 +34,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
   private final RefreshTokenCookieFactory refreshTokenCookieFactory;
   private final OAuth2AuthorizedClientService authorizedClientService;
   private final KakaoApiClient kakaoApiClient;
+  private final AgeRangeConsentRedirector ageRangeConsentRedirector;
   private final String loginCallbackUrl;
 
   public OAuth2LoginSuccessHandler(
@@ -42,12 +43,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       final RefreshTokenCookieFactory refreshTokenCookieFactory,
       final OAuth2AuthorizedClientService authorizedClientService,
       final KakaoApiClient kakaoApiClient,
+      final AgeRangeConsentRedirector ageRangeConsentRedirector,
       @Value("${app.frontend.login-callback-url}") final String loginCallbackUrl) {
     this.profileExtractors = profileExtractors;
     this.socialLoginService = socialLoginService;
     this.refreshTokenCookieFactory = refreshTokenCookieFactory;
     this.authorizedClientService = authorizedClientService;
     this.kakaoApiClient = kakaoApiClient;
+    this.ageRangeConsentRedirector = ageRangeConsentRedirector;
     this.loginCallbackUrl = loginCallbackUrl;
   }
 
@@ -57,6 +60,10 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       throws IOException {
     OAuth2AuthenticationToken oauthToken = getAuthenticationToken(authentication);
     OAuth2UserProfile profile = getUserProfile(oauthToken);
+    if (KakaoAuthorizationRequestResolver.isAgeRangeConsentCallback(request)) {
+      ageRangeConsentRedirector.redirect(response, refreshAgeRange(oauthToken, profile));
+      return;
+    }
     validateSocialEmail(profile.email());
 
     List<ServiceTermAgreement> serviceTerms = List.of();
@@ -103,7 +110,44 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     response.sendRedirect(redirectUrl);
   }
 
-  /** 카카오 access token 조회. 실패해도 로그인은 계속 진행한다(보강 정보만 포기). */
+  /**
+   * 연령대 추가 동의 결과를 반영한다. 연령대는 ID 토큰에 없어 카카오 API 로 조회한다. 연령대가 실제로 저장됐을 때만 동의 완료로 돌려보내고, 그 밖에는 모두
+   * 실패로 돌려보낸다 — 결과 화면이 오류 페이지가 되지 않도록 예외도 여기서 끝낸다.
+   */
+  private AgeRangeConsentRedirector.Result refreshAgeRange(
+      final OAuth2AuthenticationToken oauthToken, final OAuth2UserProfile profile) {
+    String kakaoAccessToken = loadKakaoAccessToken(oauthToken);
+    if (kakaoAccessToken == null) {
+      return AgeRangeConsentRedirector.Result.FAILED;
+    }
+    try {
+      KakaoApiClient.KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
+      boolean withdrawn = Boolean.TRUE.equals(userInfo.ageRangeNeedsAgreement());
+      boolean refreshed =
+          socialLoginService.refreshAgeRange(
+              profile.provider().name(), profile.providerId(), userInfo.ageRange(), withdrawn);
+      if (!refreshed) {
+        log.warn("연령대 추가 동의 계정으로 가입한 회원이 없음: providerId={}", profile.providerId());
+        return AgeRangeConsentRedirector.Result.FAILED;
+      }
+      if (userInfo.ageRange() == null || withdrawn) {
+        log.warn(
+            "연령대 추가 동의 후에도 카카오 연령대가 없음: providerId={}, needsAgreement={}",
+            profile.providerId(),
+            userInfo.ageRangeNeedsAgreement());
+        return AgeRangeConsentRedirector.Result.FAILED;
+      }
+      return AgeRangeConsentRedirector.Result.AGREED;
+    } catch (RuntimeException exception) {
+      log.warn(
+          "연령대 추가 동의 반영 실패: providerId={}, reason={}",
+          profile.providerId(),
+          exception.getMessage());
+      return AgeRangeConsentRedirector.Result.FAILED;
+    }
+  }
+
+  /** 카카오 access token 조회. 실패하면 null — 일반 로그인은 보강 정보만 포기하고 계속한다. */
   private String loadKakaoAccessToken(final OAuth2AuthenticationToken oauthToken) {
     try {
       OAuth2AuthorizedClient authorizedClient =

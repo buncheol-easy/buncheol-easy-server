@@ -82,4 +82,17 @@ class UserAgeRangeIntegrationTest {
     // then
     assertThat(reload().getAgeRange()).isEqualTo("20~29");
   }
+
+  @Test
+  void 연령대_추가_동의_반영이_DB에_커밋된다() {
+    // given
+    userDomainService.getOrCreateBySocialLogin(
+        SOCIAL_INFO, "itest@example.com", null, null, null, false);
+
+    // when
+    userDomainService.refreshAgeRange(SOCIAL_INFO, "20~29", false);
+
+    // then
+    assertThat(reload().getAgeRange()).isEqualTo("20~29");
+  }
 }

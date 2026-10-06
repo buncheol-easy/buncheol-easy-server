@@ -155,6 +155,55 @@ class UserDomainServiceTest {
   }
 
   @Nested
+  @DisplayName("연령대 추가 동의 반영 테스트")
+  class RefreshAgeRangeTest {
+
+    @Test
+    void 가입한_회원이면_연령대를_갱신하고_true_를_돌려준다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      boolean refreshed = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
+
+      // then
+      assertThat(refreshed).isTrue();
+      assertThat(existingUser.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 동의_철회가_확인되면_저장된_연령대를_파기한다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      existingUser.updateAgeRange("20~29");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      userDomainService.refreshAgeRange(socialInfo, null, true);
+
+      // then
+      assertThat(existingUser.getAgeRange()).isNull();
+    }
+
+    @Test
+    void 가입한_회원이_없으면_새로_만들지_않고_false_를_돌려준다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "unknown");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.empty());
+
+      // when
+      boolean refreshed = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
+
+      // then
+      assertThat(refreshed).isFalse();
+      then(userRepository).should(never()).save(any());
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 개최 자격 게이트 테스트")
   class RequireC2cHostQualificationTest {
 

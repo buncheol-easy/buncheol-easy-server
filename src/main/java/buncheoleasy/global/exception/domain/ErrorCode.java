@@ -62,10 +62,10 @@ public enum ErrorCode {
 
   // LEGACY(운영진 방식) 개최는 운영이 지정한 계정(can_host)만 가능하다.
   USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
-  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(재동의로 해결 가능 — 409)와
-  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "카카오 재동의 유도" 안내를 분기할 수 있다.
+  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(연령대 추가 동의로 해결 가능 — 409)와
+  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "연령대 추가 동의 유도" 안내를 분기할 수 있다.
   USER_AGE_NOT_VERIFIED(
-      "USR-032", "연령대 확인이 필요합니다. 카카오 로그인에서 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
+      "USR-032", "연령대 확인이 필요합니다. 카카오 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
   USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),

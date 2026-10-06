@@ -3,6 +3,7 @@ package buncheoleasy.auth.infrastructure.oauth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
@@ -42,6 +43,7 @@ class OAuth2LoginSuccessHandlerTest {
 
   private static final String FRONTEND_CALLBACK_URL = "http://localhost:3000/login/callback";
   private static final String REFRESH_COOKIE_PATH = "/api/backend/v1/auth";
+  private static final String AGE_RANGE_CONSENT_CALLBACK_URL = "http://localhost:3000/upload";
 
   @Mock private OAuth2UserProfileExtractor profileExtractor;
 
@@ -67,7 +69,22 @@ class OAuth2LoginSuccessHandlerTest {
         refreshTokenCookieFactory,
         authorizedClientService,
         kakaoApiClient,
+        new AgeRangeConsentRedirector(AGE_RANGE_CONSENT_CALLBACK_URL),
         loginCallbackUrl);
+  }
+
+  private void givenKakaoAccessToken() {
+    given(principal.getName()).willReturn("provider-id");
+    OAuth2AuthorizedClient authorizedClient = mock(OAuth2AuthorizedClient.class);
+    given(authorizedClient.getAccessToken())
+        .willReturn(
+            new OAuth2AccessToken(
+                OAuth2AccessToken.TokenType.BEARER,
+                "kakao-access-token",
+                Instant.now(),
+                Instant.now().plusSeconds(3600)));
+    given(authorizedClientService.loadAuthorizedClient("kakao", "provider-id"))
+        .willReturn(authorizedClient);
   }
 
   @Nested
@@ -322,6 +339,182 @@ class OAuth2LoginSuccessHandlerTest {
       then(socialLoginService).should(never()).login(any(SocialLoginCommand.class));
       assertThat(response.getRedirectedUrl()).isNull();
       assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("연령대 추가 동의 콜백 테스트")
+  class AgeRangeConsentCallbackTest {
+
+    private OAuth2AuthenticationToken authentication() {
+      return new OAuth2AuthenticationToken(
+          principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+    }
+
+    private MockHttpServletRequest consentCallback() {
+      MockHttpServletRequest request =
+          new MockHttpServletRequest("GET", "/login/oauth2/code/kakao");
+      request.setParameter(
+          "state", KakaoAuthorizationRequestResolver.AGE_RANGE_CONSENT_STATE_PREFIX + "state");
+      return request;
+    }
+
+    private void givenKakaoProfile() {
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal))
+          .willReturn(
+              new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com"));
+    }
+
+    @Test
+    void 연령대만_갱신하고_토큰_없이_개최_화면으로_동의_결과를_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      givenKakaoAccessToken();
+      given(kakaoApiClient.getUserInfo("kakao-access-token"))
+          .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678", "20~29", false));
+      given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", "20~29", false))
+          .willReturn(true);
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=agreed");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      then(socialLoginService).should(never()).login(any(SocialLoginCommand.class));
+      then(kakaoApiClient).should(never()).getServiceTerms(anyString());
+    }
+
+    @Test
+    void 카카오가_연령대를_내려주지_않으면_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      givenKakaoAccessToken();
+      given(kakaoApiClient.getUserInfo("kakao-access-token"))
+          .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, null, false));
+      given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", null, false))
+          .willReturn(true);
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+    }
+
+    @Test
+    void 연령대_동의_철회_신호는_그대로_전달하고_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      givenKakaoAccessToken();
+      given(kakaoApiClient.getUserInfo("kakao-access-token"))
+          .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, null, true));
+      given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", null, true))
+          .willReturn(true);
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      then(socialLoginService).should().refreshAgeRange("KAKAO", "provider-id", null, true);
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+    }
+
+    @Test
+    void 연령대_반영_중_예외가_나도_오류_페이지_대신_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      givenKakaoAccessToken();
+      given(kakaoApiClient.getUserInfo("kakao-access-token"))
+          .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, "20~29", false));
+      given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", "20~29", false))
+          .willThrow(new IllegalStateException("DB 오류"));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+    }
+
+    @Test
+    void 가입한_회원이_없는_카카오_계정이면_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      givenKakaoAccessToken();
+      given(kakaoApiClient.getUserInfo("kakao-access-token"))
+          .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, "20~29", false));
+      given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", "20~29", false))
+          .willReturn(false);
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+      then(socialLoginService).should(never()).login(any(SocialLoginCommand.class));
+    }
+
+    @Test
+    void 카카오_사용자_정보_조회가_실패하면_갱신하지_않고_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      givenKakaoAccessToken();
+      given(kakaoApiClient.getUserInfo("kakao-access-token"))
+          .willThrow(new RuntimeException("kapi 오류"));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+      then(socialLoginService)
+          .should(never())
+          .refreshAgeRange(anyString(), anyString(), any(), anyBoolean());
+    }
+
+    @Test
+    void 카카오_access_token_을_찾지_못하면_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      givenKakaoProfile();
+      given(principal.getName()).willReturn("provider-id");
+      given(authorizedClientService.loadAuthorizedClient("kakao", "provider-id")).willReturn(null);
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+      then(kakaoApiClient).should(never()).getUserInfo(anyString());
     }
   }
 }

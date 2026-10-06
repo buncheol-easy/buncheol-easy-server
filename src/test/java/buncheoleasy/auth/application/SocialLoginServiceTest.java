@@ -155,6 +155,25 @@ class SocialLoginServiceTest {
   }
 
   @Nested
+  @DisplayName("refreshAgeRange 테스트")
+  class RefreshAgeRangeTest {
+
+    @Test
+    void 연령대_추가_동의_결과를_소셜_계정의_회원에게_반영하고_토큰은_발급하지_않는다() {
+      // given
+      given(userDomainService.refreshAgeRange(SocialInfo.of("KAKAO", "123"), "20~29", false))
+          .willReturn(true);
+
+      // when
+      boolean refreshed = socialLoginService.refreshAgeRange("KAKAO", "123", "20~29", false);
+
+      // then
+      assertThat(refreshed).isTrue();
+      then(jwtTokenProvider).shouldHaveNoInteractions();
+    }
+  }
+
+  @Nested
   @DisplayName("reissueTokens 테스트")
   class ReissueTokensTest {
 

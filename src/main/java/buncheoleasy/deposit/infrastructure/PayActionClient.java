@@ -167,7 +167,6 @@ public class PayActionClient {
       @JsonProperty("billing_name") String billingName,
       @JsonProperty("orderer_name") String ordererName) {}
 
-  /** 실패 사유는 API 마다 {@code response}(구 API) 또는 {@code error}(주문 취소 API) 에 담겨 온다. */
   private static class OrderNotFoundException extends PayActionSendException {
 
     OrderNotFoundException() {
@@ -175,6 +174,7 @@ public class PayActionClient {
     }
   }
 
+  /** 실패 사유는 API 마다 {@code response}(구 API) 또는 {@code error}(주문 취소 API) 에 담겨 온다. */
   private record PayActionResponse(String status, Object response, Object error) {
 
     Object reason() {

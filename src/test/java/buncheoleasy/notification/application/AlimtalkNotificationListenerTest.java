@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
@@ -502,7 +503,8 @@ class AlimtalkNotificationListenerTest {
                   mock(Participation.class), null, buncheol, "카즈하", participant, mock(User.class), 0L));
 
       listener.onBuncheolCancelled(
-          new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID, List.of(PARTICIPATION_ID), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
 
       Map<String, String> variables =
           captureSend(AlimtalkTemplate.BUNCHEOL_CANCELLED, PARTICIPANT_PHONE);
@@ -530,7 +532,8 @@ class AlimtalkNotificationListenerTest {
                   mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
 
       listener.onBuncheolCancelled(
-          new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.HOST_CANCELLED));
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID, List.of(PARTICIPATION_ID), BuncheolCancelReason.HOST_CANCELLED));
 
       Map<String, String> variables =
           captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED, PARTICIPANT_PHONE);
@@ -555,13 +558,167 @@ class AlimtalkNotificationListenerTest {
                   mock(Participation.class), null, buncheol, "호시", participant, mock(User.class), 25_000L));
 
       listener.onBuncheolCancelled(
-          new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.NOT_FINALIZED));
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID, List.of(PARTICIPATION_ID), BuncheolCancelReason.NOT_FINALIZED));
 
       Map<String, String> variables =
           captureSend(AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED, PARTICIPANT_PHONE);
       assertThat(variables).containsEntry("멤버명", "호시").doesNotContainKey("취소사유");
       verify(inboxRecorder)
           .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED), any());
+    }
+
+    // 참여 단위로 보내던 때는 2자리 신청자가 같은 취소 안내를 2통·소식함 2건 받았다(staging 분철 #136).
+    @Test
+    @DisplayName("C2C 다슬롯 참여자에게는 슬롯 수만큼이 아니라 멤버명을 모두 나열해 1건만 발송")
+    void mergesMultipleSlotsOfSameParticipant() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "호시", participant));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "우지", participant));
+
+      listener.onBuncheolCancelled(
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID,
+              List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID),
+              BuncheolCancelReason.HOST_CANCELLED));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsEntry("멤버명", "호시, 우지")
+          .containsEntry("취소사유", "개최자 취소");
+      verify(sender, times(1)).send(any(), any(), any());
+      verify(inboxRecorder)
+          .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED), any());
+    }
+
+    // staging 분철 #137 모양 — 한 사람 2자리 + 다른 사람 1자리. 사람마다 1통, 모두 2통이어야 한다.
+    @Test
+    @DisplayName("서로 다른 참여자는 합산하지 않고 각자 자기 자리만 담아 1건씩 발송")
+    void sendsOncePerParticipant() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      User otherParticipant = mockUser("다른참여자닉", OTHER_PARTICIPANT_PHONE);
+      given(otherParticipant.getId()).willReturn(12L);
+      Long thirdParticipationId = 52L;
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "호시", participant));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "민규", otherParticipant));
+      given(assembler.loadByParticipation(thirdParticipationId))
+          .willReturn(cancelledView(buncheol, "우지", participant));
+
+      // 한 사람의 자리가 id 순서상 떨어져 있어도 사람 단위로 모인다.
+      listener.onBuncheolCancelled(
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID,
+              List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID, thirdParticipationId),
+              BuncheolCancelReason.HOST_CANCELLED));
+
+      assertThat(captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED, PARTICIPANT_PHONE))
+          .containsEntry("멤버명", "호시, 우지");
+      assertThat(captureSend(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED, OTHER_PARTICIPANT_PHONE))
+          .containsEntry("멤버명", "민규");
+      verify(sender, times(2)).send(any(), any(), any());
+      verify(inboxRecorder)
+          .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED), any());
+      verify(inboxRecorder)
+          .record(eq(12L), eq(AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED), any());
+    }
+
+    @Test
+    @DisplayName("C2C 미성사도 다슬롯 참여자에게는 사유 없는 C2C_BUNCHEOL_NOT_FINALIZED 1건만 발송")
+    void mergesNotFinalizedNotice() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.isC2c()).willReturn(true);
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "호시", participant));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "우지", participant));
+
+      listener.onBuncheolCancelled(
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID,
+              List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID),
+              BuncheolCancelReason.NOT_FINALIZED));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED, PARTICIPANT_PHONE);
+      assertThat(variables).containsEntry("멤버명", "호시, 우지").doesNotContainKey("취소사유");
+      verify(sender, times(1)).send(any(), any(), any());
+      verify(inboxRecorder)
+          .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED), any());
+    }
+
+    // 분철 단위 이벤트로 합친 뒤로는 격리하지 않으면 앞사람 한 명의 발송 실패가 뒷사람 전원의 알림을 없앤다.
+    @Test
+    @DisplayName("한 수신자의 발송이 실패해도 나머지 수신자에게는 발송한다")
+    void keepsSendingAfterOneRecipientFails() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("르세라핌 앨범");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      User otherParticipant = mockUser("다른참여자닉", OTHER_PARTICIPANT_PHONE);
+      given(otherParticipant.getId()).willReturn(12L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "카즈하", participant));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "사쿠라", otherParticipant));
+      willThrow(new IllegalStateException("알림톡 발송 실패"))
+          .given(sender)
+          .send(any(), eq(PARTICIPANT_PHONE), any());
+
+      listener.onBuncheolCancelled(
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID,
+              List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID),
+              BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
+
+      verify(sender)
+          .send(eq(AlimtalkTemplate.BUNCHEOL_CANCELLED), eq(OTHER_PARTICIPANT_PHONE), any());
+      verify(inboxRecorder)
+          .record(eq(12L), eq(AlimtalkTemplate.BUNCHEOL_CANCELLED), any());
+    }
+
+    @Test
+    @DisplayName("한 참여의 조립이 실패해도 나머지 참여자에게는 발송한다")
+    void skipsOnlyTheFailedParticipation() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("르세라핌 앨범");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willThrow(new IllegalStateException("멤버 슬롯 결손"));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(cancelledView(buncheol, "카즈하", participant));
+
+      listener.onBuncheolCancelled(
+          new BuncheolCancelledEvent(
+              BUNCHEOL_ID,
+              List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID),
+              BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
+
+      assertThat(captureSend(AlimtalkTemplate.BUNCHEOL_CANCELLED, PARTICIPANT_PHONE))
+          .containsEntry("멤버명", "카즈하")
+          .containsEntry("취소사유", "최소 진행 인원 미달");
+    }
+
+    private ParticipationView cancelledView(
+        final Buncheol buncheol, final String memberName, final User participant) {
+      return new ParticipationView(
+          mock(Participation.class), null, buncheol, memberName, participant, mock(User.class), 25_000L);
     }
   }
 

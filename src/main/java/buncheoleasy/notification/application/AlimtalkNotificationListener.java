@@ -176,25 +176,37 @@ public class AlimtalkNotificationListener {
     sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
-  /** (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). 문안은 {@link #cancelTemplate} 기준으로 갈린다. */
+  /**
+   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). 문안은 {@link #cancelTemplate} 기준으로 갈린다. C2C 1인 다슬롯에서 같은 알림이
+   * 슬롯 수만큼 가지 않도록 사람 단위로 묶어 1건씩 보낸다 (진행 확정과 같은 합산 규칙).
+   */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolCancelled(final BuncheolCancelledEvent event) {
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    AlimtalkTemplate template = cancelTemplate(view, event.reason());
+    sendEachSafely(
+        groupByParticipant(loadViewsSafely(event.participationIds())),
+        group -> sendCancelledNotice(group, event.reason()));
+  }
+
+  // 다슬롯 참여자에게는 멤버명을 모두 나열해 1건만 보낸다. 금액이 없는 문안이라 합산 대상은 멤버명뿐이다.
+  private void sendCancelledNotice(
+      final List<ParticipationView> group, final BuncheolCancelReason reason) {
+    ParticipationView first = group.get(0);
+    AlimtalkTemplate template = cancelTemplate(first, reason);
+    String memberName = mergedMemberName(group);
     Map<String, String> variables =
         template == AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED
             ? Map.of(
-                "닉네임", view.participant().getNickname().value(),
-                "분철명", view.buncheol().getTitle(),
-                "멤버명", view.memberName())
+                "닉네임", first.participant().getNickname().value(),
+                "분철명", first.buncheol().getTitle(),
+                "멤버명", memberName)
             : Map.of(
-                "닉네임", view.participant().getNickname().value(),
-                "분철명", view.buncheol().getTitle(),
-                "멤버명", view.memberName(),
-                "취소사유", event.reason().getDescription());
-    recordSafely(view.participant().getId(), template, variables);
-    sender.send(template, view.participant().getPhoneNumber().value(), variables);
+                "닉네임", first.participant().getNickname().value(),
+                "분철명", first.buncheol().getTitle(),
+                "멤버명", memberName,
+                "취소사유", reason.getDescription());
+    recordSafely(first.participant().getId(), template, variables);
+    sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
   /**

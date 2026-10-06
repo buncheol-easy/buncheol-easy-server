@@ -71,7 +71,7 @@ class UserControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("bankAccount.account").description("계좌번호").optional(),
                             fieldWithPath("bankAccount.holder").description("예금주").optional(),
                             fieldWithPath("canHost")
-                                .description("분철 개최 가능 여부 (개최 오픈 전엔 운영 지정 계정만 true)"))
+                                .description("운영진 권한 여부. true 면 LEGACY 개최를 열 수 있고 C2C 성인 확인·활성 개최 상한을 면제받는다. 일반 회원의 개최 가능 여부는 GET /v1/buncheols/hosting-eligibility 로 확인한다"))
                         .build())));
   }
 

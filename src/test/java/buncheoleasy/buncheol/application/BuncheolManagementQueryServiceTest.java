@@ -20,6 +20,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -244,6 +245,87 @@ class BuncheolManagementQueryServiceTest {
           buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
 
       assertThat(response.participants().get(0).participantNickname()).isEqualTo("탈퇴한 사용자");
+    }
+
+    @Test
+    void 탈퇴한_참여자는_입금자명과_수령인_정보를_비우고_발송_기록만_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L), buncheolMember(102L, 1002L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "레이")));
+      Participation withdrawn =
+          participation(601L, 101L, OTHER_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      setField(withdrawn, "confirmedAt", CONFIRMED_AT);
+      Participation remaining =
+          participation(602L, 102L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CONFIRMED);
+      setField(remaining, "confirmedAt", CONFIRMED_AT);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(withdrawn, remaining));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      Delivery received =
+          delivery(5001L, 601L, "GS25 강남역점", "유진팬", "010-1234-5678", "1234567890",
+              DeliveryStatus.RECEIVED);
+      Delivery shipping =
+          delivery(5002L, 602L, "GS25 역삼역점", "레이팬", "010-9876-5432", "9876543210",
+              DeliveryStatus.SHIPPING);
+      given(deliveryRepository.findAllByBundleIds(List.of(9601L, 9602L)))
+          .willReturn(List.of(received, shipping));
+      // @SQLRestriction(deleted_at IS NULL) — 탈퇴 회원은 조회 결과에서 빠진다.
+      given(userRepository.findAllByIds(List.of(OTHER_USER, PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse withdrawnRow = response.participants().get(0);
+      assertThat(withdrawnRow.participantNickname()).isEqualTo("탈퇴한 사용자");
+      assertThat(withdrawnRow.depositorName()).isNull();
+      assertThat(withdrawnRow.delivery().storeName()).isNull();
+      assertThat(withdrawnRow.delivery().receiverNickname()).isNull();
+      assertThat(withdrawnRow.delivery().receiverPhoneNumber()).isNull();
+      assertThat(withdrawnRow.delivery().deliveryId()).isEqualTo(5001L);
+      assertThat(withdrawnRow.delivery().shippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
+      assertThat(withdrawnRow.delivery().trackingNumber()).isEqualTo("1234567890");
+      assertThat(withdrawnRow.delivery().status()).isEqualTo(DeliveryStatus.RECEIVED);
+
+      BuncheolManagementParticipantResponse remainingRow = response.participants().get(1);
+      assertThat(remainingRow.participantNickname()).isEqualTo("장원영");
+      assertThat(remainingRow.depositorName()).isEqualTo("홍길동");
+      assertThat(remainingRow.delivery().storeName()).isEqualTo("GS25 역삼역점");
+      assertThat(remainingRow.delivery().receiverNickname()).isEqualTo("레이팬");
+      assertThat(remainingRow.delivery().receiverPhoneNumber()).isEqualTo("010-9876-5432");
+      assertThat(remainingRow.delivery().trackingNumber()).isEqualTo("9876543210");
+    }
+
+    @Test
+    void 탈퇴한_참여자라도_환불할_취소분이면_계좌를_내린다() {
+      stubBasicBuncheol(BuncheolStatus.CANCELLED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation cancelled =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CANCELLED);
+      setField(cancelled, "confirmedAt", CONFIRMED_AT);
+      setField(cancelled, "cancelReason", ParticipationCancelReason.BUNCHEOL_CANCELLED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelled));
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      // @SQLRestriction(deleted_at IS NULL) — 탈퇴 회원은 조회 결과에서 빠진다.
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER))).willReturn(List.of());
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      BuncheolManagementParticipantResponse target = response.cancelledParticipants().get(0);
+      assertThat(target.participantNickname()).isEqualTo("탈퇴한 사용자");
+      assertThat(target.depositorName()).isNull();
+      assertThat(target.refundAccount()).isNotNull();
+      assertThat(target.refundAccount().bank()).isEqualTo("국민");
+      assertThat(target.refundAccount().account()).isEqualTo("12345678");
+      assertThat(target.refundAccount().holder()).isEqualTo("홍길동");
     }
 
     @Test

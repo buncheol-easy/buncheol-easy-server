@@ -24,4 +24,15 @@ public record ManagementDeliveryResponse(
         delivery.getTrackingNumber(),
         delivery.getStatus());
   }
+
+  public static ManagementDeliveryResponse fromWithdrawnReceiver(final Delivery delivery) {
+    return new ManagementDeliveryResponse(
+        delivery.getId(),
+        delivery.getShippingMethod(),
+        null,
+        null,
+        null,
+        delivery.getTrackingNumber(),
+        delivery.getStatus());
+  }
 }

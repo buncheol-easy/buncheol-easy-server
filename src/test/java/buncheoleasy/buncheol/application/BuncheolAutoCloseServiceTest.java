@@ -207,8 +207,45 @@ class BuncheolAutoCloseServiceTest {
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
       // 개최자 취소 경로와 대칭 — 안 닫으면 마감된 분철에 활성 묶음이 영구히 남는다.
       then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
-      then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
+      // 참여자는 「개최자가 확정하지 않았어요」 안내를 받아야 한다 — 사유가 바뀌면 다른 문안이 나간다.
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(702L), BuncheolCancelReason.NOT_FINALIZED));
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
+    }
+
+    // 최소 인원 미달이면 확정 유예를 기다리지 않고 취소한다. 사유는 미성사가 아니라 인원 미달이다.
+    @Test
+    void C2C_분철이_최소_인원_미달이면_인원_미달_사유로_취소_이벤트를_발행한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getMinHeadcount()).willReturn(4);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      Participation later = mock(Participation.class);
+      given(later.getId()).willReturn(705L);
+      Participation earlier = mock(Participation.class);
+      given(earlier.getId()).willReturn(704L);
+      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+      given(buncheolDomainService.cancelUnconfirmedC2c(BUNCHEOL_ID, NOW)).willReturn(true);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isTrue();
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(704L, 705L), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
     }
   }
 }

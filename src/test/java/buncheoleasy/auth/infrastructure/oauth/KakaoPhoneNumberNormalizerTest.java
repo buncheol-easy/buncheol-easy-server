@@ -34,11 +34,10 @@ class KakaoPhoneNumberNormalizerTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"+82 10-1234-5678", "+82 16-1234-5678", "010-1234-5678"})
-  void 정규화한_번호는_도메인_신규_입력_규칙을_통과한다(String rawValue) {
+  void 정규화한_번호는_도메인_규칙을_통과한다(String rawValue) {
     String normalized = KakaoPhoneNumberNormalizer.normalize(rawValue);
 
-    assertThatCode(() -> PhoneNumber.validateForRegistration(normalized))
-        .doesNotThrowAnyException();
+    assertThatCode(() -> PhoneNumber.of(normalized)).doesNotThrowAnyException();
   }
 
   @Test

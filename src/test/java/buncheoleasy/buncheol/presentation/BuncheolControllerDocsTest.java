@@ -364,7 +364,6 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
-                            | `NOT_OPEN_YET` | 회원 개최 오픈 전(서비스 스위치 off) — 사용자가 고칠 것이 없다 | 409 `USR-035` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
                             | `AGE_UNVERIFIED` | 연령대 미확인 — 카카오 재로그인 동의로 회복 가능 | 409 `USR-032` |
                             | `NOT_ADULT` | 미성년 확정 — 개최 불가 | 403 `USR-033` |
@@ -380,7 +379,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("reason")
                                 .type(JsonFieldType.STRING)
                                 .description(
-                                    "부적격 사유 (NOT_OPEN_YET | PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
+                                    "부적격 사유 (PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
                                 .optional())
                         .build())));
   }
@@ -388,6 +387,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   @Test
   void 분철_목록_조회() throws Exception {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+    Instant createdAt = Instant.parse("2026-05-15T08:00:00Z");
     BuncheolSummaryResponse item =
         new BuncheolSummaryResponse(
             10L,
@@ -402,7 +402,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             List.of("민지", "혜인"),
             List.of("혜인"),
             false,
-            true);
+            true,
+            createdAt);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -516,6 +517,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " 배송수단의 배송비가 모두 0원(등록하지 않은 배송수단은 판정에서 제외)."
                                         + " 카드의 \"배송비 0원 이벤트\" 배지 판정용. 일반 유저가 배송비를 0원으로"
                                         + " 잡은 C2C 분철은 제외"),
+                            fieldWithPath("items[].createdAt")
+                                .description("분철 개최 시각 (UTC ISO-8601). 카드의 \"신규\" 배지 판정용"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -1048,12 +1051,15 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
                             - `participants[].depositorName` = **입금자명**(= 참여 시점 참여자의 정산 계좌 예금주 스냅샷). 개최자의 통장 대조 키.
                               **null 일 수 있다** — ⑴ LEGACY 0원(코드) 참여는 대조할 입금이 없어 내리지 않고 ⑵ 참여 계좌 강제 이전에
-                              만들어진 0원 참여는 계좌 자체가 없다. **참여자 닉네임으로 폴백해 표시할 것.**
+                              만들어진 0원 참여는 계좌 자체가 없고 ⑶ 탈퇴 회원은 거래가 끝난 뒤라 내리지 않는다.
+                              **참여자 닉네임으로 폴백해 표시할 것.**
                               C2C 는 0원 슬롯이어도 내려간다 — 대조 단위가 슬롯이 아니라 묶음(같은 사람)이라, 배송비가 첫 슬롯에만
                               붙어 생긴 0원 슬롯의 예금주를 지우면 이체 1건에 대조 키가 갈린다
                             - `participants[].refundAccount` = **평시에는 항상 null.** 계좌번호는 개최자가 실제로 환불해야 하는 건, 즉
                               **취소분 중 입금 흔적(마킹·입금확인)이 있고 0원이 아닌 건**에만 채운다
-                            - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null
+                            - `participants[].delivery` = 배송 스냅샷. 입금확인(CONFIRMED) 참여에만 생성되며 그 전(AWAITING_PAYMENT)에는 null.
+                              탈퇴 회원은 수령인 정보(`storeName`·`receiverNickname`·`receiverPhoneNumber`)가 null 이고
+                              배송 방법·운송장·상태만 내려간다
                             - `participants[].participationId` = **개최자 입금확인 API(`POST /v1/participations/{id}/confirm`) 의 대상 식별자**
                             - `ended` = 분철이 완전히 끝났는지. 개최 목록(`GET /v1/buncheols/me`)의 `ended` 와 같은 조회로 판정한다
                             - `cancelledParticipants[]` = 취소된 참여 전체. 개최자가 **환불 계좌를 확인**하는 용도다 (C2C 는 대금이
@@ -1149,7 +1155,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(추가 모집)을"
                                         + " 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("participants[].participantNickname")
-                                .description("참여자 닉네임. 조회 불가 시 null")
+                                .description("참여자 닉네임. 탈퇴 회원은 「탈퇴한 사용자」 고정 문구")
                                 .optional(),
                             fieldWithPath("participants[].buncheolMemberId")
                                 .description("분철 멤버 슬롯 ID"),
@@ -1158,7 +1164,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("participants[].depositorName")
                                 .description(
-                                    "입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키. LEGACY 0원(코드) 참여와 계좌 강제 이전 잔여 행은 null — 닉네임 폴백")
+                                    "입금자명 (= 환불 계좌 예금주). 개최자 통장 대조 키. LEGACY 0원(코드) 참여·계좌 강제 이전 잔여 행·탈퇴 회원은 null — 닉네임 폴백")
                                 .optional(),
                             fieldWithPath("participants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
@@ -1199,13 +1205,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("배송방법 (GS25_HALF | CU_HALF)")
                                 .optional(),
                             fieldWithPath("participants[].delivery.storeName")
-                                .description("편의점 지점명")
+                                .description("편의점 지점명. 탈퇴 회원은 null")
                                 .optional(),
                             fieldWithPath("participants[].delivery.receiverNickname")
-                                .description("수령인 닉네임 스냅샷")
+                                .description("수령인 닉네임 스냅샷. 탈퇴 회원은 null")
                                 .optional(),
                             fieldWithPath("participants[].delivery.receiverPhoneNumber")
-                                .description("수령인 전화번호 스냅샷")
+                                .description("수령인 전화번호 스냅샷. 탈퇴 회원은 null")
                                 .optional(),
                             fieldWithPath("participants[].delivery.trackingNumber")
                                 .description("호스트가 등록한 운송장 번호. 미등록 시 null")
@@ -1237,7 +1243,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(추가 모집)을"
                                         + " 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("cancelledParticipants[].participantNickname")
-                                .description("참여자 닉네임. 조회 불가 시 null")
+                                .description("참여자 닉네임. 탈퇴 회원은 「탈퇴한 사용자」 고정 문구")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].buncheolMemberId")
                                 .description("분철 멤버 슬롯 ID. 취소분이라 이 슬롯은 다른 참여가 점유했을 수 있다"),
@@ -1246,7 +1252,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].depositorName")
                                 .description(
-                                    "입금자명 (= 환불 계좌 예금주). LEGACY 0원(코드) 참여와 계좌 강제 이전 잔여 행은 null — 닉네임 폴백")
+                                    "입금자명 (= 환불 계좌 예금주). LEGACY 0원(코드) 참여·계좌 강제 이전 잔여 행·탈퇴 회원은 null — 닉네임 폴백. 탈퇴 회원이어도 환불할 건이면 refundAccount 는 내려간다")
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].amount")
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),

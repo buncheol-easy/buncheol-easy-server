@@ -7,9 +7,11 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
@@ -27,16 +29,23 @@ import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.buncheol.domain.participation.ShippingFeeAttribution;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
 import buncheoleasy.deposit.infrastructure.PayActionSendException;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 
 /**
@@ -59,6 +68,20 @@ class DepositOrderListenerTest {
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private PayActionClient payActionClient;
   @Mock private BuncheolDomainService buncheolDomainService;
+
+  private ListAppender<ILoggingEvent> logAppender;
+
+  @BeforeEach
+  void attachLogAppender() {
+    logAppender = new ListAppender<>();
+    logAppender.start();
+    listenerLogger().addAppender(logAppender);
+  }
+
+  @AfterEach
+  void detachLogAppender() {
+    listenerLogger().detachAppender(logAppender);
+  }
 
   /**
    * 묶음 배송비로 귀속 판정을 실제로 만들어 스텁한다. 목으로 금액을 고정하면 「묶음 원값을 그대로 더해
@@ -85,6 +108,7 @@ class DepositOrderListenerTest {
     setField(participation, "id", PARTICIPATION_ID);
     setField(participation, "amount", amount);
     setField(participation, "shippingFee", shippingFee);
+    setField(participation, "status", ParticipationStatus.AWAITING_PAYMENT);
     setField(participation, "createdAt", Instant.parse("2026-05-14T12:00:00Z"));
     setField(participation, "dueAt", Instant.parse("2026-05-14T12:30:00Z"));
     given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
@@ -162,6 +186,32 @@ class DepositOrderListenerTest {
     then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
   }
 
+  // 리스너가 밀린 사이 운영자가 확정한 참여다. 주문을 걸면 매칭 없이 남아 같은 금액의 중복 입금을 알림 없이 삼킨다.
+  @Test
+  void 첫_조회에서_이미_확정됐으면_주문을_등록하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    setField(participation, "status", ParticipationStatus.CONFIRMED);
+    setField(participation, "confirmedAt", Instant.parse("2026-05-14T12:01:00Z"));
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+    then(participationBundleDomainService).should(never()).findByParticipation(any());
+  }
+
+  @Test
+  void 첫_조회에서_이미_취소됐으면_주문을_등록하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    setField(participation, "status", ParticipationStatus.CANCELLED);
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should(never()).registerOrder(anyLong(), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+    then(participationBundleDomainService).should(never()).findByParticipation(any());
+  }
+
   // 등록·취소 리스너는 서로 다른 @Async 스레드라, 취소가 먼저 도달하면 뒤이어 등록된 주문이 살아남는다.
   @Test
   void 등록_후_재조회에서_이미_취소됐으면_주문을_취소한다() {
@@ -193,6 +243,98 @@ class DepositOrderListenerTest {
     listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
 
     then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  // 재조회는 취소 경합만 잡는다. 입금확인 이력이 있는 참여의 주문은 onBuncheolCancelled 와 같은 정책·판정
+  // 키(confirmedAt)로 건드리지 않는다.
+  @Test
+  void 등록_후_재조회에서_확정됐으면_주문을_취소하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+    Participation confirmed = newInstance(Participation.class);
+    setField(confirmed, "id", PARTICIPATION_ID);
+    setField(confirmed, "status", ParticipationStatus.CONFIRMED);
+    setField(confirmed, "confirmedAt", Instant.parse("2026-05-14T12:05:00Z"));
+    given(participationDomainService.getParticipation(PARTICIPATION_ID))
+        .willReturn(participation, confirmed);
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should().registerOrder(eq(PARTICIPATION_ID), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  @Test
+  void 등록_후_재조회에서_입금확인_뒤_분철_취소됐으면_주문을_취소하지_않는다() {
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+    Participation cancelledAfterConfirm = newInstance(Participation.class);
+    setField(cancelledAfterConfirm, "id", PARTICIPATION_ID);
+    setField(cancelledAfterConfirm, "status", ParticipationStatus.CANCELLED);
+    setField(cancelledAfterConfirm, "confirmedAt", Instant.parse("2026-05-14T12:05:00Z"));
+    given(participationDomainService.getParticipation(PARTICIPATION_ID))
+        .willReturn(participation, cancelledAfterConfirm);
+
+    listener.onParticipationCreated(new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY));
+
+    then(payActionClient).should().registerOrder(eq(PARTICIPATION_ID), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  // 재조회 실패는 취소 신호가 아니라 주문을 둔다. 등록은 이미 됐으므로 「등록 실패」로 남기면 운영자가 수동 확인
+  // 대상으로 오해한다.
+  @Test
+  void 등록_후_재조회가_실패하면_취소하지_않고_재확인_실패로_남긴다() {
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+    given(participationDomainService.getParticipation(PARTICIPATION_ID))
+        .willReturn(participation)
+        .willThrow(new DataAccessResourceFailureException("DB 일시 장애"));
+
+    assertThatCode(
+            () ->
+                listener.onParticipationCreated(
+                    new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY)))
+        .doesNotThrowAnyException();
+
+    then(payActionClient).should().registerOrder(eq(PARTICIPATION_ID), anyLong(), any(), any(), any());
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+    assertThat(logMessages())
+        .contains("페이액션 주문 등록 후 참여 상태 재확인 실패 - participationId=" + PARTICIPATION_ID)
+        .noneMatch(message -> message.startsWith("페이액션 주문 등록 실패"));
+  }
+
+  @Test
+  void 등록이_실패하면_재조회하지_않고_등록_실패로만_남긴다() {
+    Participation participation = participation(50_000L, 0L);
+    ParticipationBundle bundle =
+        bundleWith(participation, 3_000L, RefundAccount.of("국민", "12345678", "홍길동"));
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.of(bundle));
+    willThrow(new PayActionSendException("페이액션 호출 거부"))
+        .given(payActionClient)
+        .registerOrder(eq(PARTICIPATION_ID), anyLong(), any(), any(), any());
+
+    assertThatCode(
+            () ->
+                listener.onParticipationCreated(
+                    new ParticipationCreatedEvent(PARTICIPATION_ID, FlowType.LEGACY)))
+        .doesNotThrowAnyException();
+
+    then(participationDomainService).should(times(1)).getParticipation(PARTICIPATION_ID);
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+    assertThat(logMessages())
+        .contains("페이액션 주문 등록 실패 - participationId=" + PARTICIPATION_ID)
+        .noneMatch(message -> message.startsWith("페이액션 주문 등록 후 참여 상태 재확인 실패"));
   }
 
   @Test
@@ -260,6 +402,14 @@ class DepositOrderListenerTest {
         given(payActionClient.isEnabled()).willReturn(true);
       }
     }
+  }
+
+  private static Logger listenerLogger() {
+    return (Logger) LoggerFactory.getLogger(DepositOrderListener.class);
+  }
+
+  private List<String> logMessages() {
+    return logAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
   }
 
   private static <T> T newInstance(final Class<T> type) {

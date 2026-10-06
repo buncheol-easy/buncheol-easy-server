@@ -49,9 +49,19 @@ public class DepositOrderListener {
     if (!payActionClient.isEnabled()) {
       return;
     }
+    if (registerQuietly(event.participationId())) {
+      cancelIfCancelledMeanwhile(event.participationId());
+    }
+  }
+
+  private boolean registerQuietly(final Long participationId) {
     try {
-      Participation participation =
-          participationDomainService.getParticipation(event.participationId());
+      Participation participation = participationDomainService.getParticipation(participationId);
+      // 입금 대기 참여만 등록한다. 리스너가 밀린 사이 운영자가 확정한 참여에 주문을 걸면 매칭 없이 dueAt 까지 남아,
+      // 같은 예금주·금액의 중복 입금이 ALREADY_CONFIRMED 로 알림 없이 묻힌다. 취소된 참여는 걸 이유가 없다.
+      if (participation.getStatus() != ParticipationStatus.AWAITING_PAYMENT) {
+        return false;
+      }
       // 🔴 묶음을 먼저 읽는다. 아래 두 판정(0원 게이트 · 입금자명)이 같은 묶음을 봐야 한다.
       ParticipationBundle bundle =
           participationBundleDomainService.findByParticipation(participation).orElse(null);
@@ -65,7 +75,7 @@ public class DepositOrderListener {
               .shippingFeeAttributionOf(bundle, participation.getId())
               .totalAmountOf(participation);
       if (paymentAmount == 0) {
-        return;
+        return false;
       }
       // 입금자명의 정본은 묶음이다 (P2-c). 🔴 없으면 등록을 스킵한다 — 빈 입금자명으로 등록하면 금액만으로
       // 오매칭되어 남의 입금이 남의 참여를 확정시킬 수 있다(docs/80 §6-4). 자동확인만 못 하고 운영자가
@@ -74,7 +84,7 @@ public class DepositOrderListener {
       if (refundAccount == null) {
         log.warn(
             "묶음 계좌가 없어 페이액션 주문 등록을 건너뛴다 - participationId={}", participation.getId());
-        return;
+        return false;
       }
       payActionClient.registerOrder(
           participation.getId(),
@@ -82,15 +92,31 @@ public class DepositOrderListener {
           refundAccount.holder(),
           participation.getCreatedAt(),
           participation.getDueAt());
-      // 🔴 등록과 취소 리스너는 서로 다른 @Async 스레드라 순서가 보장되지 않는다. 취소가 먼저 도달하면 404 로
-      // 끝나고 뒤이어 등록된 주문이 살아남는다. 취소 이벤트는 커밋 후 발행되므로 등록 뒤 재조회로 잡힌다.
-      if (participationDomainService.getParticipation(participation.getId()).getStatus()
-          != ParticipationStatus.AWAITING_PAYMENT) {
-        cancelQuietly(participation.getId());
-      }
+      return true;
     } catch (RuntimeException e) {
       // 등록 실패 = 자동확인만 불가. 운영자가 슬랙 신규 참여 알림을 보고 수동 확인할 수 있다.
-      log.error("페이액션 주문 등록 실패 - participationId={}", event.participationId(), e);
+      log.error("페이액션 주문 등록 실패 - participationId={}", participationId, e);
+      return false;
+    }
+  }
+
+  /**
+   * 🔴 등록과 취소 리스너는 서로 다른 @Async 스레드라 순서가 보장되지 않는다. 취소가 먼저 도달하면 404 로 끝나고 뒤이어
+   * 등록된 주문이 살아남는다. 취소 이벤트는 커밋 후 발행되므로 등록 뒤 재조회로 잡힌다. 입금확인 이력이 있는 참여는
+   * {@link #onBuncheolCancelled} 와 같은 이유로 건드리지 않는다.
+   */
+  private void cancelIfCancelledMeanwhile(final Long participationId) {
+    final Participation participation;
+    try {
+      participation = participationDomainService.getParticipation(participationId);
+    } catch (RuntimeException e) {
+      // findQuietly 처럼 취소로 폴백하면 안 된다 — 여기엔 취소 신호가 없어 입금을 기다리는 정상 주문까지 취소하게 된다.
+      log.error("페이액션 주문 등록 후 참여 상태 재확인 실패 - participationId={}", participationId, e);
+      return;
+    }
+    if (participation.getStatus() == ParticipationStatus.CANCELLED
+        && participation.getConfirmedAt() == null) {
+      cancelQuietly(participationId);
     }
   }
 

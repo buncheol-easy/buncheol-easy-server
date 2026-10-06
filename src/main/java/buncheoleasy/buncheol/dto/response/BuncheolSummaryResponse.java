@@ -24,6 +24,8 @@ import java.util.List;
  *
  * <p>{@code flowType} 은 카드의 상태 배지·dim 판정을 상세 화면과 같은 기준으로 통일하기 위한 필드다 (docs/51 §3-1-2 — 이전에는 카드가
  * 상태값으로 플로우를 추정했다).
+ *
+ * <p>{@code createdAt} 은 분철 개최 시각(UTC)으로, 목록 카드의 "신규" 배지 판정과 사이트맵 lastmod 에 쓴다.
  */
 public record BuncheolSummaryResponse(
     Long id,
@@ -38,4 +40,5 @@ public record BuncheolSummaryResponse(
     List<String> memberNames,
     List<String> availableMemberNames,
     boolean shippingFeePaybackTarget,
-    boolean freeShippingEventTarget) {}
+    boolean freeShippingEventTarget,
+    Instant createdAt) {}

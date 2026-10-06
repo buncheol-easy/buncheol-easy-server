@@ -156,7 +156,7 @@ class UserControllerDocsTest extends DocsTestSupport {
                         .requestFields(
                             fieldWithPath("nickname").description("닉네임 (1~20자, 한글/영문/숫자)"),
                             fieldWithPath("phoneNumber")
-                                .description("휴대폰 번호 (01x로 시작하는 10~11자리 숫자)"),
+                                .description("휴대폰 번호 (01x로 시작하는 11자리 숫자)"),
                             fieldWithPath("name")
                                 .optional()
                                 .description("실명 (1~30자, 한글/영문 — 생략하면 기존 값 유지)"),

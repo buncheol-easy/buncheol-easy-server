@@ -59,7 +59,7 @@ public class User extends TimestampedEntity {
   @Column(name = "profile_completed", nullable = false)
   private boolean profileCompleted;
 
-  // 분철 개최 허용 여부. 개최 오픈 전이라 운영이 지정한 계정만 true (부여는 현재 DB 직접 UPDATE).
+  // 운영진 방식(LEGACY) 개최 권한. 없어도 C2C 로는 개최할 수 있다 (부여는 현재 DB 직접 UPDATE).
   @Column(name = "can_host", nullable = false)
   private boolean canHost;
 

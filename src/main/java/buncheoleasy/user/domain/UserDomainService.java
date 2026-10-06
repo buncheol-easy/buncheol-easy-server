@@ -20,7 +20,6 @@ public class UserDomainService {
   private final UserServiceTermRepository userServiceTermRepository;
   private final RandomNicknameGenerator nicknameGenerator;
   private final Clock clock;
-  private final C2cHostingProperties c2cHostingProperties;
 
   /**
    * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
@@ -126,14 +125,8 @@ public class UserDomainService {
    *
    * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
    * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
-   *
-   * <p>오픈 스위치({@link C2cHostingProperties})를 <b>가장 먼저</b> 본다. 미오픈은 사용자가 무엇을 채워도 해소되지 않으므로, 뒤에 두면
-   * "전화번호를 등록하세요" 처럼 <b>고쳐도 열리지 않는 안내</b>를 먼저 보여주게 된다.
    */
   public C2cHostQualification evaluateC2cHostQualification(final Long id) {
-    if (!c2cHostingProperties.enabled()) {
-      return C2cHostQualification.NOT_OPEN_YET;
-    }
     User user = getUser(id);
     if (!user.isProfileCompleted()) {
       return C2cHostQualification.PHONE_REQUIRED;
@@ -159,7 +152,6 @@ public class UserDomainService {
     ErrorCode errorCode =
         switch (qualification) {
           case QUALIFIED -> null;
-          case NOT_OPEN_YET -> ErrorCode.C2C_HOSTING_NOT_OPEN;
           case PHONE_REQUIRED -> ErrorCode.USER_PROFILE_IS_NOT_COMPLETE;
           case AGE_UNVERIFIED -> ErrorCode.USER_AGE_NOT_VERIFIED;
           case NOT_ADULT -> ErrorCode.USER_NOT_ADULT;

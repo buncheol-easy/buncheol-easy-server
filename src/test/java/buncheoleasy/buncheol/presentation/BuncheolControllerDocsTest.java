@@ -364,7 +364,6 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
-                            | `NOT_OPEN_YET` | 회원 개최 오픈 전(서비스 스위치 off) — 사용자가 고칠 것이 없다 | 409 `USR-035` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
                             | `AGE_UNVERIFIED` | 연령대 미확인 — 카카오 재로그인 동의로 회복 가능 | 409 `USR-032` |
                             | `NOT_ADULT` | 미성년 확정 — 개최 불가 | 403 `USR-033` |
@@ -380,7 +379,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("reason")
                                 .type(JsonFieldType.STRING)
                                 .description(
-                                    "부적격 사유 (NOT_OPEN_YET | PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
+                                    "부적격 사유 (PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
                                 .optional())
                         .build())));
   }

@@ -59,7 +59,8 @@ public class User extends TimestampedEntity {
   @Column(name = "profile_completed", nullable = false)
   private boolean profileCompleted;
 
-  // 운영진 방식(LEGACY) 개최 권한. 없어도 C2C 로는 개최할 수 있다 (부여는 현재 DB 직접 UPDATE).
+  // 운영진 권한. LEGACY 개최를 열 수 있고, C2C 로 열 때도 성인 확인·활성 개최 상한을 면제받는다.
+  // 없어도 C2C 로는 개최할 수 있다 (부여는 현재 DB 직접 UPDATE).
   @Column(name = "can_host", nullable = false)
   private boolean canHost;
 

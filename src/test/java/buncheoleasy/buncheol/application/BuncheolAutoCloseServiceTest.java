@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -115,6 +116,47 @@ class BuncheolAutoCloseServiceTest {
       then(deliveryDomainService).should().deleteByParticipationIds(List.of(701L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
+    }
+
+    // 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다 — 리스너가 사람 단위로 묶으려면 한 번에 봐야 한다.
+    @Test
+    void 취소된_참여가_여러_건이어도_사유를_담아_분철_단위로_한_번_발행한다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CANCELLED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      // cascade 재조회에는 ORDER BY 가 없다. 순서를 뒤섞어 발행 쪽 정렬을 확인한다.
+      Participation later = mock(Participation.class);
+      given(later.getId()).willReturn(703L);
+      Participation earlier = mock(Participation.class);
+      given(earlier.getId()).willReturn(701L);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+
+      buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(701L, 703L), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
+    }
+
+    @Test
+    void cascade_로_취소된_참여가_없으면_취소_이벤트를_발행하지_않는다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CANCELLED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isTrue();
+      then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // any() 로 두면 publishEvent(ApplicationEvent) 오버로드로 묶여 이 이벤트의 발행을 보지 못한다.
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolCancelledEvent.class));
     }
 
     @Test

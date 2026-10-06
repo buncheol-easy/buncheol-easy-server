@@ -78,7 +78,8 @@ class BuncheolListQueryServiceTest {
 
     @Test
     void 결과가_요청_size_와_같거나_적으면_hasNext_false_이고_nextCursor_가_null() {
-      Buncheol b1 = buncheol(10L, 100L, "분철 A", Instant.parse("2026-05-15T08:00:00Z"));
+      Instant createdAt = Instant.parse("2026-05-15T08:00:00Z");
+      Buncheol b1 = buncheol(10L, 100L, "분철 A", createdAt);
       Buncheol b2 = buncheol(11L, 100L, "분철 B", Instant.parse("2026-05-14T08:00:00Z"));
       given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(b1, b2));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
@@ -104,6 +105,7 @@ class BuncheolListQueryServiceTest {
       assertThat(result.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/a.jpg");
       assertThat(result.items().get(0).minHeadcount()).isEqualTo(3);
       assertThat(result.items().get(0).memberNames()).containsExactly("민지");
+      assertThat(result.items().get(0).createdAt()).isEqualTo(createdAt);
       assertThat(result.items().get(1).bookmarked()).isFalse();
       assertThat(result.items().get(1).thumbnailUrl()).isNull();
       assertThat(result.hasNext()).isFalse();

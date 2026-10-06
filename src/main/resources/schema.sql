@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS buncheols
     -- 이하 C2C 플로우 병존(그랜드파더링) 컬럼.
     -- 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3).
     flow_type         VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY(즉시 입금+페이액션) | C2C(신청→확정→입금 직거래)',
-    payment_due_at    DATETIME     NULL COMMENT 'C2C: 개최자 성사 확정 시 산정한 일괄 입금 기한',
+    payment_due_at    DATETIME     NULL COMMENT 'C2C: 개최자 성사 확정 시 산정한 일괄 입금 기한(확정 시각+24h, 이후 불변). 참여별 기한 정본은 participation_bundles.due_at',
     open_chat_url     VARCHAR(200) NULL COMMENT 'C2C: 개최자 오픈채팅 링크(선택) — 참여자 소통 채널',
     payment_bank      VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 은행 (확정 후 프로필 변경과 무관하게 안내 계좌 고정)',
     payment_account   VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 계좌번호',
@@ -374,11 +374,11 @@ CREATE TABLE IF NOT EXISTS participations
     refund_bank                  VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 은행 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_account               VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 계좌번호 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_holder                VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 예금주 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
-    due_at                       DATETIME     NULL COMMENT '입금 만료 시각. LEGACY=min(점유+30분, deadline) | C2C=성사 확정 시 일괄 산정(APPLIED 단계 NULL)',
+    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+30분, deadline), 지나면 자동 취소 | C2C=성사 확정 시 일괄 24h·추가 모집은 참여+24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',
-    cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT | BUNCHEOL_CANCELLED | USER_CANCELLED(C2C 자발 취소)',
-    status                       VARCHAR(30)  NOT NULL COMMENT 'AWAITING_PAYMENT | CONFIRMED | CANCELLED | APPLIED(C2C 신청) | PAYMENT_SENT(C2C 보냈어요)',
+    cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT(LEGACY 입금 만료) | BUNCHEOL_CANCELLED(분철 취소 연쇄) | USER_CANCELLED(C2C 자발 취소) | HOST_RELEASED(C2C 개최자 「제외」)',
+    status                       VARCHAR(30)  NOT NULL COMMENT 'APPLIED(C2C 신청) | AWAITING_PAYMENT | PAYMENT_SENT(C2C 보냈어요) | CONFIRMED | CANCELLED',
     -- 오픈 이벤트 배송비 환급. ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc).
     payback_status               VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',
     payback_tweet_url            VARCHAR(255) NULL COMMENT '환급 신청 후기 트윗 URL (쿼리스트링 제거 정규화 저장)',
@@ -400,8 +400,8 @@ CREATE TABLE IF NOT EXISTS participations
     created_at                   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- 이하 C2C 컬럼. 기존 배포 DB 에는 수동 ALTER 필요 (docs/46 §2.3).
-    payment_sent_at              DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 — 분쟁 증거, 반려·철회 후에도 보존',
-    payment_rejected_at          DATETIME     NULL COMMENT 'C2C: 개최자 "입금 못 찾음" 반려 시각 — 재마킹 시 NULL 초기화(최근 상태가 반려인지 판정). 셀프 철회는 NULL 유지',
+    payment_sent_at              DATETIME     NULL COMMENT 'C2C: 참여자 "보냈어요" 마킹 시각 사본 — 정본은 participation_bundles.payment_sent_at',
+    payment_rejected_at          DATETIME     NULL COMMENT '[삭제 예정] 읽고 쓰는 코드가 없다(개최자 반려 기능 없음). 이 컬럼을 매핑하지 않는 버전이 prod 에 배포된 뒤 DROP 한다',
     -- 분철 flow_type 비정규화 (조건부 INSERT 가 buncheols 에서 복사). generated column 은 타 테이블을
     -- 참조할 수 없어, LEGACY 전용 1인 1참여 유니크를 위해 참여 행에 내려받는다.
     flow_type                    VARCHAR(10)  NOT NULL DEFAULT 'LEGACY' COMMENT '분철 flow_type 비정규화 — LEGACY 1인 1참여 유니크용',

@@ -240,7 +240,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 null,
-                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null,
+                new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
             ParticipationCancellability.BLOCKED_BY_STATUS);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
@@ -272,7 +272,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
             ParticipationCancellability.FLOW_NOT_SUPPORTED);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
@@ -411,11 +411,6 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
-                            fieldWithPath("[].paymentRejectedAt")
-                                .description(
-                                    "C2C 개최자 반려('입금 못 찾음') 시각. status=AWAITING_PAYMENT 와 함께 오면 재확인이 필요한 상태다. "
-                                        + "재마킹 시 null 로 초기화되며, 참여자 셀프 철회는 null")
-                                .optional(),
                             fieldWithPath("[].openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
                                 .optional(),
@@ -456,7 +451,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   null,
-                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null, null,
+                  new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
             ParticipationCancellability.FLOW_NOT_SUPPORTED);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
@@ -543,11 +538,6 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("paymentSentAt")
                                 .description("C2C '보냈어요' 마킹 시각. 마킹 전이거나 LEGACY 면 null")
                                 .optional(),
-                            fieldWithPath("paymentRejectedAt")
-                                .description(
-                                    "C2C 개최자 반려('입금 못 찾음') 시각. status=AWAITING_PAYMENT 와 함께 오면 재확인이 필요한 상태다. "
-                                        + "재마킹 시 null 로 초기화되며, 참여자 셀프 철회는 null")
-                                .optional(),
                             fieldWithPath("openChatUrl")
                                 .description("C2C 개최자 오픈채팅 링크. 미등록이거나 LEGACY 면 null")
                                 .optional(),
@@ -619,89 +609,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                         .tag("Participation")
                         .summary("개최자 수동 입금확인")
                         .description(
-                            "개최자가 실제 입금을 확인해 입금확인중(AWAITING_PAYMENT) 참여를 CONFIRMED 로 전환한다. 입금 기한 내에만"
-                                + " 가능하며, 개최자 본인만 호출할 수 있다.")
-                        .requestHeaders(userAuthorizationHeader())
-                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .build())));
-  }
-
-  @Test
-  void C2C_참여자_보냈어요_마킹() throws Exception {
-    mockMvc
-        .perform(post("/v1/participations/{participationId}/payment-sent", 500L).with(userAuth()))
-        .andExpect(status().isNoContent())
-        .andDo(
-            document(
-                "participations-payment-sent",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Participation")
-                        .summary("C2C 참여자 '보냈어요' 마킹")
-                        .description(
-                            """
-                            입금 후 참여자가 입금 사실을 마킹한다 (`AWAITING_PAYMENT` → `PAYMENT_SENT`). 마킹된 참여는
-                            입금 만료 대상에서 제외되고 개최자의 입금확인을 기다린다. 기한 경과 검사는 하지 않으며(기한 직전 입금 보호),
-                            이미 마킹된 상태의 재요청은 멱등 성공한다. C2C 분철 전용이다.
-
-                            **발생 가능한 에러**
-                            | HTTP | 코드 | 의미 |
-                            |------|------|------|
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
-                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | 입금 대기 상태가 아님 (만료·취소·확정됨) |
-                            """)
-                        .requestHeaders(userAuthorizationHeader())
-                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .build())));
-  }
-
-  @Test
-  void C2C_참여자_보냈어요_철회() throws Exception {
-    mockMvc
-        .perform(
-            delete("/v1/participations/{participationId}/payment-sent", 500L).with(userAuth()))
-        .andExpect(status().isNoContent())
-        .andDo(
-            document(
-                "participations-payment-sent-revert",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Participation")
-                        .summary("C2C 참여자 '보냈어요' 철회")
-                        .description(
-                            "오마킹 셀프 수정. `PAYMENT_SENT` 를 `AWAITING_PAYMENT` 로 되돌린다(기한 유지). 이미 입금 대기로"
-                                + " 돌아가 있으면 멱등 성공한다. C2C 분철 전용이다.")
-                        .requestHeaders(userAuthorizationHeader())
-                        .pathParameters(parameterWithName("participationId").description("참여 ID"))
-                        .build())));
-  }
-
-  @Test
-  void C2C_개최자_미입금_반려() throws Exception {
-    mockMvc
-        .perform(
-            post("/v1/participations/{participationId}/reject-payment", 500L).with(userAuth()))
-        .andExpect(status().isNoContent())
-        .andDo(
-            document(
-                "participations-reject-payment",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Participation")
-                        .summary("C2C 개최자 미입금 반려")
-                        .description(
-                            """
-                            개최자가 통장에서 입금 내역을 찾지 못한 '보냈어요' 를 반려한다. 취소가 아니라 `AWAITING_PAYMENT` 로
-                            복귀시키고 입금 기한을 `max(기존 기한, 지금+24h)` 로 연장하며, 참여자에게 연장된 새 기한을 담은 입금
-                            재확인 알림이 발송된다. C2C 분철 전용이며 개최자 본인만 호출할 수 있다.
-
-                            **발생 가능한 에러**
-                            | HTTP | 코드 | 의미 |
-                            |------|------|------|
-                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철의 참여 |
-                            | 409 | `BCH-087` (`PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED`) | '보냈어요' 상태가 아님 |
-                            """)
+                            "LEGACY(운영진 개최) 전용. 개최자가 실제 입금을 확인해 입금확인중(AWAITING_PAYMENT) 참여를 CONFIRMED 로"
+                                + " 전환한다. 입금 기한 내에만 가능하며, 개최자 본인만 호출할 수 있다. C2C 분철은 409"
+                                + " `BCH-117`(`BUNDLE_CONFIRM_REQUIRED`) — 묶음 입금확인 API 를 쓴다.")
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("participationId").description("참여 ID"))
                         .build())));

@@ -1544,7 +1544,7 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
     }
 
-    // BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
+    // BCH-084 는 성사 확정·진행 확정·제외·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
     // 문구(예: 취소 안내)를 여기에 넣으면 다른 액션에서 엉뚱한 안내가 나간다.
     @Test
     void LEGACY_분철의_진행_확정은_범용_플로우_가드로_막힌다() {

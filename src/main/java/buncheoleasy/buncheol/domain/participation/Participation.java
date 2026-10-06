@@ -130,9 +130,10 @@ public class Participation extends TimestampedEntity {
   @Column(name = "flow_type", length = 10, insertable = false, updatable = false)
   private FlowType flowType;
 
-  // 입금 만료 시각. 이 시각까지 호스트의 입금확인이 없으면 자동 취소된다.
-  // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변.
-  // C2C = 성사 확정 시 일괄 산정(APPLIED 단계는 NULL), 개최자 반려 시 연장될 수 있어 CAS 로 갱신된다 (docs/46 §4.5).
+  // 입금 기한.
+  // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변. 지나면 만료 스케줄러가 자동 취소한다.
+  // C2C = 성사 확정 시 일괄 24h(APPLIED 단계는 NULL)·추가 모집은 참여 시각 + 24h. 자동 취소하지 않으며 정본은
+  // 묶음(participation_bundles.due_at)이다 — 이 칸은 사본이다.
   @Column(name = "due_at")
   private Instant dueAt;
 
@@ -152,17 +153,9 @@ public class Participation extends TimestampedEntity {
   @Column(nullable = false, length = 30)
   private ParticipationStatus status;
 
-  // C2C: 참여자가 "보냈어요" 를 누른 시각. 반려(마킹 해제)·철회 후에도 보존하는 분쟁 증거 타임스탬프 (docs/46 §1.1).
+  // C2C: 참여자가 "보냈어요" 를 누른 시각. 정본은 묶음(participation_bundles.payment_sent_at)이고 이 칸은 사본이다.
   @Column(name = "payment_sent_at")
   private Instant paymentSentAt;
-
-  // C2C: 개최자가 "입금 못 찾음" 으로 반려한 시각 (docs/53 Q-03). 개최자 반려와 참여자 셀프 철회가 같은 CAS 를 쓰는데
-  // 응답만으로는 구분이 안 돼 참여자에게 재확인 안내를 띄울 수 없었다 — 반려에만 값을 넣어 구분한다.
-  // 재마킹("보냈어요") 시 NULL 로 초기화한다. 안 그러면 반려 → 재마킹 → 셀프 철회 후에도 반려 표시가 남는다.
-  // 분쟁 증거는 paymentSentAt 이 이미 보존하므로 여기서 이력을 남길 필요는 없다.
-  // ⚠️ 응답에 실을 때는 원시 게터가 아니라 {@link #getVisiblePaymentRejectedAt} 를 쓴다.
-  @Column(name = "payment_rejected_at")
-  private Instant paymentRejectedAt;
 
 
   // --- 오픈 이벤트 배송비 환급(배송비 돌려받기) ---
@@ -267,20 +260,6 @@ public class Participation extends TimestampedEntity {
     this.shippingFee = shippingFee;
     this.dueAt = dueAt;
     this.status = status;
-  }
-
-  /**
-   * 응답에 노출할 반려 시각. 입금 대기 구간을 벗어나면 {@code null} 이다.
-   *
-   * <p>초기화는 재마킹 CAS 하나뿐이라, 반려 뒤 개최자가 그냥 수동 입금확인해 주면 {@code CONFIRMED +
-   * paymentRejectedAt≠null} 조합이 그대로 남는다. 그 상태로 내보내면 {@code paymentRejectedAt != null} 만 보는
-   * 클라이언트가 확정된 참여에 "입금 확인 안 됨" 배지를 붙인다. 상태 조건을 FE 규율에 맡기는 대신 서버가 계약을 보증한다 (PR #123 리뷰).
-   *
-   * <p>개최자 계좌·입금자명 노출 조건({@code AWAITING_PAYMENT || PAYMENT_SENT} — 쿼리 서비스에 있다)과 **의도적으로
-   * 다르다**. 반려 표시는 입금 대기 구간에서만 의미가 있어 한 상태만 통과시킨다.
-   */
-  public Instant getVisiblePaymentRejectedAt() {
-    return status == ParticipationStatus.AWAITING_PAYMENT ? paymentRejectedAt : null;
   }
 
   /**

@@ -16,9 +16,9 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
-import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -484,8 +484,8 @@ class AlimtalkNotificationListenerTest {
       given(buncheol.getPaymentAccount())
           .willReturn(BankAccount.of("국민은행", "12345678", "홍길동"));
       lenient().when(buncheol.isC2c()).thenReturn(true);
-      // 🔴 분철 칸에는 「옛 값」을 심는다 — 이 칸은 반려 연장을 못 받는 별개 칸이라, 알림이 여기를 읽으면
-      // 「제외」 게이트와 다른 기한을 말한다. 값을 같게 두면 테스트가 그 갈림에 눈이 먼다.
+      // 🔴 분철 칸에는 다른 값을 심는다 — 알림은 「제외」 게이트와 같은 묶음 기한을 읽어야 하고, 값을 같게 두면
+      // 테스트가 어느 칸을 읽는지 가리지 못한다.
       lenient()
           .when(buncheol.getPaymentDueAt())
           .thenReturn(Instant.parse("2026-08-02T00:00:00Z"));
@@ -958,16 +958,15 @@ class AlimtalkNotificationListenerTest {
   }
 
   @Nested
-  @DisplayName("C2C 보냈어요(onPaymentSent)")
-  class PaymentSent {
+  @DisplayName("C2C 묶음 보냈어요(onBundlePaymentSent)")
+  class BundlePaymentSent {
 
     @Test
-    @DisplayName("개최자에게 C2C_PAYMENT_SENT 발송 + 통장 대조용 입금자명 포함 변수 매핑 + 수신함 기록")
+    @DisplayName("개최자에게 C2C_PAYMENT_SENT 1건 — 묶음 전체 금액 합산 + 통장 대조용 입금자명 + 수신함 기록")
     void sendsToHost() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(77L);
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
-      Participation participation = mock(Participation.class);
       ParticipationBundle bundle = mock(ParticipationBundle.class);
       given(bundle.getRefundAccount()).willReturn(RefundAccount.of("국민", "12345678", "홍길동"));
       User participant = mock(User.class);
@@ -977,18 +976,24 @@ class AlimtalkNotificationListenerTest {
       given(assembler.loadByParticipation(PARTICIPATION_ID))
           .willReturn(
               new ParticipationView(
-                  participation, bundle, buncheol, "호시", participant, host, 25_000L));
+                  mock(Participation.class), bundle, buncheol, "호시", participant, host, 25_000L));
+      given(assembler.loadByParticipation(PARTICIPATION_ID + 1))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class), bundle, buncheol, "우지", participant, host, 23_000L));
 
-      listener.onPaymentSent(new PaymentSentEvent(PARTICIPATION_ID));
+      listener.onBundlePaymentSent(
+          new BundlePaymentSentEvent(
+              900L, List.of(PARTICIPATION_ID + 1), List.of(PARTICIPATION_ID, PARTICIPATION_ID + 1)));
 
       Map<String, String> variables = captureSend(AlimtalkTemplate.C2C_PAYMENT_SENT, HOST_PHONE);
       assertThat(variables)
           .containsEntry("닉네임", "개최자닉")
           .containsEntry("분철명", "세븐틴 미니 12집 분철")
-          .containsEntry("멤버명", "호시")
+          .containsEntry("멤버명", "호시, 우지")
           .containsEntry("참여자닉네임", "참여자닉")
           .containsEntry("입금자명", "홍길동")
-          .containsEntry("입금금액", "25,000")
+          .containsEntry("입금금액", "48,000")
           .containsEntry("분철ID", "77");
       verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_PAYMENT_SENT), any());
     }

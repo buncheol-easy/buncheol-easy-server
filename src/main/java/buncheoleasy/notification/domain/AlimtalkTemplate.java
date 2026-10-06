@@ -221,26 +221,6 @@ public enum AlimtalkTemplate {
           AlimtalkButton.channelAdd(),
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
-  /** C2C 개최자 반려 → 입금 재확인 안내 (연장된 새 기한 포함 — docs/46 §4.5). */
-  C2C_PAYMENT_RECHECK(
-      "입금 재확인 안내",
-      """
-      #{닉네임}님, 입금이 아직 확인되지 않았어요.
-
-      개최자가 입금 내역을 찾지 못해 '보냈어요' 표시를 해제했어요.
-      입금 전이라면 아래 계좌로 기한 내에 입금 후 다시 '보냈어요'를 눌러주세요.
-      이미 보내셨다면 입금자명과 금액을 확인해 분철이지에 문의해 주세요.
-
-      ▶ 분철명: #{분철명}
-      ▶ 참여 멤버: #{멤버명}
-      ▶ 입금 금액: #{입금금액}원
-      ▶ 입금 계좌: #{은행명} #{계좌번호} (예금주: #{예금주})
-      ▶ 입금 기한: #{입금기한}\
-      """,
-      List.of(
-          AlimtalkButton.channelAdd(),
-          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
-
   /**
    * C2C 입금 확인. 기존 PAYMENT_CONFIRMED 는 "진행 인원이 모두 모이면" 이 다음 단계라 C2C 에 오안내 — 인원은 성사 확정 시점에 이미 채워졌고 남은
    * 조건은 함께 참여한 사람들의 입금이다.
@@ -321,8 +301,8 @@ public enum AlimtalkTemplate {
           AlimtalkButton.webLink("분철 관리 하러가기", BuncheolUrls.BUNCHEOL_MANAGE))),
 
   /**
-   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인해 달라는 요청. 반려는 API 만 있고 관리 화면에 버튼이 없어 안내하지 않는다.
-   * 마킹(슬롯) 건당 1건 발송하며, 다슬롯 참여자의 이체 1건과 대조할 수 있도록 입금자명(환불 계좌 예금주와 동일 — docs/46 §4.7-A1)을 함께 안내한다.
+   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인해 달라는 요청. 묶음(이체 1건)당 1건 발송하며, 대조할 수
+   * 있도록 입금자명(환불 계좌 예금주와 동일 — docs/46 §4.7-A1)을 함께 안내한다.
    */
   C2C_PAYMENT_SENT(
       "입금 확인 요청 안내",

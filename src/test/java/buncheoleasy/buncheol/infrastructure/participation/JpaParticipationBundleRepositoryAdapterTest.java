@@ -316,7 +316,7 @@ class JpaParticipationBundleRepositoryAdapterTest {
         .extracting(ParticipationBundle::getDueAt)
         .isEqualTo(dueAt);
 
-    // 이미 채워진 묶음은 다시 덮어쓰지 않는다 — 반려로 연장된 기한이 되돌아가면 안 된다.
+    // 이미 채워진 묶음은 다시 덮어쓰지 않는다 — 추가 모집 묶음의 개별 기한 같은 다른 값을 일괄 기한으로 덮으면 안 된다.
     entityManager.clear();
     assertThat(participationBundleRepository.assignDueAtByBuncheolId(
             buncheolId, dueAt.plus(1, ChronoUnit.DAYS), Instant.now()))
@@ -542,73 +542,6 @@ class JpaParticipationBundleRepositoryAdapterTest {
     }
   }
 
-  @Nested
-  @DisplayName("extendDueAt — 개최자 반려 시 묶음 기한 연장")
-  class ExtendDueAtTest {
-
-    // 🔴 이 가드가 이 기능의 안전성 근거다 — 기한이 앞으로 당겨지면 「제외」가 열려, 반려로 24h 를 더 받은
-    // 정상 입금 대기자를 개최자가 바로 뺄 수 있게 된다.
-    @Test
-    @DisplayName("이미 더 뒤인 기한은 앞으로 당겨지지 않는다")
-    void 이미_더_뒤인_기한은_당겨지지_않는다() {
-      Instant later = Instant.now().plusSeconds(86_400).truncatedTo(ChronoUnit.SECONDS);
-      Long bundleId = openBundle(later);
-      entityManager.flush();
-      entityManager.clear();
-
-      participationBundleRepository.extendDueAt(
-          bundleId, later.minusSeconds(3600), Instant.now());
-      entityManager.clear();
-
-      assertThat(participationBundleRepository.findById(bundleId))
-          .get()
-          .extracting(ParticipationBundle::getDueAt)
-          .isEqualTo(later);
-    }
-
-    @Test
-    @DisplayName("더 뒤로 미는 것은 반영된다")
-    void 더_뒤로_미는_것은_반영된다() {
-      Instant original = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.SECONDS);
-      Instant extended = original.plusSeconds(86_400);
-      Long bundleId = openBundle(original);
-      entityManager.flush();
-      entityManager.clear();
-
-      participationBundleRepository.extendDueAt(bundleId, extended, Instant.now());
-      entityManager.clear();
-
-      assertThat(participationBundleRepository.findById(bundleId))
-          .get()
-          .extracting(ParticipationBundle::getDueAt)
-          .isEqualTo(extended);
-    }
-
-    @Test
-    @DisplayName("이미 닫힌 묶음의 기한은 밀지 않는다")
-    void 이미_닫힌_묶음의_기한은_밀지_않는다() {
-      Instant original = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.SECONDS);
-      Long bundleId = openBundle(original);
-      entityManager.flush();
-      jdbcTemplate.update(
-          "UPDATE participation_bundles SET closed_at = CURRENT_TIMESTAMP WHERE id = ?", bundleId);
-      entityManager.clear();
-
-      participationBundleRepository.extendDueAt(
-          bundleId, original.plusSeconds(86_400), Instant.now());
-      entityManager.clear();
-
-      assertThat(participationBundleRepository.findById(bundleId))
-          .get()
-          .extracting(ParticipationBundle::getDueAt)
-          .isEqualTo(original);
-    }
-  }
-
-  /**
-   * 「제외」 CAS 는 {@code ParticipationRepository} 에 있지만 묶음 픽스처가 여기 있어 함께 둔다. 검증 대상이
-   * <b>가드가 UPDATE WHERE 안에서 원자적으로 도는가</b> 라 실제 DB 로 돌려야 의미가 있다.
-   */
   @Nested
   @DisplayName("releaseBundleIfDue — 개최자 「제외」")
   class ReleaseBundleIfDueTest {

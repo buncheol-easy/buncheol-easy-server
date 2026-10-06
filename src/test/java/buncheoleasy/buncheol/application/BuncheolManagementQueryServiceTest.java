@@ -247,8 +247,6 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants().get(0).participantNickname()).isEqualTo("탈퇴한 사용자");
     }
 
-    // 탈퇴는 진행 중인 거래가 없어야 가능하다(USR-029) — 개최자가 탈퇴 회원의 실명·연락처를 쓸 일이 없다.
-    // 탈퇴하지 않은 참여자를 같은 응답에 넣어, 비우는 판정이 행 단위로만 걸리는지까지 본다.
     @Test
     void 탈퇴한_참여자는_입금자명과_수령인_정보를_비우고_발송_기록만_내린다() {
       stubBasicBuncheol(BuncheolStatus.CONFIRMED);
@@ -265,7 +263,6 @@ class BuncheolManagementQueryServiceTest {
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
           .willReturn(List.of(withdrawn, remaining));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
-      // 배송까지 끝나야 탈퇴 가드를 통과한다.
       Delivery received =
           delivery(5001L, 601L, "GS25 강남역점", "유진팬", "010-1234-5678", "1234567890",
               DeliveryStatus.RECEIVED);
@@ -287,7 +284,6 @@ class BuncheolManagementQueryServiceTest {
       assertThat(withdrawnRow.delivery().storeName()).isNull();
       assertThat(withdrawnRow.delivery().receiverNickname()).isNull();
       assertThat(withdrawnRow.delivery().receiverPhoneNumber()).isNull();
-      // 배송 방법·운송장·상태는 개최자가 남긴 발송 기록이라 그대로다.
       assertThat(withdrawnRow.delivery().deliveryId()).isEqualTo(5001L);
       assertThat(withdrawnRow.delivery().shippingMethod()).isEqualTo(ShippingMethod.GS25_HALF);
       assertThat(withdrawnRow.delivery().trackingNumber()).isEqualTo("1234567890");
@@ -302,8 +298,6 @@ class BuncheolManagementQueryServiceTest {
       assertThat(remainingRow.delivery().trackingNumber()).isEqualTo("9876543210");
     }
 
-    // 🔴 예외 — 취소된 참여는 탈퇴를 막지 않아, 입금확인 뒤 취소된 참여자가 환불받기 전에 탈퇴할 수 있다.
-    // 탈퇴했다고 계좌까지 비우면 개최자가 돌려줄 돈을 보낼 곳이 사라진다.
     @Test
     void 탈퇴한_참여자라도_환불할_취소분이면_계좌를_내린다() {
       stubBasicBuncheol(BuncheolStatus.CANCELLED, FlowType.C2C);
@@ -311,7 +305,6 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(buncheolMember(101L, 1001L)));
       given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
           .willReturn(List.of(groupMember(1001L, "안유진")));
-      // 개최자가 입금확인한 뒤 분철을 취소했다 — 참여자 자발 취소가 아니고 금액도 있어 환불 대상이다.
       Participation cancelled =
           participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.CANCELLED);
       setField(cancelled, "confirmedAt", CONFIRMED_AT);

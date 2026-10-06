@@ -224,8 +224,7 @@ public class BuncheolManagementQueryService {
       final Map<Long, BundleReleasability> releasabilityByBundleId,
       final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
-    // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다. 탈퇴는 진행 중인 거래가 없어야 가능하므로(USR-029)
-    // 개최자에게 실명·연락처를 남길 이유가 없다.
+    // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다.
     boolean withdrawn = participant == null;
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려가고 클라가 닉네임으로 폴백한다.
     RefundAccount refundAccount =
@@ -264,7 +263,7 @@ public class BuncheolManagementQueryService {
         // C2C 의 입금 기한 정본은 묶음이다(이체 1회 = 기한 1개). LEGACY 는 자리 값이 판정 조건이라 그대로다.
         ParticipationBundleDomainService.dueAtOf(bundleById, participation, c2c),
         participation.getConfirmedAt(),
-        // 탈퇴 판정을 걸지 않는다 — 취소된 참여는 탈퇴를 막지 않아, 입금확인 뒤 취소된 참여자가 환불받기 전에 탈퇴할 수 있다.
+        // 취소분은 환불받기 전에 탈퇴할 수 있어 탈퇴 판정을 걸지 않는다.
         refundAccountFor(participation, refundAccount, c2c, paymentAmount),
         delivery == null
             ? null

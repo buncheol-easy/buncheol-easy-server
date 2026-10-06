@@ -105,6 +105,7 @@ public class User extends TimestampedEntity {
   }
 
   public void updatePhoneNumber(final String newValue) {
+    PhoneNumber.validateForRegistration(newValue);
     PhoneNumber newPhoneNumber = PhoneNumber.of(newValue);
 
     boolean wasNull = (this.phoneNumber == null);

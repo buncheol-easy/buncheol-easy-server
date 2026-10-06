@@ -24,7 +24,7 @@ public enum ErrorCode {
   USER_EMAIL_FORMAT_INVALID("USR-009", "올바른 이메일 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
 
   USER_PHONE_NUMBER_REQUIRED("USR-010", "전화번호는 필수입니다.", HttpStatus.BAD_REQUEST),
-  USER_PHONE_NUMBER_LENGTH_INVALID("USR-011", "전화번호는 10자 또는 11자여야 합니다.", HttpStatus.BAD_REQUEST),
+  USER_PHONE_NUMBER_LENGTH_INVALID("USR-011", "전화번호는 11자리여야 합니다.", HttpStatus.BAD_REQUEST),
   USER_PHONE_NUMBER_FORMAT_INVALID(
       "USR-012", "올바른 전화번호 형식이 아닙니다. (예: 01012345678)", HttpStatus.BAD_REQUEST),
 

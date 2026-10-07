@@ -87,7 +87,7 @@ public class BuncheolService {
 
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
-          new BuncheolImageUploadEvent(buncheol.getId(), images, request.thumbnailIndex()));
+          BuncheolImageUploadEvent.ofHold(buncheol.getId(), images, request.thumbnailIndex()));
     }
 
     return buncheol.getId();
@@ -203,7 +203,7 @@ public class BuncheolService {
 
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
-          new BuncheolImageUploadEvent(buncheolId, images, request.thumbnailIndex()));
+          BuncheolImageUploadEvent.ofModify(buncheolId, images, request.thumbnailIndex()));
     }
   }
 

@@ -57,7 +57,7 @@ class BuncheolImageEventListenerTest {
 
       // when
       listener.handleImageUpload(
-          new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1, file2, file3), 2));
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1, file2, file3), 2));
 
       // then
       then(buncheolImageDomainService)
@@ -83,7 +83,7 @@ class BuncheolImageEventListenerTest {
 
       // when
       listener.handleImageUpload(
-          new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1, file2, file3), 2));
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1, file2, file3), 2));
 
       // then
       then(buncheolImageDomainService)
@@ -104,7 +104,7 @@ class BuncheolImageEventListenerTest {
 
       // when
       listener.handleImageUpload(
-          new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1, file2), 1));
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1, file2), 1));
 
       // then
       then(buncheolImageDomainService)
@@ -119,7 +119,8 @@ class BuncheolImageEventListenerTest {
       givenUploadSucceeds(file1, "https://cdn.example.com/1.jpg");
 
       // when
-      listener.handleImageUpload(new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1), -1));
+      listener.handleImageUpload(
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1), -1));
 
       // then — 플래그를 남기지 않고 조회 쿼리의 MIN(id) 폴백으로 수렴한다.
       then(buncheolImageDomainService)
@@ -137,7 +138,7 @@ class BuncheolImageEventListenerTest {
 
       // when
       listener.handleImageUpload(
-          new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1, file2), null));
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1, file2), null));
 
       // then
       then(buncheolImageDomainService)
@@ -163,12 +164,75 @@ class BuncheolImageEventListenerTest {
 
       // when
       listener.handleImageUpload(
-          new BuncheolImageUploadEvent(BUNCHEOL_ID, List.of(file1, file2), 0));
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1, file2), 0));
 
       // then
       then(buncheolImageDomainService)
           .should(never())
           .createBuncheolImages(any(), anyList(), any());
+      then(buncheolImageDomainService)
+          .should(never())
+          .createInitialBuncheolImages(any(), anyList(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("저장 경로 분기 테스트")
+  class SavePathTest {
+
+    @Test
+    void 개최_직후_첫_업로드는_플래그_해제_없는_첫_저장으로_보낸다() {
+      // given
+      ImageFile file1 = imageFile("image1.jpg");
+      givenUploadSucceeds(file1, "https://cdn.example.com/1.jpg");
+
+      // when
+      listener.handleImageUpload(BuncheolImageUploadEvent.ofHold(BUNCHEOL_ID, List.of(file1), 0));
+
+      // then
+      then(buncheolImageDomainService)
+          .should()
+          .createInitialBuncheolImages(BUNCHEOL_ID, List.of("https://cdn.example.com/1.jpg"), 0);
+      then(buncheolImageDomainService)
+          .should(never())
+          .createBuncheolImages(any(), anyList(), any());
+    }
+
+    @Test
+    void 개최_직후_첫_업로드도_일부_실패하면_보정된_대표사진_위치를_전달한다() {
+      // given
+      ImageFile file1 = imageFile("image1.jpg");
+      ImageFile file2 = imageFile("image2.jpg");
+      givenUploadFails(file1);
+      givenUploadSucceeds(file2, "https://cdn.example.com/2.jpg");
+
+      // when
+      listener.handleImageUpload(
+          BuncheolImageUploadEvent.ofHold(BUNCHEOL_ID, List.of(file1, file2), 1));
+
+      // then
+      then(buncheolImageDomainService)
+          .should()
+          .createInitialBuncheolImages(BUNCHEOL_ID, List.of("https://cdn.example.com/2.jpg"), 0);
+    }
+
+    @Test
+    void 수정_업로드는_기존_플래그를_해제하는_저장으로_보낸다() {
+      // given
+      ImageFile file1 = imageFile("image1.jpg");
+      givenUploadSucceeds(file1, "https://cdn.example.com/1.jpg");
+
+      // when
+      listener.handleImageUpload(
+          BuncheolImageUploadEvent.ofModify(BUNCHEOL_ID, List.of(file1), 0));
+
+      // then
+      then(buncheolImageDomainService)
+          .should()
+          .createBuncheolImages(BUNCHEOL_ID, List.of("https://cdn.example.com/1.jpg"), 0);
+      then(buncheolImageDomainService)
+          .should(never())
+          .createInitialBuncheolImages(any(), anyList(), any());
     }
   }
 }

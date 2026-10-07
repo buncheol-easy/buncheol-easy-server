@@ -259,6 +259,7 @@ class BuncheolServiceTest {
       BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
       assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
       assertThat(event.thumbnailIndex()).isEqualTo(1);
+      assertThat(event.initialUpload()).isTrue();
     }
 
     @Test
@@ -805,6 +806,7 @@ class BuncheolServiceTest {
       BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
       assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
       assertThat(event.thumbnailIndex()).isZero();
+      assertThat(event.initialUpload()).isFalse();
     }
 
     @Test

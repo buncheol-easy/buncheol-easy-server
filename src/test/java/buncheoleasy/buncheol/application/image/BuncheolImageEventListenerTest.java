@@ -199,6 +199,24 @@ class BuncheolImageEventListenerTest {
     }
 
     @Test
+    void 개최_직후_첫_업로드도_일부_실패하면_보정된_대표사진_위치를_전달한다() {
+      // given
+      ImageFile file1 = imageFile("image1.jpg");
+      ImageFile file2 = imageFile("image2.jpg");
+      givenUploadFails(file1);
+      givenUploadSucceeds(file2, "https://cdn.example.com/2.jpg");
+
+      // when
+      listener.handleImageUpload(
+          BuncheolImageUploadEvent.ofHold(BUNCHEOL_ID, List.of(file1, file2), 1));
+
+      // then
+      then(buncheolImageDomainService)
+          .should()
+          .createInitialBuncheolImages(BUNCHEOL_ID, List.of("https://cdn.example.com/2.jpg"), 0);
+    }
+
+    @Test
     void 수정_업로드는_기존_플래그를_해제하는_저장으로_보낸다() {
       // given
       ImageFile file1 = imageFile("image1.jpg");

@@ -40,6 +40,8 @@ public class BuncheolImageDomainService {
   /**
    * 개최 직후 첫 저장. 플래그 해제를 하지 않는다 — 새 분철은 이미지가 없어 해제 UPDATE 가 인덱스 끝 빈 구간에 갭 락을 잡고, 동시에 개최된 다른 분철의
    * INSERT 와 서로 막혀 데드락이 난다.
+   *
+   * <p>⚠️ 이미지가 하나도 없는 분철에만 호출한다(호출자 계약). 기존 이미지가 있으면 대표 플래그가 여러 장 남는다.
    */
   @Transactional
   public void createInitialBuncheolImages(

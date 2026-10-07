@@ -159,18 +159,33 @@ class UserDomainServiceTest {
   class RefreshAgeRangeTest {
 
     @Test
-    void 가입한_회원이면_연령대를_갱신하고_true_를_돌려준다() {
+    void 가입한_회원이면_연령대를_갱신하고_PRESENT_를_돌려준다() {
       // given
       SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
       User existingUser = User.create("KAKAO", "123456", "test@example.com");
       given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
 
       // when
-      boolean refreshed = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
 
       // then
-      assertThat(refreshed).isTrue();
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.PRESENT);
       assertThat(existingUser.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 저장_규칙에_맞지_않는_값이면_저장하지_않고_ABSENT_를_돌려준다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, " ", false);
+
+      // then
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.ABSENT);
+      assertThat(existingUser.getAgeRange()).isNull();
     }
 
     @Test
@@ -182,23 +197,24 @@ class UserDomainServiceTest {
       given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
 
       // when
-      userDomainService.refreshAgeRange(socialInfo, null, true);
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, null, true);
 
       // then
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.ABSENT);
       assertThat(existingUser.getAgeRange()).isNull();
     }
 
     @Test
-    void 가입한_회원이_없으면_새로_만들지_않고_false_를_돌려준다() {
+    void 가입한_회원이_없으면_새로_만들지_않고_NO_MEMBER_를_돌려준다() {
       // given
       SocialInfo socialInfo = SocialInfo.of("KAKAO", "unknown");
       given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.empty());
 
       // when
-      boolean refreshed = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
 
       // then
-      assertThat(refreshed).isFalse();
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.NO_MEMBER);
       then(userRepository).should(never()).save(any());
     }
   }

@@ -17,6 +17,7 @@ import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.AgeRangeRefreshResult;
 import buncheoleasy.user.domain.SocialInfo;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
@@ -162,13 +163,14 @@ class SocialLoginServiceTest {
     void 연령대_추가_동의_결과를_소셜_계정의_회원에게_반영하고_토큰은_발급하지_않는다() {
       // given
       given(userDomainService.refreshAgeRange(SocialInfo.of("KAKAO", "123"), "20~29", false))
-          .willReturn(true);
+          .willReturn(AgeRangeRefreshResult.PRESENT);
 
       // when
-      boolean refreshed = socialLoginService.refreshAgeRange("KAKAO", "123", "20~29", false);
+      AgeRangeRefreshResult result =
+          socialLoginService.refreshAgeRange("KAKAO", "123", "20~29", false);
 
       // then
-      assertThat(refreshed).isTrue();
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.PRESENT);
       then(jwtTokenProvider).shouldHaveNoInteractions();
     }
   }

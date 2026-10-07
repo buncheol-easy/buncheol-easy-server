@@ -40,14 +40,19 @@ public class UserDomainService {
         .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
   }
 
-  /** 연령대 추가 동의 결과를 가입한 회원에게 반영한다. 동의만 더하는 흐름이라 회원이 없으면 만들지 않고 false 를 돌려준다. */
+  /** 연령대 추가 동의 결과를 가입한 회원에게 반영하고, 반영 뒤 회원에게 연령대가 있는지 돌려준다. */
   @Transactional
-  public boolean refreshAgeRange(
+  public AgeRangeRefreshResult refreshAgeRange(
       final SocialInfo socialInfo, final String ageRange, final boolean ageRangeWithdrawn) {
     return userRepository
         .findBySocialInfo(socialInfo)
         .map(user -> applyAgeRange(user, ageRange, ageRangeWithdrawn))
-        .isPresent();
+        .map(
+            user ->
+                user.getAgeRange() != null
+                    ? AgeRangeRefreshResult.PRESENT
+                    : AgeRangeRefreshResult.ABSENT)
+        .orElse(AgeRangeRefreshResult.NO_MEMBER);
   }
 
   /**

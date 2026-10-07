@@ -5,6 +5,7 @@ import buncheoleasy.auth.application.SocialLoginCommand;
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.AgeRangeRefreshResult;
 import buncheoleasy.user.domain.SocialProvider;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import jakarta.servlet.http.HttpServletRequest;
@@ -111,8 +112,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
   }
 
   /**
-   * 연령대 추가 동의 결과를 반영한다. 연령대는 ID 토큰에 없어 카카오 API 로 조회한다. 연령대가 실제로 저장됐을 때만 동의 완료로 돌려보내고, 그 밖에는 모두
-   * 실패로 돌려보낸다 — 결과 화면이 오류 페이지가 되지 않도록 예외도 여기서 끝낸다.
+   * 연령대 추가 동의 결과를 반영한다. 연령대는 ID 토큰에 없어 카카오 API 로 조회한다. 반영 뒤 회원에게 연령대가 있을 때만 동의 완료로 돌려보내고, 그 밖에는
+   * 모두 실패로 돌려보낸다 — 결과 화면이 오류 페이지가 되지 않도록 예외도 여기서 끝낸다.
    */
   private AgeRangeConsentRedirector.Result refreshAgeRange(
       final OAuth2AuthenticationToken oauthToken) {
@@ -123,26 +124,29 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         return AgeRangeConsentRedirector.Result.FAILED;
       }
       KakaoApiClient.KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
-      boolean withdrawn = Boolean.TRUE.equals(userInfo.ageRangeNeedsAgreement());
-      // 철회 신호면 결과가 실패여도 저장값을 파기해야 하므로 판정보다 먼저 반영한다.
-      boolean refreshed =
+      AgeRangeRefreshResult result =
           socialLoginService.refreshAgeRange(
-              profile.provider().name(), profile.providerId(), userInfo.ageRange(), withdrawn);
-      if (!refreshed) {
-        log.warn("연령대 추가 동의 계정으로 가입한 회원이 없음: providerId={}", profile.providerId());
-        return AgeRangeConsentRedirector.Result.FAILED;
-      }
-      if (userInfo.ageRange() == null || withdrawn) {
-        log.warn(
-            "연령대 추가 동의 후에도 카카오 연령대가 없음: providerId={}, needsAgreement={}",
-            profile.providerId(),
-            userInfo.ageRangeNeedsAgreement());
-        return AgeRangeConsentRedirector.Result.FAILED;
-      }
-      return AgeRangeConsentRedirector.Result.AGREED;
+              profile.provider().name(),
+              profile.providerId(),
+              userInfo.ageRange(),
+              Boolean.TRUE.equals(userInfo.ageRangeNeedsAgreement()));
+      return switch (result) {
+        case PRESENT -> AgeRangeConsentRedirector.Result.AGREED;
+        case ABSENT -> {
+          log.warn(
+              "연령대 추가 동의 후에도 연령대가 없음: providerId={}, needsAgreement={}",
+              profile.providerId(),
+              userInfo.ageRangeNeedsAgreement());
+          yield AgeRangeConsentRedirector.Result.FAILED;
+        }
+        case NO_MEMBER -> {
+          log.warn("연령대 추가 동의 계정으로 가입한 회원이 없음: providerId={}", profile.providerId());
+          yield AgeRangeConsentRedirector.Result.FAILED;
+        }
+      };
     } catch (RuntimeException exception) {
       log.warn(
-          "연령대 추가 동의 반영 실패: providerId={}, reason={}",
+          "연령대 추가 동의 반영 실패: principalName={}, reason={}",
           oauthToken.getName(),
           exception.getMessage());
       return AgeRangeConsentRedirector.Result.FAILED;

@@ -15,6 +15,7 @@ import buncheoleasy.auth.application.SocialLoginCommand;
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.AgeRangeRefreshResult;
 import buncheoleasy.user.domain.SocialProvider;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import java.time.Instant;
@@ -375,7 +376,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(kakaoApiClient.getUserInfo("kakao-access-token"))
           .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678", "20~29", false));
       given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", "20~29", false))
-          .willReturn(true);
+          .willReturn(AgeRangeRefreshResult.PRESENT);
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -391,7 +392,7 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    void 카카오가_연령대를_내려주지_않으면_실패로_돌려보낸다() throws Exception {
+    void 반영_뒤에도_연령대가_없으면_실패로_돌려보낸다() throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       givenKakaoProfile();
@@ -399,7 +400,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(kakaoApiClient.getUserInfo("kakao-access-token"))
           .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, null, false));
       given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", null, false))
-          .willReturn(true);
+          .willReturn(AgeRangeRefreshResult.ABSENT);
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -420,7 +421,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(kakaoApiClient.getUserInfo("kakao-access-token"))
           .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, null, true));
       given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", null, true))
-          .willReturn(true);
+          .willReturn(AgeRangeRefreshResult.ABSENT);
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -463,7 +464,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(kakaoApiClient.getUserInfo("kakao-access-token"))
           .willReturn(new KakaoApiClient.KakaoUserInfo(null, null, "20~29", false));
       given(socialLoginService.refreshAgeRange("KAKAO", "provider-id", "20~29", false))
-          .willReturn(false);
+          .willReturn(AgeRangeRefreshResult.NO_MEMBER);
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 

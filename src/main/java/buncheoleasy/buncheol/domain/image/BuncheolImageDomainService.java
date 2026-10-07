@@ -34,17 +34,29 @@ public class BuncheolImageDomainService {
       // "분철당 플래그 최대 1장" 을 유지한다.
       buncheolImageRepository.clearThumbnail(buncheolId);
     }
-    List<BuncheolImage> newBuncheolImages =
-        IntStream.range(0, imageUrls.size())
-            .mapToObj(
-                i ->
-                    BuncheolImage.create(
-                        buncheolId,
-                        imageUrls.get(i),
-                        thumbnailPosition != null && thumbnailPosition == i))
-            .toList();
+    buncheolImageRepository.saveAll(toImages(buncheolId, imageUrls, thumbnailPosition));
+  }
 
-    buncheolImageRepository.saveAll(newBuncheolImages);
+  /**
+   * 개최 직후 첫 저장. 플래그 해제를 하지 않는다 — 새 분철은 이미지가 없어 해제 UPDATE 가 인덱스 끝 빈 구간에 갭 락을 잡고, 동시에 개최된 다른 분철의
+   * INSERT 와 서로 막혀 데드락이 난다.
+   */
+  @Transactional
+  public void createInitialBuncheolImages(
+      final Long buncheolId, final List<String> imageUrls, final Integer thumbnailPosition) {
+    buncheolImageRepository.saveAll(toImages(buncheolId, imageUrls, thumbnailPosition));
+  }
+
+  private List<BuncheolImage> toImages(
+      final Long buncheolId, final List<String> imageUrls, final Integer thumbnailPosition) {
+    return IntStream.range(0, imageUrls.size())
+        .mapToObj(
+            i ->
+                BuncheolImage.create(
+                    buncheolId,
+                    imageUrls.get(i),
+                    thumbnailPosition != null && thumbnailPosition == i))
+        .toList();
   }
 
   // 분철은 이미지 최소 1장 이상, 최대 5장. 개최(hold)는 신규 이미지 수로 호출한다.

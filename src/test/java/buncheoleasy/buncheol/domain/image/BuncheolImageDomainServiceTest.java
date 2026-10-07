@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.inOrder;
@@ -238,6 +239,32 @@ class BuncheolImageDomainServiceTest {
       // then
       then(buncheolImageRepository).should(never()).clearThumbnail(buncheolId);
       then(buncheolImageRepository).should().saveAll(anyList());
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 직후 첫 이미지 저장 테스트 (createInitialBuncheolImages)")
+  class CreateInitialBuncheolImagesTest {
+
+    @Test
+    void 대표사진을_지정해도_기존_플래그_해제_없이_저장한다() {
+      // given
+      Long buncheolId = 1L;
+      List<String> imageUrls =
+          List.of("https://cdn.example.com/image1.jpg", "https://cdn.example.com/image2.jpg");
+
+      // when
+      buncheolImageDomainService.createInitialBuncheolImages(buncheolId, imageUrls, 1);
+
+      // then
+      then(buncheolImageRepository).should(never()).clearThumbnail(anyLong());
+      then(buncheolImageRepository).should().saveAll(imagesCaptor.capture());
+      List<BuncheolImage> saved = imagesCaptor.getValue();
+      assertThat(saved)
+          .extracting(BuncheolImage::getImageUrl)
+          .containsExactly(
+              "https://cdn.example.com/image1.jpg", "https://cdn.example.com/image2.jpg");
+      assertThat(saved).extracting(BuncheolImage::isThumbnail).containsExactly(false, true);
     }
   }
 

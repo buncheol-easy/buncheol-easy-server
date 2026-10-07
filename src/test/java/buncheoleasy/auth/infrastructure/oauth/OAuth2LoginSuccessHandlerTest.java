@@ -499,6 +499,27 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
+    void 프로필_추출이_실패해도_오류_페이지_대신_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal))
+          .willThrow(new RuntimeException("broken principal"));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(consentCallback(), response, authentication());
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+      then(socialLoginService)
+          .should(never())
+          .refreshAgeRange(anyString(), anyString(), any(), anyBoolean());
+    }
+
+    @Test
     void 카카오_access_token_을_찾지_못하면_실패로_돌려보낸다() throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();

@@ -59,11 +59,11 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       HttpServletRequest request, HttpServletResponse response, Authentication authentication)
       throws IOException {
     OAuth2AuthenticationToken oauthToken = getAuthenticationToken(authentication);
-    OAuth2UserProfile profile = getUserProfile(oauthToken);
     if (KakaoAuthorizationRequestResolver.isAgeRangeConsentCallback(request)) {
-      ageRangeConsentRedirector.redirect(response, refreshAgeRange(oauthToken, profile));
+      ageRangeConsentRedirector.redirect(response, refreshAgeRange(oauthToken));
       return;
     }
+    OAuth2UserProfile profile = getUserProfile(oauthToken);
     validateSocialEmail(profile.email());
 
     List<ServiceTermAgreement> serviceTerms = List.of();
@@ -115,14 +115,16 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
    * 실패로 돌려보낸다 — 결과 화면이 오류 페이지가 되지 않도록 예외도 여기서 끝낸다.
    */
   private AgeRangeConsentRedirector.Result refreshAgeRange(
-      final OAuth2AuthenticationToken oauthToken, final OAuth2UserProfile profile) {
-    String kakaoAccessToken = loadKakaoAccessToken(oauthToken);
-    if (kakaoAccessToken == null) {
-      return AgeRangeConsentRedirector.Result.FAILED;
-    }
+      final OAuth2AuthenticationToken oauthToken) {
     try {
+      OAuth2UserProfile profile = getUserProfile(oauthToken);
+      String kakaoAccessToken = loadKakaoAccessToken(oauthToken);
+      if (kakaoAccessToken == null) {
+        return AgeRangeConsentRedirector.Result.FAILED;
+      }
       KakaoApiClient.KakaoUserInfo userInfo = kakaoApiClient.getUserInfo(kakaoAccessToken);
       boolean withdrawn = Boolean.TRUE.equals(userInfo.ageRangeNeedsAgreement());
+      // 철회 신호면 결과가 실패여도 저장값을 파기해야 하므로 판정보다 먼저 반영한다.
       boolean refreshed =
           socialLoginService.refreshAgeRange(
               profile.provider().name(), profile.providerId(), userInfo.ageRange(), withdrawn);
@@ -141,7 +143,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     } catch (RuntimeException exception) {
       log.warn(
           "연령대 추가 동의 반영 실패: providerId={}, reason={}",
-          profile.providerId(),
+          oauthToken.getName(),
           exception.getMessage());
       return AgeRangeConsentRedirector.Result.FAILED;
     }

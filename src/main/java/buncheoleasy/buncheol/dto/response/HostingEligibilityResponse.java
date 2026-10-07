@@ -13,7 +13,7 @@ public record HostingEligibilityResponse(boolean eligible, Reason reason) {
   public enum Reason {
     /** 가입 미완료 — 전화번호 등록 필요. */
     PHONE_REQUIRED,
-    /** 연령대 미보유 — 카카오 재로그인·재동의로 회복 가능. */
+    /** 연령대 미보유 — 연령대 추가 동의({@code /oauth2/authorization/kakao/age-range})로 회복 가능. */
     AGE_UNVERIFIED,
     /** 미성년 확정 — 개최 불가. */
     NOT_ADULT,

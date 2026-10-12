@@ -205,11 +205,39 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
+  @DisplayName("C2C 입금 기한 뒤 제외(C2C_PAYMENT_EXPIRED)")
+  class C2cPaymentExpired {
+
+    // C2C 는 입금 자동 만료가 없어 이 알림은 개최자 「제외」 때만 나간다(docs/70 결정 9). '보냈어요'를 누른 묶음도 제외될 수 있다.
+    @Test
+    @DisplayName("자동 취소가 아닌 개최자 취소를 안내하고 미치환 토큰을 남기지 않는다")
+    void render() {
+      Map<String, String> variables =
+          Map.of("닉네임", "참여자닉", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시 외 1");
+
+      String rendered = AlimtalkTemplate.C2C_PAYMENT_EXPIRED.render(variables);
+
+      assertThat(AlimtalkTemplate.C2C_PAYMENT_EXPIRED.subject()).isEqualTo("참여 취소 안내");
+      assertThat(rendered)
+          .isEqualTo(
+              "참여자닉님, 입금 기한이 지나 개최자가 참여를 취소했어요.\n"
+                  + "\n"
+                  + "아직 입금 전이었다면 따로 하실 일은 없어요.\n"
+                  + "이미 입금하셨는데 취소되었다면\n"
+                  + "개최자 확인 후 처리를 도와드릴게요. 분철이지로 문의해 주세요.\n"
+                  + "\n"
+                  + "▶ 분철명: 세븐틴 미니 12집 분철\n"
+                  + "▶ 참여 멤버: 호시 외 1");
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 진행 확정(C2C_BUNCHEOL_CONFIRMED)")
   class C2cBuncheolConfirmed {
 
+    // 개최자가 미입금 묶음을 제외하고 「입금한 N자리로 진행 확정」해도 이 알림이 나간다.
     @Test
-    @DisplayName("확정 사유를 인원이 아닌 전원 입금확인으로 안내하고 미치환 토큰을 남기지 않는다")
+    @DisplayName("전원 입금이 아닌 입금 확인된 참여자로 진행함을 안내하고 미치환 토큰을 남기지 않는다")
     void render() {
       Map<String, String> variables =
           Map.of("닉네임", "참여자닉", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시 외 1");
@@ -217,11 +245,14 @@ class AlimtalkTemplateTest {
       String rendered = AlimtalkTemplate.C2C_BUNCHEOL_CONFIRMED.render(variables);
 
       assertThat(rendered)
-          .startsWith("참여자닉님, 참여하신 분철의 진행이 확정되었어요!")
-          .contains("참여자들의 입금이 모두 완료되어")
-          .doesNotContain("진행 인원이 모두 모여")
-          .contains("▶ 참여 멤버: 호시 외 1")
-          .doesNotContain("#{");
+          .isEqualTo(
+              "참여자닉님, 참여하신 분철의 진행이 확정되었어요! 🎉\n"
+                  + "\n"
+                  + "입금이 확인된 참여자들로 분철을 진행해요. 이제 상품 준비가 시작돼요.\n"
+                  + "상품이 발송되면 운송장과 함께 다시 알려드릴게요.\n"
+                  + "\n"
+                  + "▶ 분철명: 세븐틴 미니 12집 분철\n"
+                  + "▶ 참여 멤버: 호시 외 1");
     }
   }
 

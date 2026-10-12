@@ -146,6 +146,23 @@ class AlimtalkNotificationListenerTest {
           .containsEntry("멤버명", "장원영");
       verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.PAYMENT_EXPIRED), any());
     }
+
+    // 만료 스케줄러는 LEGACY 만 조회해 정상 경로로는 닿지 않는다. C2C 전용 문안은 개최자 「제외」 안내라 여기서 쓰면 사실과 다르다.
+    @Test
+    @DisplayName("C2C 참여면 발송·수신함 기록 없이 건너뛴다")
+    void skipsC2c() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(
+              new ParticipationView(
+                  mock(Participation.class), null, buncheol, "호시", mock(User.class), mock(User.class), 25_000L));
+
+      listener.onPaymentExpired(new PaymentExpiredEvent(PARTICIPATION_ID));
+
+      verify(sender, never()).send(any(), any(), any());
+      verify(inboxRecorder, never()).record(any(), any(), any());
+    }
   }
 
   @Nested
@@ -178,7 +195,7 @@ class AlimtalkNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("C2C 는 전원 입금확인이 전이 조건이라 C2C_BUNCHEOL_CONFIRMED 로 발송")
+    @DisplayName("C2C 는 인원이 아닌 입금확인이 전이 조건이라 C2C_BUNCHEOL_CONFIRMED 로 발송")
     void c2cUsesOwnTemplate() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");

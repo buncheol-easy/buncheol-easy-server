@@ -185,14 +185,17 @@ public enum AlimtalkTemplate {
           AlimtalkButton.channelAdd(),
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
-  /** C2C 입금 기한 만료 자동 취소. 기존 PAYMENT_EXPIRED 는 플랫폼 환불 계좌 전제라 C2C 에 오안내(docs/46 §6.2). */
+  /**
+   * C2C 개최자 「제외」 안내. C2C 는 입금 자동 만료가 없어 기한 뒤 개최자 제외가 유일한 발송 경로다. 기존 PAYMENT_EXPIRED 는 플랫폼 환불 계좌
+   * 전제라 C2C 에 오안내(docs/46 §6.2).
+   */
   C2C_PAYMENT_EXPIRED(
-      "참여 자동 취소 안내",
+      "참여 취소 안내",
       """
-      #{닉네임}님, 입금 기한이 지나 참여가 자동 취소되었어요.
+      #{닉네임}님, 입금 기한이 지나 개최자가 참여를 취소했어요.
 
       아직 입금 전이었다면 따로 하실 일은 없어요.
-      이미 입금하셨는데 '보냈어요'를 누르지 못해 취소되었다면
+      이미 입금하셨는데 취소되었다면
       개최자 확인 후 처리를 도와드릴게요. 분철이지로 문의해 주세요.
 
       ▶ 분철명: #{분철명}
@@ -259,14 +262,15 @@ public enum AlimtalkTemplate {
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
   /**
-   * C2C 진행 확정. 기존 BUNCHEOL_CONFIRMED 는 "진행 인원이 모두 모여" 가 전제라 C2C 에 오안내 — 전이 조건은 인원이 아니라 전원 입금확인이다.
+   * C2C 진행 확정. 기존 BUNCHEOL_CONFIRMED 는 "진행 인원이 모두 모여" 가 전제라 C2C 에 오안내 — 전이 조건은 인원이 아니라 입금확인이다. 개최자가
+   * 미입금 묶음을 제외하고 확정할 수도 있어 "전원 입금" 으로 쓰지 않는다.
    */
   C2C_BUNCHEOL_CONFIRMED(
       "분철 진행 확정 안내",
       """
       #{닉네임}님, 참여하신 분철의 진행이 확정되었어요! 🎉
 
-      참여자들의 입금이 모두 완료되어 이제 상품 준비가 시작돼요.
+      입금이 확인된 참여자들로 분철을 진행해요. 이제 상품 준비가 시작돼요.
       상품이 발송되면 운송장과 함께 다시 알려드릴게요.
 
       ▶ 분철명: #{분철명}

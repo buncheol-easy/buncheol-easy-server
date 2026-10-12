@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -711,6 +712,84 @@ class BuncheolControllerTest {
           .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
           .andExpect(status().isForbidden())
           .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 자리 빼기 API 테스트")
+  class RemoveMemberTest {
+
+    @Test
+    void 자리를_빼면_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              delete("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+                  .with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService).should().removeMember(HOST_ID, 10L, 7L);
+    }
+
+    @Test
+    void 신청자가_있는_자리면_409와_전용_코드를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT))
+          .given(buncheolService)
+          .removeMember(HOST_ID, 10L, 7L);
+
+      mockMvc
+          .perform(
+              delete("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      containsString(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 자리 다시 넣기 API 테스트")
+  class AddMemberTest {
+
+    private ResultActions perform(final String body) throws Exception {
+      return mockMvc.perform(
+          post("/v1/buncheols/{id}/members", 10L)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(body)
+              .with(mockAuth()));
+    }
+
+    @Test
+    void 자리를_넣으면_201과_새_자리_id_를_반환한다() throws Exception {
+      given(
+              buncheolService.addMember(
+                  eq(HOST_ID),
+                  eq(10L),
+                  argThat(r -> r.memberId().equals(200L) && r.price().equals(15_000L))))
+          .willReturn(30L);
+
+      perform("{\"memberId\": 200, \"price\": 15000}")
+          .andExpect(status().isCreated())
+          .andExpect(jsonPath("$.buncheolMemberId").value(30));
+    }
+
+    @Test
+    void memberId_가_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"price\": 15000}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).addMember(any(), any(), any());
+    }
+
+    @Test
+    void 가격이_음수면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"memberId\": 200, \"price\": -100}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).addMember(any(), any(), any());
     }
   }
 

@@ -4,6 +4,7 @@ import buncheoleasy.buncheol.application.participation.ParticipationService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -11,8 +12,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.springframework.test.util.ReflectionTestUtils.setField;
 
 import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
 import buncheoleasy.buncheol.application.image.ImageFile;
@@ -22,11 +25,13 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
+import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -44,6 +49,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -51,8 +57,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -64,6 +72,7 @@ import org.springframework.context.ApplicationEventPublisher;
 class BuncheolServiceTest {
 
   private static final Long HOST_ID = 1L;
+  private static final Long OTHER_USER_ID = 2L;
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
   private static final Long MEMBER_ID = 200L;
@@ -1218,5 +1227,296 @@ class BuncheolServiceTest {
           .should(never())
           .assignDueAtByBuncheolId(anyLong(), any(), any());
     }
+  }
+
+  @Nested
+  @DisplayName("C2C 개최자 자리 빼기 테스트")
+  class RemoveMemberTest {
+
+    private static final Long SLOT_ID = 7L;
+    private static final Long OTHER_SLOT_ID = 8L;
+
+    private void givenLocked(final Buncheol buncheol) {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+    }
+
+    private void givenSlots(final Long... slotIds) {
+      List<BuncheolMember> slots =
+          Arrays.stream(slotIds).map(id -> slot(id, MEMBER_ID + id)).toList();
+      given(buncheolMemberDomainService.findAllByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(slots);
+    }
+
+    @Test
+    void 개최자가_아니면_거부하고_아무것도_지우지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+
+      assertThatThrownBy(() -> buncheolService.removeMember(OTHER_USER_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+    }
+
+    @Test
+    void LEGACY_분철이면_범용_플로우_가드로_거부한다() {
+      givenLocked(slotEditBuncheol(FlowType.LEGACY, BuncheolStatus.RECRUITING));
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"CONFIRMED", "CANCELLED", "HOST_CANCELLED"})
+    void 신청을_받지_않는_상태면_거부한다(final BuncheolStatus status) {
+      givenLocked(slotEditBuncheol(FlowType.C2C, status));
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+    }
+
+    // 마감이 지난 모집중(C2C 확정 유예 구간)은 신청을 받지 않는다 — 자리도 바꾸지 않는다.
+    @Test
+    void 마감이_지난_모집중이면_거부한다() {
+      givenLocked(pastDeadlineC2cBuncheol());
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    @Test
+    void 그_분철의_자리가_아니면_없는_멤버로_거부한다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(OTHER_SLOT_ID, 9L);
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+    }
+
+    @Test
+    void 마지막_자리는_빼지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(SLOT_ID);
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_LAST);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+    }
+
+    @Test
+    void 활성_참여가_있어_지우지_못하면_신청자_있음으로_거부하고_최소_인원은_그대로다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(SLOT_ID, OTHER_SLOT_ID);
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(false);
+      given(participationDomainService.hasActiveParticipationOnSlot(SLOT_ID)).willReturn(true);
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT);
+
+      then(buncheolDomainService)
+          .should(never())
+          .lowerMinHeadcountToSlotCount(anyLong(), anyInt(), any());
+    }
+
+    @Test
+    void 취소_기록만_있어_지우지_못하면_기록_있음으로_거부한다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(SLOT_ID, OTHER_SLOT_ID);
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(false);
+      given(participationDomainService.hasActiveParticipationOnSlot(SLOT_ID)).willReturn(false);
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY);
+    }
+
+    // 남은 자리 수 = 빼기 전 자리 수 - 1. 모집중 여부는 UPDATE 조건이 가른다(입금 수집중이면 0행).
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+    void 빈_자리는_지우고_남은_자리_수로_최소_인원_맞추기를_요청한다(final BuncheolStatus status) {
+      givenLocked(slotEditBuncheol(FlowType.C2C, status));
+      givenSlots(SLOT_ID, OTHER_SLOT_ID, 9L);
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(true);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolDomainService).should().lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 2, NOW);
+    }
+
+    // 🔴 앞에서 getBuncheol 을 부르면 영속성 컨텍스트가 락 이전 값을 돌려준다 — 잠금 조회가 첫 분철 조회여야 하고,
+    // 자리 잠금 → 조건부 삭제 순서여야 「마지막 자리」 판정이 낡지 않는다.
+    @Test
+    void 분철_잠금_조회가_첫_분철_조회이고_자리_잠금_뒤에_지운다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(SLOT_ID, OTHER_SLOT_ID);
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(true);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+      InOrder order = inOrder(buncheolDomainService, buncheolMemberDomainService);
+      order.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      order.verify(buncheolMemberDomainService).findAllByBuncheolIdForUpdate(BUNCHEOL_ID);
+      order.verify(buncheolMemberDomainService).removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID);
+      order.verify(buncheolDomainService).lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 1, NOW);
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 개최자 자리 다시 넣기 테스트")
+  class AddMemberTest {
+
+    private static final Long NEW_SLOT_ID = 30L;
+
+    private final BuncheolMemberAddRequest request =
+        new BuncheolMemberAddRequest(MEMBER_ID, 15_000L);
+
+    @Test
+    void 개최자가_아니면_거부한다() {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+
+      assertThatThrownBy(() -> buncheolService.addMember(OTHER_USER_ID, BUNCHEOL_ID, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(buncheolMemberDomainService).should(never()).addOpenSlot(any(), any(), anyLong());
+    }
+
+    @Test
+    void LEGACY_분철이면_범용_플로우_가드로_거부한다() {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.LEGACY, BuncheolStatus.RECRUITING));
+
+      assertThatThrownBy(() -> buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    @Test
+    void 신청을_받지_않는_상태면_거부한다() {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, BuncheolStatus.CONFIRMED));
+
+      assertThatThrownBy(() -> buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(buncheolMemberDomainService).should(never()).addOpenSlot(any(), any(), anyLong());
+    }
+
+    @Test
+    void 분철_그룹에_속하지_않는_멤버면_거부한다() {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      willThrow(new BusinessException(ErrorCode.GROUP_MEMBER_NOT_IN_GROUP))
+          .given(groupDomainService)
+          .getGroupMembersByIdsInGroup(GROUP_ID, List.of(MEMBER_ID));
+
+      assertThatThrownBy(() -> buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.GROUP_MEMBER_NOT_IN_GROUP);
+
+      then(buncheolMemberDomainService).should(never()).addOpenSlot(any(), any(), anyLong());
+    }
+
+    @Test
+    void 이미_분철에_있는_멤버면_거부한다() {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      given(buncheolMemberDomainService.existsInBuncheol(BUNCHEOL_ID, MEMBER_ID)).willReturn(true);
+
+      assertThatThrownBy(() -> buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_ALREADY_EXISTS);
+
+      then(buncheolMemberDomainService).should(never()).addOpenSlot(any(), any(), anyLong());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+    void 신청을_받는_동안에는_선착순_자리를_만들고_최소_인원은_올리지_않는다(final BuncheolStatus status) {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, status));
+      given(buncheolMemberDomainService.addOpenSlot(BUNCHEOL_ID, MEMBER_ID, 15_000L))
+          .willReturn(slot(NEW_SLOT_ID, MEMBER_ID));
+
+      Long slotId = buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request);
+
+      assertThat(slotId).isEqualTo(NEW_SLOT_ID);
+      then(groupDomainService).should().getGroupMembersByIdsInGroup(GROUP_ID, List.of(MEMBER_ID));
+      then(buncheolDomainService)
+          .should(never())
+          .lowerMinHeadcountToSlotCount(anyLong(), anyInt(), any());
+      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+    }
+  }
+
+  /** 자리 빼기·넣기용 실제 분철 — 개최자·플로우·상태 검사를 목이 아니라 도메인 코드로 태운다. */
+  private Buncheol slotEditBuncheol(final FlowType flowType, final BuncheolStatus status) {
+    Buncheol buncheol =
+        Buncheol.create(
+            HOST_ID,
+            new BuncheolParams(
+                GROUP_ID, "자리 분철", null, "공식 스토어", NOW.plus(1, ChronoUnit.DAYS), 3, 3000, null,
+                flowType, null),
+            NOW);
+    setField(buncheol, "id", BUNCHEOL_ID);
+    setField(buncheol, "status", status);
+    return buncheol;
+  }
+
+  private Buncheol pastDeadlineC2cBuncheol() {
+    Instant deadline = NOW.minus(1, ChronoUnit.HOURS);
+    Buncheol buncheol =
+        Buncheol.create(
+            HOST_ID,
+            new BuncheolParams(
+                GROUP_ID, "자리 분철", null, "공식 스토어", deadline, 3, 3000, null, FlowType.C2C, null),
+            deadline.minus(1, ChronoUnit.DAYS));
+    setField(buncheol, "id", BUNCHEOL_ID);
+    return buncheol;
+  }
+
+  private static BuncheolMember slot(final Long slotId, final Long groupMemberId) {
+    BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, groupMemberId, 10_000L);
+    setField(member, "id", slotId);
+    return member;
   }
 }

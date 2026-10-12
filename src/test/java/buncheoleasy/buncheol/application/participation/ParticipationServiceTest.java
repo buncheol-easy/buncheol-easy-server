@@ -1793,4 +1793,82 @@ class ParticipationServiceTest {
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
   }
+
+  @Nested
+  @DisplayName("개최자가 뺀 자리로 신청 테스트")
+  class RemovedSlotTest {
+
+    private Buncheol stubC2cBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      return buncheol;
+    }
+
+    // 자리를 빼면 행이 사라진다 — 분철 락 뒤 자리 조회가 없는 멤버로 거부해 INSERT 까지 가지 않는다.
+    @Test
+    void 뺀_자리로_신청하면_없는_멤버로_거부하고_참여를_만들지_않는다() {
+      stubC2cBuncheol();
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willThrow(new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+    }
+
+    // 🔴 다슬롯 신청은 한 트랜잭션이다 — 빠진 자리 하나의 예외가 그대로 밖으로 나가야 앞서 만든 자리까지 롤백된다.
+    @Test
+    void 다슬롯_신청_중_하나가_빠졌으면_예외가_전파되어_전체가_실패한다() {
+      Buncheol buncheol = stubC2cBuncheol();
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(buncheolMemberDomainService.getBuncheolMember(SECOND_MEMBER_ID, BUNCHEOL_ID))
+          .willThrow(new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      givenParticipantAccount();
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID,
+                      PARTICIPANT_ID,
+                      new ParticipateRequest(
+                          null,
+                          List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID),
+                          SHIPPING_ADDRESS_ID,
+                          null,
+                          null)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
+
+      then(participationDomainService).should(times(1)).createParticipationIfRecruiting(any());
+      // 마지막 슬롯에서 실패했으므로 정원 충족 판정까지 가지 않는다.
+      then(buncheolMemberDomainService).should(never()).findAllByBuncheolId(anyLong());
+    }
+  }
 }

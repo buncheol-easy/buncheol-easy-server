@@ -893,6 +893,112 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
+  void C2C_자리_빼기() throws Exception {
+    mockMvc
+        .perform(
+            delete("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L).with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-remove-member",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("C2C 자리 빼기")
+                        .description(
+                            """
+                            C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 빈 자리 하나를 분철에서 뺀다.
+                            다른 곳(X·포카마켓 등)에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
+
+                            자리 행을 지우므로 뺀 멤버는 상세 `members[]`·목록·찜의 남은 멤버·멤버 검색에서
+                            **처음부터 없던 것처럼 사라진다**(별도 「마감」 표시 없음). 그 자리 id 로 신청하면
+                            `404 BCH-061` 이다. 실수였다면 `POST /v1/buncheols/{id}/members` 로 다시 넣는다(새 id 가 생긴다).
+
+                            **최소 인원**: 모집중에 빼서 남은 자리 수가 `minHeadcount` 보다 작아지면 `minHeadcount` 를
+                            남은 자리 수로 낮춘다(그대로 두면 마감 정각에 인원 미달로 즉시 취소된다). 입금 수집중에는
+                            바꾸지 않고, 다시 넣어도 올리지 않는다.
+
+                            **권한**: 해당 분철의 **개최자 본인만**. 회원 개최(C2C) 분철만 지원한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
+                            | 409 | `BCH-120` (`BUNCHEOL_MEMBER_REMOVE_LAST`) | 마지막 자리 — 분철 취소로 안내 |
+                            | 409 | `BCH-118` (`BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT`) | 신청자(신청·입금 확인 중·보냈어요·확정)가 있는 자리 |
+                            | 409 | `BCH-119` (`BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY`) | 지금 신청자는 없지만 취소된 신청 등 기록이 남은 자리 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(
+                            parameterWithName("id").description("분철 ID"),
+                            parameterWithName("buncheolMemberId")
+                                .description("뺄 자리 ID (상세 `members[].buncheolMemberId`)"))
+                        .build())));
+  }
+
+  @Test
+  void C2C_자리_다시_넣기() throws Exception {
+    given(buncheolService.addMember(any(), any(), any())).willReturn(30L);
+
+    mockMvc
+        .perform(
+            post("/v1/buncheols/{id}/members", 10L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"memberId\": 200, \"price\": 15000}")
+                .with(userAuth()))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.buncheolMemberId").value(30))
+        .andDo(
+            document(
+                "buncheols-add-member",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("C2C 자리 다시 넣기")
+                        .description(
+                            """
+                            C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 분철 그룹의 멤버를 자리로 넣는다.
+                            주로 잘못 뺀 자리를 되살릴 때 쓴다. 개최와 같은 규칙으로 검사하며 선착순(`OPEN`) 자리로 만든다.
+                            만든 즉시 신청을 받는다. `minHeadcount` 는 바꾸지 않는다.
+
+                            **권한**: 해당 분철의 **개최자 본인만**. 회원 개최(C2C) 분철만 지원한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `memberId`·`price` 누락 또는 `price` 음수 |
+                            | 400 | `BCH-027` (`BUNCHEOL_MEMBER_PRICE_INVALID`) | `price` 가 100원 단위가 아님 |
+                            | 400 | `GRP-002` (`GROUP_MEMBER_NOT_IN_GROUP`) | 분철 그룹에 속하지 않는 멤버 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
+                            | 409 | `BCH-121` (`BUNCHEOL_MEMBER_ALREADY_EXISTS`) | 이미 분철에 있는 멤버 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestSchema(Schema.schema("BuncheolMemberAddRequest"))
+                        .requestFields(
+                            fieldWithPath("memberId")
+                                .type(JsonFieldType.NUMBER)
+                                .description("그룹 멤버 ID (분철 그룹 소속이어야 한다)"),
+                            fieldWithPath("price")
+                                .type(JsonFieldType.NUMBER)
+                                .description("멤버 1명당 금액. 0 이상·100원 단위 (개최와 같은 규칙)"))
+                        .responseSchema(Schema.schema("BuncheolMemberAddResponse"))
+                        .responseFields(
+                            fieldWithPath("buncheolMemberId")
+                                .type(JsonFieldType.NUMBER)
+                                .description(
+                                    "새 자리 ID. 상세 `members[].buncheolMemberId` 와 같은 값이라 바로 신청 슬롯 id 로 쓸 수 있다"))
+                        .build())));
+  }
+
+  @Test
   void 오픈채팅_링크_수정() throws Exception {
     mockMvc
         .perform(

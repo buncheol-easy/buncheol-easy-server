@@ -42,6 +42,9 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
   @Autowired private BuncheolMemberRepository buncheolMemberRepository;
 
+  // 어댑터를 거치지 않고 FK 위반 메시지를 직접 보려고 쓴다(같은 패키지의 package-private 인터페이스).
+  @Autowired private JpaBuncheolMemberRepository jpaBuncheolMemberRepository;
+
   @Autowired private BuncheolRepository buncheolRepository;
 
   @Autowired private JdbcTemplate jdbcTemplate;
@@ -277,6 +280,38 @@ class JpaBuncheolMemberRepositoryAdapterTest {
           .isFalse();
 
       assertThat(slotExists(slotId)).isTrue();
+    }
+
+    // 어댑터의 FK 판별(제약 이름)이 H2 의 Hibernate 번역 메시지에서도 맞는지 — 조건 없는 JPQL 삭제로 FK 를 직접 일으킨다.
+    @Test
+    void H2_에서_참여_FK_위반_메시지에_FK_이름이_실린다() {
+      Long participatedSlot = saveSlot(memberId);
+      insertParticipationOn(participatedSlot, "CANCELLED");
+
+      assertThatThrownBy(() -> jpaBuncheolMemberRepository.deleteAllByBuncheolId(buncheolId))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .satisfies(
+              ex ->
+                  assertThat(ex.getMessage().toLowerCase())
+                      .contains("fk_participations_buncheol_member"));
+    }
+
+    @Test
+    void H2_에서_참여_코드_FK_위반_메시지에_FK_이름이_실린다() {
+      Long codedSlot = saveSlot(memberId);
+      jdbcTemplate.update(
+          "INSERT INTO participation_codes (code, buncheol_id, buncheol_member_id, expires_at)"
+              + " VALUES ('CODE6789', ?, ?, ?)",
+          buncheolId,
+          codedSlot,
+          Timestamp.from(Instant.now().plus(1, ChronoUnit.DAYS)));
+
+      assertThatThrownBy(() -> jpaBuncheolMemberRepository.deleteAllByBuncheolId(buncheolId))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .satisfies(
+              ex ->
+                  assertThat(ex.getMessage().toLowerCase())
+                      .contains("fk_participation_codes_member"));
     }
 
     // 조건부 DELETE 가 뚫려도 DB 가 마지막 선이다 — 참여 행이 가리키는 자리는 FK 가 삭제를 거부한다.

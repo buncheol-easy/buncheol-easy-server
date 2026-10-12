@@ -10,6 +10,8 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -27,15 +29,35 @@ class JpaBuncheolMemberRepositoryAdapterExceptionTest {
 
   @Mock private JpaBuncheolMemberRepository jpaBuncheolMemberRepository;
 
-  @Test
-  void 자리_삭제가_FK_로_막히면_500이_아니라_기록이_있어_뺄_수_없다로_거부한다() {
+  // MySQL 1451 형식. 자리를 가리키는 FK 두 개(schema.sql participations·participation_codes)가 대상이다.
+  @ParameterizedTest
+  @ValueSource(strings = {"fk_participations_buncheol_member", "fk_participation_codes_member"})
+  void 자리_삭제가_자리_FK_로_막히면_500이_아니라_기록이_있어_뺄_수_없다로_거부한다(final String fk) {
     given(jpaBuncheolMemberRepository.deleteIfUnreferenced(7L, 10L))
-        .willThrow(new DataIntegrityViolationException("fk_some_new_reference"));
+        .willThrow(
+            new DataIntegrityViolationException(
+                "could not execute statement [Cannot delete or update a parent row: a foreign key"
+                    + " constraint fails (`buncheoleasy`.`x`, CONSTRAINT `"
+                    + fk
+                    + "` FOREIGN KEY (`buncheol_member_id`)"
+                    + " REFERENCES `buncheol_members` (`id`))]"));
 
     assertThatThrownBy(() -> adapter.deleteIfUnreferenced(7L, 10L))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode")
         .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY);
+  }
+
+  // DELETE 는 flushAutomatically 라 같은 트랜잭션의 다른 쓰기 실패가 여기서 터질 수 있다 — 「기록 있음」으로 덮지 않는다.
+  @Test
+  void 자리_FK_가_아닌_무결성_위반은_그대로_올린다() {
+    DataIntegrityViolationException other =
+        new DataIntegrityViolationException(
+            "could not execute statement [Duplicate entry '3' for key"
+                + " 'participations.uq_participations_active_member']");
+    given(jpaBuncheolMemberRepository.deleteIfUnreferenced(7L, 10L)).willThrow(other);
+
+    assertThatThrownBy(() -> adapter.deleteIfUnreferenced(7L, 10L)).isSameAs(other);
   }
 
   @Test

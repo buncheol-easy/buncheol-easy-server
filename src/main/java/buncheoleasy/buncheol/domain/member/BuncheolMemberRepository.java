@@ -47,7 +47,8 @@ public interface BuncheolMemberRepository {
 
   /**
    * 어떤 참여·참여 코드 행도 가리키지 않는 자리만 지운다(상태 무관 — 취소된 참여도 FK 로 자리를 붙잡는다). 판정과 삭제를 한
-   * DELETE 로 묶는다. 그 밖의 FK 위반이 나도 500 이 아니라 {@code BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY} 로 바꿔 던진다.
+   * DELETE 로 묶는다. 그래도 자리를 가리키는 FK 가 삭제를 막으면 500 이 아니라 {@code
+   * BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY} 로 바꿔 던지고, 그 밖의 무결성 위반은 그대로 올린다.
    *
    * @return 지웠으면 true (false = 참조하는 행이 있거나 그 분철의 자리가 아님)
    */

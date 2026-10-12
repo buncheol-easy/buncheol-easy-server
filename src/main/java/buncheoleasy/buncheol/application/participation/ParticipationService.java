@@ -171,6 +171,10 @@ public class ParticipationService {
     // HTTP 경로에서는 @NotNull 이 먼저 걸러 C-001 로 응답하므로 이 분기는 도달하지 않는다.
     // 컨트롤러를 거치지 않는 직접 호출(배치·테스트 등)을 막는 최후 가드로만 동작한다.
     BuncheolMember member = buncheolMemberDomainService.getBuncheolMember(slotId, buncheolId);
+    // 닫힌 자리는 C2C 개최자 「빼기」로만 생겨 LEGACY 에는 없다 — 데이터 이상 방어(잠금 없음).
+    if (member.isClosed()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+    }
 
     Optional<ParticipationCode> code =
         participationCodeDomainService.validateForParticipation(
@@ -280,8 +284,15 @@ public class ParticipationService {
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }
+    // 🔴 자리는 <b>잠금 읽기</b>(FOR SHARE)로 읽는다. 이 트랜잭션의 스냅샷은 분철 락 전의 일반 조회
+    // (requireProfileCompleted·getBuncheol)가 이미 잡았으므로, 일반 조회로 읽으면 락을 기다리는 사이 개최자가 닫은
+    // 자리를 「열림」으로 볼 수 있다. 잠금 읽기는 최신 커밋을 본다. 락 순서는 분철(X) → 자리(S) 로, 개최자 빼기·닫기
+    // (분철 X → 자리 X)와 같은 방향이다 — 둘 다 분철 락을 먼저 잡아 자리 락에서 서로를 기다리지 않는다.
     BuncheolMember member =
-        buncheolMemberDomainService.getBuncheolMember(slotId, buncheol.getId());
+        buncheolMemberDomainService.getBuncheolMemberForShare(slotId, buncheol.getId());
+    if (member.isClosed()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+    }
     // C2C 에는 코드 슬롯을 만들 수 없다(개최 가드) — 도달했다면 데이터 이상이다.
     if (member.requiresCode()
         || ParticipationCodeDomainService.submitted(request.participationCode())) {
@@ -472,7 +483,11 @@ public class ParticipationService {
    * </ul>
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
-    long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
+    // 개최자가 닫은 자리는 채워질 수 없으므로 정원에서 뺀다 — 안 빼면 남은 자리가 다 차도 알림이 영영 안 나간다.
+    long totalSlots =
+        buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).stream()
+            .filter(slot -> !slot.isClosed())
+            .count();
     List<Long> participantIds =
         participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
     if (participantIds.size() >= totalSlots) {

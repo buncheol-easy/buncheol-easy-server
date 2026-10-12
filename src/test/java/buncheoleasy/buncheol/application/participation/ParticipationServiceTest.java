@@ -807,7 +807,7 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       given(
               participationShippingAddressResolver.resolve(
@@ -844,6 +844,21 @@ class ParticipationServiceTest {
     }
 
 
+    // 개최자가 닫은 자리는 채워질 수 없다 — 정원에서 빼지 않으면 열린 자리가 다 차도 알림이 영영 안 나간다.
+    @Test
+    void 닫힌_자리는_정원에서_빼고_열린_자리가_다_차면_정원_충족_이벤트를_발행한다() {
+      stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(
+              List.of(buncheolMember(), buncheolMember(), closedMember(SECOND_MEMBER_ID)));
+      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(100L, 200L));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should().publishEvent(any(BuncheolFullEvent.class));
+    }
+
     @Test
     void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
       stubC2cRecruitingBuncheol();
@@ -869,7 +884,7 @@ class ParticipationServiceTest {
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       given(
               participationShippingAddressResolver.resolve(
@@ -911,7 +926,7 @@ class ParticipationServiceTest {
       given(buncheol.getStatus()).willReturn(status);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       return buncheol;
     }
@@ -1056,7 +1071,7 @@ class ParticipationServiceTest {
     void C2C_자리_2개_신청의_응답_총액은_배송비를_한_번만_더한다() {
       Buncheol buncheol = stubC2c(BuncheolStatus.RECRUITING);
       givenFirstParticipation(buncheol);
-      given(buncheolMemberDomainService.getBuncheolMember(SECOND_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(SECOND_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE));
       // 첫 슬롯은 활성 참여가 없고, 둘째 슬롯은 첫 슬롯을 상속한다(같은 묶음 · 배송비 0).
       given(
@@ -1172,7 +1187,7 @@ class ParticipationServiceTest {
       given(buncheol.getStatus()).willReturn(status);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       return buncheol;
     }
@@ -1275,7 +1290,7 @@ class ParticipationServiceTest {
       given(buncheol.getStatus()).willReturn(BuncheolStatus.CONFIRMED);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
 
       assertThatThrownBy(
@@ -1812,7 +1827,7 @@ class ParticipationServiceTest {
     @Test
     void 뺀_자리로_신청하면_없는_멤버로_거부하고_참여를_만들지_않는다() {
       stubC2cBuncheol();
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willThrow(new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
 
       assertThatThrownBy(
@@ -1833,9 +1848,9 @@ class ParticipationServiceTest {
       Buncheol buncheol = stubC2cBuncheol();
       given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
-      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
-      given(buncheolMemberDomainService.getBuncheolMember(SECOND_MEMBER_ID, BUNCHEOL_ID))
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(SECOND_MEMBER_ID, BUNCHEOL_ID))
           .willThrow(new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty());
@@ -1869,6 +1884,118 @@ class ParticipationServiceTest {
       then(participationDomainService).should(times(1)).createParticipationIfRecruiting(any());
       // 마지막 슬롯에서 실패했으므로 정원 충족 판정까지 가지 않는다.
       then(buncheolMemberDomainService).should(never()).findAllByBuncheolId(anyLong());
+    }
+  }
+
+  private BuncheolMember closedMember(final Long id) {
+    BuncheolMember member = buncheolMember(id, MEMBER_PRICE);
+    setField(member, "accessType", BuncheolMemberAccessType.CLOSED);
+    return member;
+  }
+
+  @Nested
+  @DisplayName("개최자가 닫은 자리로 신청 테스트")
+  class ClosedSlotTest {
+
+    private Buncheol stubC2cBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      return buncheol;
+    }
+
+    // 🔴 자리는 잠금 읽기로 읽어야 한다 — 이 트랜잭션의 스냅샷은 분철 락 전에 잡혀, 일반 조회로는 락을 기다리는 사이
+    // 개최자가 닫은 자리를 「열림」으로 본다. 일반 조회로 되돌리면 이 테스트가 잡는다.
+    @Test
+    void C2C_신청은_닫힌_자리를_잠금_읽기로_확인해_마감_멤버로_거부한다() {
+      stubC2cBuncheol();
+      given(
+              buncheolMemberDomainService.getBuncheolMemberForShare(
+                  BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(closedMember(BUNCHEOL_MEMBER_ID));
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+
+      then(buncheolMemberDomainService).should(never()).getBuncheolMember(any(), any());
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+    }
+
+    // 다슬롯은 한 트랜잭션이다 — 닫힌 자리의 예외가 그대로 나가야 앞서 만든 자리까지 롤백된다.
+    @Test
+    void 다슬롯_신청_중_하나가_닫혔으면_예외가_전파되어_전체가_실패한다() {
+      Buncheol buncheol = stubC2cBuncheol();
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(
+              buncheolMemberDomainService.getBuncheolMemberForShare(
+                  BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              buncheolMemberDomainService.getBuncheolMemberForShare(
+                  SECOND_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(closedMember(SECOND_MEMBER_ID));
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      givenParticipantAccount();
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID,
+                      PARTICIPANT_ID,
+                      new ParticipateRequest(
+                          null,
+                          List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID),
+                          SHIPPING_ADDRESS_ID,
+                          null,
+                          null)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+
+      then(participationDomainService).should(times(1)).createParticipationIfRecruiting(any());
+    }
+
+    // LEGACY 에는 닫힌 자리가 생기지 않지만(개최자 빼기는 C2C 전용) 데이터 이상이면 같은 코드로 막는다.
+    @Test
+    void LEGACY_신청도_닫힌_자리면_마감_멤버로_거부한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(closedMember(BUNCHEOL_MEMBER_ID));
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+
+      then(participationCodeDomainService)
+          .should(never())
+          .validateForParticipation(any(), any(), any());
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
   }
 }

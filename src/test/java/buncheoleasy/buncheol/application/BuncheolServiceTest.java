@@ -202,6 +202,52 @@ class BuncheolServiceTest {
       assertThat(memberParams.getFirst().price()).isEqualTo(50_000L);
     }
 
+    // CLOSED 는 개최자 「빼기」 전용 값 — 개최 요청으로 만들면 LEGACY 에도 닫힌 자리가 생기고 롤백 대비 전제가 깨진다.
+    @Test
+    void C2C_개최_요청에_닫힌_자리가_있으면_거부하고_자리를_만들지_않는다() {
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+      HoldBuncheolRequest request =
+          holdRequest(
+              List.of(
+                  new BuncheolMemberRequest(
+                      MEMBER_ID, 50_000L, BuncheolMemberAccessType.CLOSED)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+      then(buncheolMemberDomainService).should(never()).createBuncheolMembers(any(), anyList());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 운영진_LEGACY_개최_요청도_닫힌_자리는_거부한다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      given(groupDomainService.getGroupMembersByIdsInGroup(eq(GROUP_ID), anyList()))
+          .willReturn(List.of(groupMember(MEMBER_ID)));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+      HoldBuncheolRequest request =
+          holdRequestWithFlow(
+              List.of(new BuncheolMemberRequest(MEMBER_ID, 0L, BuncheolMemberAccessType.CLOSED)),
+              FlowType.LEGACY);
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+      then(buncheolMemberDomainService).should(never()).createBuncheolMembers(any(), anyList());
+    }
+
     @Test
     void 이미지가_0장이면_BUNCHEOL_IMAGE_REQUIRED_예외가_발생하고_분철이_저장되지_않는다() {
       // given — 이미지 개수 검증이 가장 먼저 수행되어 0장이면 즉시 차단된다.

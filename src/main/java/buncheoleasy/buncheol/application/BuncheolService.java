@@ -84,6 +84,7 @@ public class BuncheolService {
 
     List<BuncheolMemberParams> memberParams =
         request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();
+    validateNoClosedSlots(memberParams);
     validateCodeOnlySlotsAllowed(flowType, memberParams);
     validateCodeOnlySlotsAreFree(memberParams);
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), memberParams);
@@ -94,6 +95,16 @@ public class BuncheolService {
     }
 
     return buncheol.getId();
+  }
+
+  /**
+   * CLOSED 는 개최자가 신청을 받다가 「빼기」로 닫을 때만 생기는 값이다. 개최 요청으로 만들게 두면 LEGACY 에도 닫힌 자리가 생기고, 이
+   * 값을 모르는 옛 서버로 롤백할 때 "닫힌 자리는 빼기 기능이 쓰인 뒤에만 있다" 는 대비 전제가 깨진다.
+   */
+  private void validateNoClosedSlots(final List<BuncheolMemberParams> memberParams) {
+    if (memberParams.stream().anyMatch(param -> param.accessType().isClosed())) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+    }
   }
 
   /** 코드 발급 API 가 관리자 전용이라, C2C 에 코드 슬롯을 만들면 아무도 발급할 수 없는 영구 잠긴 슬롯이 된다. */

@@ -1314,11 +1314,27 @@ class BuncheolServiceTest {
     void 마지막_자리는_빼지_않는다() {
       givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
       givenSlots(SLOT_ID);
+      given(participationDomainService.hasActiveParticipationOnSlot(SLOT_ID)).willReturn(false);
 
       assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_LAST);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+    }
+
+    // 신청자가 있는 분철에 「분철을 취소해 주세요」(BCH-120)를 권하면 안 된다 — 신청자 안내가 먼저다.
+    @Test
+    void 마지막_자리에_신청자가_있으면_마지막_자리보다_신청자_있음이_먼저다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(SLOT_ID);
+      given(participationDomainService.hasActiveParticipationOnSlot(SLOT_ID)).willReturn(true);
+
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT);
 
       then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
     }

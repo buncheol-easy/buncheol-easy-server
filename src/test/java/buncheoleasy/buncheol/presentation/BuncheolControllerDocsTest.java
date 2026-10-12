@@ -928,7 +928,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
-                            | 409 | `BCH-120` (`BUNCHEOL_MEMBER_REMOVE_LAST`) | 마지막 자리 — 분철 취소로 안내 |
+                            | 409 | `BCH-120` (`BUNCHEOL_MEMBER_REMOVE_LAST`) | 마지막 자리 — 분철 취소로 안내. 그 자리에 신청자가 있으면 `BCH-118` 이 대신 나간다 |
                             | 409 | `BCH-118` (`BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT`) | 신청자(신청·입금 확인 중·보냈어요·확정)가 있는 자리 |
                             | 409 | `BCH-119` (`BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY`) | 지금 신청자는 없지만 취소된 신청 등 기록이 남은 자리 |
                             """)

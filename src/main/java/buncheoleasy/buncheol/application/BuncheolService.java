@@ -382,7 +382,8 @@ public class BuncheolService {
    * 자리 행을 지우므로 상세·목록·찜·멤버 검색에서 처음부터 없던 멤버처럼 사라진다.
    *
    * <p>참여 행이 하나라도 가리키는 자리(취소 기록 포함)는 FK 가 삭제를 막으므로 뺄 수 없다 — 활성 참여면 BCH-118, 기록뿐이면 BCH-119.
-   * 마지막 자리는 뺄 수 없다(BCH-120) — 자리가 0 인 분철은 상세·마감 판정 어디에서도 전제하지 않는다.
+   * 마지막 자리는 뺄 수 없다(BCH-120) — 자리가 0 인 분철은 상세·마감 판정 어디에서도 전제하지 않는다. 단 그 자리에 신청자가 있으면
+   * BCH-118 이 먼저다 — 신청자가 있는 분철에 「분철을 취소해 주세요」를 권하면 안 된다.
    *
    * <p>모집중에 빼서 남은 자리 수가 최소 인원보다 작아지면 최소 인원을 남은 자리 수로 낮춘다. 그대로 두면 C2C 는 마감 정각에 인원
    * 미달로 즉시 취소되어 신청자까지 전원 취소된다.
@@ -404,7 +405,11 @@ public class BuncheolService {
       throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
     }
     if (slots.size() <= 1) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REMOVE_LAST);
+      // 판정은 위 잠금 조회로 끝났고, 여기서 다시 읽는 것은 어느 안내를 줄지뿐이다(지우지 않으므로 원자성과 무관).
+      throw new BusinessException(
+          participationDomainService.hasActiveParticipationOnSlot(buncheolMemberId)
+              ? ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT
+              : ErrorCode.BUNCHEOL_MEMBER_REMOVE_LAST);
     }
 
     if (!buncheolMemberDomainService.removeIfUnreferenced(buncheolMemberId, buncheolId)) {

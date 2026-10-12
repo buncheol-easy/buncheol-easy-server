@@ -323,6 +323,21 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 
+  // 개최자 자리 빼기 뒤 「최소 인원 ≤ 자리 수」 복원. 모집중에만 낮춘다 — C2C 는 마감 정각에 신청 인원이 최소 인원
+  // 미만이면 유예 없이 취소되므로(findIdsByStatusAndDeadlineBefore), 뺀 자리만큼 영영 못 채울 최소 인원이 남으면 신청자까지
+  // 전원 취소된다. 입금 수집중은 이미 성사 확정이라 최소 인원이 판정에 쓰이지 않는다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.minHeadcount = :slotCount, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus "
+          + "AND b.minHeadcount > :slotCount")
+  int lowerMinHeadcountIfRecruiting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("slotCount") int slotCount,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("now") Instant now);
+
   /** C2C 참여 생성 직렬화용 잠금 조회 — 다슬롯 첫 참여 판정(배송비 1회·스냅샷 일치)의 TOCTOU 방지 (docs/46 §4.7-A1·A2). */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT b FROM Buncheol b WHERE b.id = :id")

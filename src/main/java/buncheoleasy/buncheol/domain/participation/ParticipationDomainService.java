@@ -133,6 +133,11 @@ public class ParticipationDomainService {
     return participationRepository.existsActiveByShippingAddressId(shippingAddressId);
   }
 
+  /** 멤버 자리가 활성 참여(신청·입금 확인 중·보냈어요·확정)로 점유됐는지. */
+  public boolean hasActiveParticipationOnSlot(final Long buncheolMemberId) {
+    return participationRepository.existsActiveByBuncheolMemberId(buncheolMemberId);
+  }
+
   /** 입금 만료가 도과한 참여 폴링 (입금 만료 스케줄러용). */
   public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
     return participationRepository.findOverduePaymentTargets(now, limit);

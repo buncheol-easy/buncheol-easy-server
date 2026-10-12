@@ -160,6 +160,15 @@ public interface BuncheolRepository {
   int hostCancelIfCollectingAndNoConfirmed(Long buncheolId, Instant now);
 
   /**
+   * 모집중({@link BuncheolStatus#RECRUITING}) 분철의 최소 인원이 {@code slotCount} 보다 크면 {@code slotCount} 로
+   * 낮춘다. 개최자가 자리를 뺀 직후 「최소 인원 ≤ 자리 수」를 다시 맞추는 용도다. {@code @Modifying} bulk UPDATE 이므로 호출 측
+   * 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 모집중이 아니거나 이미 자리 수 이하)
+   */
+  int lowerMinHeadcountIfRecruiting(Long buncheolId, int slotCount, Instant now);
+
+  /**
    * C2C 참여 생성 직렬화용 잠금 조회 (SELECT ... FOR UPDATE). 다슬롯 첫 참여 판정(배송비 1회·배송지/입금자명 스냅샷 일치)의
    * check-then-insert 레이스를 분철 행 락으로 막는다 (docs/46 §4.7-A1·A2). 호출 측 트랜잭션이 필수다.
    */

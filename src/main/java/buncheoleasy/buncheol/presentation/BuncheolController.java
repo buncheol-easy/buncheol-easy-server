@@ -7,6 +7,7 @@ import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
+import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -14,6 +15,7 @@ import buncheoleasy.buncheol.dto.request.OpenChatUrlUpdateRequest;
 import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
+import buncheoleasy.buncheol.dto.response.BuncheolMemberAddResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.HoldBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
@@ -177,6 +179,27 @@ public class BuncheolController {
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
     buncheolService.cancelBuncheol(hostId, id);
     return ResponseEntity.noContent().build();
+  }
+
+  /** C2C 개최자의 빈 자리 빼기 — 다른 곳에서 먼저 팔린 멤버를 신청 받는 동안 분철에서 내린다. */
+  @DeleteMapping("/{id}/members/{buncheolMemberId}")
+  public ResponseEntity<Void> removeMember(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @PathVariable final Long buncheolMemberId) {
+    buncheolService.removeMember(hostId, id, buncheolMemberId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** C2C 개최자의 멤버 자리 (다시) 넣기 — 뺀 자리를 되살릴 때 쓴다. */
+  @PostMapping("/{id}/members")
+  public ResponseEntity<BuncheolMemberAddResponse> addMember(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @Valid @RequestBody final BuncheolMemberAddRequest request) {
+    Long buncheolMemberId = buncheolService.addMember(hostId, id, request);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(BuncheolMemberAddResponse.of(buncheolMemberId));
   }
 
   private List<ImageFile> toImageFiles(final List<MultipartFile> files) {

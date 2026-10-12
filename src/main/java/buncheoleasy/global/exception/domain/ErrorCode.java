@@ -243,6 +243,18 @@ public enum ErrorCode {
       "회원 개최 분철은 참여 묶음 단위로만 입금 확인할 수 있어요. 묶음 화면에서 한 번에 확인해 주세요.",
       HttpStatus.CONFLICT),
   
+  // ── 개최자 자리 빼기·다시 넣기 (C2C) ──
+  // 빼기는 행 삭제라 참여·참여 코드 행이 하나라도 가리키면 FK 가 막는다. 활성 참여(신청자)와 그 밖의 기록을
+  // 나눠 안내한다 — 취소 기록뿐인 자리는 개최자 눈에 빈 자리라 같은 문구면 "왜 안 빠지지" 가 된다.
+  BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT(
+      "BCH-118", "신청자가 있는 자리는 뺄 수 없어요.", HttpStatus.CONFLICT),
+  BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY(
+      "BCH-119", "이전 신청 기록이 있는 자리는 뺄 수 없어요.", HttpStatus.CONFLICT),
+  BUNCHEOL_MEMBER_REMOVE_LAST(
+      "BCH-120", "마지막 멤버는 뺄 수 없어요. 분철을 취소해 주세요.", HttpStatus.CONFLICT),
+  // BCH-021 은 개최 요청 안의 중복(400)이다. 이건 이미 분철에 있는 멤버와의 충돌이라 따로 둔다.
+  BUNCHEOL_MEMBER_ALREADY_EXISTS("BCH-121", "이미 분철에 있는 멤버예요.", HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

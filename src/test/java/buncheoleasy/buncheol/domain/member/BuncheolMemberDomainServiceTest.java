@@ -1,8 +1,12 @@
 package buncheoleasy.buncheol.domain.member;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -122,6 +126,33 @@ class BuncheolMemberDomainServiceTest {
 
       // then
       then(buncheolMemberRepository).should().saveAll(anyList());
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 다시 넣기 테스트")
+  class AddOpenSlotTest {
+
+    @Test
+    void 선착순_자리로_저장한다() {
+      given(buncheolMemberRepository.save(any()))
+          .willAnswer(invocation -> invocation.getArgument(0));
+
+      BuncheolMember saved = buncheolMemberDomainService.addOpenSlot(1L, 2L, 12_300L);
+
+      assertThat(saved.getAccessType()).isEqualTo(BuncheolMemberAccessType.OPEN);
+      assertThat(saved.getPrice()).isEqualTo(12_300L);
+    }
+
+    // 개최와 같은 가격 규칙 — 100원 단위가 아니면 저장하기 전에 막힌다.
+    @Test
+    void 가격이_100원_단위가_아니면_저장하지_않고_거부한다() {
+      assertThatThrownBy(() -> buncheolMemberDomainService.addOpenSlot(1L, 2L, 12_350L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
+
+      then(buncheolMemberRepository).should(never()).save(any());
     }
   }
 }

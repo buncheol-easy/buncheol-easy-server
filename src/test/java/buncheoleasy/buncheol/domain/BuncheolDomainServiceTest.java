@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -126,6 +127,32 @@ class BuncheolDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 빼기 뒤 최소 인원 낮추기 테스트")
+  class LowerMinHeadcountToSlotCountTest {
+
+    @Test
+    void 남은_자리_수로_낮추기를_저장소에_위임한다() {
+      given(buncheolRepository.lowerMinHeadcountIfRecruiting(BUNCHEOL_ID, 2, NOW)).willReturn(1);
+
+      assertThat(buncheolDomainService.lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 2, NOW)).isTrue();
+    }
+
+    // 엔티티 검증을 거치지 않는 UPDATE 라 「최소 인원 ≥ 1」이 여기서 지켜져야 한다.
+    @Test
+    void 남은_자리가_0이면_최소_인원_규칙으로_거부하고_쓰지_않는다() {
+      assertThatThrownBy(
+              () -> buncheolDomainService.lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 0, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_INVALID);
+
+      then(buncheolRepository)
+          .should(never())
+          .lowerMinHeadcountIfRecruiting(anyLong(), anyInt(), any());
     }
   }
 }

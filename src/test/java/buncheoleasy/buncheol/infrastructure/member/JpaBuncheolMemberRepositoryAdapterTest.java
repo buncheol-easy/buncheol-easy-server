@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.member;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolParams;
@@ -12,6 +13,8 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
 import buncheoleasy.buncheol.infrastructure.TestUserFixture;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
@@ -22,8 +25,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +41,9 @@ import org.springframework.transaction.annotation.Transactional;
 class JpaBuncheolMemberRepositoryAdapterTest {
 
   @Autowired private BuncheolMemberRepository buncheolMemberRepository;
+
+  // 어댑터를 거치지 않고 FK 위반 메시지를 직접 보려고 쓴다(같은 패키지의 package-private 인터페이스).
+  @Autowired private JpaBuncheolMemberRepository jpaBuncheolMemberRepository;
 
   @Autowired private BuncheolRepository buncheolRepository;
 
@@ -217,6 +226,211 @@ class JpaBuncheolMemberRepositoryAdapterTest {
 
       assertThat(countMembersByBuncheolId(buncheolId)).isZero();
     }
+  }
+
+  @Nested
+  @DisplayName("참조 없는 자리 삭제 테스트")
+  class DeleteIfUnreferencedTest {
+
+    @Test
+    void 참여도_참여_코드도_없는_자리는_지워진다() {
+      Long slotId = saveSlot(memberId);
+      Long otherSlotId = saveSlot(memberId2);
+
+      assertThat(buncheolMemberRepository.deleteIfUnreferenced(slotId, buncheolId)).isTrue();
+
+      assertThat(slotExists(slotId)).isFalse();
+      assertThat(slotExists(otherSlotId)).isTrue();
+    }
+
+    // 🔴 취소(CANCELLED)도 막는다 — 취소된 참여 행도 FK 로 자리를 가리켜, 지우려 하면 DB 가 거부한다.
+    @ParameterizedTest
+    @ValueSource(
+        strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED", "CANCELLED"})
+    void 참여_행이_하나라도_있으면_상태와_무관하게_지우지_않는다(final String status) {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, status);
+
+      assertThat(buncheolMemberRepository.deleteIfUnreferenced(slotId, buncheolId)).isFalse();
+
+      assertThat(slotExists(slotId)).isTrue();
+    }
+
+    // participation_codes.buncheol_member_id 도 ON DELETE 없는 FK 다. 빠뜨리면 DELETE 가 FK 로 터진다.
+    @Test
+    void 참여_코드가_붙은_자리는_지우지_않는다() {
+      Long slotId = saveSlot(memberId);
+      jdbcTemplate.update(
+          "INSERT INTO participation_codes (code, buncheol_id, buncheol_member_id, expires_at)"
+              + " VALUES ('CODE2345', ?, ?, ?)",
+          buncheolId,
+          slotId,
+          Timestamp.from(Instant.now().plus(1, ChronoUnit.DAYS)));
+
+      assertThat(buncheolMemberRepository.deleteIfUnreferenced(slotId, buncheolId)).isFalse();
+
+      assertThat(slotExists(slotId)).isTrue();
+    }
+
+    @Test
+    void 다른_분철의_자리는_지우지_않는다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(buncheolMemberRepository.deleteIfUnreferenced(slotId, buncheolId + 9_999L))
+          .isFalse();
+
+      assertThat(slotExists(slotId)).isTrue();
+    }
+
+    // 어댑터의 FK 판별(제약 이름)이 H2 의 Hibernate 번역 메시지에서도 맞는지 — 조건 없는 JPQL 삭제로 FK 를 직접 일으킨다.
+    @Test
+    void H2_에서_참여_FK_위반_메시지에_FK_이름이_실린다() {
+      Long participatedSlot = saveSlot(memberId);
+      insertParticipationOn(participatedSlot, "CANCELLED");
+
+      assertThatThrownBy(() -> jpaBuncheolMemberRepository.deleteAllByBuncheolId(buncheolId))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .satisfies(
+              ex ->
+                  assertThat(ex.getMessage().toLowerCase())
+                      .contains("fk_participations_buncheol_member"));
+    }
+
+    @Test
+    void H2_에서_참여_코드_FK_위반_메시지에_FK_이름이_실린다() {
+      Long codedSlot = saveSlot(memberId);
+      jdbcTemplate.update(
+          "INSERT INTO participation_codes (code, buncheol_id, buncheol_member_id, expires_at)"
+              + " VALUES ('CODE6789', ?, ?, ?)",
+          buncheolId,
+          codedSlot,
+          Timestamp.from(Instant.now().plus(1, ChronoUnit.DAYS)));
+
+      assertThatThrownBy(() -> jpaBuncheolMemberRepository.deleteAllByBuncheolId(buncheolId))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .satisfies(
+              ex ->
+                  assertThat(ex.getMessage().toLowerCase())
+                      .contains("fk_participation_codes_member"));
+    }
+
+    // 조건부 DELETE 가 뚫려도 DB 가 마지막 선이다 — 참여 행이 가리키는 자리는 FK 가 삭제를 거부한다.
+    @Test
+    void 참여_행이_가리키는_자리는_FK_가_삭제를_거부한다() {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, "CANCELLED");
+
+      assertThatThrownBy(
+              () -> jdbcTemplate.update("DELETE FROM buncheol_members WHERE id = ?", slotId))
+          .isInstanceOf(DataIntegrityViolationException.class);
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 잠금 조회 테스트")
+  class FindAllByBuncheolIdForUpdateTest {
+
+    @Test
+    void 그_분철의_자리만_돌려준다() {
+      Long slotId = saveSlot(memberId);
+      Long slotId2 = saveSlot(memberId2);
+      Long otherBuncheolId = saveOtherBuncheol();
+      buncheolMemberRepository.saveAll(
+          List.of(BuncheolMember.create(otherBuncheolId, memberId3, 1_000L)));
+      em.flush();
+      em.clear();
+
+      assertThat(buncheolMemberRepository.findAllByBuncheolIdForUpdate(buncheolId))
+          .extracting(BuncheolMember::getId)
+          .containsExactlyInAnyOrder(slotId, slotId2);
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 하나 저장 테스트")
+  class SaveTest {
+
+    @Test
+    void 새_자리를_저장하면_id_가_채워지고_선착순이다() {
+      BuncheolMember saved =
+          buncheolMemberRepository.save(BuncheolMember.create(buncheolId, memberId, 12_300L));
+
+      assertThat(saved.getId()).isNotNull();
+      em.clear();
+      BuncheolMember loaded =
+          buncheolMemberRepository.findByIdAndBuncheolId(saved.getId(), buncheolId).orElseThrow();
+      assertThat(loaded.getPrice()).isEqualTo(12_300L);
+      assertThat(loaded.getAccessType()).isEqualTo(BuncheolMemberAccessType.OPEN);
+    }
+
+    // 사전 검사를 빠져나간 경합의 마지막 선 — 500 이 아니라 중복 코드로 떨어져야 한다.
+    @Test
+    void 같은_분철에_같은_멤버가_이미_있으면_중복_코드로_거부한다() {
+      saveSlot(memberId);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolMemberRepository.save(BuncheolMember.create(buncheolId, memberId, 0L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_ALREADY_EXISTS);
+    }
+
+    @Test
+    void 분철_안_멤버_존재_여부를_돌려준다() {
+      saveSlot(memberId);
+
+      assertThat(buncheolMemberRepository.existsByBuncheolIdAndMemberId(buncheolId, memberId))
+          .isTrue();
+      assertThat(buncheolMemberRepository.existsByBuncheolIdAndMemberId(buncheolId, memberId2))
+          .isFalse();
+    }
+  }
+
+  private Long saveSlot(final Long groupMemberId) {
+    BuncheolMember member = BuncheolMember.create(buncheolId, groupMemberId, 10_000L);
+    buncheolMemberRepository.saveAll(List.of(member));
+    em.flush();
+    em.clear();
+    return member.getId();
+  }
+
+  private Long saveOtherBuncheol() {
+    Long otherHostId = TestUserFixture.insertUser(jdbcTemplate, "otherhost");
+    Long otherGroupId =
+        jdbcTemplate.queryForObject(
+            "SELECT group_id FROM buncheols WHERE id = ?", Long.class, buncheolId);
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+    Buncheol other =
+        Buncheol.create(
+            otherHostId,
+            new BuncheolParams(
+                otherGroupId, "다른 분철", null, "스토어명", deadline, 1, 3000, null, FlowType.C2C, null),
+            Instant.now());
+    buncheolRepository.save(other);
+    em.flush();
+    return other.getId();
+  }
+
+  private int participationSeq = 0;
+
+  private void insertParticipationOn(final Long slotId, final String status) {
+    participationSeq++;
+    Long participantId = TestUserFixture.insertUser(jdbcTemplate, "slotp" + participationSeq);
+    jdbcTemplate.update(
+        "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, amount,"
+            + " shipping_fee, status, flow_type)"
+            + " VALUES (?, ?, ?, 0, 0, ?, 'C2C')",
+        buncheolId,
+        slotId,
+        participantId,
+        status);
+  }
+
+  private boolean slotExists(final Long slotId) {
+    return jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM buncheol_members WHERE id = ?", Integer.class, slotId)
+        > 0;
   }
 
   private int countMembersByBuncheolId(final Long targetBuncheolId) {

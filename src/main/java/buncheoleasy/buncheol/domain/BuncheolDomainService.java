@@ -162,6 +162,21 @@ public class BuncheolDomainService {
     return buncheolRepository.cancelIfCollectingAndEmpty(buncheolId, now) > 0;
   }
 
+  /**
+   * 개최자가 자리를 뺀 뒤 모집중 분철의 최소 인원을 남은 자리 수로 낮춘다 — 포트 javadoc 참고. 입금 수집중이거나 이미 자리 수
+   * 이하면 그대로 둔다. 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 낮췄으면 true
+   */
+  public boolean lowerMinHeadcountToSlotCount(
+      final Long buncheolId, final int slotCount, final Instant now) {
+    // 엔티티 검증(Buncheol#validateMinHeadcount)을 거치지 않는 UPDATE 라 「최소 인원 ≥ 1」을 여기서 지킨다.
+    if (slotCount < 1) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_INVALID);
+    }
+    return buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, slotCount, now) > 0;
+  }
+
   /** C2C 참여 생성 직렬화용 잠금 조회 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
   public Buncheol getBuncheolForUpdate(final Long id) {
     return buncheolRepository

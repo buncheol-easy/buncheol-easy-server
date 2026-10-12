@@ -437,6 +437,59 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("자리 빼기 뒤 최소 인원 낮추기 CAS 테스트")
+  class LowerMinHeadcountIfRecruitingTest {
+
+    private Long persistWithMinHeadcount(final int minHeadcount) {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params =
+          new BuncheolParams(
+              groupId, "최소 인원 분철", null, "공식 스토어", deadline, minHeadcount, 3000, null,
+              FlowType.C2C, null);
+      return persistAndDetach(Buncheol.create(hostId, params, Instant.now())).getId();
+    }
+
+    private int minHeadcountOf(final Long buncheolId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT min_headcount FROM buncheols WHERE id = ?", Integer.class, buncheolId);
+    }
+
+    @Test
+    void 모집중이고_최소_인원이_남은_자리보다_크면_남은_자리_수로_낮춘다() {
+      Long buncheolId = persistWithMinHeadcount(3);
+
+      int affected = buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, 2, Instant.now());
+
+      assertThat(affected).isOne();
+      assertThat(minHeadcountOf(buncheolId)).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3})
+    void 최소_인원이_남은_자리_수_이하면_그대로_둔다(final int slotCount) {
+      Long buncheolId = persistWithMinHeadcount(2);
+
+      int affected =
+          buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, slotCount, Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(minHeadcountOf(buncheolId)).isEqualTo(2);
+    }
+
+    // 입금 수집중은 이미 성사 확정이라 최소 인원이 판정에 쓰이지 않는다 — 건드리지 않는다.
+    @Test
+    void 입금_수집중이면_낮추지_않는다() {
+      Long buncheolId = persistWithMinHeadcount(3);
+      forceStatus(buncheolId, BuncheolStatus.PAYMENT_COLLECTING);
+
+      int affected = buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, 2, Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(minHeadcountOf(buncheolId)).isEqualTo(3);
+    }
+  }
+
+  @Nested
   @DisplayName("호스트의 분철 목록 조회 테스트")
   class FindVisibleByHostIdOrderByCreatedAtDescTest {
 

@@ -30,4 +30,26 @@ public interface BuncheolMemberRepository {
       Long buncheolMemberId, Long buncheolId, BuncheolMemberAccessType accessType);
 
   void deleteById(Long id);
+
+  /**
+   * 자리 하나를 저장한다. 같은 분철에 같은 멤버가 이미 있으면({@code uq_buncheol_members_buncheol_member})
+   * {@code BUNCHEOL_MEMBER_ALREADY_EXISTS} 로 바꿔 던진다 — 사전 검사를 빠져나간 경합의 마지막 선이다.
+   */
+  BuncheolMember save(BuncheolMember buncheolMember);
+
+  boolean existsByBuncheolIdAndMemberId(Long buncheolId, Long memberId);
+
+  /**
+   * 분철의 자리를 잠금 조회(SELECT ... FOR UPDATE)한다. 잠금 조회는 트랜잭션 스냅샷이 아니라 최신 커밋을 읽으므로, 분철
+   * 락을 기다리는 사이 커밋된 다른 빼기까지 센다. 호출 측 트랜잭션이 필수다.
+   */
+  List<BuncheolMember> findAllByBuncheolIdForUpdate(Long buncheolId);
+
+  /**
+   * 어떤 참여·참여 코드 행도 가리키지 않는 자리만 지운다(상태 무관 — 취소된 참여도 FK 로 자리를 붙잡는다). 판정과 삭제를 한
+   * DELETE 로 묶는다. 그 밖의 FK 위반이 나도 500 이 아니라 {@code BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY} 로 바꿔 던진다.
+   *
+   * @return 지웠으면 true (false = 참조하는 행이 있거나 그 분철의 자리가 아님)
+   */
+  boolean deleteIfUnreferenced(Long buncheolMemberId, Long buncheolId);
 }

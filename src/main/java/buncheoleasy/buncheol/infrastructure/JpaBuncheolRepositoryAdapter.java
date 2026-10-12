@@ -217,6 +217,13 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
+  public int lowerMinHeadcountIfRecruiting(
+      final Long buncheolId, final int slotCount, final Instant now) {
+    return jpaBuncheolRepository.lowerMinHeadcountIfRecruiting(
+        buncheolId, slotCount, BuncheolStatus.RECRUITING, now);
+  }
+
+  @Override
   public Optional<Buncheol> findByIdForUpdate(final Long id) {
     return jpaBuncheolRepository.findByIdForUpdate(id);
   }

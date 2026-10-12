@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.domain.member;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -56,8 +57,40 @@ public class BuncheolMemberDomainService {
     return buncheolMemberRepository.save(BuncheolMember.create(buncheolId, memberId, price));
   }
 
-  public boolean existsInBuncheol(final Long buncheolId, final Long memberId) {
-    return buncheolMemberRepository.existsByBuncheolIdAndMemberId(buncheolId, memberId);
+  public Optional<BuncheolMember> findInBuncheol(final Long buncheolId, final Long memberId) {
+    return buncheolMemberRepository.findByBuncheolIdAndMemberId(buncheolId, memberId);
+  }
+
+  /**
+   * 신청 경로용 자리 조회 — 공유 잠금으로 최신 커밋을 읽는다(포트 javadoc). 없으면 {@code PARTICIPATION_MEMBER_NOT_FOUND}. 호출 측
+   * {@code @Transactional} 필수.
+   */
+  public BuncheolMember getBuncheolMemberForShare(final Long id, final Long buncheolId) {
+    return buncheolMemberRepository
+        .findByIdAndBuncheolIdForShare(id, buncheolId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
+  }
+
+  /**
+   * 활성 참여가 없는 자리만 닫는다({@code CLOSED}) — 기존 접근 정책 CAS 와 같은 판정이다. 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 닫았으면 true (false = 활성 참여가 있음)
+   */
+  public boolean closeIfUnoccupied(final Long buncheolMemberId, final Long buncheolId) {
+    return buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+        buncheolMemberId, buncheolId, BuncheolMemberAccessType.CLOSED);
+  }
+
+  /**
+   * 닫힌 자리를 선착순으로 다시 열고 가격을 바꾼다. 가격은 개최와 같은 규칙으로 먼저 검사한다(UPDATE 는 엔티티 검증을 거치지 않는다).
+   * 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 다시 열었으면 true
+   */
+  public boolean reopenClosedSlot(
+      final Long buncheolMemberId, final Long buncheolId, final long price) {
+    BuncheolMember.validatePrice(price);
+    return buncheolMemberRepository.reopenIfClosed(buncheolMemberId, buncheolId, price);
   }
 
   /** 분철의 자리를 잠금 조회한다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -12,6 +13,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -153,6 +155,50 @@ class BuncheolMemberDomainServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
 
       then(buncheolMemberRepository).should(never()).save(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 닫기·다시 열기·잠금 조회 테스트")
+  class CloseAndReopenTest {
+
+    @Test
+    void 닫기는_기존_접근_정책_CAS_로_CLOSED_를_요청한다() {
+      given(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  7L, 1L, BuncheolMemberAccessType.CLOSED))
+          .willReturn(true);
+
+      assertThat(buncheolMemberDomainService.closeIfUnoccupied(7L, 1L)).isTrue();
+    }
+
+    @Test
+    void 다시_열기는_가격을_먼저_검사하고_CAS_를_부른다() {
+      given(buncheolMemberRepository.reopenIfClosed(7L, 1L, 15_000L)).willReturn(true);
+
+      assertThat(buncheolMemberDomainService.reopenClosedSlot(7L, 1L, 15_000L)).isTrue();
+    }
+
+    // UPDATE 는 엔티티 검증을 거치지 않는다 — 개최와 같은 가격 규칙을 여기서 지켜야 한다.
+    @Test
+    void 다시_열기_가격이_100원_단위가_아니면_쓰지_않고_거부한다() {
+      assertThatThrownBy(() -> buncheolMemberDomainService.reopenClosedSlot(7L, 1L, 15_050L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
+
+      then(buncheolMemberRepository).should(never()).reopenIfClosed(any(), any(), anyLong());
+    }
+
+    @Test
+    void 잠금_조회로_자리가_없으면_없는_멤버로_거부한다() {
+      given(buncheolMemberRepository.findByIdAndBuncheolIdForShare(7L, 1L))
+          .willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> buncheolMemberDomainService.getBuncheolMemberForShare(7L, 1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
     }
   }
 }

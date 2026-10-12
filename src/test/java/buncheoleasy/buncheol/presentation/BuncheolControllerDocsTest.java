@@ -595,7 +595,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - 멤버별 `price` 는 호스트가 설정한 해당 멤버 슬롯의 고정 금액 (원, **0 이상·100원 단위** — 0원 슬롯은 오픈 이벤트 무료 분철 용도)
                             - 멤버별 `saleStatus` 는 판매 상태 — `AVAILABLE`(공석, 참여 가능) / `APPLIED`(C2C 무입금 신청으로 선점) /
                               `AWAITING_PAYMENT`(누군가 선점 후 입금 확인 대기 중, 기한 초과 시 다시 공석) / `SOLD`(입금확인 완료) /
-                              `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가) /
+                              `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가.
+                              **C2C 개최자가 「빼기」로 닫은 자리도 `CLOSED`** — 신청을 받는 분철의 빈 자리가 `CLOSED` 면 이 경우뿐이다) /
                               `CODE_ONLY`(참여 코드 보유자에게 배정된 공석 — 선착순으로는 참여 불가. "마감"이 아니라
                               "배정된 자리"로 표시할 것)
                             - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
@@ -708,7 +709,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("members[].saleStatus")
                                 .description(
                                     "판매 상태 (AVAILABLE=공석 | APPLIED=C2C 신청 선점 | AWAITING_PAYMENT=입금 확인 대기 중"
-                                        + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석"
+                                        + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석 또는 개최자가 닫은 자리"
                                         + " | CODE_ONLY=참여 코드 보유자에게 배정된 공석)"),
                             fieldWithPath("members[].paymentDueAt")
                                 .description(
@@ -910,12 +911,21 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 빈 자리 하나를 분철에서 뺀다.
                             다른 곳(X·포카마켓 등)에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
 
-                            자리 행을 지우므로 뺀 멤버는 상세 `members[]`·목록·찜의 남은 멤버·멤버 검색에서
-                            **처음부터 없던 것처럼 사라진다**(별도 「마감」 표시 없음). 그 자리 id 로 신청하면
-                            `404 BCH-061` 이다. 실수였다면 `POST /v1/buncheols/{id}/members` 로 다시 넣는다(새 id 가 생긴다).
+                            자리 상태에 따라 결과가 갈린다(응답은 모두 `204`):
 
-                            **최소 인원**: 모집중에 빼서 남은 자리 수가 `minHeadcount` 보다 작아지면 `minHeadcount` 를
-                            남은 자리 수로 낮춘다(그대로 두면 마감 정각에 인원 미달로 즉시 취소된다). 입금 수집중에는
+                            | 뺄 자리 | 결과 |
+                            |---|---|
+                            | 신청·취소 기록이 하나도 없는 빈 자리 | **행 삭제** — 상세 `members[]`·목록·찜의 남은 멤버·멤버 검색에서 처음부터 없던 것처럼 사라진다. 그 자리 id 로 신청하면 `404 BCH-061` |
+                            | 신청자는 없고 기록(취소 등)만 남은 빈 자리 | **닫기** — 행은 남고 상세 `saleStatus` 가 `CLOSED`(「마감」)로 바뀐다. 목록·찜의 남은 멤버에서 빠지고, 그 자리 id 로 신청하면 `409 BCH-122` (멤버 검색에는 남는다) |
+                            | 이미 닫힌 자리 | 변화 없음 (멱등) |
+
+                            실수였다면 `POST /v1/buncheols/{id}/members` 로 다시 넣는다 — 지운 자리는 새 id 로,
+                            닫힌 자리는 **같은 id** 로 다시 열린다.
+
+                            **남은 자리 = 열린 자리**(닫히지 않은 자리)다. 마지막 열린 자리는 뺄 수 없다.
+
+                            **최소 인원**: 모집중에 빼서 열린 자리 수가 `minHeadcount` 보다 작아지면 `minHeadcount` 를
+                            열린 자리 수로 낮춘다(그대로 두면 마감 정각에 인원 미달로 즉시 취소된다). 입금 수집중에는
                             바꾸지 않고, 다시 넣어도 올리지 않는다.
 
                             **권한**: 해당 분철의 **개최자 본인만**. 회원 개최(C2C) 분철만 지원한다.
@@ -928,9 +938,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
-                            | 409 | `BCH-120` (`BUNCHEOL_MEMBER_REMOVE_LAST`) | 마지막 자리 — 분철 취소로 안내. 그 자리에 신청자가 있으면 `BCH-118` 이 대신 나간다 |
+                            | 409 | `BCH-120` (`BUNCHEOL_MEMBER_REMOVE_LAST`) | 마지막 열린 자리 — 분철 취소로 안내. 그 자리에 신청자가 있으면 `BCH-118` 이 대신 나간다 |
                             | 409 | `BCH-118` (`BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT`) | 신청자(신청·입금 확인 중·보냈어요·확정)가 있는 자리 |
-                            | 409 | `BCH-119` (`BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY`) | 지금 신청자는 없지만 취소된 신청 등 기록이 남은 자리 |
+                            | 409 | `BCH-119` (`BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY`) | 예비 — 알 수 없는 참조가 자리를 붙잡은 경우의 마지막 선 (지금 스키마로는 나오지 않는다) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(
@@ -964,6 +974,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 분철 그룹의 멤버를 자리로 넣는다.
                             주로 잘못 뺀 자리를 되살릴 때 쓴다. 개최와 같은 규칙으로 검사하며 선착순(`OPEN`) 자리로 만든다.
                             만든 즉시 신청을 받는다. `minHeadcount` 는 바꾸지 않는다.
+
+                            같은 멤버의 **닫힌 자리**(빼기로 `CLOSED` 가 된 자리)가 있으면 새로 만들지 않고 **그 자리를 다시 연다** —
+                            응답 `buncheolMemberId` 는 그 자리의 기존 id 이고 가격은 이번 요청의 `price` 로 바뀐다.
+                            열린 자리가 이미 있으면 `BCH-121`.
 
                             **권한**: 해당 분철의 **개최자 본인만**. 회원 개최(C2C) 분철만 지원한다.
 

@@ -244,16 +244,19 @@ public enum ErrorCode {
       HttpStatus.CONFLICT),
   
   // ── 개최자 자리 빼기·다시 넣기 (C2C) ──
-  // 빼기는 행 삭제라 참여·참여 코드 행이 하나라도 가리키면 FK 가 막는다. 활성 참여(신청자)와 그 밖의 기록을
-  // 나눠 안내한다 — 취소 기록뿐인 자리는 개최자 눈에 빈 자리라 같은 문구면 "왜 안 빠지지" 가 된다.
+  // 기록(취소 등)만 남은 자리는 지우지 않고 닫으므로(CLOSED) 빼기를 막는 것은 활성 참여(신청자)뿐이다.
   BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT(
       "BCH-118", "신청자가 있는 자리는 뺄 수 없어요.", HttpStatus.CONFLICT),
+  // 조건부 삭제가 모르는 FK 가 자리를 붙잡았을 때의 마지막 선 — 지금 스키마로는 닫기로 넘어가 나오지 않는다.
   BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY(
       "BCH-119", "이전 신청 기록이 있는 자리는 뺄 수 없어요.", HttpStatus.CONFLICT),
   BUNCHEOL_MEMBER_REMOVE_LAST(
       "BCH-120", "마지막 멤버는 뺄 수 없어요. 분철을 취소해 주세요.", HttpStatus.CONFLICT),
   // BCH-021 은 개최 요청 안의 중복(400)이다. 이건 이미 분철에 있는 멤버와의 충돌이라 따로 둔다.
   BUNCHEOL_MEMBER_ALREADY_EXISTS("BCH-121", "이미 분철에 있는 멤버예요.", HttpStatus.CONFLICT),
+  // 개최자가 「빼기」로 닫은 자리(CLOSED)에 신청. 없는 멤버(BCH-061)와 나눠야 화면이 "다른 멤버를 고르라" 고 안내할 수 있다.
+  PARTICIPATION_MEMBER_CLOSED(
+      "BCH-122", "개최자가 마감한 멤버예요. 다른 멤버를 골라 주세요.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

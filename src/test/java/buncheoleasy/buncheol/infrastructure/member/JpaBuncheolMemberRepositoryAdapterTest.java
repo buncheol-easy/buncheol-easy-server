@@ -16,6 +16,7 @@ import buncheoleasy.buncheol.infrastructure.TestUserFixture;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -30,6 +31,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -377,13 +379,124 @@ class JpaBuncheolMemberRepositoryAdapterTest {
     }
 
     @Test
-    void 분철_안_멤버_존재_여부를_돌려준다() {
-      saveSlot(memberId);
+    void 분철_안_멤버의_자리를_찾는다() {
+      Long slotId = saveSlot(memberId);
 
-      assertThat(buncheolMemberRepository.existsByBuncheolIdAndMemberId(buncheolId, memberId))
+      assertThat(buncheolMemberRepository.findByBuncheolIdAndMemberId(buncheolId, memberId))
+          .map(BuncheolMember::getId)
+          .contains(slotId);
+      assertThat(buncheolMemberRepository.findByBuncheolIdAndMemberId(buncheolId, memberId2))
+          .isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 닫기·다시 열기 테스트")
+  class CloseAndReopenTest {
+
+    private String accessTypeColumn(final Long slotId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT access_type FROM buncheol_members WHERE id = ?", String.class, slotId);
+    }
+
+    private long priceColumn(final Long slotId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT price FROM buncheol_members WHERE id = ?", Long.class, slotId);
+    }
+
+    // 닫기는 기존 접근 정책 CAS 를 그대로 쓴다 — 취소 기록만 있으면 활성 참여가 아니라 닫힌다.
+    @Test
+    void 취소_기록만_있는_자리는_CLOSED_로_닫히고_엔티티로_다시_읽힌다() {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, "CANCELLED");
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, BuncheolMemberAccessType.CLOSED))
           .isTrue();
-      assertThat(buncheolMemberRepository.existsByBuncheolIdAndMemberId(buncheolId, memberId2))
+
+      em.clear();
+      assertThat(accessTypeColumn(slotId)).isEqualTo("CLOSED");
+      // @Enumerated(STRING) 왕복 — 이 값을 모르는 서버는 여기서 500 이 난다(롤백 주의).
+      BuncheolMember loaded =
+          buncheolMemberRepository.findByIdAndBuncheolId(slotId, buncheolId).orElseThrow();
+      assertThat(loaded.isClosed()).isTrue();
+      assertThat(loaded.requiresCode()).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED"})
+    void 활성_참여가_있는_자리는_닫히지_않는다(final String status) {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, status);
+
+      assertThat(
+              buncheolMemberRepository.changeAccessTypeIfUnoccupied(
+                  slotId, buncheolId, BuncheolMemberAccessType.CLOSED))
           .isFalse();
+      assertThat(accessTypeColumn(slotId)).isEqualTo("OPEN");
+    }
+
+    @Test
+    void 닫힌_자리는_선착순으로_다시_열리고_가격이_바뀐다() {
+      Long slotId = saveSlot(memberId);
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET access_type = 'CLOSED' WHERE id = ?", slotId);
+
+      assertThat(buncheolMemberRepository.reopenIfClosed(slotId, buncheolId, 15_000L)).isTrue();
+
+      assertThat(accessTypeColumn(slotId)).isEqualTo("OPEN");
+      assertThat(priceColumn(slotId)).isEqualTo(15_000L);
+    }
+
+    // 열린 자리를 「다시 열기」로 가격만 바꾸는 우회로가 되면 안 된다 — 닫힌 자리만 대상이다.
+    @Test
+    void 열린_자리는_다시_열기로_바뀌지_않는다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(buncheolMemberRepository.reopenIfClosed(slotId, buncheolId, 15_000L)).isFalse();
+
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    @Test
+    void 다른_분철의_자리는_다시_열지_않는다() {
+      Long slotId = saveSlot(memberId);
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET access_type = 'CLOSED' WHERE id = ?", slotId);
+
+      assertThat(buncheolMemberRepository.reopenIfClosed(slotId, buncheolId + 9_999L, 15_000L))
+          .isFalse();
+      assertThat(accessTypeColumn(slotId)).isEqualTo("CLOSED");
+    }
+  }
+
+  @Nested
+  @DisplayName("신청 경로 자리 잠금 읽기 테스트")
+  class FindByIdAndBuncheolIdForShareTest {
+
+    // 신청 트랜잭션의 스냅샷은 분철 락 전에 잡혀, 일반 조회로는 그 사이 닫힌 자리를 「열림」으로 본다 — 잠금 읽기여야 한다.
+    @Test
+    void 공유_잠금_읽기로_선언돼_있다() throws NoSuchMethodException {
+      Lock lock =
+          JpaBuncheolMemberRepository.class
+              .getMethod("findByIdAndBuncheolIdForShare", Long.class, Long.class)
+              .getAnnotation(Lock.class);
+
+      assertThat(lock).isNotNull();
+      assertThat(lock.value()).isEqualTo(LockModeType.PESSIMISTIC_READ);
+    }
+
+    @Test
+    void 그_분철의_자리만_돌려준다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(buncheolMemberRepository.findByIdAndBuncheolIdForShare(slotId, buncheolId))
+          .map(BuncheolMember::getId)
+          .contains(slotId);
+      assertThat(
+              buncheolMemberRepository.findByIdAndBuncheolIdForShare(slotId, buncheolId + 9_999L))
+          .isEmpty();
     }
   }
 

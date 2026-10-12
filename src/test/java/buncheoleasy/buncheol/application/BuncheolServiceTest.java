@@ -26,6 +26,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -51,6 +52,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -1241,8 +1243,19 @@ class BuncheolServiceTest {
     }
 
     private void givenSlots(final Long... slotIds) {
+      givenSlots(List.of(), slotIds);
+    }
+
+    /** {@code closedSlotIds} 에 든 자리는 닫힌({@code CLOSED}) 자리로 만든다. */
+    private void givenSlots(final List<Long> closedSlotIds, final Long... slotIds) {
       List<BuncheolMember> slots =
-          Arrays.stream(slotIds).map(id -> slot(id, MEMBER_ID + id)).toList();
+          Arrays.stream(slotIds)
+              .map(
+                  id ->
+                      closedSlotIds.contains(id)
+                          ? closedSlot(id, MEMBER_ID + id)
+                          : slot(id, MEMBER_ID + id))
+              .toList();
       given(buncheolMemberDomainService.findAllByBuncheolIdForUpdate(BUNCHEOL_ID))
           .willReturn(slots);
     }
@@ -1339,13 +1352,14 @@ class BuncheolServiceTest {
       then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
     }
 
+    // 지우기·닫기 CAS 가 둘 다 실패하는 건 활성 참여가 있을 때뿐이다.
     @Test
-    void 활성_참여가_있어_지우지_못하면_신청자_있음으로_거부하고_최소_인원은_그대로다() {
+    void 지우지도_닫지도_못하면_신청자_있음으로_거부하고_최소_인원은_그대로다() {
       givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
       givenSlots(SLOT_ID, OTHER_SLOT_ID);
       given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
           .willReturn(false);
-      given(participationDomainService.hasActiveParticipationOnSlot(SLOT_ID)).willReturn(true);
+      given(buncheolMemberDomainService.closeIfUnoccupied(SLOT_ID, BUNCHEOL_ID)).willReturn(false);
 
       assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
           .isInstanceOf(BusinessException.class)
@@ -1357,18 +1371,64 @@ class BuncheolServiceTest {
           .lowerMinHeadcountToSlotCount(anyLong(), anyInt(), any());
     }
 
-    @Test
-    void 취소_기록만_있어_지우지_못하면_기록_있음으로_거부한다() {
-      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
-      givenSlots(SLOT_ID, OTHER_SLOT_ID);
+    // 🔴 취소 기록이 FK 로 붙은 빈 자리 — 지울 수는 없지만 신청은 계속 받으므로, 닫지 않으면 이중 판매가 그대로 난다.
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+    void 기록만_남아_지우지_못한_자리는_닫고_열린_자리_수로_최소_인원을_맞춘다(final BuncheolStatus status) {
+      givenLocked(slotEditBuncheol(FlowType.C2C, status));
+      givenSlots(SLOT_ID, OTHER_SLOT_ID, 9L);
       given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
           .willReturn(false);
+      given(buncheolMemberDomainService.closeIfUnoccupied(SLOT_ID, BUNCHEOL_ID)).willReturn(true);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolDomainService).should().lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 2, NOW);
+    }
+
+    // 화면이 낡았거나 두 번 누른 경우 — 이미 닫힌 자리는 아무것도 쓰지 않고 끝난다(204).
+    @Test
+    void 이미_닫힌_자리는_아무것도_바꾸지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(List.of(SLOT_ID), SLOT_ID, OTHER_SLOT_ID);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+      then(buncheolMemberDomainService).should(never()).closeIfUnoccupied(any(), any());
+      then(buncheolDomainService)
+          .should(never())
+          .lowerMinHeadcountToSlotCount(anyLong(), anyInt(), any());
+    }
+
+    // 닫힌 자리는 신청을 받지 않으므로 「남은 자리」가 아니다 — 열린 자리가 하나뿐이면 그게 마지막 자리다.
+    @Test
+    void 마지막_열린_자리_판정은_닫힌_자리를_세지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(List.of(OTHER_SLOT_ID), SLOT_ID, OTHER_SLOT_ID);
       given(participationDomainService.hasActiveParticipationOnSlot(SLOT_ID)).willReturn(false);
 
       assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY);
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_REMOVE_LAST);
+
+      then(buncheolMemberDomainService).should(never()).removeIfUnreferenced(any(), any());
+      then(buncheolMemberDomainService).should(never()).closeIfUnoccupied(any(), any());
+    }
+
+    @Test
+    void 최소_인원은_닫힌_자리를_뺀_열린_자리_수로_맞춘다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(List.of(9L), SLOT_ID, OTHER_SLOT_ID, 9L);
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(true);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolDomainService).should().lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 1, NOW);
     }
 
     // 남은 자리 수 = 빼기 전 자리 수 - 1. 모집중 여부는 UPDATE 조건이 가른다(입금 수집중이면 0행).
@@ -1404,6 +1464,8 @@ class BuncheolServiceTest {
       order.verify(buncheolMemberDomainService).findAllByBuncheolIdForUpdate(BUNCHEOL_ID);
       order.verify(buncheolMemberDomainService).removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID);
       order.verify(buncheolDomainService).lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 1, NOW);
+      // 지웠으면 닫지 않는다.
+      then(buncheolMemberDomainService).should(never()).closeIfUnoccupied(any(), any());
     }
   }
 
@@ -1473,7 +1535,8 @@ class BuncheolServiceTest {
     void 이미_분철에_있는_멤버면_거부한다() {
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
           .willReturn(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
-      given(buncheolMemberDomainService.existsInBuncheol(BUNCHEOL_ID, MEMBER_ID)).willReturn(true);
+      given(buncheolMemberDomainService.findInBuncheol(BUNCHEOL_ID, MEMBER_ID))
+          .willReturn(Optional.of(slot(31L, MEMBER_ID)));
 
       assertThatThrownBy(() -> buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request))
           .isInstanceOf(BusinessException.class)
@@ -1481,6 +1544,46 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_ALREADY_EXISTS);
 
       then(buncheolMemberDomainService).should(never()).addOpenSlot(any(), any(), anyLong());
+      // 열린 자리는 다시 열기 대상이 아니다 — 가격만 바꾸는 우회로가 되면 안 된다.
+      then(buncheolMemberDomainService).should(never()).reopenClosedSlot(any(), any(), anyLong());
+    }
+
+    // 닫힌 자리는 기록이 FK 로 붙어 지울 수 없고 (분철, 멤버) 유니크라 새 행도 못 만든다 — 같은 자리를 다시 연다.
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+    void 같은_멤버의_닫힌_자리가_있으면_같은_id_로_다시_연다(final BuncheolStatus status) {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, status));
+      given(buncheolMemberDomainService.findInBuncheol(BUNCHEOL_ID, MEMBER_ID))
+          .willReturn(Optional.of(closedSlot(31L, MEMBER_ID)));
+      given(buncheolMemberDomainService.reopenClosedSlot(31L, BUNCHEOL_ID, 15_000L))
+          .willReturn(true);
+
+      Long slotId = buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request);
+
+      assertThat(slotId).isEqualTo(31L);
+      then(buncheolMemberDomainService).should(never()).addOpenSlot(any(), any(), anyLong());
+      then(buncheolDomainService)
+          .should(never())
+          .lowerMinHeadcountToSlotCount(anyLong(), anyInt(), any());
+    }
+
+    // 다시 열기 CAS 는 닫힌 자리만 바꾼다 — 실패하면(그 사이 열림) 이미 있는 멤버다.
+    @Test
+    void 다시_열기_CAS_가_실패하면_이미_있는_멤버로_거부한다() {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      given(buncheolMemberDomainService.findInBuncheol(BUNCHEOL_ID, MEMBER_ID))
+          .willReturn(Optional.of(closedSlot(31L, MEMBER_ID)));
+      given(buncheolMemberDomainService.reopenClosedSlot(31L, BUNCHEOL_ID, 15_000L))
+          .willReturn(false);
+
+      assertThatThrownBy(() -> buncheolService.addMember(HOST_ID, BUNCHEOL_ID, request))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_ALREADY_EXISTS);
     }
 
     @ParameterizedTest
@@ -1533,6 +1636,12 @@ class BuncheolServiceTest {
   private static BuncheolMember slot(final Long slotId, final Long groupMemberId) {
     BuncheolMember member = BuncheolMember.create(BUNCHEOL_ID, groupMemberId, 10_000L);
     setField(member, "id", slotId);
+    return member;
+  }
+
+  private static BuncheolMember closedSlot(final Long slotId, final Long groupMemberId) {
+    BuncheolMember member = slot(slotId, groupMemberId);
+    setField(member, "accessType", BuncheolMemberAccessType.CLOSED);
     return member;
   }
 }

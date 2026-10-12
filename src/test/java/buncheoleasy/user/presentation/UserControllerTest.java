@@ -96,6 +96,18 @@ class UserControllerTest {
   }
 
   @Test
+  void 프로필_수정_시_휴대폰_번호가_10자리면_400을_반환한다() throws Exception {
+    mockMvc
+        .perform(
+            put("/v1/users/me")
+                .with(mockAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nickname\":\"테스트유저\",\"phoneNumber\":\"0101234567\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+  }
+
+  @Test
   void 회원탈퇴_중_BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
     willThrow(new BusinessException(ErrorCode.USER_NOT_FOUND)).given(userService).withdraw(USER_ID);
 

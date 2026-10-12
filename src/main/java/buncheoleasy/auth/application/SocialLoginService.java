@@ -5,6 +5,7 @@ import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.AgeRangeRefreshResult;
 import buncheoleasy.user.domain.SocialInfo;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
@@ -53,6 +54,16 @@ public class SocialLoginService {
       }
     }
     return jwtTokenProvider.issueTokens(user.getId());
+  }
+
+  /** 연령대 추가 동의 결과를 반영한다. 로그인 상태는 바꾸지 않으므로 토큰을 발급하지 않는다. */
+  public AgeRangeRefreshResult refreshAgeRange(
+      final String provider,
+      final String providerId,
+      final String ageRange,
+      final boolean ageRangeWithdrawn) {
+    return userDomainService.refreshAgeRange(
+        SocialInfo.of(provider, providerId), ageRange, ageRangeWithdrawn);
   }
 
   public TokenPair reissueTokens(final String refreshToken) {

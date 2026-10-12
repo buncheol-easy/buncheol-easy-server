@@ -1,5 +1,6 @@
 package buncheoleasy.global.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -18,6 +19,7 @@ import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.feedback.application.FeedbackService;
 import buncheoleasy.global.page.CursorResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +32,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 /**
  * {@code /v1/buncheols/{id}} 가 비로그인 허용으로 열리면서 동일 단일 세그먼트 패턴이 {@code /v1/buncheols/me} 까지 함께 매칭한다. 본
@@ -250,6 +254,35 @@ class SecurityConfigTest {
                   .contentType(MediaType.APPLICATION_JSON)
                   .content(BODY))
           .andExpect(status().isUnauthorized());
+    }
+  }
+
+  @Nested
+  @DisplayName("카카오 인가 요청 — 일반 로그인과 연령대 추가 동의")
+  class KakaoAuthorizationPaths {
+
+    private String scopeOf(final String path) throws Exception {
+      String location =
+          mockMvc
+              .perform(get(path))
+              .andExpect(status().isFound())
+              .andReturn()
+              .getResponse()
+              .getRedirectedUrl();
+      assertThat(location).startsWith("https://kauth.kakao.com/oauth/authorize?");
+      String scope =
+          UriComponentsBuilder.fromUriString(location).build().getQueryParams().getFirst("scope");
+      return scope == null ? null : UriUtils.decode(scope, StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void 일반_로그인은_카카오에_scope_를_보내지_않는다() throws Exception {
+      assertThat(scopeOf("/oauth2/authorization/kakao")).isNull();
+    }
+
+    @Test
+    void 연령대_추가_동의는_openid_와_age_range_만_요청한다() throws Exception {
+      assertThat(scopeOf("/oauth2/authorization/kakao/age-range")).isEqualTo("openid age_range");
     }
   }
 }

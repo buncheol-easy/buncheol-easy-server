@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users
     settlement_account  VARCHAR(50)  NULL COMMENT '정산 계좌번호',
     settlement_holder   VARCHAR(50)  NULL COMMENT '정산 예금주',
     profile_completed   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '프로필 설정 완료 여부',
-    -- 개최 오픈 전 운영 지정 계정만 true. 부여는 DB 직접 UPDATE 로 한다.
+    -- 운영진 권한이다. LEGACY 개최를 열 수 있고 C2C 성인 확인·활성 개최 상한을 면제받는다. 부여는 DB 직접 UPDATE 로 한다.
     -- 기존 배포 DB 에는 수동 ALTER 필요.
     can_host            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '분철 개최 허용 여부',
     -- NULL = 미동의/철회. 광고성 정보는 동의 일시 기록·2년 주기 재확인 의무가 있어 boolean 대신 일시로 저장한다.

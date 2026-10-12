@@ -16,6 +16,9 @@ import java.util.List;
  *
  * <p>{@code freeShippingEventTarget} 은 운영진(LEGACY) 분철이면서 이용 가능한 배송수단의 배송비가 모두 0원인지로, 공개
  * 목록({@link BuncheolSummaryResponse})과 같은 "배송비 0원 이벤트" 배지를 찜 목록 카드에도 띄우기 위한 필드다.
+ *
+ * <p>{@code createdAt} 은 <b>찜한 시각이 아니라</b> 분철 개최 시각(UTC)이다. 공개 목록과 같은 "신규" 배지를 찜 목록 카드에도 띄우기
+ * 위한 필드다.
  */
 public record MyBookmarkedBuncheolResponse(
     Long bookmarkId,
@@ -27,4 +30,5 @@ public record MyBookmarkedBuncheolResponse(
     String thumbnailUrl,
     List<String> memberNames,
     List<String> availableMemberNames,
-    boolean freeShippingEventTarget) {}
+    boolean freeShippingEventTarget,
+    Instant createdAt) {}

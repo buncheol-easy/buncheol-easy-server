@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
  */
 public final class KakaoPhoneNumberNormalizer {
 
-  private static final Pattern KOREAN_MOBILE = Pattern.compile("^01\\d{8,9}$");
+  private static final Pattern KOREAN_MOBILE = Pattern.compile("^01\\d{9}$");
 
   private KakaoPhoneNumberNormalizer() {}
 

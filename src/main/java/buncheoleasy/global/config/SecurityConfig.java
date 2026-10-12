@@ -2,6 +2,7 @@ package buncheoleasy.global.config;
 
 import buncheoleasy.auth.infrastructure.jwt.JwtAuthenticationEntryPoint;
 import buncheoleasy.auth.infrastructure.jwt.JwtAuthenticationFilter;
+import buncheoleasy.auth.infrastructure.oauth.KakaoAuthorizationRequestResolver;
 import buncheoleasy.auth.infrastructure.oauth.OAuth2LoginFailureHandler;
 import buncheoleasy.auth.infrastructure.oauth.OAuth2LoginSuccessHandler;
 import lombok.RequiredArgsConstructor;
@@ -78,6 +79,7 @@ public class SecurityConfig {
   /** 의견 보내기(POST 한정 공개). 로그인 실패·가입 이탈처럼 <b>로그인할 수 없는 상태의 의견</b>이 가장 받고 싶은 종류라 비로그인도 허용한다. */
   private static final String FEEDBACK_PATH = "/v1/feedbacks";
 
+  private final KakaoAuthorizationRequestResolver kakaoAuthorizationRequestResolver;
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -128,6 +130,10 @@ public class SecurityConfig {
         .oauth2Login(
             oauth2 ->
                 oauth2
+                    .authorizationEndpoint(
+                        endpoint ->
+                            endpoint.authorizationRequestResolver(
+                                kakaoAuthorizationRequestResolver)) // 일반 로그인·연령대 추가 동의 인가 요청
                     .successHandler(oAuth2LoginSuccessHandler) // 로그인 성공 시 동작
                     .failureHandler(oAuth2LoginFailureHandler) // 로그인 실패 시 동작
             )

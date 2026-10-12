@@ -386,6 +386,32 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
+    void createdAt_은_찜한_시각이_아니라_분철_개최_시각이다() {
+      BuncheolBookmark bm = bookmark(500L, USER_ID, 10L);
+      setField(bm, "createdAt", Instant.parse("2026-05-18T00:00:00Z"));
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bm));
+
+      Instant hostedAt = Instant.parse("2026-05-10T09:00:00Z");
+      Buncheol b =
+          buncheol(10L, 100L, "분철 A", BuncheolStatus.RECRUITING, Instant.parse("2026-06-01T12:00:00Z"));
+      setField(b, "createdAt", hostedAt);
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(b));
+
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, false);
+
+      assertThat(result.get(0).createdAt()).isEqualTo(hostedAt);
+    }
+
+    @Test
     void 필터로_모두_제외되면_빈_리스트를_반환한다() {
       BuncheolBookmark bm = bookmark(500L, USER_ID, 10L);
       given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))

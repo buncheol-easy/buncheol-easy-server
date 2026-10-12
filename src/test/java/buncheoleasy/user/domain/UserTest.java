@@ -158,7 +158,7 @@ class UserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"012345678", "012345678901"})
+    @ValueSource(strings = {"012345678", "0101234567", "012345678901"})
     void phoneNumber가_길이가_유효하지_않으면_예외가_발생한다(String phoneNumber) {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");
@@ -171,7 +171,8 @@ class UserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0201234567", "1012345678", "00123456789", "a101234567", "0201234567a"})
+    @ValueSource(
+        strings = {"02012345678", "10123456789", "00123456789", "a1012345678", "0201234567a"})
     void phoneNumber_형식이_유효하지_않은_경우_예외가_발생한다(String phoneNumber) {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");
@@ -184,8 +185,7 @@ class UserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(
-        strings = {"01012345678", "01112345678", "01612345678", "01912345678", "0161234567"})
+    @ValueSource(strings = {"01012345678", "01112345678", "01612345678", "01912345678"})
     void 올바른_형식의_phoneNumber로_업데이트할_수_있다(String phoneNumber) {
       // given
       User user = User.create("KAKAO", "123456", "test@example.com");

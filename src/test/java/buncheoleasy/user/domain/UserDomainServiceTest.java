@@ -37,9 +37,6 @@ class UserDomainServiceTest {
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
-  // 기존 테스트의 관심사는 사용자 자격이므로 오픈 스위치는 켠 상태를 기본으로 둔다.
-  @Spy private C2cHostingProperties c2cHostingProperties = new C2cHostingProperties(true);
-
   @Nested
   @DisplayName("소셜 로그인 테스트")
   class GetOrCreateBySocialLoginTest {
@@ -158,6 +155,71 @@ class UserDomainServiceTest {
   }
 
   @Nested
+  @DisplayName("연령대 추가 동의 반영 테스트")
+  class RefreshAgeRangeTest {
+
+    @Test
+    void 가입한_회원이면_연령대를_갱신하고_PRESENT_를_돌려준다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
+
+      // then
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.PRESENT);
+      assertThat(existingUser.getAgeRange()).isEqualTo("20~29");
+    }
+
+    @Test
+    void 저장_규칙에_맞지_않는_값이면_저장하지_않고_ABSENT_를_돌려준다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, " ", false);
+
+      // then
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.ABSENT);
+      assertThat(existingUser.getAgeRange()).isNull();
+    }
+
+    @Test
+    void 동의_철회가_확인되면_저장된_연령대를_파기한다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      existingUser.updateAgeRange("20~29");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, null, true);
+
+      // then
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.ABSENT);
+      assertThat(existingUser.getAgeRange()).isNull();
+    }
+
+    @Test
+    void 가입한_회원이_없으면_새로_만들지_않고_NO_MEMBER_를_돌려준다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "unknown");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.empty());
+
+      // when
+      AgeRangeRefreshResult result = userDomainService.refreshAgeRange(socialInfo, "20~29", false);
+
+      // then
+      assertThat(result).isEqualTo(AgeRangeRefreshResult.NO_MEMBER);
+      then(userRepository).should(never()).save(any());
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 개최 자격 게이트 테스트")
   class RequireC2cHostQualificationTest {
 
@@ -174,45 +236,6 @@ class UserDomainServiceTest {
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
       userDomainService.requireC2cHostQualification(1L);
-    }
-
-    @Test
-    void 오픈_스위치가_꺼져_있으면_자격을_다_갖춰도_C2C_HOSTING_NOT_OPEN_예외가_발생한다() {
-      UserDomainService closed = closedHostingService();
-
-      assertThatThrownBy(() -> closed.requireC2cHostQualification(1L))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.C2C_HOSTING_NOT_OPEN);
-    }
-
-    @Test
-    void 오픈_스위치가_꺼져_있으면_사용자를_조회하지도_않는다() {
-      UserDomainService closed = closedHostingService();
-
-      closed.evaluateC2cHostQualification(1L);
-
-      // 스위치는 사용자 상태와 무관하다 — 조회까지 갔다면 판정 순서가 뒤집힌 것이고,
-      // 탈퇴·미존재 사용자에게 "없는 사용자" 예외가 미오픈 안내보다 먼저 뜬다.
-      then(userRepository).should(never()).findById(any());
-    }
-
-    @Test
-    void 오픈_스위치가_꺼져_있으면_사전_조회도_NOT_OPEN_YET_을_반환한다() {
-      UserDomainService closed = closedHostingService();
-
-      assertThat(closed.evaluateC2cHostQualification(1L))
-          .isEqualTo(C2cHostQualification.NOT_OPEN_YET);
-    }
-
-    // 스위치를 끈 인스턴스는 따로 만든다 — @InjectMocks 필드는 테스트마다 바꿀 수 없다.
-    private UserDomainService closedHostingService() {
-      return new UserDomainService(
-          userRepository,
-          userServiceTermRepository,
-          nicknameGenerator,
-          clock,
-          new C2cHostingProperties(false));
     }
 
     @Test

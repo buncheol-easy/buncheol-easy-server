@@ -13,7 +13,7 @@ import java.time.Instant;
  * 묶음(추가 모집)을 한 사람 아래로 모을 수 없다.
  *
  * <p><b>{@code participantId}(= {@code users.id}) 를 그대로 내리는 것은 의도된 결정이다.</b> 이 레포에서 유저 PK 를
- * 응답에 싣는 첫 사례라 근거를 남긴다 — 이 화면은 이미 같은 사람의 <b>예금주 실명</b>({@code depositorName})을 항상
+ * 응답에 싣는 첫 사례라 근거를 남긴다 — 이 화면은 이미 같은 사람의 <b>예금주 실명</b>({@code depositorName})을
  * 내려준다(통장 대조가 이 필드의 존재 이유다). 개최자는 자기 분철의 참여자만 볼 수 있고, 그 범위에서 실명이 이미 전역·
  * 사실상 불변인 식별자로 기능하므로 {@code users.id} 가 더하는 식별력이 없다. 응답 범위 안에서만 유효한 그룹핑 키를
  * 따로 만드는 대안은, 같은 식별력을 얻으면서 화면·서버 양쪽에 새 개념을 하나 더 들이는 비용만 남는다.
@@ -44,7 +44,8 @@ import java.time.Instant;
   *
  * <p>{@code participantNickname} 은 <b>항상 채워진다</b> — 탈퇴(soft delete) 회원은 조회에서 빠지므로
  * 「탈퇴한 사용자」 고정 문구로 내린다. 클라는 null 폴백을 둘 필요가 없다(두면 별칭 폴백이 예금주
- * 실명을 닉네임 자리에 채우는, 실명이 새는 경로가 된다).
+ * 실명을 닉네임 자리에 채우는, 실명이 새는 경로가 된다). 탈퇴 회원 행은 {@code depositorName} 과
+ * {@code delivery} 의 수령인 정보(지점·닉네임·전화번호)도 비운다 — 환불할 취소분의 {@code refundAccount} 만 예외다.
  */
 public record BuncheolManagementParticipantResponse(
     Long participationId,

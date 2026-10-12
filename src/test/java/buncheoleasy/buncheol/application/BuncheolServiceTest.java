@@ -259,6 +259,7 @@ class BuncheolServiceTest {
       BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
       assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
       assertThat(event.thumbnailIndex()).isEqualTo(1);
+      assertThat(event.initialUpload()).isTrue();
     }
 
     @Test
@@ -532,7 +533,6 @@ class BuncheolServiceTest {
      */
     @ParameterizedTest
     @CsvSource({
-      "NOT_OPEN_YET, NOT_OPEN_YET",
       "PHONE_REQUIRED, PHONE_REQUIRED",
       "AGE_UNVERIFIED, AGE_UNVERIFIED",
       "NOT_ADULT, NOT_ADULT"
@@ -806,6 +806,7 @@ class BuncheolServiceTest {
       BuncheolImageUploadEvent event = imageUploadEventCaptor.getValue();
       assertThat(event.buncheolId()).isEqualTo(BUNCHEOL_ID);
       assertThat(event.thumbnailIndex()).isZero();
+      assertThat(event.initialUpload()).isFalse();
     }
 
     @Test
@@ -948,6 +949,53 @@ class BuncheolServiceTest {
       // 취소된 참여의 배송 스냅샷을 정리한다.
       then(deliveryDomainService).should().deleteByParticipationIds(List.of(50L));
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
+    }
+
+    // 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다 — 리스너가 사람 단위로 묶으려면 한 번에 봐야 한다.
+    @Test
+    void 취소된_참여가_여러_건이어도_취소_이벤트는_분철_단위로_한_번_발행된다() {
+      // given — cascade 재조회에는 ORDER BY 가 없다. 순서를 뒤섞어 발행 쪽 정렬을 확인한다.
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.RECRUITING);
+      Participation later = mock(Participation.class);
+      given(later.getId()).willReturn(52L);
+      Participation earlier = mock(Participation.class);
+      given(earlier.getId()).willReturn(50L);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(50L, 52L), BuncheolCancelReason.HOST_CANCELLED));
+    }
+
+    @Test
+    void cascade_로_취소된_참여가_없으면_취소_이벤트를_발행하지_않는다() {
+      // given
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.RECRUITING);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      // when
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      // then
+      then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // any() 로 두면 publishEvent(ApplicationEvent) 오버로드로 묶여 이 이벤트의 발행을 보지 못한다.
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolCancelledEvent.class));
     }
 
     @Test

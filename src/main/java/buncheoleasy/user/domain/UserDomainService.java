@@ -20,12 +20,11 @@ public class UserDomainService {
   private final UserServiceTermRepository userServiceTermRepository;
   private final RandomNicknameGenerator nicknameGenerator;
   private final Clock clock;
-  private final C2cHostingProperties c2cHostingProperties;
 
   /**
    * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
    * 않는다 — 마이페이지에서 수정한 값을 보호한다. 단 연령대는 예외: 마이페이지 수정 대상이 아니고 시간이 지나면 구간이 바뀌므로 재로그인 때마다 카카오 최신값으로
-   * 갱신한다(기존 가입자의 추가 동의 수집 경로 — docs/50).
+   * 갱신한다.
    */
   @Transactional
   public User getOrCreateBySocialLogin(
@@ -37,15 +36,30 @@ public class UserDomainService {
       final boolean ageRangeWithdrawn) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .map(user -> refreshAgeRange(user, ageRange, ageRangeWithdrawn))
+        .map(user -> applyAgeRange(user, ageRange, ageRangeWithdrawn))
         .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
   }
 
+  /** 연령대 추가 동의 결과를 가입한 회원에게 반영하고, 반영 뒤 회원에게 연령대가 있는지 돌려준다. */
+  @Transactional
+  public AgeRangeRefreshResult refreshAgeRange(
+      final SocialInfo socialInfo, final String ageRange, final boolean ageRangeWithdrawn) {
+    return userRepository
+        .findBySocialInfo(socialInfo)
+        .map(user -> applyAgeRange(user, ageRange, ageRangeWithdrawn))
+        .map(
+            user ->
+                user.getAgeRange() != null
+                    ? AgeRangeRefreshResult.PRESENT
+                    : AgeRangeRefreshResult.ABSENT)
+        .orElse(AgeRangeRefreshResult.NO_MEMBER);
+  }
+
   /**
-   * 재로그인 시 연령대를 카카오 최신 상태로 맞춘다 — 철회 확정 신호가 오면 지체 없이 파기(PIPA), 새 값이 오면 갱신, 신호가 없으면(미동의였던 그대로·조회
-   * 실패) 기존 값을 유지한다.
+   * 연령대를 카카오 최신 상태로 맞춘다 — 철회 확정 신호가 오면 지체 없이 파기(PIPA), 새 값이 오면 갱신, 신호가 없으면(미동의였던 그대로·조회 실패) 기존
+   * 값을 유지한다.
    */
-  private User refreshAgeRange(
+  private User applyAgeRange(
       final User user, final String ageRange, final boolean ageRangeWithdrawn) {
     if (ageRangeWithdrawn) {
       user.clearAgeRange();
@@ -126,14 +140,8 @@ public class UserDomainService {
    *
    * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
    * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
-   *
-   * <p>오픈 스위치({@link C2cHostingProperties})를 <b>가장 먼저</b> 본다. 미오픈은 사용자가 무엇을 채워도 해소되지 않으므로, 뒤에 두면
-   * "전화번호를 등록하세요" 처럼 <b>고쳐도 열리지 않는 안내</b>를 먼저 보여주게 된다.
    */
   public C2cHostQualification evaluateC2cHostQualification(final Long id) {
-    if (!c2cHostingProperties.enabled()) {
-      return C2cHostQualification.NOT_OPEN_YET;
-    }
     User user = getUser(id);
     if (!user.isProfileCompleted()) {
       return C2cHostQualification.PHONE_REQUIRED;
@@ -159,7 +167,6 @@ public class UserDomainService {
     ErrorCode errorCode =
         switch (qualification) {
           case QUALIFIED -> null;
-          case NOT_OPEN_YET -> ErrorCode.C2C_HOSTING_NOT_OPEN;
           case PHONE_REQUIRED -> ErrorCode.USER_PROFILE_IS_NOT_COMPLETE;
           case AGE_UNVERIFIED -> ErrorCode.USER_AGE_NOT_VERIFIED;
           case NOT_ADULT -> ErrorCode.USER_NOT_ADULT;

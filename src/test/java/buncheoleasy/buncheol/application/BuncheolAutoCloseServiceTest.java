@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -117,6 +118,47 @@ class BuncheolAutoCloseServiceTest {
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
     }
 
+    // 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다 — 리스너가 사람 단위로 묶으려면 한 번에 봐야 한다.
+    @Test
+    void 취소된_참여가_여러_건이어도_사유를_담아_분철_단위로_한_번_발행한다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CANCELLED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      // cascade 재조회에는 ORDER BY 가 없다. 순서를 뒤섞어 발행 쪽 정렬을 확인한다.
+      Participation later = mock(Participation.class);
+      given(later.getId()).willReturn(703L);
+      Participation earlier = mock(Participation.class);
+      given(earlier.getId()).willReturn(701L);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+
+      buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(701L, 703L), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
+    }
+
+    @Test
+    void cascade_로_취소된_참여가_없으면_취소_이벤트를_발행하지_않는다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CANCELLED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isTrue();
+      then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
+      // any() 로 두면 publishEvent(ApplicationEvent) 오버로드로 묶여 이 이벤트의 발행을 보지 못한다.
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolCancelledEvent.class));
+    }
+
     @Test
     void CAS_마감에_실패하면_후속_처리_없이_false를_반환한다() {
       // 플로우 분기용 선조회만 있고(isC2c=false 기본값), CAS 실패 후 상태 재조회·후속 처리는 없다.
@@ -165,8 +207,45 @@ class BuncheolAutoCloseServiceTest {
       then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
       // 개최자 취소 경로와 대칭 — 안 닫으면 마감된 분철에 활성 묶음이 영구히 남는다.
       then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
-      then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
+      // 참여자는 「개최자가 확정하지 않았어요」 안내를 받아야 한다 — 사유가 바뀌면 다른 문안이 나간다.
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(702L), BuncheolCancelReason.NOT_FINALIZED));
       then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
+    }
+
+    // 최소 인원 미달이면 확정 유예를 기다리지 않고 취소한다. 사유는 미성사가 아니라 인원 미달이다.
+    @Test
+    void C2C_분철이_최소_인원_미달이면_인원_미달_사유로_취소_이벤트를_발행한다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getMinHeadcount()).willReturn(4);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      Participation later = mock(Participation.class);
+      given(later.getId()).willReturn(705L);
+      Participation earlier = mock(Participation.class);
+      given(earlier.getId()).willReturn(704L);
+      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+      given(buncheolDomainService.cancelUnconfirmedC2c(BUNCHEOL_ID, NOW)).willReturn(true);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(later, earlier));
+
+      boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      assertThat(result).isTrue();
+      ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
+          ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue())
+          .isEqualTo(
+              new BuncheolCancelledEvent(
+                  BUNCHEOL_ID, List.of(704L, 705L), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
     }
   }
 }

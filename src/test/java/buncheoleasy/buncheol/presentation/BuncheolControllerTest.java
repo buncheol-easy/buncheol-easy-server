@@ -830,7 +830,8 @@ class BuncheolControllerTest {
               List.of("민지"),
               List.of("민지"),
               false,
-              false);
+              false,
+              Instant.parse("2026-05-15T08:00:00Z"));
       CursorResponse<BuncheolSummaryResponse> response =
           new CursorResponse<>(List.of(item), null, false);
 
@@ -847,6 +848,8 @@ class BuncheolControllerTest {
           .perform(get("/v1/buncheols"))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.items[0].bookmarked").value(false))
+          // 클라가 Date.parse 로 '신규' 배지를 판정하므로 숫자 타임스탬프가 아닌 ISO-8601 문자열이어야 한다.
+          .andExpect(jsonPath("$.items[0].createdAt").value("2026-05-15T08:00:00Z"))
           .andExpect(jsonPath("$.hasNext").value(false))
           .andExpect(jsonPath("$.nextCursor").doesNotExist());
     }

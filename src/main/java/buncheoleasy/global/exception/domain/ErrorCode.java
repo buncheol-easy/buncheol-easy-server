@@ -24,7 +24,7 @@ public enum ErrorCode {
   USER_EMAIL_FORMAT_INVALID("USR-009", "올바른 이메일 형식이 아닙니다.", HttpStatus.BAD_REQUEST),
 
   USER_PHONE_NUMBER_REQUIRED("USR-010", "전화번호는 필수입니다.", HttpStatus.BAD_REQUEST),
-  USER_PHONE_NUMBER_LENGTH_INVALID("USR-011", "전화번호는 10자 또는 11자여야 합니다.", HttpStatus.BAD_REQUEST),
+  USER_PHONE_NUMBER_LENGTH_INVALID("USR-011", "전화번호는 11자리여야 합니다.", HttpStatus.BAD_REQUEST),
   USER_PHONE_NUMBER_FORMAT_INVALID(
       "USR-012", "올바른 전화번호 형식이 아닙니다. (예: 01012345678)", HttpStatus.BAD_REQUEST),
 
@@ -62,19 +62,14 @@ public enum ErrorCode {
 
   // LEGACY(운영진 방식) 개최는 운영이 지정한 계정(can_host)만 가능하다.
   USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
-  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(재동의로 해결 가능 — 409)와
-  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "카카오 재동의 유도" 안내를 분기할 수 있다.
+  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(연령대 추가 동의로 해결 가능 — 409)와
+  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "연령대 추가 동의 유도" 안내를 분기할 수 있다.
   USER_AGE_NOT_VERIFIED(
-      "USR-032", "연령대 확인이 필요합니다. 카카오 로그인에서 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
+      "USR-032", "연령대 확인이 필요합니다. 카카오 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
   USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
-  // 회원 개최 오픈 전(서비스 스위치 off). 같은 성격의 선례인 배송비 환급 이벤트 off 가 409
-  // (PAYBACK_NOT_ELIGIBLE) 라 계열을 맞춘다. 503 은 이 서비스에서 "진짜 장애" 와 1:1 로 쓰여 왔고
-  // (5xx 는 S3 업로드 실패·내부 오류 둘뿐), 정상 사용자 동작인 개최 버튼 클릭이 5xx 를 만들면
-  // 오픈 직전 트래픽이 몰리는 시점에 5xx 지표가 통째로 올라간다.
-  C2C_HOSTING_NOT_OPEN(
-      "USR-035", "회원 개최는 아직 오픈 전이에요. 준비되면 공지로 알려드릴게요.", HttpStatus.CONFLICT),
+  // USR-035 는 회원 개최 오픈 스위치(미오픈 차단) 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),

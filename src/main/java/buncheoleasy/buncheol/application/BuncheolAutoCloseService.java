@@ -150,14 +150,16 @@ public class BuncheolAutoCloseService {
     // 취소된 참여의 묶음도 함께 닫는다 (개최자 취소 경로와 같은 이유 — BuncheolService#cancelBuncheol).
     participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
     // 스냅샷이 아니라 cascade 로 실제 전이된 참여만 재조회해 발행 — 그 사이 자발취소·만료된 참여에 중복 알림이 가지 않도록.
-    List<Participation> cancelled =
-        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
+    List<Long> cancelledIds =
+        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId).stream()
+            .map(Participation::getId)
+            .sorted()
+            .toList();
     // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
-    deliveryDomainService.deleteByParticipationIds(
-        cancelled.stream().map(Participation::getId).toList());
-    cancelled.forEach(
-        participation ->
-            eventPublisher.publishEvent(
-                new BuncheolCancelledEvent(participation.getId(), reason)));
+    deliveryDomainService.deleteByParticipationIds(cancelledIds);
+    // 분철 단위로 1번 발행한다 — 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다.
+    if (!cancelledIds.isEmpty()) {
+      eventPublisher.publishEvent(new BuncheolCancelledEvent(buncheolId, cancelledIds, reason));
+    }
   }
 }

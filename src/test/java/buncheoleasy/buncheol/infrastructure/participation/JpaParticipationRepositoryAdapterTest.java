@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -2239,6 +2240,79 @@ class JpaParticipationRepositoryAdapterTest {
       Buncheol buncheol = buncheolRepository.findById(buncheolId).orElseThrow();
       Participation saved = participationRepository.findById(participationId).orElseThrow();
       assertThat(buncheol.isCreatedBeforeFinalize(saved.getCreatedAt())).isTrue();
+    }
+  }
+
+  /**
+   * 개최자가 뺀 자리로 들어온 신청의 FK 위반을 「없는 멤버」로 바꾸는 판별이 실제 메시지에서 맞는지 고정한다. 운영 INSERT 는 H2 로 못
+   * 태우므로(UTC_TIMESTAMP) 같은 FK 를 평범한 INSERT 로 일으켜 <b>Spring 이 번역한 예외의 메시지</b>를 본다.
+   */
+  @Nested
+  @DisplayName("자리 FK 위반 판별 테스트")
+  class MemberSlotForeignKeyTest {
+
+    private static final String SLOT_FK = "fk_participations_buncheol_member";
+
+    private void insertRaw(final Long buncheolId, final Long buncheolMemberId, final Long userId) {
+      jdbcTemplate.update(
+          "INSERT INTO participations (buncheol_id, buncheol_member_id, participant_id, amount,"
+              + " status, flow_type) VALUES (?, ?, ?, 0, 'APPLIED', 'C2C')",
+          buncheolId,
+          buncheolMemberId,
+          userId);
+    }
+
+    @Test
+    void H2_에서_없는_자리를_가리키면_번역된_예외_메시지에_자리_FK_이름이_실린다() {
+      Long buncheolId = createBuncheol();
+      Long removedSlotId = createBuncheolMember(buncheolId) + 9_999L;
+
+      assertThatThrownBy(() -> insertRaw(buncheolId, removedSlotId, participantId))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .isNotInstanceOf(DuplicateKeyException.class)
+          .satisfies(
+              ex ->
+                  assertThat(
+                          JpaParticipationRepositoryAdapter.isViolationOf(
+                              (DataIntegrityViolationException) ex, SLOT_FK))
+                      .isTrue());
+    }
+
+    // 넓게 삼키지 않는다 — 다른 FK 위반(여기선 없는 참여자)은 자리 FK 로 판별되면 안 된다.
+    @Test
+    void H2_에서_다른_FK_위반은_자리_FK_로_판별하지_않는다() {
+      Long buncheolId = createBuncheol();
+      Long slotId = createBuncheolMember(buncheolId);
+
+      assertThatThrownBy(() -> insertRaw(buncheolId, slotId, participantId + 9_999L))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .satisfies(
+              ex ->
+                  assertThat(
+                          JpaParticipationRepositoryAdapter.isViolationOf(
+                              (DataIntegrityViolationException) ex, SLOT_FK))
+                      .isFalse());
+    }
+
+    // MySQL 1452 는 제약 이름을 백틱으로 싣는다(실 DB 로는 못 일으켜 형식만 고정). staging 의 제약 이름은
+    // information_schema 로 fk_participations_buncheol_member 임을 확인했다.
+    @Test
+    void MySQL_1452_형식_메시지에서_자리_FK_를_판별한다() {
+      DataIntegrityViolationException mysqlStyle =
+          new DataIntegrityViolationException(
+              "PreparedStatementCallback; SQL [INSERT INTO participations ...];"
+                  + " Cannot add or update a child row: a foreign key constraint fails"
+                  + " (`buncheoleasy`.`participations`, CONSTRAINT `fk_participations_buncheol_member`"
+                  + " FOREIGN KEY (`buncheol_member_id`) REFERENCES `buncheol_members` (`id`))");
+      DataIntegrityViolationException otherFk =
+          new DataIntegrityViolationException(
+              "PreparedStatementCallback; SQL [INSERT INTO participations ...];"
+                  + " Cannot add or update a child row: a foreign key constraint fails"
+                  + " (`buncheoleasy`.`participations`, CONSTRAINT `fk_participations_user`"
+                  + " FOREIGN KEY (`participant_id`) REFERENCES `users` (`id`))");
+
+      assertThat(JpaParticipationRepositoryAdapter.isViolationOf(mysqlStyle, SLOT_FK)).isTrue();
+      assertThat(JpaParticipationRepositoryAdapter.isViolationOf(otherFk, SLOT_FK)).isFalse();
     }
   }
 }

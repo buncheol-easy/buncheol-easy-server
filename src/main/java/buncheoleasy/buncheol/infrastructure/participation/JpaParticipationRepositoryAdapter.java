@@ -151,6 +151,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       }
       // 멤버 슬롯에 이미 활성 참여가 존재(선착순 마감). uq_participations_active_member 위반.
       throw new BusinessException(ErrorCode.PARTICIPATION_ALREADY_EXISTS);
+    } catch (DataIntegrityViolationException ex) {
+      // 개최자가 자리를 뺀 직후의 경합 — 신청 트랜잭션은 분철 락 전에 스냅샷을 잡아, 락 뒤 자리 조회가 이미 지워진
+      // 자리를 보고 통과할 수 있다. FK 가 막은 그 경우만 「없는 멤버」로 바꾸고 다른 제약 위반은 그대로 올린다.
+      if (isViolationOf(ex, "fk_participations_buncheol_member")) {
+        throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
+      }
+      throw ex;
     }
     if (affected == 0) {
       return false;

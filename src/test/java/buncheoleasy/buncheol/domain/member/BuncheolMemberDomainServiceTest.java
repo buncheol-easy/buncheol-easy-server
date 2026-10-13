@@ -18,6 +18,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -188,6 +190,27 @@ class BuncheolMemberDomainServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
 
       then(buncheolMemberRepository).should(never()).reopenIfClosed(any(), any(), anyLong());
+    }
+
+    @Test
+    void 가격_바꾸기는_가격을_먼저_검사하고_조건부_UPDATE_를_부른다() {
+      given(buncheolMemberRepository.changePriceIfUnoccupied(7L, 1L, 15_000L)).willReturn(true);
+
+      assertThat(buncheolMemberDomainService.changePriceIfUnoccupied(7L, 1L, 15_000L)).isTrue();
+    }
+
+    // UPDATE 는 엔티티 검증을 거치지 않는다 — 개최와 같은 가격 규칙을 여기서 지켜야 한다.
+    @ParameterizedTest
+    @ValueSource(longs = {15_050L, -100L})
+    void 가격_바꾸기_가격이_규칙에_어긋나면_쓰지_않고_거부한다(final long price) {
+      assertThatThrownBy(() -> buncheolMemberDomainService.changePriceIfUnoccupied(7L, 1L, price))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
+
+      then(buncheolMemberRepository)
+          .should(never())
+          .changePriceIfUnoccupied(any(), any(), anyLong());
     }
 
     @Test

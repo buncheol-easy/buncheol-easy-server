@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.presentation;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -28,6 +29,7 @@ import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTermsChange;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
@@ -663,6 +665,87 @@ class BuncheolControllerTest {
           .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
+    // 옛 클라이언트는 조건 칸을 모른다 — 전부 null(유지)로 서비스에 닿아야 배포 전과 결과가 같다.
+    @Test
+    void 조건_칸이_없는_요청은_조건을_전부_null_로_넘긴다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .modifyBuncheol(
+              eq(HOST_ID),
+              eq(10L),
+              argThat(
+                  request ->
+                      request.title().equals("수정 분철 제목")
+                          && request.toTermsChange().equals(BuncheolTermsChange.none())),
+              any());
+    }
+
+    @Test
+    void 조건_칸을_실으면_그대로_서비스에_넘긴다() throws Exception {
+      String json =
+          """
+          {
+            "title": "수정 분철 제목",
+            "keepImageIds": [1],
+            "thumbnailImageId": 1,
+            "deadline": "2026-10-20T03:00:00Z",
+            "minHeadcount": 2,
+            "gs25ShippingFee": null,
+            "cuShippingFee": 2500,
+            "purchaseSite": "새 구매처"
+          }
+          """;
+      MockMultipartFile requestPart =
+          new MockMultipartFile("request", "", MediaType.APPLICATION_JSON_VALUE, json.getBytes());
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .modifyBuncheol(
+              eq(HOST_ID),
+              eq(10L),
+              argThat(
+                  request ->
+                      request
+                          .toTermsChange()
+                          .equals(
+                              new BuncheolTermsChange(
+                                  Instant.parse("2026-10-20T03:00:00Z"),
+                                  2,
+                                  null,
+                                  2500,
+                                  "새 구매처"))),
+              any());
+    }
+
+    @Test
+    void 신청자가_있어_조건을_못_바꾸면_409와_전용_코드를_반환한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT))
+          .given(buncheolService)
+          .modifyBuncheol(eq(HOST_ID), eq(10L), any(), any());
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(containsString(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT.getCode())));
+    }
+
     @Test
     void BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
       // given
@@ -795,6 +878,58 @@ class BuncheolControllerTest {
               content()
                   .string(
                       containsString(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 빈 자리 가격 바꾸기 API 테스트")
+  class ChangeMemberPriceTest {
+
+    private ResultActions perform(final String body) throws Exception {
+      return mockMvc.perform(
+          patch("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(body)
+              .with(mockAuth()));
+    }
+
+    @Test
+    void 가격을_바꾸면_204를_반환한다() throws Exception {
+      perform("{\"price\": 15000}").andExpect(status().isNoContent());
+
+      then(buncheolService).should().changeMemberPrice(HOST_ID, 10L, 7L, 15_000L);
+    }
+
+    @Test
+    void 가격이_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).changeMemberPrice(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void 가격이_음수면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"price\": -100}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).changeMemberPrice(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void 신청자가_있는_자리면_409와_전용_코드를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED))
+          .given(buncheolService)
+          .changeMemberPrice(HOST_ID, 10L, 7L, 15_000L);
+
+      perform("{\"price\": 15000}")
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      containsString(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED.getCode())));
     }
   }
 

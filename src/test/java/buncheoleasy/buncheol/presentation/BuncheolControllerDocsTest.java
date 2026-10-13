@@ -109,7 +109,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
           "title": "뉴진스 1집 분철 (수정)",
           "description": "공식 스토어 단독 구성",
           "keepImageIds": [1, 2],
-          "thumbnailImageId": 2
+          "thumbnailImageId": 2,
+          "deadline": "2026-10-20T03:00:00Z",
+          "minHeadcount": 2,
+          "gs25ShippingFee": 3000,
+          "cuShippingFee": null,
+          "purchaseSite": "공식 스토어"
         }
         """;
   }
@@ -237,7 +242,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             """
                             multipart/form-data PUT.
 
-                            모집중(RECRUITING)이고 마감 전인 분철만 수정 가능하며, 제목·설명·이미지·오픈채팅 링크만 변경할 수 있다.
+                            모집중(RECRUITING)이고 마감 전인 분철만 수정 가능하다. 제목·설명·이미지·오픈채팅 링크는 신청자가 있어도
+                            바꿀 수 있고, **거래 조건**(마감·최소 인원·배송비·구매처)은 **활성 신청(신청·입금 확인 중·보냈어요·확정)이
+                            0건인 회원 개최(C2C) 분철**에서만 바꿀 수 있다. 바꿀 수 있는지는 상세 응답 `termsEditable` 로 미리 알 수 있다.
 
                             **request 파트** (application/json, 필수)
                             ```json
@@ -247,9 +254,25 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "keepImageIds": [Long],         // 유지할 기존 이미지 ID
                               "thumbnailImageId": Long?,      // 유지 이미지 중 대표사진으로 지정할 ID (keepImageIds 에 포함돼야 함)
                               "thumbnailIndex": Integer?,     // 신규 images 파트 중 대표사진으로 쓸 인덱스(0-base) — 둘 중 정확히 하나 필수
-                              "openChatUrl": String?          // null = 기존 값 유지, 빈 문자열/공백 = 링크 제거, 값 = https://open.kakao.com/ 형식 검증 후 교체
+                              "openChatUrl": String?,         // null = 기존 값 유지, 빈 문자열/공백 = 링크 제거, 값 = https://open.kakao.com/ 형식 검증 후 교체
+                              "deadline": Instant?,           // 거래 조건(선택). 미래·매시 정각(UTC ISO-8601). 상한 없음
+                              "minHeadcount": Integer?,       // 거래 조건(선택). 1 이상·열린 자리 수(개최자가 닫은 자리 제외) 이하
+                              "gs25ShippingFee": Integer?,    // 거래 조건(선택). 배송비 두 칸은 한 묶음 — 아래 참고
+                              "cuShippingFee": Integer?,
+                              "purchaseSite": String?         // 거래 조건(선택). 1~200자
                             }
                             ```
+
+                            **거래 조건 칸 해석**
+                            - 칸이 `null`(또는 생략)이면 지금 값을 유지한다. 조건 칸을 하나도 보내지 않는 요청은 이 칸들이 생기기 전과 같다.
+                            - **지금 값과 다를 때만 바뀐 것으로 본다.** 지금 값을 그대로 실어 보내면 신청자가 있어도·운영진 개최(LEGACY)여도
+                              거부하지 않는다(화면이 조건 칸을 늘 함께 보내도 제목 수정이 막히지 않게).
+                            - 배송비는 `gs25ShippingFee`·`cuShippingFee` 둘 다 `null` 이면 유지, **하나라도 오면 정책 전체를 바꾼다** —
+                              안 보낸 쪽은 「지원 안 함」이 된다(개최와 같은 해석, 0원 = 무료 배송).
+                            - 바뀐 칸만 개최와 같은 규칙으로 검증한다.
+                            - 신청 여부 판정과 조건 쓰기는 한 조건부 UPDATE 다. 저장 직전에 신청이 들어오면 `409 BCH-124` 이고
+                              제목·이미지 등 이 요청의 다른 변경도 모두 반영되지 않는다.
+                            - 자리별 가격은 이 API 가 아니라 `PATCH /v1/buncheols/{id}/members/{buncheolMemberId}` 로 바꾼다.
 
                             **images 파트** (선택): 새로 업로드할 이미지 파일 목록.
                             `keepImageIds`(해당 분철의 실제 이미지여야 함) + 새 이미지 합이 **최소 1장 ~ 최대 5장** 이어야 한다. 즉 수정 후에도
@@ -273,6 +296,18 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-083` (`BUNCHEOL_THUMBNAIL_REQUIRED`) | 대표사진 지정(`thumbnailImageId`/`thumbnailIndex`) 누락 |
                             | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 새 이미지 파일명이 없거나 확장자가 없음 |
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 새 이미지가 한 장이라도 있음 — 아무것도 바꾸지 않는다(기존 이미지 유지) |
+                            | 400 | `BCH-003` (`BUNCHEOL_DEADLINE_INVALID`) | 바꾼 `deadline` 이 현재 시각 이후가 아님 |
+                            | 400 | `BCH-004` (`BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR`) | 바꾼 `deadline` 이 매시 정각이 아님 |
+                            | 400 | `BCH-008` (`BUNCHEOL_MIN_HEADCOUNT_INVALID`) | 바꾼 `minHeadcount` 가 1 미만 |
+                            | 400 | `BCH-123` (`BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS`) | 바꾼 `minHeadcount` 가 열린 자리 수보다 큼 |
+                            | 400 | `BCH-007` (`BUNCHEOL_SHIPPING_FEE_INVALID`) | 배송비가 음수 |
+                            | 400 | `BCH-001` (`BUNCHEOL_REQUIRED_FIELD_MISSING`) | 바꾼 `purchaseSite` 가 빈 문자열·공백 |
+                            | 400 | `BCH-002` (`BUNCHEOL_TEXT_LENGTH_INVALID`) | 바꾼 `purchaseSite` 가 200자 초과 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중이 아니거나 마감이 지남 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철의 거래 조건을 바꾸려 함 |
+                            | 409 | `BCH-124` (`BUNCHEOL_TERMS_EDIT_HAS_APPLICANT`) | 활성 신청이 있는데 거래 조건을 바꾸려 함 (저장 직전에 들어온 신청 포함) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
@@ -965,6 +1000,63 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             parameterWithName("id").description("분철 ID"),
                             parameterWithName("buncheolMemberId")
                                 .description("뺄 자리 ID (상세 `members[].buncheolMemberId`)"))
+                        .build())));
+  }
+
+  @Test
+  void C2C_자리_가격_바꾸기() throws Exception {
+    mockMvc
+        .perform(
+            patch("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"price\": 15000}")
+                .with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-change-member-price",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("C2C 자리 가격 바꾸기")
+                        .description(
+                            """
+                            C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 빈 자리 하나의 가격을 바꾼다.
+                            자리 id 는 그대로라 그 자리를 열어 둔 화면도 계속 신청할 수 있다(빼고 다시 넣으면 id 가 바뀐다).
+
+                            **그 자리에 활성 신청자(신청·입금 확인 중·보냈어요·확정)가 있으면 바꾸지 않는다** — 그 사람이 보고 신청한
+                            가격이다. 다른 자리에 신청자가 있는 것은 상관없다. 판정과 쓰기는 한 조건부 UPDATE 라, 저장 직전에 그 자리에
+                            신청이 들어오면 `409 BCH-125` 다.
+
+                            개최자가 닫은 자리(`CLOSED`, 상세 `saleStatus` 「마감」)는 바꾸지 않는다 — `POST /v1/buncheols/{id}/members`
+                            (다시 넣기)가 가격을 받아 연다.
+
+                            `minHeadcount` 등 분철 조건은 바꾸지 않는다.
+
+                            **권한**: 해당 분철의 **개최자 본인만**. 회원 개최(C2C) 분철만 지원한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `price` 누락 또는 음수 |
+                            | 400 | `BCH-027` (`BUNCHEOL_MEMBER_PRICE_INVALID`) | `price` 가 100원 단위가 아님 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
+                            | 409 | `BCH-125` (`BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED`) | 그 자리에 신청자가 있거나 닫힌 자리 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(
+                            parameterWithName("id").description("분철 ID"),
+                            parameterWithName("buncheolMemberId")
+                                .description("가격을 바꿀 자리 ID (상세 `members[].buncheolMemberId`)"))
+                        .requestSchema(Schema.schema("BuncheolMemberPriceRequest"))
+                        .requestFields(
+                            fieldWithPath("price")
+                                .type(JsonFieldType.NUMBER)
+                                .description("멤버 1명당 새 금액. 0 이상·100원 단위 (개최와 같은 규칙)"))
                         .build())));
   }
 

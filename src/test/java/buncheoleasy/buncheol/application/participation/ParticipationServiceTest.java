@@ -806,7 +806,7 @@ class ParticipationServiceTest {
       given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       given(
@@ -886,7 +886,7 @@ class ParticipationServiceTest {
       given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
       given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       given(
@@ -928,7 +928,7 @@ class ParticipationServiceTest {
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheol.getStatus()).willReturn(status);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       return buncheol;
@@ -1189,7 +1189,7 @@ class ParticipationServiceTest {
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheol.getStatus()).willReturn(status);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
       return buncheol;
@@ -1292,7 +1292,7 @@ class ParticipationServiceTest {
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheol.getStatus()).willReturn(BuncheolStatus.CONFIRMED);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
 
@@ -1822,7 +1822,7 @@ class ParticipationServiceTest {
       given(buncheol.isC2c()).willReturn(true);
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       return buncheol;
     }
 
@@ -1906,7 +1906,7 @@ class ParticipationServiceTest {
       given(buncheol.isC2c()).willReturn(true);
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       return buncheol;
     }
 
@@ -1999,6 +1999,119 @@ class ParticipationServiceTest {
           .should(never())
           .validateForParticipation(any(), any(), any());
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 신청 — 분철 락 뒤 최신 값 테스트")
+  class LatestValueAfterLockTest {
+
+    private static final long CHANGED_SHIPPING_FEE = 2_000L;
+
+    /** 락 이전에 읽힌 분철. 상태만 본다 — 돈 판정에 쓰이면 안 된다. */
+    private Buncheol loadedBeforeLock(final BuncheolStatus status) {
+      Buncheol loaded = mock(Buncheol.class);
+      given(loaded.isC2c()).willReturn(true);
+      given(loaded.getStatus()).willReturn(status);
+      given(loaded.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(loaded);
+      return loaded;
+    }
+
+    /** 락과 함께 다시 읽은 최신 분철. 실제로는 같은 인스턴스가 다시 채워지지만, 값이 다름을 보이려고 따로 둔다. */
+    private Buncheol latestAfterLock(final BuncheolStatus status) {
+      Buncheol latest = mock(Buncheol.class);
+      given(latest.getId()).willReturn(BUNCHEOL_ID);
+      given(latest.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(latest.getStatus()).willReturn(status);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(latest);
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      return latest;
+    }
+
+    // 🔴 개최자가 신청자 0명일 때 배송비를 바꾼 직후 첫 신청이 들어온 경우. 락 이전 값을 쓰면 옛 배송비가 묶음에 새겨지고
+    // updatable=false 라 되돌릴 수 없다. 락 전 인스턴스를 그대로 쓰도록 되돌리면 이 테스트가 깨진다.
+    @Test
+    void 락_뒤_다시_읽은_배송비로_새_묶음을_연다() {
+      Buncheol loaded = loadedBeforeLock(BuncheolStatus.RECRUITING);
+      Buncheol latest = latestAfterLock(BuncheolStatus.RECRUITING);
+      given(latest.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(CHANGED_SHIPPING_FEE);
+      given(participationDomainService.findInheritanceSource(latest, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, latest, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      givenParticipantAccount();
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember()));
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(
+              any(),
+              isNull(),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(CHANGED_SHIPPING_FEE),
+              any(),
+              isNull(),
+              eq(NOW));
+      then(loaded).should(never()).shippingFeeFor(any());
+    }
+
+    // 락을 기다리는 사이 성사 확정됐다 — 이전 값으로 진행했어도 조건부 INSERT 가 막았던 경우라 결과(BCH-060)가 같다.
+    @Test
+    void 락을_기다리는_사이_상태가_바뀌면_신청을_받지_않는다() {
+      loadedBeforeLock(BuncheolStatus.RECRUITING);
+      latestAfterLock(BuncheolStatus.PAYMENT_COLLECTING);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+    }
+
+    // 🔴 다중 신청은 모집중 전용이다(합산 응답이 추가 모집에서는 거짓). 그 가드는 락 이전 값으로 판정하므로, 락 뒤 최신 상태가
+    // 입금 수집중이면 추가 모집 분기로 새지 않고 거절돼야 한다. 상태 비교를 지우면 이 테스트가 깨진다.
+    @Test
+    void 다중_신청은_락_사이_성사_확정되면_추가_모집으로_새지_않는다() {
+      loadedBeforeLock(BuncheolStatus.RECRUITING);
+      latestAfterLock(BuncheolStatus.PAYMENT_COLLECTING);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID,
+                      PARTICIPANT_ID,
+                      new ParticipateRequest(
+                          null,
+                          List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID),
+                          SHIPPING_ADDRESS_ID,
+                          null,
+                          null)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+      then(participationBundleDomainService)
+          .should(never())
+          .attach(any(), any(), any(), anyLong(), any(), any(), any());
     }
   }
 }

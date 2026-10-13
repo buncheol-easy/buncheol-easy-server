@@ -650,6 +650,165 @@ class BuncheolTest {
     }
   }
 
+  @Nested
+  @DisplayName("거래 조건 수정 테스트")
+  class TermsChangeTest {
+
+    private static final Instant NOW = Instant.parse("2026-10-13T03:20:00Z");
+    private static final Instant DEADLINE = Instant.parse("2026-10-20T03:00:00Z");
+
+    // 지금 조건: 마감 DEADLINE · 최소 2 · GS25 3,000 (CU 미지원) · 구매처 "공식 스토어".
+    private Buncheol c2c() {
+      return Buncheol.create(
+          HOST_ID,
+          new BuncheolParams(
+              1L, "조건 분철", null, "공식 스토어", DEADLINE, 2, 3000, null, FlowType.C2C, null),
+          NOW);
+    }
+
+    private BuncheolTermsChange change(
+        final Instant deadline,
+        final Integer minHeadcount,
+        final Integer gs25,
+        final Integer cu,
+        final String purchaseSite) {
+      return new BuncheolTermsChange(deadline, minHeadcount, gs25, cu, purchaseSite);
+    }
+
+    @Test
+    void 조건_칸을_하나도_보내지_않으면_바뀐_것이_없다() {
+      assertThat(c2c().changesTerms(BuncheolTermsChange.none())).isFalse();
+    }
+
+    // 수정 화면이 조건 칸을 늘 함께 보내도 신청자가 있는 분철의 제목 수정이 막히지 않아야 한다.
+    @Test
+    void 지금_값을_그대로_보내면_바뀐_것이_없다() {
+      assertThat(c2c().changesTerms(change(DEADLINE, 2, 3000, null, "공식 스토어"))).isFalse();
+    }
+
+    @Test
+    void 칸_하나라도_다르면_바뀐_것이다() {
+      Buncheol buncheol = c2c();
+
+      assertThat(buncheol.changesTerms(change(DEADLINE.plusSeconds(3600), null, null, null, null)))
+          .isTrue();
+      assertThat(buncheol.changesTerms(change(null, 3, null, null, null))).isTrue();
+      assertThat(buncheol.changesTerms(change(null, null, 2500, null, null))).isTrue();
+      assertThat(buncheol.changesTerms(change(null, null, null, null, "다른 스토어"))).isTrue();
+    }
+
+    // 배송비는 한 묶음이다 — 하나만 보내면 안 보낸 쪽은 「지원 안 함」이 된다.
+    @Test
+    void 배송비를_하나만_보내면_나머지는_지원_안_함으로_본다() {
+      Buncheol buncheol = c2c();
+
+      assertThat(buncheol.changesTerms(change(null, null, null, 2000, null))).isTrue();
+      BuncheolTerms terms = buncheol.applyTermsChange(change(null, null, null, 2000, null), NOW);
+
+      assertThat(terms.shippingFeePolicy()).isEqualTo(ShippingFeePolicy.of(null, 2000));
+    }
+
+    @Test
+    void 보내지_않은_칸은_지금_값으로_채운다() {
+      BuncheolTerms terms = c2c().applyTermsChange(change(null, 1, null, null, null), NOW);
+
+      assertThat(terms)
+          .isEqualTo(new BuncheolTerms(DEADLINE, 1, ShippingFeePolicy.of(3000, null), "공식 스토어"));
+    }
+
+    @Test
+    void 엔티티는_바꾸지_않는다() {
+      Buncheol buncheol = c2c();
+
+      buncheol.applyTermsChange(
+          change(DEADLINE.plusSeconds(3600), 1, 0, 0, "다른 스토어"), NOW);
+
+      assertThat(buncheol.getDeadline()).isEqualTo(DEADLINE);
+      assertThat(buncheol.getMinHeadcount()).isEqualTo(2);
+      assertThat(buncheol.getShippingFeePolicy()).isEqualTo(ShippingFeePolicy.of(3000, null));
+      assertThat(buncheol.getPurchaseSite()).isEqualTo("공식 스토어");
+    }
+
+    @Test
+    void 지난_마감은_개최와_같은_코드로_거부한다() {
+      assertThatThrownBy(
+              () -> c2c().applyTermsChange(change(NOW.minusSeconds(1200), null, null, null, null), NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_DEADLINE_INVALID);
+    }
+
+    @Test
+    void 정각이_아닌_마감은_개최와_같은_코드로_거부한다() {
+      assertThatThrownBy(
+              () ->
+                  c2c()
+                      .applyTermsChange(
+                          change(DEADLINE.plusSeconds(1800), null, null, null, null), NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1})
+    void 최소_인원이_1_미만이면_거부한다(final int minHeadcount) {
+      assertThatThrownBy(
+              () -> c2c().applyTermsChange(change(null, minHeadcount, null, null, null), NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_INVALID);
+    }
+
+    @Test
+    void 배송비가_음수면_거부한다() {
+      assertThatThrownBy(() -> c2c().applyTermsChange(change(null, null, -100, null, null), NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_SHIPPING_FEE_INVALID);
+    }
+
+    @Test
+    void 빈_구매처는_거부한다() {
+      assertThatThrownBy(() -> c2c().applyTermsChange(change(null, null, null, null, "  "), NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    void 구매처가_200자를_넘으면_거부한다() {
+      assertThatThrownBy(
+              () -> c2c().applyTermsChange(change(null, null, null, null, "가".repeat(201)), NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_TEXT_LENGTH_INVALID);
+    }
+
+    // 바뀌지 않은 칸은 검증하지 않는다 — 지금 마감이 그 사이 「지금」에 가까워졌어도 그대로 실어 보낸 값으로 거부하지 않는다.
+    @Test
+    void 바뀌지_않은_마감은_다시_검증하지_않는다() {
+      Instant nearDeadline = DEADLINE.minusSeconds(1);
+
+      BuncheolTerms terms = c2c().applyTermsChange(change(DEADLINE, 1, null, null, null), nearDeadline);
+
+      assertThat(terms.deadline()).isEqualTo(DEADLINE);
+      assertThat(terms.minHeadcount()).isEqualTo(1);
+    }
+
+    @Test
+    void 수정_가능_판정은_지금_상태_방식_마감을_쓴다() {
+      Buncheol buncheol = c2c();
+
+      assertThat(buncheol.termsEditability(NOW, false))
+          .isEqualTo(BuncheolTermsEditability.EDITABLE);
+      assertThat(buncheol.termsEditability(NOW, true))
+          .isEqualTo(BuncheolTermsEditability.BLOCKED_BY_APPLICANT);
+      assertThat(buncheol.termsEditability(DEADLINE, false))
+          .isEqualTo(BuncheolTermsEditability.BLOCKED_BY_STATUS);
+    }
+  }
+
   private void setFinalizedAt(final Buncheol buncheol, final Instant finalizedAt) {
     try {
       Field field = Buncheol.class.getDeclaredField("finalizedAt");

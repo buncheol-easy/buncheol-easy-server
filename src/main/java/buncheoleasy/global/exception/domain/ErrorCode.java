@@ -262,6 +262,14 @@ public enum ErrorCode {
   BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS(
       "BCH-123", "최소 진행 인원은 대상 멤버 수 이하로 정해 주세요.", HttpStatus.BAD_REQUEST),
 
+  // ── 신청자 0명 C2C 분철의 조건 수정 ──
+  // 마감·최소 인원·배송비·구매처는 신청자가 보고 신청한 거래 조건이라, 활성 신청이 하나라도 있으면 바꾸지 않는다.
+  BUNCHEOL_TERMS_EDIT_HAS_APPLICANT(
+      "BCH-124", "신청자가 있어 마감·최소 인원·배송비·구매처는 바꿀 수 없어요.", HttpStatus.CONFLICT),
+  // 빼기(BCH-118)와 같은 규칙 — 신청자가 본 가격은 바꾸지 않는다. 닫힌 자리는 다시 넣기로 가격과 함께 연다.
+  BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED(
+      "BCH-125", "신청자가 있거나 마감한 자리는 가격을 바꿀 수 없어요.", HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

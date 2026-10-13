@@ -18,6 +18,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -243,6 +244,61 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     if (!deadline.isAfter(now)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
+  }
+
+  /** 개최자가 지금 거래 조건을 바꿀 수 있는지 — 수정 API 사전 검사와 상세 응답이 같은 판정을 쓴다. */
+  public BuncheolTermsEditability termsEditability(
+      final Instant now, final boolean hasActiveParticipation) {
+    return BuncheolTermsEditability.of(status, flowType, deadline, now, hasActiveParticipation);
+  }
+
+  /**
+   * 요청이 거래 조건을 <b>실제로</b> 바꾸는가. 지금 값을 그대로 실어 보낸 칸은 바뀐 것으로 보지 않는다 — 수정 화면이 조건 칸을 늘 함께
+   * 보내도, 신청자가 있는 분철의 제목·설명 수정이 막히지 않게 한다.
+   */
+  public boolean changesTerms(final BuncheolTermsChange change) {
+    return differs(change.deadline(), deadline)
+        || differs(change.minHeadcount(), minHeadcount)
+        || (change.replacesShippingFee()
+            && !(Objects.equals(change.gs25ShippingFee(), shippingFeePolicy.gs25ShippingFee())
+                && Objects.equals(change.cuShippingFee(), shippingFeePolicy.cuShippingFee())))
+        || differs(change.purchaseSite(), purchaseSite);
+  }
+
+  /**
+   * 요청의 조건 칸을 지금 조건에 덮은 새 조건. 바뀐 칸만 개최와 같은 규칙으로 검증한다(마감 = 미래·정각, 최소 인원 ≥ 1, 배송비 = 하나
+   * 이상·0 이상, 구매처 = 필수·200자).
+   *
+   * <p>엔티티는 바꾸지 않는다 — 쓰기는 조건부 UPDATE({@link BuncheolRepository#changeTermsIfNoApplicant})로 한다. 더티체킹으로 쓰면
+   * 신청 여부 판정과 쓰기가 한 문장이 아니게 되고, flush 가 다른 CAS 가 바꾼 칸과 겹친다(이 엔티티의 {@code @DynamicUpdate} 주석).
+   * 최소 인원 ≤ 열린 자리 수는 자리를 읽어야 해서 호출 측이 본다.
+   */
+  public BuncheolTerms applyTermsChange(final BuncheolTermsChange change, final Instant now) {
+    Instant newDeadline = deadline;
+    if (differs(change.deadline(), deadline)) {
+      validateDeadline(change.deadline(), now);
+      newDeadline = change.deadline();
+    }
+    int newMinHeadcount = minHeadcount;
+    if (differs(change.minHeadcount(), minHeadcount)) {
+      validateMinHeadcount(change.minHeadcount());
+      newMinHeadcount = change.minHeadcount();
+    }
+    ShippingFeePolicy newShippingFeePolicy =
+        change.replacesShippingFee()
+            ? ShippingFeePolicy.of(change.gs25ShippingFee(), change.cuShippingFee())
+            : shippingFeePolicy;
+    String newPurchaseSite = purchaseSite;
+    if (differs(change.purchaseSite(), purchaseSite)) {
+      validatePurchaseSite(change.purchaseSite());
+      newPurchaseSite = change.purchaseSite();
+    }
+    return new BuncheolTerms(newDeadline, newMinHeadcount, newShippingFeePolicy, newPurchaseSite);
+  }
+
+  // null = 보내지 않은 칸(유지).
+  private static boolean differs(final Object requested, final Object current) {
+    return requested != null && !requested.equals(current);
   }
 
   public void validateShippingMethodSupported(final ShippingMethod shippingMethod) {

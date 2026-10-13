@@ -1155,7 +1155,8 @@ class BuncheolControllerTest {
                   new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점")),
               FlowType.LEGACY,
               null,
-              null);
+              null,
+              false);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -1180,7 +1181,8 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))
-          .andExpect(jsonPath("$.myParticipation.participations[0].status").value("AWAITING_PAYMENT"));
+          .andExpect(jsonPath("$.myParticipation.participations[0].status").value("AWAITING_PAYMENT"))
+          .andExpect(jsonPath("$.termsEditable").value(false));
     }
 
     @Test
@@ -1201,7 +1203,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null);
+              null, FlowType.LEGACY, null, null, false);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -1231,7 +1233,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null);
+              null, FlowType.LEGACY, null, null, false);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc

@@ -573,7 +573,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                   new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점")),
               FlowType.LEGACY,
               null,
-              null);
+              null,
+              false);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -617,6 +618,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - `myParticipation.participatedMemberCount` 는 이 분철에서 내가 활성 참여 중인 멤버 슬롯 수
                             - `myParticipation.participations[].participationId` 는 참여 취소·상세 조회 API 호출에 사용
                             - `myParticipation.inheritanceApplies` 가 `true` 면 <b>자리 추가 신청 시 배송지를 고를 수 없다</b> — 첫 신청의 묶음을 재사용하므로 그 주소로 함께 배송된다. 화면은 `inheritedShippingAddress` 를 보여 주고 선택 UI 를 감춘다 (주소가 `null` 이면 빈 상태로 그리되 <b>선택 UI 를 되살리지 말 것</b>)
+                            - `termsEditable` 은 개최자가 지금 거래 조건(마감·최소 인원·배송비·구매처)을 수정 API(`PUT /v1/buncheols/{id}`)로
+                              바꿀 수 있는지다. `true` = 개최자 본인 · 회원 개최(C2C) · 모집중(`RECRUITING`) · 마감 전 · 활성 신청
+                              (신청·입금 확인 중·보냈어요·확정) 0건. 개최자가 아니면 항상 `false`. 조회 시점 값이라 그 사이 신청이 들어오면
+                              저장이 `409 BCH-124` 일 수 있다. 이 필드가 없는 응답(옛 서버)은 `false` 로 읽을 것
 
                             **응답 예시**
                             ```json
@@ -668,7 +673,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 ],
                                 "inheritanceApplies": true,
                                 "inheritedShippingAddress": {"shippingMethod": "GS25_HALF", "storeName": "GS25 강남역점"}
-                              }
+                              },
+                              "termsEditable": false
                             }
                             ```
 
@@ -780,7 +786,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + "신청 단계(APPLIED)부터 노출된다. 미등록이거나 LEGACY 면 null. "
                                         + "**서버 전역 규칙이 아니다** — 취소한 참여자도 `GET /v1/participations/{id}` "
                                         + "와 내 참여 목록에서는 링크를 계속 받는다")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("termsEditable")
+                                .description(
+                                    "개최자가 지금 거래 조건(마감·최소 인원·배송비·구매처)을 수정 API 로 바꿀 수 있는지."
+                                        + " true = 개최자 본인 · C2C · 모집중 · 마감 전 · 활성 신청 0건."
+                                        + " 개최자가 아니면 항상 false. 조회 시점 값이라 저장이 409(BCH-124)일 수 있다"))
                         .build())));
   }
 

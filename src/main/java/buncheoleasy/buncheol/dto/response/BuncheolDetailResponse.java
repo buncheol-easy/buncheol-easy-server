@@ -18,6 +18,9 @@ import java.util.List;
  *     <b>서버 전역 규칙이 아니다</b> — 취소한 참여자도 자기 참여 상세({@code GET /v1/participations/{id}})와 내 참여
  *     목록에서는 링크를 계속 받는다(입금 후 취소된 사람의 개최자 문의 채널). ⚠️ 이 게이트는 차단이 아니라 <b>수집 비용을 올리는</b>
  *     조치다 — 신청은 무입금이고 즉시 취소되므로 신청 → 취득 → 취소 경로는 남는다.
+ * @param termsEditable 개최자가 지금 거래 조건(마감·최소 인원·배송비·구매처)을 바꿀 수 있는지 — 수정 API 와 같은 판정({@code
+ *     BuncheolTermsEditability}). 개최자 본인이 아니면 항상 false. 조회 시점 값이라 저장이 409 일 수 있다. 응답 맨 뒤에 둔다 —
+ *     이 필드를 모르는 클라이언트는 무시하고, 옛 서버 응답에는 없어 클라이언트가 false 로 폴백한다
  */
 public record BuncheolDetailResponse(
     Long id,
@@ -36,4 +39,5 @@ public record BuncheolDetailResponse(
     MyParticipationSummaryResponse myParticipation,
     FlowType flowType,
     Instant paymentDueAt,
-    String openChatUrl) {}
+    String openChatUrl,
+    boolean termsEditable) {}

@@ -101,8 +101,9 @@ public class BuncheolDetailQueryService {
                 .filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED)
                 .count();
 
+    final Instant now = Instant.now(clock);
     // 공석 슬롯을 "신청 가능"으로 내릴지의 기준 — 참여 가드와 같은 도메인 술어를 쓴다 (docs/53 Q-14).
-    boolean openForNewParticipation = buncheol.acceptsNewParticipation(Instant.now(clock));
+    boolean openForNewParticipation = buncheol.acceptsNewParticipation(now);
     // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 그 값이 「제외」 게이트가 보는 값이고,
     // 카드 계약이 "이 시각이 지나면 슬롯이 공석으로 풀린다" 이기 때문이다. 배치 1회로 붙인다.
     // LEGACY 는 dueAtOf 가 조기 반환이라 이 맵을 한 번도 읽지 않는다. 공개 엔드포인트라 헛쿼리를 안 낸다.
@@ -157,6 +158,9 @@ public class BuncheolDetailQueryService {
     // 객체를 돌려주므로, 로그인만 하면 링크가 보이게 된다.
     String visibleOpenChatUrl =
         hostedByMe || !myActiveParticipations.isEmpty() ? buncheol.getOpenChatUrl() : null;
+    // 수정 API 사전 검사와 같은 판정을 이미 읽은 활성 참여로 낸다(추가 쿼리 없음). 최종 차단은 수정 API 의 조건부 UPDATE 다.
+    boolean termsEditable =
+        hostedByMe && buncheol.termsEditability(now, !activeParticipations.isEmpty()).isEditable();
 
     return new BuncheolDetailResponse(
         buncheol.getId(),
@@ -175,7 +179,8 @@ public class BuncheolDetailQueryService {
         myParticipation,
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
-        visibleOpenChatUrl);
+        visibleOpenChatUrl,
+        termsEditable);
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(

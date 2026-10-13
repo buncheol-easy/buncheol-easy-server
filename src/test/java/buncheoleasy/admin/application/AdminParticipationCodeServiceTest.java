@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import buncheoleasy.admin.dto.request.AdminParticipationCodeIssueRequest;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
@@ -116,6 +117,89 @@ class AdminParticipationCodeServiceTest {
         .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
 
     then(buncheolMemberDomainService).should(never()).changeAccessType(any(), any(), any());
+  }
+
+  // CLOSED 는 C2C 개최자 「빼기」 전용 — 운영진이 아무 자리나 닫을 수 있으면 안 된다.
+  @Test
+  void 운영진은_CLOSED_로_바꿀_수_없다() {
+    assertThatThrownBy(
+            () ->
+                adminParticipationCodeService.changeBuncheolMemberAccessType(
+                    BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.CLOSED))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+    then(buncheolMemberDomainService).should(never()).changeAccessType(any(), any(), any());
+  }
+
+  // 🔴 C2C 자리를 OPEN 으로 바꾸면 개최자가 닫은 자리가 말없이 다시 열린다 — 열고 닫기는 개최자 경로만 쥔다.
+  @Test
+  void C2C_분철_자리는_OPEN_으로도_바꿀_수_없다() {
+    Buncheol c2c = newInstance(Buncheol.class);
+    setField(c2c, "flowType", FlowType.C2C);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(c2c);
+
+    assertThatThrownBy(
+            () ->
+                adminParticipationCodeService.changeBuncheolMemberAccessType(
+                    BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.OPEN))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+
+    then(buncheolMemberDomainService).should(never()).changeAccessType(any(), any(), any());
+    then(participationCodeDomainService).should(never()).revokeOutstandingByMember(any(), any());
+  }
+
+  // 기존 C2C 코드 참여 거부(BCH-110)는 그대로 — 새 가드보다 먼저 걸린다.
+  @Test
+  void C2C_분철_코드_참여_전환은_기존_코드로_거부한다() {
+    Buncheol c2c = newInstance(Buncheol.class);
+    setField(c2c, "flowType", FlowType.C2C);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(c2c);
+
+    assertThatThrownBy(
+            () ->
+                adminParticipationCodeService.changeBuncheolMemberAccessType(
+                    BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.CODE_ONLY))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED);
+  }
+
+  // 회귀 — LEGACY 의 OPEN ↔ CODE_ONLY 전환은 그대로 된다.
+  @Test
+  void LEGACY_분철은_선착순으로_되돌리고_남은_코드를_폐기한다() {
+    Buncheol legacy = newInstance(Buncheol.class);
+    setField(legacy, "flowType", FlowType.LEGACY);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(legacy);
+
+    adminParticipationCodeService.changeBuncheolMemberAccessType(
+        BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.OPEN);
+
+    then(buncheolMemberDomainService)
+        .should()
+        .changeAccessType(SLOT_ID, BUNCHEOL_ID, BuncheolMemberAccessType.OPEN);
+    then(participationCodeDomainService).should().revokeOutstandingByMember(SLOT_ID, NOW);
+  }
+
+  @Test
+  void LEGACY_분철의_0원_자리는_코드_참여로_바꾼다() {
+    Buncheol legacy = newInstance(Buncheol.class);
+    setField(legacy, "flowType", FlowType.LEGACY);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(legacy);
+    BuncheolMember freeSlot = codeSlot();
+    setField(freeSlot, "accessType", BuncheolMemberAccessType.OPEN);
+    given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
+        .willReturn(freeSlot);
+
+    adminParticipationCodeService.changeBuncheolMemberAccessType(
+        BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.CODE_ONLY);
+
+    then(buncheolMemberDomainService)
+        .should()
+        .changeAccessType(SLOT_ID, BUNCHEOL_ID, BuncheolMemberAccessType.CODE_ONLY);
   }
 
   @Test

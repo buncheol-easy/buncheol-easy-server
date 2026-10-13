@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
@@ -188,7 +189,7 @@ public class BuncheolDetailQueryService {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     Participation active = activeByMemberId.get(buncheolMember.getId());
     BuncheolMemberSaleStatus saleStatus =
-        toSaleStatus(active, openForNewParticipation, buncheolMember.requiresCode());
+        toSaleStatus(active, openForNewParticipation, buncheolMember.getAccessType());
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
@@ -215,9 +216,9 @@ public class BuncheolDetailQueryService {
   private BuncheolMemberSaleStatus toSaleStatus(
       final Participation active,
       final boolean openForNewParticipation,
-      final boolean requiresCode) {
+      final BuncheolMemberAccessType accessType) {
     if (active == null) {
-      return emptySlotStatus(openForNewParticipation, requiresCode);
+      return emptySlotStatus(openForNewParticipation, accessType);
     }
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
@@ -227,22 +228,28 @@ public class BuncheolDetailQueryService {
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
-      case CANCELLED -> emptySlotStatus(openForNewParticipation, requiresCode);
+      case CANCELLED -> emptySlotStatus(openForNewParticipation, accessType);
     };
   }
 
   /**
    * 공석의 판매 상태 — 신규 참여를 받지 않는 분철에서는 신청 가능한 것처럼 보이면 안 된다 (docs/53 Q-14). 마감을 코드 배정보다
    * 먼저 보는 이유는, 닫힌 분철에서는 코드가 있어도 참여 INSERT 가 막히기 때문이다.
+   *
+   * <p>개최자가 닫은 자리({@code CLOSED} 접근)도 기존 값 {@code CLOSED}(「마감」)로 내려 새 응답 값을 만들지 않는다. 신청을 받는
+   * 분철의 빈 자리가 {@code CLOSED} 면 개최자가 닫은 자리뿐이라 화면이 구분할 수 있다.
    */
   private BuncheolMemberSaleStatus emptySlotStatus(
-      final boolean openForNewParticipation, final boolean requiresCode) {
+      final boolean openForNewParticipation, final BuncheolMemberAccessType accessType) {
     if (!openForNewParticipation) {
       return BuncheolMemberSaleStatus.CLOSED;
     }
-    return requiresCode
-        ? BuncheolMemberSaleStatus.CODE_ONLY
-        : BuncheolMemberSaleStatus.AVAILABLE;
+    // switch 식이라 접근 정책이 늘면 컴파일 에러로 매핑을 강제한다.
+    return switch (accessType) {
+      case OPEN -> BuncheolMemberSaleStatus.AVAILABLE;
+      case CODE_ONLY -> BuncheolMemberSaleStatus.CODE_ONLY;
+      case CLOSED -> BuncheolMemberSaleStatus.CLOSED;
+    };
   }
 
   private MyParticipationSummaryResponse toMyParticipation(

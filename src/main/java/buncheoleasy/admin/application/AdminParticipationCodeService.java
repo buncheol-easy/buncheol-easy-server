@@ -140,6 +140,10 @@ public class AdminParticipationCodeService {
   public void changeBuncheolMemberAccessType(
       final Long buncheolId, final Long buncheolMemberId, final BuncheolMemberAccessType accessType) {
     final Instant now = Instant.now(clock);
+    // CLOSED 는 C2C 개최자 「빼기」 전용 값이다 — 운영진 화면은 OPEN·CODE_ONLY 만 다룬다.
+    if (accessType == BuncheolMemberAccessType.CLOSED) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+    }
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
     if (accessType == BuncheolMemberAccessType.CODE_ONLY) {
       if (buncheol.isC2c()) {
@@ -148,6 +152,10 @@ public class AdminParticipationCodeService {
       if (!buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId).isFree()) {
         throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
       }
+    }
+    // C2C 자리의 열고 닫기는 개최자 「빼기·다시 넣기」가 쥔다 — 여기서 OPEN 으로 바꾸면 개최자가 닫은 자리가 말없이 다시 열린다.
+    if (buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
     buncheolMemberDomainService.changeAccessType(buncheolMemberId, buncheolId, accessType);
     if (accessType == BuncheolMemberAccessType.OPEN) {

@@ -46,11 +46,32 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
       @Param("accessType") BuncheolMemberAccessType accessType,
       @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
 
-  boolean existsByBuncheolIdAndMemberId(Long buncheolId, Long memberId);
+  Optional<BuncheolMember> findByBuncheolIdAndMemberId(Long buncheolId, Long memberId);
+
+  @Lock(LockModeType.PESSIMISTIC_READ)
+  @Query("SELECT m FROM BuncheolMember m WHERE m.id = :id AND m.buncheolId = :buncheolId")
+  Optional<BuncheolMember> findByIdAndBuncheolIdForShare(
+      @Param("id") Long id, @Param("buncheolId") Long buncheolId);
+
+  // updated_at 은 명시하지 않는다 — changeAccessTypeIfUnoccupied 처럼 컬럼의 ON UPDATE CURRENT_TIMESTAMP 가 남긴다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE BuncheolMember m SET m.accessType = :openType, m.price = :price "
+          + "WHERE m.id = :id AND m.buncheolId = :buncheolId AND m.accessType = :closedType")
+  int reopenIfClosed(
+      @Param("id") Long id,
+      @Param("buncheolId") Long buncheolId,
+      @Param("price") long price,
+      @Param("openType") BuncheolMemberAccessType openType,
+      @Param("closedType") BuncheolMemberAccessType closedType);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT m FROM BuncheolMember m WHERE m.buncheolId = :buncheolId")
   List<BuncheolMember> findAllByBuncheolIdForUpdate(@Param("buncheolId") Long buncheolId);
+
+  @Lock(LockModeType.PESSIMISTIC_READ)
+  @Query("SELECT m FROM BuncheolMember m WHERE m.buncheolId = :buncheolId")
+  List<BuncheolMember> findAllByBuncheolIdForShare(@Param("buncheolId") Long buncheolId);
 
   // 🔴 참조 테이블이 늘면 여기에 NOT EXISTS 를 더해야 한다 — FK 로 자리를 가리키는 것은 지금 participations ·
   // participation_codes 둘이다(둘 다 ON DELETE 없음). 빠뜨려도 FK 가 막고 어댑터가 거부로 바꾸지만 안내 문구가 뭉뚱그려진다.

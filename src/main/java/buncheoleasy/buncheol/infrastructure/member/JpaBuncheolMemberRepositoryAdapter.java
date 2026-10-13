@@ -97,13 +97,37 @@ public class JpaBuncheolMemberRepositoryAdapter implements BuncheolMemberReposit
   }
 
   @Override
-  public boolean existsByBuncheolIdAndMemberId(final Long buncheolId, final Long memberId) {
-    return jpaBuncheolMemberRepository.existsByBuncheolIdAndMemberId(buncheolId, memberId);
+  public Optional<BuncheolMember> findByBuncheolIdAndMemberId(
+      final Long buncheolId, final Long memberId) {
+    return jpaBuncheolMemberRepository.findByBuncheolIdAndMemberId(buncheolId, memberId);
+  }
+
+  @Override
+  public Optional<BuncheolMember> findByIdAndBuncheolIdForShare(
+      final Long id, final Long buncheolId) {
+    return jpaBuncheolMemberRepository.findByIdAndBuncheolIdForShare(id, buncheolId);
+  }
+
+  @Override
+  public boolean reopenIfClosed(
+      final Long buncheolMemberId, final Long buncheolId, final long price) {
+    return jpaBuncheolMemberRepository.reopenIfClosed(
+            buncheolMemberId,
+            buncheolId,
+            price,
+            BuncheolMemberAccessType.OPEN,
+            BuncheolMemberAccessType.CLOSED)
+        > 0;
   }
 
   @Override
   public List<BuncheolMember> findAllByBuncheolIdForUpdate(final Long buncheolId) {
     return jpaBuncheolMemberRepository.findAllByBuncheolIdForUpdate(buncheolId);
+  }
+
+  @Override
+  public List<BuncheolMember> findAllByBuncheolIdForShare(final Long buncheolId) {
+    return jpaBuncheolMemberRepository.findAllByBuncheolIdForShare(buncheolId);
   }
 
   @Override

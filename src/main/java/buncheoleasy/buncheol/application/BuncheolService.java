@@ -79,6 +79,9 @@ public class BuncheolService {
 
     List<Long> memberIds = extractDistinctMemberIds(request.buncheolMembers());
     groupDomainService.getGroupMembersByIdsInGroup(request.groupId(), memberIds);
+    // 개최 시 자리 수 = 요청 멤버 수 (중복은 위에서, 닫힌 자리는 아래에서 거부된다).
+    buncheolDomainService.validateMinHeadcountWithinSlots(
+        request.minHeadcount(), request.buncheolMembers().size());
 
     Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, request.toParams(flowType));
 

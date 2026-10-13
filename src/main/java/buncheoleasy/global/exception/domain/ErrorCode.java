@@ -257,6 +257,10 @@ public enum ErrorCode {
   // 개최자가 「빼기」로 닫은 자리(CLOSED)에 신청. 없는 멤버(BCH-061)와 나눠야 화면이 "다른 멤버를 고르라" 고 안내할 수 있다.
   PARTICIPATION_MEMBER_CLOSED(
       "BCH-122", "개최자가 마감한 멤버예요. 다른 멤버를 골라 주세요.", HttpStatus.CONFLICT),
+  // BCH-008(1명 이상)과 나눈다 — 최소 인원이 자리 수보다 크면 성사 판정(참여 수 ≥ 최소 인원)이 참이 될 수 없는
+  // 분철이 열린다. BCH-008 문구로는 무엇을 고쳐야 하는지 보이지 않는다.
+  BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS(
+      "BCH-123", "최소 진행 인원은 대상 멤버 수 이하로 정해 주세요.", HttpStatus.BAD_REQUEST),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

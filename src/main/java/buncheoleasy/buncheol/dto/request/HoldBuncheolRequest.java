@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
+ * @param minHeadcount 1 이상, buncheolMembers 개수 이하. 자리 수와의 비교는 서비스가 한다(넘으면 BCH-123).
  * @param thumbnailIndex 대표사진으로 쓸 이미지의 images 파트 내 인덱스(0-base, 필수). 이미지 저장 순서는 업로드 순서를 그대로 따르고, 대표사진
  *     여부만 별도 플래그로 기록된다.
  * @param flowType 개최 방식(선택). null 이면 서버가 결정한다 — 일반 유저 = C2C 강제(LEGACY 요청은 USR-031 거부), 운영진(can_host) =

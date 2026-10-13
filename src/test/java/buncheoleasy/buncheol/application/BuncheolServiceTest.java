@@ -128,7 +128,7 @@ class BuncheolServiceTest {
         "분철 설명입니다.",
         "공식 스토어",
         Instant.now().plus(7, ChronoUnit.DAYS),
-        3,
+        1,
         3000,
         null,
         null,
@@ -145,13 +145,37 @@ class BuncheolServiceTest {
         "분철 설명입니다.",
         "공식 스토어",
         Instant.now().plus(7, ChronoUnit.DAYS),
-        3,
+        1,
         3000,
         null,
         null,
         flowType,
         0,
         members);
+  }
+
+  private HoldBuncheolRequest holdRequestWithMinHeadcount(
+      List<BuncheolMemberRequest> members, int minHeadcount) {
+    return new HoldBuncheolRequest(
+        GROUP_ID,
+        "테스트 분철 제목",
+        "분철 설명입니다.",
+        "공식 스토어",
+        Instant.now().plus(7, ChronoUnit.DAYS),
+        minHeadcount,
+        3000,
+        null,
+        null,
+        null,
+        0,
+        members);
+  }
+
+  private static List<BuncheolMemberRequest> threeMembers() {
+    return List.of(
+        new BuncheolMemberRequest(MEMBER_ID, 50_000L),
+        new BuncheolMemberRequest(MEMBER_ID + 1, 50_000L),
+        new BuncheolMemberRequest(MEMBER_ID + 2, 50_000L));
   }
 
   // 대표사진 지정은 필수라 기본 픽스처는 신규 이미지 0번을 지정한다.
@@ -364,6 +388,45 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED);
+    }
+
+    // 성사 판정은 참여 행 수를 센다 — 최소 인원이 자리 수를 넘으면 성사될 수 없는 분철이 열린다.
+    @Test
+    void 최소_인원이_멤버_수를_넘으면_BCH_123_예외가_발생하고_분철을_만들지_않는다() {
+      HoldBuncheolRequest request = holdRequestWithMinHeadcount(threeMembers(), 5);
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS))
+          .given(buncheolDomainService)
+          .validateMinHeadcountWithinSlots(5, 3);
+
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(buncheolMemberDomainService).should(never()).createBuncheolMembers(any(), anyList());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 최소_인원이_멤버_수와_같으면_자리_수로_검사를_통과해_개최된다() {
+      HoldBuncheolRequest request = holdRequestWithMinHeadcount(threeMembers(), 3);
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+
+      Long createdId = buncheolService.holdBuncheol(HOST_ID, request, images);
+
+      assertThat(createdId).isEqualTo(BUNCHEOL_ID);
+      then(buncheolDomainService).should().validateMinHeadcountWithinSlots(3, 3);
+      then(buncheolMemberDomainService)
+          .should()
+          .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
+      assertThat(buncheolMemberParamsCaptor.getValue()).hasSize(3);
     }
 
     @Test

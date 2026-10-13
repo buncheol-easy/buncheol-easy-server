@@ -440,9 +440,10 @@ public class ParticipationService {
   /**
    * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 미충족→충족 전이마다 발행하고, 취소→재신청 루프의 중복
    * 발송 차단은 리스너의 인메모리 가드가 담당한다. 카운트는 반드시 잠금 조회(current read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행
-   * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다.
+   * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다. <b>분모(열린 자리 수)도 같다</b> — 스냅샷으로 세면 락
+   * 대기 중 개최자가 닫은 자리를 「열림」으로 세어 충족을 놓치고, 다시 연 자리를 「닫힘」으로 세어 빈 자리가 있는데 발행한다.
    *
-   * <p>락 순서 규약: 이 경로는 분철 행(X) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
+   * <p>락 순서 규약: 이 경로는 분철 행(X) → 자리 행(S) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
    * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
    * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 는 슬롯 확인 뒤
    * {@code confirmIfAllSlotsConfirmed} 로, C2C 는 {@code ParticipationBundleService#confirmPayment} 가 묶음
@@ -484,8 +485,10 @@ public class ParticipationService {
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
     // 개최자가 닫은 자리는 채워질 수 없으므로 정원에서 뺀다 — 안 빼면 남은 자리가 다 차도 알림이 영영 안 나간다.
+    // 자리도 잠금 읽기(FOR SHARE)로 센다(javadoc). 락 순서는 분철(X, 이미 보유) → 자리(S) → 참여(X) 로, 자리를 쓰는 개최자
+    // 빼기·닫기·다시 열기(분철 X → 자리 X)와 같은 방향이다.
     long totalSlots =
-        buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).stream()
+        buncheolMemberDomainService.findAllByBuncheolIdForShare(buncheol.getId()).stream()
             .filter(slot -> !slot.isClosed())
             .count();
     List<Long> participantIds =

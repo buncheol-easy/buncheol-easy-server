@@ -826,7 +826,7 @@ class ParticipationServiceTest {
     @Test
     void 이_신청으로_전_슬롯이_채워지면_신청_인원을_사람_수로_담아_정원_충족_이벤트를_발행한다() {
       stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
           .willReturn(Collections.nCopies(3, buncheolMember()));
       // 3슬롯을 2명이 채움(한 명이 2슬롯) — 신청 인원은 distinct 참여자 수여야 한다.
       given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
@@ -848,7 +848,7 @@ class ParticipationServiceTest {
     @Test
     void 닫힌_자리는_정원에서_빼고_열린_자리가_다_차면_정원_충족_이벤트를_발행한다() {
       stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
           .willReturn(
               List.of(buncheolMember(), buncheolMember(), closedMember(SECOND_MEMBER_ID)));
       given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
@@ -857,12 +857,15 @@ class ParticipationServiceTest {
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
       then(eventPublisher).should().publishEvent(any(BuncheolFullEvent.class));
+      // 🔴 분모(열린 자리 수)는 잠금 읽기로 센다 — 스냅샷으로 세면 락 대기 중 닫히거나 다시 열린 자리를 잘못 센다.
+      then(buncheolMemberDomainService).should().findAllByBuncheolIdForShare(BUNCHEOL_ID);
+      then(buncheolMemberDomainService).should(never()).findAllByBuncheolId(anyLong());
     }
 
     @Test
     void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
       stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
           .willReturn(Collections.nCopies(3, buncheolMember()));
       given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
           .willReturn(List.of(100L, 200L));
@@ -939,7 +942,7 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember()));
     }
 
@@ -1318,7 +1321,7 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
           .willReturn(List.of(buncheolMember()));
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
@@ -1883,7 +1886,7 @@ class ParticipationServiceTest {
 
       then(participationDomainService).should(times(1)).createParticipationIfRecruiting(any());
       // 마지막 슬롯에서 실패했으므로 정원 충족 판정까지 가지 않는다.
-      then(buncheolMemberDomainService).should(never()).findAllByBuncheolId(anyLong());
+      then(buncheolMemberDomainService).should(never()).findAllByBuncheolIdForShare(anyLong());
     }
   }
 

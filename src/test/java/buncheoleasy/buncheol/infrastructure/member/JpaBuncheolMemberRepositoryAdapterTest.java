@@ -487,6 +487,38 @@ class JpaBuncheolMemberRepositoryAdapterTest {
       assertThat(lock.value()).isEqualTo(LockModeType.PESSIMISTIC_READ);
     }
 
+    // 정원 판정의 분모도 신청 트랜잭션 스냅샷이 아니라 최신 커밋으로 세야 한다.
+    @Test
+    void 정원_판정용_자리_목록도_공유_잠금_읽기로_선언돼_있다() throws NoSuchMethodException {
+      Lock lock =
+          JpaBuncheolMemberRepository.class
+              .getMethod("findAllByBuncheolIdForShare", Long.class)
+              .getAnnotation(Lock.class);
+
+      assertThat(lock).isNotNull();
+      assertThat(lock.value()).isEqualTo(LockModeType.PESSIMISTIC_READ);
+    }
+
+    @Test
+    void 정원_판정용_자리_목록은_닫힌_자리까지_그_분철_것만_돌려준다() {
+      Long openSlot = saveSlot(memberId);
+      Long closedSlot = saveSlot(memberId2);
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET access_type = 'CLOSED' WHERE id = ?", closedSlot);
+      Long otherBuncheolId = saveOtherBuncheol();
+      buncheolMemberRepository.saveAll(
+          List.of(BuncheolMember.create(otherBuncheolId, memberId3, 1_000L)));
+      em.flush();
+      em.clear();
+
+      List<BuncheolMember> slots = buncheolMemberRepository.findAllByBuncheolIdForShare(buncheolId);
+
+      assertThat(slots)
+          .extracting(BuncheolMember::getId)
+          .containsExactlyInAnyOrder(openSlot, closedSlot);
+      assertThat(slots.stream().filter(slot -> !slot.isClosed()).count()).isEqualTo(1);
+    }
+
     @Test
     void 그_분철의_자리만_돌려준다() {
       Long slotId = saveSlot(memberId);

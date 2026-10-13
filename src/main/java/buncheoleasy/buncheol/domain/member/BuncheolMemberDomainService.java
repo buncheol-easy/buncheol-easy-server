@@ -98,6 +98,11 @@ public class BuncheolMemberDomainService {
     return buncheolMemberRepository.findAllByBuncheolIdForUpdate(buncheolId);
   }
 
+  /** 분철의 자리를 공유 잠금 조회한다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public List<BuncheolMember> findAllByBuncheolIdForShare(final Long buncheolId) {
+    return buncheolMemberRepository.findAllByBuncheolIdForShare(buncheolId);
+  }
+
   /**
    * 참여·참여 코드 기록이 하나도 없는 자리만 지운다 — 판정과 삭제를 한 DELETE 로 원자화한다. 호출 측 {@code @Transactional}
    * 필수.

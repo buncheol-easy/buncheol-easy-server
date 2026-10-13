@@ -126,6 +126,11 @@ public class JpaBuncheolMemberRepositoryAdapter implements BuncheolMemberReposit
   }
 
   @Override
+  public List<BuncheolMember> findAllByBuncheolIdForShare(final Long buncheolId) {
+    return jpaBuncheolMemberRepository.findAllByBuncheolIdForShare(buncheolId);
+  }
+
+  @Override
   public boolean deleteIfUnreferenced(final Long buncheolMemberId, final Long buncheolId) {
     try {
       return jpaBuncheolMemberRepository.deleteIfUnreferenced(buncheolMemberId, buncheolId) > 0;

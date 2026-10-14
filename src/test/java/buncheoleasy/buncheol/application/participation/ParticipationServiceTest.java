@@ -48,6 +48,8 @@ import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -2008,40 +2010,51 @@ class ParticipationServiceTest {
 
     private static final long CHANGED_SHIPPING_FEE = 2_000L;
 
-    /** 락 이전에 읽힌 분철. 상태만 본다 — 돈 판정에 쓰이면 안 된다. */
-    private Buncheol loadedBeforeLock(final BuncheolStatus status) {
-      Buncheol loaded = mock(Buncheol.class);
-      given(loaded.isC2c()).willReturn(true);
-      given(loaded.getStatus()).willReturn(status);
-      given(loaded.getId()).willReturn(BUNCHEOL_ID);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(loaded);
-      return loaded;
-    }
-
-    /** 락과 함께 다시 읽은 최신 분철. 실제로는 같은 인스턴스가 다시 채워지지만, 값이 다름을 보이려고 따로 둔다. */
-    private Buncheol latestAfterLock(final BuncheolStatus status) {
-      Buncheol latest = mock(Buncheol.class);
-      given(latest.getId()).willReturn(BUNCHEOL_ID);
-      given(latest.isHost(PARTICIPANT_ID)).willReturn(false);
-      given(latest.getStatus()).willReturn(status);
-      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(latest);
+    /**
+     * 운영에서는 락 이전에 읽힌 분철과 락 뒤 분철이 <b>같은 인스턴스</b>다(영속성 컨텍스트) — 다시 읽기가 그 인스턴스의 값을 덮는다.
+     * 그래서 mock 도 하나만 두고, 다시 읽기 호출({@code getLatestBuncheolForUpdate})에서 상태·배송비를 바꿔 「다시 채움」을 흉내
+     * 낸다. mock 을 둘로 나누면 「다시 읽기 전에 상태를 잡아 두는가」를 검증하지 못한다(잡는 시점을 락 뒤로 옮겨도 통과한다).
+     */
+    private Buncheol refreshedOnLock(
+        final BuncheolStatus statusBefore,
+        final BuncheolStatus statusAfter,
+        final long feeBefore,
+        final long feeAfter) {
+      AtomicReference<BuncheolStatus> status = new AtomicReference<>(statusBefore);
+      AtomicLong fee = new AtomicLong(feeBefore);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
+      given(buncheol.getStatus()).willAnswer(invocation -> status.get());
+      lenient()
+          .when(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF))
+          .thenAnswer(invocation -> fee.get());
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID))
+          .willAnswer(
+              invocation -> {
+                status.set(statusAfter);
+                fee.set(feeAfter);
+                return buncheol;
+              });
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
-      return latest;
+      return buncheol;
     }
 
     // 🔴 개최자가 신청자 0명일 때 배송비를 바꾼 직후 첫 신청이 들어온 경우. 락 이전 값을 쓰면 옛 배송비가 묶음에 새겨지고
-    // updatable=false 라 되돌릴 수 없다. 락 전 인스턴스를 그대로 쓰도록 되돌리면 이 테스트가 깨진다.
+    // updatable=false 라 되돌릴 수 없다. 다시 읽기를 빼면(옛 잠금 조회로 되돌리면) 이 테스트가 깨진다.
     @Test
-    void 락_뒤_다시_읽은_배송비로_새_묶음을_연다() {
-      Buncheol loaded = loadedBeforeLock(BuncheolStatus.RECRUITING);
-      Buncheol latest = latestAfterLock(BuncheolStatus.RECRUITING);
-      given(latest.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(CHANGED_SHIPPING_FEE);
-      given(participationDomainService.findInheritanceSource(latest, PARTICIPANT_ID))
+    void 락_뒤_다시_채운_배송비로_새_묶음을_연다() {
+      Buncheol buncheol =
+          refreshedOnLock(
+              BuncheolStatus.RECRUITING, BuncheolStatus.RECRUITING, SHIPPING_FEE, CHANGED_SHIPPING_FEE);
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty());
       given(
               participationShippingAddressResolver.resolve(
-                  PARTICIPANT_ID, latest, SHIPPING_ADDRESS_ID))
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
           .willReturn(shippingAddress());
       givenParticipantAccount();
       given(participationDomainService.createParticipationIfRecruiting(any()))
@@ -2065,14 +2078,14 @@ class ParticipationServiceTest {
               any(),
               isNull(),
               eq(NOW));
-      then(loaded).should(never()).shippingFeeFor(any());
     }
 
     // 락을 기다리는 사이 성사 확정됐다 — 이전 값으로 진행했어도 조건부 INSERT 가 막았던 경우라 결과(BCH-060)가 같다.
+    // 🔴 락 이전 상태를 다시 읽기 <b>뒤에</b> 잡으면(같은 인스턴스라 이미 덮인 값) 비교가 무력해져 이 테스트가 깨진다.
     @Test
     void 락을_기다리는_사이_상태가_바뀌면_신청을_받지_않는다() {
-      loadedBeforeLock(BuncheolStatus.RECRUITING);
-      latestAfterLock(BuncheolStatus.PAYMENT_COLLECTING);
+      refreshedOnLock(
+          BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING, SHIPPING_FEE, SHIPPING_FEE);
 
       assertThatThrownBy(
               () ->
@@ -2087,11 +2100,11 @@ class ParticipationServiceTest {
     }
 
     // 🔴 다중 신청은 모집중 전용이다(합산 응답이 추가 모집에서는 거짓). 그 가드는 락 이전 값으로 판정하므로, 락 뒤 최신 상태가
-    // 입금 수집중이면 추가 모집 분기로 새지 않고 거절돼야 한다. 상태 비교를 지우면 이 테스트가 깨진다.
+    // 입금 수집중이면 추가 모집 분기로 새지 않고 거절돼야 한다. 상태 비교를 지우거나 잡는 시점을 락 뒤로 옮기면 깨진다.
     @Test
     void 다중_신청은_락_사이_성사_확정되면_추가_모집으로_새지_않는다() {
-      loadedBeforeLock(BuncheolStatus.RECRUITING);
-      latestAfterLock(BuncheolStatus.PAYMENT_COLLECTING);
+      refreshedOnLock(
+          BuncheolStatus.RECRUITING, BuncheolStatus.PAYMENT_COLLECTING, SHIPPING_FEE, SHIPPING_FEE);
 
       assertThatThrownBy(
               () ->

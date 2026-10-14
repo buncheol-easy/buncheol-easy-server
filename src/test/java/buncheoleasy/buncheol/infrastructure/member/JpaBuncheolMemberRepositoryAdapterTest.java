@@ -453,17 +453,34 @@ class JpaBuncheolMemberRepositoryAdapterTest {
       assertThat(priceColumn(slotId)).isEqualTo(10_000L);
     }
 
-    // 접근 정책·다른 칸은 그대로 둔다 — 행 전체를 다시 쓰는 더티체킹(updatePrice)을 쓰지 않는 이유다.
+    // 가격 규칙은 자리 단위다 — 같은 분철의 다른 자리에 신청자가 있어도 빈 자리는 바꿀 수 있다. 서브쿼리를 분철 단위로 넓히면
+    // 신청자가 한 명만 있어도 모든 자리 가격이 잠겨 빨개진다.
     @Test
-    void 가격만_바꾸고_접근_정책은_그대로_둔다() {
-      Long slotId = saveSlot(memberId);
-
-      buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L);
+    void 같은_분철의_다른_자리에_신청자가_있어도_빈_자리_가격은_바뀐다() {
+      Long occupiedSlotId = saveSlot(memberId);
+      Long emptySlotId = saveSlot(memberId2);
+      insertParticipationOn(occupiedSlotId, "APPLIED");
 
       assertThat(
-              jdbcTemplate.queryForObject(
-                  "SELECT access_type FROM buncheol_members WHERE id = ?", String.class, slotId))
-          .isEqualTo("OPEN");
+              buncheolMemberRepository.changePriceIfUnoccupied(emptySlotId, buncheolId, 15_000L))
+          .isTrue();
+
+      assertThat(priceColumn(emptySlotId)).isEqualTo(15_000L);
+      assertThat(priceColumn(occupiedSlotId)).isEqualTo(10_000L);
+    }
+
+    // 고른 자리 한 행만 쓴다 — 자리 조건이 빠지면 같은 분철의 빈 자리 가격이 전부 바뀌어 빨개진다.
+    @Test
+    void 고른_자리의_가격만_바꾸고_같은_분철의_다른_자리는_그대로_둔다() {
+      Long targetSlotId = saveSlot(memberId);
+      Long otherSlotId = saveSlot(memberId2);
+
+      assertThat(
+              buncheolMemberRepository.changePriceIfUnoccupied(targetSlotId, buncheolId, 15_000L))
+          .isTrue();
+
+      assertThat(priceColumn(targetSlotId)).isEqualTo(15_000L);
+      assertThat(priceColumn(otherSlotId)).isEqualTo(10_000L);
     }
   }
 

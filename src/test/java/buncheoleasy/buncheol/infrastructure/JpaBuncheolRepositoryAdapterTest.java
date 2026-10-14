@@ -501,6 +501,18 @@ class JpaBuncheolRepositoryAdapterTest {
       assertUnchanged(buncheolId);
     }
 
+    // 「신청자 0명」은 이 분철 기준이다 — 서브쿼리의 분철 조건을 빼면 다른 분철 신청 하나로 모든 분철이 막혀 빨개진다.
+    @Test
+    void 다른_분철의_활성_참여는_보지_않는다() {
+      Long buncheolId = persistC2c();
+      Long otherBuncheolId = persistC2c();
+      insertParticipation(otherBuncheolId, "APPLIED");
+
+      assertThat(buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now()))
+          .isOne();
+      assertThat(reloadTerms(buncheolId)).isEqualTo(newTerms);
+    }
+
     @Test
     void 취소된_참여만_있으면_신청자로_보지_않고_바꾼다() {
       Long buncheolId = persistC2c();

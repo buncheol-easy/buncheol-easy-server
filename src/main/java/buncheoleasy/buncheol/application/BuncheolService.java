@@ -7,6 +7,8 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTerms;
+import buncheoleasy.buncheol.domain.BuncheolTermsChange;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -186,15 +188,31 @@ public class BuncheolService {
     return HostingEligibilityResponse.allowed();
   }
 
+  /**
+   * 분철 수정 — 모집중·마감 전에만. 제목·설명·사진·오픈채팅 링크는 신청자가 있어도 바꿀 수 있고, 거래 조건(마감·최소 인원·배송비·구매처)은
+   * <b>활성 신청이 하나도 없는 C2C 분철</b>에서만 바꾼다. 조건 칸은 지금 값과 다를 때만 바뀐 것으로 본다 — 조건 칸을 보내지 않거나 지금 값을
+   * 그대로 보낸 요청은 이전과 같다.
+   *
+   * <p>거래 조건 쓰기는 더티체킹이 아니라 「활성 신청 없음」을 함께 보는 조건부 UPDATE 다. 앞의 판정({@link
+   * Buncheol#termsEditability})은 안내용이고, 판정 뒤 들어온 신청은 그 UPDATE 가 막아 409 로 전부 롤백된다(제목·사진 변경 포함).
+   *
+   * <p>락 순서는 분철 행(X) → 자리 행(S, 최소 인원을 바꿀 때) → 참여 행(UPDATE 의 NOT EXISTS) 으로, C2C 신청·자리 빼기와 같은
+   * 방향이다.
+   */
   @Transactional
   public void modifyBuncheol(
       final Long hostId,
       final Long buncheolId,
       final BuncheolModifyRequest request,
       final List<ImageFile> images) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    final Instant now = Instant.now(clock);
+    // 🔴 잠금 조회가 이 트랜잭션의 첫 분철 조회여야 한다 — lockForSlotEdit 주석과 같은 함정. 신청과 분철 행에서 한 줄로 서고, 조건
+    // 칸은 잠근 최신 값과 비교한다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
     buncheol.validateOwner(hostId);
-    buncheol.validateRecruiting(Instant.now(clock));
+    buncheol.validateRecruiting(now);
+
+    Optional<BuncheolTerms> newTerms = resolveTermsChange(buncheol, request.toTermsChange(), now);
 
     buncheolImageDomainService.validateModifyImageCount(
         buncheolId, request.keepImageIds(), images.size());
@@ -203,6 +221,13 @@ public class BuncheolService {
 
     buncheolDomainService.updateBuncheolContent(buncheol, request.title(), request.description());
     buncheolDomainService.updateBuncheolOpenChatUrl(buncheol, request.openChatUrl());
+
+    // 조건 쓰기는 제목·설명 변경 뒤에 둔다 — 이 UPDATE 가 영속성 컨텍스트를 먼저 flush 하고 비우므로, 앞의 더티체킹 변경이 함께
+    // 나가고 이후 엔티티 flush 가 조건 칸을 되쓰지 않는다. 실패하면 예외로 전부 롤백되고 아래 이미지 벌크도 돌지 않는다.
+    if (newTerms.isPresent()
+        && !buncheolDomainService.changeTermsIfNoApplicant(buncheolId, newTerms.get(), now)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT);
+    }
 
     // ⚠️ 이 지점 이후는 clearAutomatically=true 벌크 쿼리(삭제·플래그 해제/지정)가 이어져 영속성 컨텍스트가 비워진다.
     // buncheol 엔티티 변경(더티체킹)은 반드시 이 앞에서 끝내야 한다 — 이후 변경은 조용히 유실된다.
@@ -222,6 +247,44 @@ public class BuncheolService {
       eventPublisher.publishEvent(
           BuncheolImageUploadEvent.ofModify(buncheolId, images, request.thumbnailIndex()));
     }
+  }
+
+  /**
+   * 요청이 거래 조건을 실제로 바꾸면 수정 가능 여부를 판정하고 바뀐 칸을 검증해 새 조건을 돌려준다. 바뀐 칸이 없으면 비어 있다 — 그때는
+   * 신청자 여부를 묻지 않는다(신청자가 있어도 제목·사진 수정은 열려 있다).
+   */
+  private Optional<BuncheolTerms> resolveTermsChange(
+      final Buncheol buncheol, final BuncheolTermsChange change, final Instant now) {
+    if (!buncheol.changesTerms(change)) {
+      return Optional.empty();
+    }
+    // 안내용 사전 검사 — 상세 응답의 termsEditable 과 같은 판정이다. 최종 차단은 조건부 UPDATE 가 한다.
+    // 분철 행을 잠근 뒤라 신청이 새로 커밋될 수 없어, 여기서 본 「신청자 없음」이 그 UPDATE 까지 유지된다.
+    boolean hasActiveParticipation =
+        !participationDomainService.findActiveByBuncheolId(buncheol.getId()).isEmpty();
+    // switch 식이라 판정 값이 늘면 컴파일 에러로 매핑을 강제한다(cancelBuncheol 과 같은 이유).
+    ErrorCode blockedCode =
+        switch (buncheol.termsEditability(now, hasActiveParticipation)) {
+          case EDITABLE -> null;
+          case BLOCKED_BY_STATUS -> ErrorCode.BUNCHEOL_NOT_RECRUITING;
+          case BLOCKED_BY_FLOW -> ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED;
+          case BLOCKED_BY_APPLICANT -> ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT;
+        };
+    if (blockedCode != null) {
+      throw new BusinessException(blockedCode);
+    }
+
+    BuncheolTerms terms = buncheol.applyTermsChange(change, now);
+    if (terms.minHeadcount() != buncheol.getMinHeadcount()) {
+      // 닫힌 자리는 신청을 받지 않으므로 세지 않는다 — 자리 빼기의 최소 인원 하향과 같은 수다. 분철 잠금 뒤 잠금 읽기라 최신이다.
+      int openSlotCount =
+          (int)
+              buncheolMemberDomainService.findAllByBuncheolIdForShare(buncheol.getId()).stream()
+                  .filter(slot -> !slot.isClosed())
+                  .count();
+      buncheolDomainService.validateMinHeadcountWithinSlots(terms.minHeadcount(), openSlotCount);
+    }
+    return Optional.of(terms);
   }
 
   /**
@@ -488,7 +551,32 @@ public class BuncheolService {
   }
 
   /**
-   * 자리 빼기·넣기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다.
+   * C2C 개최자가 <b>모집중·마감 전</b>에 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 — 그 자리에 활성 신청자가 있으면 바꾸지
+   * 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
+   *
+   * <p>🔴 빼기·넣기와 달리 <b>입금 수집중(추가 모집)에는 열지 않는다</b>. 추가 모집 신청은 바로 입금 대기라, 옛 가격을 띄워 둔 화면이 그
+   * 값으로 입금액을 안내해 틀린 금액이 송금될 수 있다. 모집중 신청은 입금을 성사 확정 뒤 서버 금액으로 안내받는다. 추가 모집 중 가격은 빼고
+   * 다시 넣기로 바꾼다.
+   *
+   * <p>닫힌 자리는 바꾸지 않는다 — 다시 넣기({@link #addMember})가 가격을 받아 연다. 판정과 쓰기는 조건부 UPDATE 하나이고, 락 순서는
+   * 분철 행(X) → 자리 행(X, UPDATE) → 참여 행(S, NOT EXISTS) 으로 빼기와 같다.
+   */
+  @Transactional
+  public void changeMemberPrice(
+      final Long hostId, final Long buncheolId, final Long buncheolMemberId, final long price) {
+    final Instant now = Instant.now(clock);
+    Buncheol buncheol = lockForSlotEdit(hostId, buncheolId, now);
+    buncheol.validateRecruiting(now);
+
+    if (!buncheolMemberDomainService.changePriceIfUnoccupied(buncheolMemberId, buncheolId, price)) {
+      // 판정은 위 UPDATE 로 끝났고, 여기서 읽는 것은 어느 안내를 줄지뿐이다 — 그 분철의 자리가 아니면 빼기와 같은 404.
+      buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId);
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED);
+    }
+  }
+
+  /**
+   * 자리 빼기·넣기·가격 바꾸기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다.
    *
    * <p>🔴 이 잠금 조회가 트랜잭션의 <b>첫 분철 조회</b>여야 한다. 앞에서 {@code getBuncheol} 을 부르면 영속성 컨텍스트가 락 이전에
    * 읽은 인스턴스를 그대로 돌려줘 상태 판정이 낡는다(ParticipationService#participateC2c 주석과 같은 함정).

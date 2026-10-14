@@ -121,6 +121,18 @@ public class JpaBuncheolMemberRepositoryAdapter implements BuncheolMemberReposit
   }
 
   @Override
+  public boolean changePriceIfUnoccupied(
+      final Long buncheolMemberId, final Long buncheolId, final long price) {
+    return jpaBuncheolMemberRepository.changePriceIfUnoccupied(
+            buncheolMemberId,
+            buncheolId,
+            price,
+            BuncheolMemberAccessType.OPEN,
+            ParticipationStatus.active())
+        > 0;
+  }
+
+  @Override
   public List<BuncheolMember> findAllByBuncheolIdForUpdate(final Long buncheolId) {
     return jpaBuncheolMemberRepository.findAllByBuncheolIdForUpdate(buncheolId);
   }

@@ -391,6 +391,100 @@ class JpaBuncheolMemberRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("빈 자리 가격 바꾸기 CAS 테스트")
+  class ChangePriceIfUnoccupiedTest {
+
+    private long priceColumn(final Long slotId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT price FROM buncheol_members WHERE id = ?", Long.class, slotId);
+    }
+
+    @Test
+    void 신청자가_없는_선착순_자리는_가격이_바뀐다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isTrue();
+
+      assertThat(priceColumn(slotId)).isEqualTo(15_000L);
+    }
+
+    // 이 테스트가 가드 본체다 — NOT EXISTS 를 지우면 신청자가 본 가격이 바뀌어 빨개진다.
+    @ParameterizedTest
+    @ValueSource(strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED"})
+    void 활성_참여가_있는_자리는_바꾸지_않는다(final String status) {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, status);
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isFalse();
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    @Test
+    void 취소_기록만_있는_자리는_바뀐다() {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, "CANCELLED");
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isTrue();
+    }
+
+    // 닫힌 자리는 다시 넣기(가격 포함)로만 연다 — 가격만 바꿔 두면 다시 열 때의 가격과 갈린다.
+    @Test
+    void 닫힌_자리는_바꾸지_않는다() {
+      Long slotId = saveSlot(memberId);
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET access_type = 'CLOSED' WHERE id = ?", slotId);
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isFalse();
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    @Test
+    void 다른_분철의_자리는_바꾸지_않는다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(
+              buncheolMemberRepository.changePriceIfUnoccupied(
+                  slotId, buncheolId + 9_999L, 15_000L))
+          .isFalse();
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    // 가격 규칙은 자리 단위다 — 같은 분철의 다른 자리에 신청자가 있어도 빈 자리는 바꿀 수 있다. 서브쿼리를 분철 단위로 넓히면
+    // 신청자가 한 명만 있어도 모든 자리 가격이 잠겨 빨개진다.
+    @Test
+    void 같은_분철의_다른_자리에_신청자가_있어도_빈_자리_가격은_바뀐다() {
+      Long occupiedSlotId = saveSlot(memberId);
+      Long emptySlotId = saveSlot(memberId2);
+      insertParticipationOn(occupiedSlotId, "APPLIED");
+
+      assertThat(
+              buncheolMemberRepository.changePriceIfUnoccupied(emptySlotId, buncheolId, 15_000L))
+          .isTrue();
+
+      assertThat(priceColumn(emptySlotId)).isEqualTo(15_000L);
+      assertThat(priceColumn(occupiedSlotId)).isEqualTo(10_000L);
+    }
+
+    // 고른 자리 한 행만 쓴다 — 자리 조건이 빠지면 같은 분철의 빈 자리 가격이 전부 바뀌어 빨개진다.
+    @Test
+    void 고른_자리의_가격만_바꾸고_같은_분철의_다른_자리는_그대로_둔다() {
+      Long targetSlotId = saveSlot(memberId);
+      Long otherSlotId = saveSlot(memberId2);
+
+      assertThat(
+              buncheolMemberRepository.changePriceIfUnoccupied(targetSlotId, buncheolId, 15_000L))
+          .isTrue();
+
+      assertThat(priceColumn(targetSlotId)).isEqualTo(15_000L);
+      assertThat(priceColumn(otherSlotId)).isEqualTo(10_000L);
+    }
+  }
+
+  @Nested
   @DisplayName("자리 닫기·다시 열기 테스트")
   class CloseAndReopenTest {
 

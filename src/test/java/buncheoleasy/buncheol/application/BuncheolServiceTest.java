@@ -23,7 +23,9 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTerms;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
@@ -50,9 +52,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -831,7 +835,7 @@ class BuncheolServiceTest {
           new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 1L, null, null);
       Buncheol buncheol = mock(Buncheol.class);
 
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willDoNothing()
           .given(buncheolImageDomainService)
           .validateModifyImageCount(BUNCHEOL_ID, List.of(1L, 2L), 0);
@@ -857,7 +861,7 @@ class BuncheolServiceTest {
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
 
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willDoNothing()
           .given(buncheolImageDomainService)
           .validateModifyImageCount(BUNCHEOL_ID, List.of(), 1);
@@ -876,7 +880,7 @@ class BuncheolServiceTest {
           new BuncheolModifyRequest(
               "수정 제목", "수정 설명", List.of(1L, 2L), 1L, null, "https://open.kakao.com/o/gAbCdEf");
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
@@ -893,7 +897,7 @@ class BuncheolServiceTest {
       BuncheolModifyRequest request =
           new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L, 2L), 2L, null, null);
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
@@ -914,7 +918,7 @@ class BuncheolServiceTest {
           new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, 0, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
 
       // when
       buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, images);
@@ -936,7 +940,7 @@ class BuncheolServiceTest {
           new BuncheolModifyRequest("수정 제목", "수정 설명", List.of(1L), null, null, null);
       List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_THUMBNAIL_REQUIRED))
           .given(buncheolImageDomainService)
           .validateThumbnailSelection(List.of(1L), 1, null, null);
@@ -966,7 +970,7 @@ class BuncheolServiceTest {
               new ImageFile("6.jpg", "image/jpeg", new byte[] {6}));
       Buncheol buncheol = mock(Buncheol.class);
 
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_IMAGE_LIMIT_EXCEEDED))
           .given(buncheolImageDomainService)
           .validateModifyImageCount(BUNCHEOL_ID, List.of(), 6);
@@ -986,7 +990,7 @@ class BuncheolServiceTest {
       // given
       Long buncheolId = 999L;
       BuncheolModifyRequest request = modifyRequest();
-      given(buncheolDomainService.getBuncheol(buncheolId))
+      given(buncheolDomainService.getBuncheolForUpdate(buncheolId))
           .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
 
       // when & then
@@ -1003,7 +1007,7 @@ class BuncheolServiceTest {
       BuncheolModifyRequest request = modifyRequest();
       Buncheol buncheol = mock(Buncheol.class);
 
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
           .given(buncheol)
           .validateOwner(HOST_ID);
@@ -1025,7 +1029,7 @@ class BuncheolServiceTest {
       BuncheolModifyRequest request = modifyRequest();
       Buncheol buncheol = mock(Buncheol.class);
 
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING))
           .given(buncheol)
           .validateRecruiting(any(Instant.class));
@@ -1038,6 +1042,273 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
       then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("분철 수정 — 거래 조건 테스트")
+  class ModifyTermsTest {
+
+    // slotEditBuncheol 의 지금 조건: 마감 NOW+1일 · 최소 3 · GS25 3,000(CU 미지원) · 구매처 "공식 스토어".
+    private static final Instant CURRENT_DEADLINE = NOW.plus(1, ChronoUnit.DAYS);
+    private static final Instant NEW_DEADLINE = NOW.plus(3, ChronoUnit.DAYS);
+
+    private BuncheolModifyRequest termsRequest(
+        final Instant deadline,
+        final Integer minHeadcount,
+        final Integer gs25ShippingFee,
+        final Integer cuShippingFee,
+        final String purchaseSite) {
+      return new BuncheolModifyRequest(
+          "수정 제목",
+          "수정 설명",
+          List.of(1L),
+          1L,
+          null,
+          null,
+          deadline,
+          minHeadcount,
+          gs25ShippingFee,
+          cuShippingFee,
+          purchaseSite);
+    }
+
+    private void givenLocked(final FlowType flowType) {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
+          .willReturn(slotEditBuncheol(flowType, BuncheolStatus.RECRUITING));
+    }
+
+    private void givenActiveParticipations(final int count) {
+      List<Participation> active =
+          IntStream.range(0, count)
+              .mapToObj(i -> mock(Participation.class))
+              .toList();
+      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(active);
+    }
+
+    private void givenSlots(final int openCount, final int closedCount) {
+      List<BuncheolMember> slots = new ArrayList<>();
+      for (long i = 0; i < openCount; i++) {
+        slots.add(slot(100L + i, MEMBER_ID + i));
+      }
+      for (long i = 0; i < closedCount; i++) {
+        slots.add(closedSlot(200L + i, MEMBER_ID + 50 + i));
+      }
+      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID)).willReturn(slots);
+    }
+
+    @Test
+    void 조건_칸이_없으면_신청자를_묻지_않고_조건을_쓰지_않는다() {
+      givenLocked(FlowType.C2C);
+
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, modifyRequest(), List.of());
+
+      then(participationDomainService).should(never()).findActiveByBuncheolId(anyLong());
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+      then(buncheolDomainService).should().updateBuncheolContent(any(), any(), any());
+    }
+
+    // 수정 화면이 조건 칸을 늘 함께 보내도 신청자가 있는 분철의 제목·사진 수정이 막히면 안 된다. LEGACY 도 같다.
+    @ParameterizedTest
+    @EnumSource(FlowType.class)
+    void 지금_값을_그대로_보내면_조건을_건드리지_않고_제목은_바꾼다(final FlowType flowType) {
+      givenLocked(flowType);
+
+      buncheolService.modifyBuncheol(
+          HOST_ID,
+          BUNCHEOL_ID,
+          termsRequest(CURRENT_DEADLINE, 3, 3000, null, "공식 스토어"),
+          List.of());
+
+      then(participationDomainService).should(never()).findActiveByBuncheolId(anyLong());
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+      then(buncheolDomainService).should().updateBuncheolContent(any(), eq("수정 제목"), any());
+    }
+
+    // 🔴 잠금 조회가 첫 분철 조회여야 조건 비교가 최신 값을 본다. 조건 UPDATE 는 제목 변경 뒤(flush 순서)·이미지 벌크 앞(실패 시 미실행).
+    @Test
+    void 신청자가_없으면_바뀐_조건을_제목_변경_뒤_조건부_UPDATE_로_쓴다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(0);
+      BuncheolTerms expected =
+          new BuncheolTerms(NEW_DEADLINE, 3, ShippingFeePolicy.of(2500, null), "공식 스토어");
+      given(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, expected, NOW))
+          .willReturn(true);
+
+      buncheolService.modifyBuncheol(
+          HOST_ID, BUNCHEOL_ID, termsRequest(NEW_DEADLINE, null, 2500, null, null), List.of());
+
+      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+      InOrder order = inOrder(buncheolDomainService, buncheolImageDomainService);
+      order.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      order.verify(buncheolDomainService).updateBuncheolContent(any(), any(), any());
+      order.verify(buncheolDomainService).changeTermsIfNoApplicant(BUNCHEOL_ID, expected, NOW);
+      order.verify(buncheolImageDomainService).deleteImagesExcluding(eq(BUNCHEOL_ID), anyList());
+    }
+
+    // 판정 뒤 들어온 신청은 조건부 UPDATE 가 막는다 — 예외로 제목 변경까지 롤백되고 이미지 벌크는 돌지 않아야 한다.
+    @Test
+    void 조건부_UPDATE_가_0행이면_409로_거부하고_이미지를_건드리지_않는다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(0);
+      given(buncheolDomainService.changeTermsIfNoApplicant(eq(BUNCHEOL_ID), any(), eq(NOW)))
+          .willReturn(false);
+      List<ImageFile> images = List.of(new ImageFile("new.jpg", "image/jpeg", new byte[] {1, 2}));
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(NEW_DEADLINE, null, null, null, null),
+                      images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT);
+
+      then(buncheolImageDomainService).should(never()).deleteImagesExcluding(anyLong(), anyList());
+      then(buncheolImageDomainService).should(never()).changeThumbnail(anyLong(), anyLong());
+      then(buncheolImageDomainService).should(never()).clearThumbnail(anyLong());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    // 신청자가 있으면 값이 틀렸는지보다 「바꿀 수 없다」가 먼저다 — 값을 고쳐 와도 어차피 막힌다.
+    @Test
+    void 활성_신청이_있으면_값_검증보다_먼저_409로_거부한다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(1);
+      Instant notOnTheHour = NEW_DEADLINE.plusSeconds(1800);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(notOnTheHour, null, null, null, null),
+                      List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT);
+
+      then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+    }
+
+    @Test
+    void LEGACY_는_조건이_바뀌면_범용_플로우_가드로_거부한다() {
+      givenLocked(FlowType.LEGACY);
+      givenActiveParticipations(0);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(NEW_DEADLINE, null, null, null, null),
+                      List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+    }
+
+    @Test
+    void 정각이_아닌_마감은_개최와_같은_코드로_거부하고_쓰지_않는다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(0);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(NEW_DEADLINE.plusSeconds(1800), null, null, null, null),
+                      List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR);
+
+      then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+    }
+
+    // 닫힌 자리는 신청을 받지 않는다 — 전체 4자리여도 열린 자리 3이면 최소 4는 채울 수 없다.
+    @Test
+    void 최소_인원이_열린_자리_수를_넘으면_거부한다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(0);
+      givenSlots(3, 1);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS))
+          .given(buncheolDomainService)
+          .validateMinHeadcountWithinSlots(4, 3);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID, BUNCHEOL_ID, termsRequest(null, 4, null, null, null), List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS);
+
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+    }
+
+    @Test
+    void 최소_인원을_열린_자리_수로_낮추면_쓴다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(0);
+      givenSlots(2, 1);
+      given(buncheolDomainService.changeTermsIfNoApplicant(eq(BUNCHEOL_ID), any(), eq(NOW)))
+          .willReturn(true);
+
+      buncheolService.modifyBuncheol(
+          HOST_ID, BUNCHEOL_ID, termsRequest(null, 2, null, null, null), List.of());
+
+      then(buncheolDomainService).should().validateMinHeadcountWithinSlots(2, 2);
+      then(buncheolDomainService)
+          .should()
+          .changeTermsIfNoApplicant(
+              BUNCHEOL_ID,
+              new BuncheolTerms(CURRENT_DEADLINE, 2, ShippingFeePolicy.of(3000, null), "공식 스토어"),
+              NOW);
+    }
+
+    @Test
+    void 최소_인원을_바꾸지_않으면_자리를_읽지_않는다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(0);
+      given(buncheolDomainService.changeTermsIfNoApplicant(eq(BUNCHEOL_ID), any(), eq(NOW)))
+          .willReturn(true);
+
+      buncheolService.modifyBuncheol(
+          HOST_ID, BUNCHEOL_ID, termsRequest(null, null, null, 2000, "새 구매처"), List.of());
+
+      then(buncheolMemberDomainService).should(never()).findAllByBuncheolIdForShare(anyLong());
+      then(buncheolDomainService)
+          .should()
+          .changeTermsIfNoApplicant(
+              BUNCHEOL_ID,
+              new BuncheolTerms(CURRENT_DEADLINE, 3, ShippingFeePolicy.of(null, 2000), "새 구매처"),
+              NOW);
+    }
+
+    @Test
+    void 개최자가_아니면_신청자를_묻기_전에_거부한다() {
+      givenLocked(FlowType.C2C);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      OTHER_USER_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(NEW_DEADLINE, null, null, null, null),
+                      List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(participationDomainService).should(never()).findActiveByBuncheolId(anyLong());
     }
   }
 
@@ -1713,6 +1984,147 @@ class BuncheolServiceTest {
           .should(never())
           .lowerMinHeadcountToSlotCount(anyLong(), anyInt(), any());
       then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 개최자 빈 자리 가격 바꾸기 테스트")
+  class ChangeMemberPriceTest {
+
+    private static final Long SLOT_ID = 7L;
+
+    private void givenLocked(final Buncheol buncheol) {
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+    }
+
+    @Test
+    void 개최자가_아니면_거부하고_가격을_바꾸지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.changeMemberPrice(OTHER_USER_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+
+      then(buncheolMemberDomainService)
+          .should(never())
+          .changePriceIfUnoccupied(any(), any(), anyLong());
+    }
+
+    @Test
+    void LEGACY_분철이면_범용_플로우_가드로_거부한다() {
+      givenLocked(slotEditBuncheol(FlowType.LEGACY, BuncheolStatus.RECRUITING));
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"CONFIRMED", "CANCELLED", "HOST_CANCELLED"})
+    void 신청을_받지_않는_상태면_거부한다(final BuncheolStatus status) {
+      givenLocked(slotEditBuncheol(FlowType.C2C, status));
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(buncheolMemberDomainService)
+          .should(never())
+          .changePriceIfUnoccupied(any(), any(), anyLong());
+    }
+
+    @Test
+    void 마감이_지난_모집중이면_거부한다() {
+      givenLocked(pastDeadlineC2cBuncheol());
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    @Test
+    void 모집중_마감_전에는_빈_자리_가격을_바꾼다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
+          .willReturn(true);
+
+      buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L);
+
+      then(buncheolMemberDomainService).should(never()).getBuncheolMember(any(), any());
+    }
+
+    // 🔴 빼기·넣기와 달리 추가 모집(입금 수집중)에는 열지 않는다 — 신청이 바로 입금 대기라 옛 가격을 띄운 화면이 틀린 입금액을
+    // 안내할 수 있다. 이 검사를 지우면 가격이 바뀌어 빨개진다.
+    @Test
+    void 입금_수집중이면_거부하고_가격을_바꾸지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.PAYMENT_COLLECTING));
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(buncheolMemberDomainService)
+          .should(never())
+          .changePriceIfUnoccupied(any(), any(), anyLong());
+    }
+
+    // 🔴 분철 잠금이 첫 분철 조회여야 신청(분철 잠금 → 자리 잠금 읽기)과 한 줄로 서서, 신청이 바뀐 가격을 본다.
+    @Test
+    void 분철_잠금이_첫_분철_조회이고_그_뒤에_가격을_쓴다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
+          .willReturn(true);
+
+      buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L);
+
+      then(buncheolDomainService).should(never()).getBuncheol(anyLong());
+      InOrder order = inOrder(buncheolDomainService, buncheolMemberDomainService);
+      order.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      order.verify(buncheolMemberDomainService).changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L);
+    }
+
+    @Test
+    void 신청자가_있거나_닫힌_자리면_409로_거부한다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
+          .willReturn(false);
+      given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(slot(SLOT_ID, MEMBER_ID));
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED);
+    }
+
+    // 빼기와 같은 안내 — 이미 뺐거나 다른 분철의 자리면 없는 자리다.
+    @Test
+    void 그_분철의_자리가_아니면_없는_자리로_거부한다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
+          .willReturn(false);
+      given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
+          .willThrow(new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
     }
   }
 

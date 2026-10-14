@@ -8,6 +8,7 @@ import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
+import buncheoleasy.buncheol.dto.request.BuncheolMemberPriceRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -188,6 +189,17 @@ public class BuncheolController {
       @PathVariable final Long id,
       @PathVariable final Long buncheolMemberId) {
     buncheolService.removeMember(hostId, id, buncheolMemberId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** C2C 개최자의 빈 자리 가격 바꾸기 — 모집중·마감 전, 그 자리에 신청자가 없을 때만. */
+  @PatchMapping("/{id}/members/{buncheolMemberId}")
+  public ResponseEntity<Void> changeMemberPrice(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @PathVariable final Long buncheolMemberId,
+      @Valid @RequestBody final BuncheolMemberPriceRequest request) {
+    buncheolService.changeMemberPrice(hostId, id, buncheolMemberId, request.price());
     return ResponseEntity.noContent().build();
   }
 

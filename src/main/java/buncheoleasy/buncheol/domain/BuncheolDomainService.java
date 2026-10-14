@@ -111,11 +111,12 @@ public class BuncheolDomainService {
     throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
   }
 
-  /** C2C 확정 유예 경과 미성사 취소 CAS (RECRUITING → CANCELLED — docs/46 §7.1-5). 호출 측 {@code @Transactional} 필수. */
+  /**
+   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED — 확정 유예 경과 docs/46 §7.1-5, 마감 시각 인원 미달). 마감이 아직 안 지났으면
+   * (그 사이 연장됨) 취소하지 않는다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수.
+   */
   public boolean cancelUnconfirmedC2c(final Long buncheolId, final Instant now) {
-    return buncheolRepository.finalizeIfStatus(
-            buncheolId, BuncheolStatus.RECRUITING, BuncheolStatus.CANCELLED, now)
-        > 0;
+    return buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, now) > 0;
   }
 
   /** 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
@@ -193,5 +194,26 @@ public class BuncheolDomainService {
     return buncheolRepository
         .findByIdForUpdate(id)
         .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+  }
+
+  /**
+   * 잠금 조회 + 잠금 시점 최신 값으로 다시 채우기 — 같은 트랜잭션에서 잠금 전에 이미 분철을 읽은 경로용(포트 javadoc).
+   * 호출 측 {@code @Transactional} 필수.
+   */
+  public Buncheol getLatestBuncheolForUpdate(final Long id) {
+    return buncheolRepository
+        .findLatestByIdForUpdate(id)
+        .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+  }
+
+  /**
+   * 활성 신청이 없는 모집중 C2C 분철의 거래 조건을 바꾼다 — 포트 javadoc 참고. 값은 {@code Buncheol#applyTermsChange} 로 검증을
+   * 마친 것이어야 한다(UPDATE 는 엔티티 검증을 거치지 않는다). 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 바꿨으면 true (false = 그 사이 신청이 들어왔거나 모집중·마감 전이 아님)
+   */
+  public boolean changeTermsIfNoApplicant(
+      final Long buncheolId, final BuncheolTerms terms, final Instant now) {
+    return buncheolRepository.changeTermsIfNoApplicant(buncheolId, terms, now) > 0;
   }
 }

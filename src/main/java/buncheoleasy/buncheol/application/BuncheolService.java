@@ -551,8 +551,12 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 개최자가 신청을 받는 동안(모집중·입금 수집중) 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 — 그 자리에 활성 신청자가 있으면
-   * 바꾸지 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
+   * C2C 개최자가 <b>모집중·마감 전</b>에 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 — 그 자리에 활성 신청자가 있으면 바꾸지
+   * 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
+   *
+   * <p>🔴 빼기·넣기와 달리 <b>입금 수집중(추가 모집)에는 열지 않는다</b>. 추가 모집 신청은 바로 입금 대기라, 옛 가격을 띄워 둔 화면이 그
+   * 값으로 입금액을 안내해 틀린 금액이 송금될 수 있다. 모집중 신청은 입금을 성사 확정 뒤 서버 금액으로 안내받는다. 추가 모집 중 가격은 빼고
+   * 다시 넣기로 바꾼다.
    *
    * <p>닫힌 자리는 바꾸지 않는다 — 다시 넣기({@link #addMember})가 가격을 받아 연다. 판정과 쓰기는 조건부 UPDATE 하나이고, 락 순서는
    * 분철 행(X) → 자리 행(X, UPDATE) → 참여 행(S, NOT EXISTS) 으로 빼기와 같다.
@@ -561,7 +565,8 @@ public class BuncheolService {
   public void changeMemberPrice(
       final Long hostId, final Long buncheolId, final Long buncheolMemberId, final long price) {
     final Instant now = Instant.now(clock);
-    lockForSlotEdit(hostId, buncheolId, now);
+    Buncheol buncheol = lockForSlotEdit(hostId, buncheolId, now);
+    buncheol.validateRecruiting(now);
 
     if (!buncheolMemberDomainService.changePriceIfUnoccupied(buncheolMemberId, buncheolId, price)) {
       // 판정은 위 UPDATE 로 끝났고, 여기서 읽는 것은 어느 안내를 줄지뿐이다 — 그 분철의 자리가 아니면 빼기와 같은 404.

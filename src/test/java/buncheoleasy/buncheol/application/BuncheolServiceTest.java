@@ -2053,19 +2053,32 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 빼기·넣기와 같은 구간 — 입금 수집중 추가 모집에서도 빈 자리 가격은 바꿀 수 있다.
-    @ParameterizedTest
-    @EnumSource(
-        value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING"})
-    void 신청을_받는_동안에는_빈_자리_가격을_바꾼다(final BuncheolStatus status) {
-      givenLocked(slotEditBuncheol(FlowType.C2C, status));
+    @Test
+    void 모집중_마감_전에는_빈_자리_가격을_바꾼다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
       given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
           .willReturn(true);
 
       buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L);
 
       then(buncheolMemberDomainService).should(never()).getBuncheolMember(any(), any());
+    }
+
+    // 🔴 빼기·넣기와 달리 추가 모집(입금 수집중)에는 열지 않는다 — 신청이 바로 입금 대기라 옛 가격을 띄운 화면이 틀린 입금액을
+    // 안내할 수 있다. 이 검사를 지우면 가격이 바뀌어 빨개진다.
+    @Test
+    void 입금_수집중이면_거부하고_가격을_바꾸지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.PAYMENT_COLLECTING));
+
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(buncheolMemberDomainService)
+          .should(never())
+          .changePriceIfUnoccupied(any(), any(), anyLong());
     }
 
     // 🔴 분철 잠금이 첫 분철 조회여야 신청(분철 잠금 → 자리 잠금 읽기)과 한 줄로 서서, 신청이 바뀐 가격을 본다.

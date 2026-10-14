@@ -192,7 +192,7 @@ public class BuncheolController {
     return ResponseEntity.noContent().build();
   }
 
-  /** C2C 개최자의 빈 자리 가격 바꾸기 — 그 자리에 신청자가 없을 때만. */
+  /** C2C 개최자의 빈 자리 가격 바꾸기 — 모집중·마감 전, 그 자리에 신청자가 없을 때만. */
   @PatchMapping("/{id}/members/{buncheolMemberId}")
   public ResponseEntity<Void> changeMemberPrice(
       @AuthenticationPrincipal final Long hostId,

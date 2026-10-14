@@ -272,7 +272,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             - 바뀐 칸만 개최와 같은 규칙으로 검증한다.
                             - 신청 여부 판정과 조건 쓰기는 한 조건부 UPDATE 다. 저장 직전에 신청이 들어오면 `409 BCH-124` 이고
                               제목·이미지 등 이 요청의 다른 변경도 모두 반영되지 않는다.
-                            - 자리별 가격은 이 API 가 아니라 `PATCH /v1/buncheols/{id}/members/{buncheolMemberId}` 로 바꾼다.
+                            - 자리별 가격은 이 API 가 아니라 `PATCH /v1/buncheols/{id}/members/{buncheolMemberId}` 로 바꾼다(모집중·마감 전만).
 
                             **images 파트** (선택): 새로 업로드할 이미지 파일 목록.
                             `keepImageIds`(해당 분철의 실제 이미지여야 함) + 새 이미지 합이 **최소 1장 ~ 최대 5장** 이어야 한다. 즉 수정 후에도
@@ -1021,8 +1021,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 자리 가격 바꾸기")
                         .description(
                             """
-                            C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 빈 자리 하나의 가격을 바꾼다.
-                            자리 id 는 그대로라 그 자리를 열어 둔 화면도 계속 신청할 수 있다(빼고 다시 넣으면 id 가 바뀐다).
+                            C2C 개최자가 **모집중(`RECRUITING`)·마감 전**에 빈 자리 하나의 가격을 바꾼다. 자리 id 는 그대로다.
+
+                            **입금 수집중(성사 확정 뒤 추가 모집)에는 바꿀 수 없다(`409 BCH-060`).** 추가 모집 신청은 바로 입금 대기라,
+                            옛 가격을 띄워 둔 화면이 그 값으로 입금액을 안내할 수 있기 때문이다. 추가 모집 중 가격을 바꾸려면
+                            빼고(`DELETE …/members/{buncheolMemberId}`) 다시 넣는다(`POST …/members`, 새 가격).
+                            ⚠️ 신청·취소 기록이 남은 자리는 빼면 닫히고(`CLOSED`) 다시 넣으면 **같은 id** 로 다시 열린다.
 
                             **그 자리에 활성 신청자(신청·입금 확인 중·보냈어요·확정)가 있으면 바꾸지 않는다** — 그 사람이 보고 신청한
                             가격이다. 다른 자리에 신청자가 있는 것은 상관없다. 판정과 쓰기는 한 조건부 UPDATE 라, 저장 직전에 그 자리에
@@ -1044,7 +1048,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중·마감 전이 아님 — 입금 수집중(추가 모집)·마감 지난 모집중·진행확정·취소 |
                             | 409 | `BCH-125` (`BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED`) | 그 자리에 신청자가 있거나 닫힌 자리 |
                             """)
                         .requestHeaders(userAuthorizationHeader())

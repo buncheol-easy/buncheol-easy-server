@@ -558,6 +558,82 @@ class JpaBuncheolRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("C2C 자동 마감 취소 CAS 테스트")
+  class CancelExpiredC2cIfRecruitingTest {
+
+    // 정각(초 단위)으로 맞춰 DB 정밀도와 무관하게 경계를 고정한다.
+    private final Instant deadline = Instant.now().truncatedTo(ChronoUnit.HOURS);
+
+    private Long persistC2cWithDeadline(final FlowType flowType) {
+      Instant future = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params =
+          new BuncheolParams(
+              groupId, "자동 마감 분철", null, "공식 스토어", future, 2, 3000, null, flowType, null);
+      Long id = persistAndDetach(Buncheol.create(hostId, params, Instant.now())).getId();
+      forceDeadline(id, deadline);
+      return id;
+    }
+
+    private String statusOf(final Long buncheolId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+    }
+
+    @Test
+    void 마감이_지났으면_취소한다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+
+      int affected = buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.plusSeconds(60));
+
+      assertThat(affected).isOne();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.CANCELLED.name());
+    }
+
+    // 폴링 쿼리(deadline <= now)와 같은 경계 — 마감 정각에 고른 분철은 여기서도 통과해야 한다.
+    @Test
+    void 마감_정각이면_취소한다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+
+      assertThat(buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline)).isOne();
+    }
+
+    // 🔴 이 테스트가 가드 본체다. 폴링이 옛 마감으로 고른 뒤 개최자가 연장했으면 0행으로 건너뛰고, 다음 폴링이 새 마감으로 다시
+    // 판정한다. 마감 조건을 지우면 연장된 분철이 취소돼 빨개진다.
+    @Test
+    void 마감이_연장돼_아직_안_지났으면_취소하지_않고_다음_폴링에_맡긴다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+
+      int affected = buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.minusSeconds(1));
+
+      assertThat(affected).isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.RECRUITING.name());
+    }
+
+    @Test
+    void LEGACY_분철은_취소하지_않는다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.LEGACY);
+
+      assertThat(buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.plusSeconds(60)))
+          .isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.RECRUITING.name());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING"},
+        mode = EnumSource.Mode.EXCLUDE)
+    void 모집중이_아니면_취소하지_않는다(final BuncheolStatus status) {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+      forceStatus(buncheolId, status);
+
+      assertThat(buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.plusSeconds(60)))
+          .isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(status.name());
+    }
+  }
+
+  @Nested
   @DisplayName("최신 값 잠금 조회 테스트")
   class FindLatestByIdForUpdateTest {
 

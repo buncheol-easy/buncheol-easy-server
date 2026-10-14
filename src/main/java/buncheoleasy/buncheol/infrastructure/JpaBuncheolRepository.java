@@ -369,6 +369,23 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       @Param("now") Instant now);
 
+  // C2C 자동 마감(미성사·인원 미달 취소) 전용 CAS. finalizeIfStatus 와 달리 마감 시각을 다시 본다 — 신청자 0명이면 개최자가 마감을
+  // 바꿀 수 있어, 폴링이 옛 마감으로 고른 뒤 연장이 커밋되면 상태만 보는 CAS 는 연장된 분철을 취소한다(되돌릴 수 없다).
+  // :now 는 폴링 쿼리와 같은 값이라 마감이 그대로면 폴링이 고른 분철은 여기서도 통과한다. 연장돼 0행이면 다음 폴링이 새 마감으로
+  // 다시 판정한다. 개최자 수정은 반대로 deadline > :now 를 요구해(changeTermsIfNoActiveParticipation) 경계에서 한쪽만 이긴다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :cancelledStatus, b.finalizedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus AND b.flowType = :c2cFlow "
+          + "AND b.deadline <= :now")
+  int cancelExpiredC2cIfRecruiting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("c2cFlow") FlowType c2cFlow,
+      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
+      @Param("now") Instant now);
+
   // expectedStatus → newStatus CAS UPDATE (호스트 취소 공용: RECRUITING/CANCELLED → HOST_CANCELLED).
   // 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)

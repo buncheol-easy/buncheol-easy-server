@@ -91,6 +91,15 @@ public interface BuncheolRepository {
       Long buncheolId, BuncheolStatus expectedStatus, BuncheolStatus newStatus, Instant now);
 
   /**
+   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED, {@code finalized_at} 기록). {@link #finalizeIfStatus} 와 달리
+   * <b>마감 시각을 다시 본다</b>({@code deadline <= now}) — 폴링이 옛 마감으로 고른 뒤 개최자가 마감을 연장했으면 0행이다.
+   * C2C 분철에만 적용된다. {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 RECRUITING 이 아니거나, C2C 가 아니거나, 마감이 아직 안 지남)
+   */
+  int cancelExpiredC2cIfRecruiting(Long buncheolId, Instant now);
+
+  /**
    * 마감 판정 전용 CAS. 입금확인된(CONFIRMED) 참여 수가 {@code minHeadcount} 이상이면 CONFIRMED, 미만이면 CANCELLED 로 {@code
    * RECRUITING} 인 분철을 단일 UPDATE 로 원자 전이한다(카운트·비교·전이를 한 current-read 쿼리로 묶어 stale count 오판을 방지).
    *

@@ -111,11 +111,12 @@ public class BuncheolDomainService {
     throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
   }
 
-  /** C2C 확정 유예 경과 미성사 취소 CAS (RECRUITING → CANCELLED — docs/46 §7.1-5). 호출 측 {@code @Transactional} 필수. */
+  /**
+   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED — 확정 유예 경과 docs/46 §7.1-5, 마감 시각 인원 미달). 마감이 아직 안 지났으면
+   * (그 사이 연장됨) 취소하지 않는다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수.
+   */
   public boolean cancelUnconfirmedC2c(final Long buncheolId, final Instant now) {
-    return buncheolRepository.finalizeIfStatus(
-            buncheolId, BuncheolStatus.RECRUITING, BuncheolStatus.CANCELLED, now)
-        > 0;
+    return buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, now) > 0;
   }
 
   /** 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */

@@ -115,6 +115,26 @@ class BuncheolAutoCloseServiceIntegrationTest {
     assertThat(participationStatus(applied)).isEqualTo("CANCELLED");
   }
 
+  // 🔴 폴링이 옛 마감으로 고른 뒤 개최자가 마감을 연장한 경우(신청자 0명이면 연장할 수 있다). 인원 미달이어도 취소하지 않고
+  // 다음 폴링이 새 마감으로 다시 판정한다.
+  @Test
+  void C2C_분철이_폴링_뒤_마감이_연장되면_인원_미달이어도_취소되지_않는다() {
+    Instant now = Instant.now();
+    Long buncheolId = insertBuncheol(pastDeadline(), "RECRUITING", 1);
+    jdbcTemplate.update("UPDATE buncheols SET flow_type = 'C2C' WHERE id = ?", buncheolId);
+    assertThat(buncheolAutoCloseService.findExpiredBuncheolIds(now)).contains(buncheolId);
+    jdbcTemplate.update(
+        "UPDATE buncheols SET deadline = ? WHERE id = ?",
+        Timestamp.from(futureDeadline()),
+        buncheolId);
+
+    boolean finalized = buncheolAutoCloseService.finalizeExpired(buncheolId, now);
+    em.flush();
+
+    assertThat(finalized).isFalse();
+    assertThat(buncheolStatus(buncheolId)).isEqualTo("RECRUITING");
+  }
+
   // 인원이 찼으면 개최자의 확정을 유예 동안 기다린다 — 조기 확정(자리 남음)은 개최자 선택이다.
   @Test
   void C2C_분철이_최소인원을_채웠으면_유예_안에는_취소되지_않는다() {

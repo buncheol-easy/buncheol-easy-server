@@ -259,6 +259,12 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
+  public int cancelExpiredC2cIfRecruiting(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.cancelExpiredC2cIfRecruiting(
+        buncheolId, BuncheolStatus.RECRUITING, FlowType.C2C, BuncheolStatus.CANCELLED, now);
+  }
+
+  @Override
   public int finalizeIfStatus(
       final Long buncheolId,
       final BuncheolStatus expectedStatus,

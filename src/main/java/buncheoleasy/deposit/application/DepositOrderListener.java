@@ -137,16 +137,22 @@ public class DepositOrderListener {
    *
    * <p>cascade 는 입금확인된 참여도 취소하지만 그 주문은 건드리지 않는다. 이미 매칭이 끝났고, 취소 API 는 결제 취소 성격(취소액·잔액 응답)이라
    * 매칭 완료 주문에 어떤 부수효과가 있는지 확인되지 않았다. 판정은 cascade 가 지우지 않는 {@code confirmedAt} 으로 한다.
+   *
+   * <p>이벤트는 분철 단위라 취소된 참여마다 따로 판정한다. 도우미가 모두 예외를 삼키므로 한 건의 조회·취소 실패가 나머지 주문 취소를 막지 않는다.
    */
   @Async
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolCancelled(final BuncheolCancelledEvent event) {
-    Participation participation = findQuietly(event.participationId());
-    if (participation != null
-        && (participation.getConfirmedAt() != null || isC2c(participation))) {
-      return;
+    for (final Long participationId : event.participationIds()) {
+      // isC2c 를 루프 밖에서 분철로 한 번만 보면 안 된다 — 참여 조회가 실패한 건을 LEGACY 로 간주해
+      // 취소를 시도하는 지금의 폴백이 바뀐다.
+      Participation participation = findQuietly(participationId);
+      if (participation != null
+          && (participation.getConfirmedAt() != null || isC2c(participation))) {
+        continue;
+      }
+      cancelQuietly(participationId);
     }
-    cancelQuietly(event.participationId());
   }
 
   // 조회 실패는 LEGACY·미확정으로 간주해 취소 경로를 태운다 — 주문이 없으면 취소는 no-op 이다.

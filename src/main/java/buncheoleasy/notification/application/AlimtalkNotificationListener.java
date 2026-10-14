@@ -99,17 +99,20 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함. LEGACY 는 플랫폼 환불 안내, C2C 는 돈이 개최자 계좌로 가는 직거래라 문의
-   * 유도 문안으로 갈린다 (docs/46 §6.2).
+   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없어 기한 뒤 취소 안내는 {@link
+   * #onBundleReleased} 가 보낸다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentExpired(final PaymentExpiredEvent event) {
     ParticipationView view = assembler.loadByParticipation(event.participationId());
-    AlimtalkTemplate template =
-        view.buncheol().isC2c()
-            ? AlimtalkTemplate.C2C_PAYMENT_EXPIRED
-            : AlimtalkTemplate.PAYMENT_EXPIRED;
+    // C2C_PAYMENT_EXPIRED 는 "개최자가 참여를 취소했어요" 문안이라 시스템 만료에 보내면 하지 않은 일을 개최자 탓으로 안내한다.
+    if (view.buncheol().isC2c()) {
+      log.error(
+          "C2C 참여에 입금 만료 이벤트 수신, 알림톡 발송 건너뜀 - participationId={}", event.participationId());
+      return;
+    }
+    AlimtalkTemplate template = AlimtalkTemplate.PAYMENT_EXPIRED;
     Map<String, String> variables =
         Map.of(
             "닉네임", view.participant().getNickname().value(),
@@ -120,14 +123,8 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 개최자가 묶음을 「제외」함 — 입금 기한이 지나 참여가 취소됐다.
-   *
-   * <p>🟡 <b>기존 {@code C2C_PAYMENT_EXPIRED} 템플릿을 재사용한다.</b> 본문이 "입금 기한이 지나 참여가
-   * <b>자동</b> 취소되었어요" 라 '자동' 한 단어가 부정확하지만, 참여자가 겪는 사실(기한이 지나 취소됨)과 안내할
-   * 행동(입금 전이면 할 일 없음 / 이미 보냈으면 문의)이 정확히 같다. 전용 템플릿은 카카오 승인 리드타임을 알 수 없어
-   * 이 기능 전체를 묶어 세우므로, <b>침묵보다 재사용이 낫다</b>고 판단했다. 문구 개정은 별도로 신청한다.
-   *
-   * <p>묶음 1통으로 보낸다 — 슬롯마다 보내면 같은 사람이 같은 내용을 여러 번 받는다.
+   * (참여자) 개최자가 묶음을 「제외」함 — 입금 기한이 지나 참여가 취소됐다. 묶음 1통으로 보낸다 — 슬롯마다 보내면 같은 사람이 같은 내용을 여러 번
+   * 받는다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -148,8 +145,9 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 전원 입금확인이 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은
-   * 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (성사 안내와 같은 합산 규칙).
+   * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 입금확인(전원 또는 미입금 제외 후 개최자 확정)이
+   * 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (성사 안내와 같은 합산
+   * 규칙).
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -176,25 +174,37 @@ public class AlimtalkNotificationListener {
     sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
-  /** (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). 문안은 {@link #cancelTemplate} 기준으로 갈린다. */
+  /**
+   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). 문안은 {@link #cancelTemplate} 기준으로 갈린다. C2C 1인 다슬롯에서 같은 알림이
+   * 슬롯 수만큼 가지 않도록 사람 단위로 묶어 1건씩 보낸다 (진행 확정과 같은 합산 규칙).
+   */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolCancelled(final BuncheolCancelledEvent event) {
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    AlimtalkTemplate template = cancelTemplate(view, event.reason());
+    sendEachSafely(
+        groupByParticipant(loadViewsSafely(event.participationIds())),
+        group -> sendCancelledNotice(group, event.reason()));
+  }
+
+  // 다슬롯 참여자에게는 멤버명을 모두 나열해 1건만 보낸다. 금액이 없는 문안이라 합산 대상은 멤버명뿐이다.
+  private void sendCancelledNotice(
+      final List<ParticipationView> group, final BuncheolCancelReason reason) {
+    ParticipationView first = group.get(0);
+    AlimtalkTemplate template = cancelTemplate(first, reason);
+    String memberName = mergedMemberName(group);
     Map<String, String> variables =
         template == AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED
             ? Map.of(
-                "닉네임", view.participant().getNickname().value(),
-                "분철명", view.buncheol().getTitle(),
-                "멤버명", view.memberName())
+                "닉네임", first.participant().getNickname().value(),
+                "분철명", first.buncheol().getTitle(),
+                "멤버명", memberName)
             : Map.of(
-                "닉네임", view.participant().getNickname().value(),
-                "분철명", view.buncheol().getTitle(),
-                "멤버명", view.memberName(),
-                "취소사유", event.reason().getDescription());
-    recordSafely(view.participant().getId(), template, variables);
-    sender.send(template, view.participant().getPhoneNumber().value(), variables);
+                "닉네임", first.participant().getNickname().value(),
+                "분철명", first.buncheol().getTitle(),
+                "멤버명", memberName,
+                "취소사유", reason.getDescription());
+    recordSafely(first.participant().getId(), template, variables);
+    sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
   /**
@@ -284,7 +294,7 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인(또는 반려)해 달라고 요청한다. 마킹(슬롯) 건당 1건이라 다슬롯 참여자는
+   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인해 달라고 요청한다. 마킹(슬롯) 건당 1건이라 다슬롯 참여자는
    * 슬롯 수만큼 발송될 수 있고, 금액도 슬롯별 금액이다 — 이체 1건과의 대조는 입금자명(환불 계좌 예금주, docs/46 §4.7-A1)으로 한다.
    */
   @Async(ALIMTALK_EXECUTOR)

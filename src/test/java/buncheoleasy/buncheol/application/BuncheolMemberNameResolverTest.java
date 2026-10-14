@@ -116,6 +116,23 @@ class BuncheolMemberNameResolverTest {
     assertThat(result.available().get(10L)).containsExactly("하니");
   }
 
+  // 개최자가 닫은 자리도 카드에서 「남은 멤버」로 보이면 안 된다 — 전체 멤버 목록에는 남긴다.
+  @Test
+  void 개최자가_닫은_자리는_잔여에서_제외되고_전체에는_남는다() {
+    BuncheolMember closedSlot = buncheolMember(802L, 10L, 2002L);
+    setField(closedSlot, "accessType", BuncheolMemberAccessType.CLOSED);
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(801L, 10L, 2001L), closedSlot));
+    given(groupMemberRepository.findAllByIds(List.of(2001L, 2002L)))
+        .willReturn(List.of(groupMember(2001L, "하니"), groupMember(2002L, "민지")));
+
+    BuncheolMemberNameResolver.MemberNames result =
+        resolver.resolveNames(List.of(10L), Set.of());
+
+    assertThat(result.all().get(10L)).containsExactly("하니", "민지");
+    assertThat(result.available().get(10L)).containsExactly("하니");
+  }
+
   private BuncheolMember buncheolMember(Long id, Long buncheolId, Long memberId) {
     BuncheolMember bm = newInstance(BuncheolMember.class);
     setField(bm, "id", id);

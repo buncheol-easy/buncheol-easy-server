@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.presentation;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -14,6 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -27,6 +29,7 @@ import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTermsChange;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
@@ -479,6 +482,30 @@ class BuncheolControllerTest {
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }
+
+    // 핵심 회귀 지점은 레코드가 아니라 컨트롤러 — toImageFile 의 catch 가 IOException 을 넘어
+    // BusinessException 까지 삼키도록 넓어지면 ImageFileTest 는 초록인 채 조용히 회귀한다.
+    @Test
+    void 허용되지_않은_확장자가_섞이면_201_전에_400_FILE_002_로_거부하고_서비스를_호출하지_않는다()
+        throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      MockMultipartFile gif =
+          new MockMultipartFile("images", "s.gif", MediaType.IMAGE_GIF_VALUE, new byte[] {1});
+
+      mockMvc
+          .perform(
+              multipart("/v1/buncheols")
+                  .file(requestPart)
+                  .file(validImagePart())
+                  .file(gif)
+                  .with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value(ErrorCode.FILE_EXTENSION_INVALID.getCode()));
+
+      then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
+    }
   }
 
   @Nested
@@ -638,6 +665,87 @@ class BuncheolControllerTest {
           .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
     }
 
+    // 옛 클라이언트는 조건 칸을 모른다 — 전부 null(유지)로 서비스에 닿아야 배포 전과 결과가 같다.
+    @Test
+    void 조건_칸이_없는_요청은_조건을_전부_null_로_넘긴다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .modifyBuncheol(
+              eq(HOST_ID),
+              eq(10L),
+              argThat(
+                  request ->
+                      request.title().equals("수정 분철 제목")
+                          && request.toTermsChange().equals(BuncheolTermsChange.none())),
+              any());
+    }
+
+    @Test
+    void 조건_칸을_실으면_그대로_서비스에_넘긴다() throws Exception {
+      String json =
+          """
+          {
+            "title": "수정 분철 제목",
+            "keepImageIds": [1],
+            "thumbnailImageId": 1,
+            "deadline": "2026-10-20T03:00:00Z",
+            "minHeadcount": 2,
+            "gs25ShippingFee": null,
+            "cuShippingFee": 2500,
+            "purchaseSite": "새 구매처"
+          }
+          """;
+      MockMultipartFile requestPart =
+          new MockMultipartFile("request", "", MediaType.APPLICATION_JSON_VALUE, json.getBytes());
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .modifyBuncheol(
+              eq(HOST_ID),
+              eq(10L),
+              argThat(
+                  request ->
+                      request
+                          .toTermsChange()
+                          .equals(
+                              new BuncheolTermsChange(
+                                  Instant.parse("2026-10-20T03:00:00Z"),
+                                  2,
+                                  null,
+                                  2500,
+                                  "새 구매처"))),
+              any());
+    }
+
+    @Test
+    void 신청자가_있어_조건을_못_바꾸면_409와_전용_코드를_반환한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT))
+          .given(buncheolService)
+          .modifyBuncheol(eq(HOST_ID), eq(10L), any(), any());
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(containsString(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT.getCode())));
+    }
+
     @Test
     void BusinessException이_발생하면_해당_HTTP_상태코드로_매핑된다() throws Exception {
       // given
@@ -653,6 +761,32 @@ class BuncheolControllerTest {
           .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+    }
+
+    // 수정은 기존 사진을 트랜잭션 안에서 먼저 지우므로, 서비스까지 가면 사진이 0장이 된다 — 서비스 전에 막는지 고정한다.
+    @Test
+    void 허용되지_않은_확장자면_204_전에_400_FILE_002_로_거부하고_서비스를_호출하지_않는다()
+        throws Exception {
+      String keepNothingJson =
+          """
+                    {
+                      "title": "수정 분철 제목",
+                      "keepImageIds": [],
+                      "thumbnailIndex": 0
+                    }
+                    """;
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, keepNothingJson.getBytes());
+      MockMultipartFile gif =
+          new MockMultipartFile("images", "s.gif", MediaType.IMAGE_GIF_VALUE, new byte[] {1});
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).file(gif).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value(ErrorCode.FILE_EXTENSION_INVALID.getCode()));
+
+      then(buncheolService).should(never()).modifyBuncheol(any(), any(), any(), any());
     }
   }
 
@@ -711,6 +845,136 @@ class BuncheolControllerTest {
           .perform(delete("/v1/buncheols/{id}", 10L).with(mockAuth()))
           .andExpect(status().isForbidden())
           .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NO_PERMISSION.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 자리 빼기 API 테스트")
+  class RemoveMemberTest {
+
+    @Test
+    void 자리를_빼면_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(
+              delete("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+                  .with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      then(buncheolService).should().removeMember(HOST_ID, 10L, 7L);
+    }
+
+    @Test
+    void 신청자가_있는_자리면_409와_전용_코드를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT))
+          .given(buncheolService)
+          .removeMember(HOST_ID, 10L, 7L);
+
+      mockMvc
+          .perform(
+              delete("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+                  .with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      containsString(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 빈 자리 가격 바꾸기 API 테스트")
+  class ChangeMemberPriceTest {
+
+    private ResultActions perform(final String body) throws Exception {
+      return mockMvc.perform(
+          patch("/v1/buncheols/{id}/members/{buncheolMemberId}", 10L, 7L)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(body)
+              .with(mockAuth()));
+    }
+
+    @Test
+    void 가격을_바꾸면_204를_반환한다() throws Exception {
+      perform("{\"price\": 15000}").andExpect(status().isNoContent());
+
+      then(buncheolService).should().changeMemberPrice(HOST_ID, 10L, 7L, 15_000L);
+    }
+
+    @Test
+    void 가격이_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).changeMemberPrice(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void 가격이_음수면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"price\": -100}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).changeMemberPrice(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void 신청자가_있는_자리면_409와_전용_코드를_반환한다() throws Exception {
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED))
+          .given(buncheolService)
+          .changeMemberPrice(HOST_ID, 10L, 7L, 15_000L);
+
+      perform("{\"price\": 15000}")
+          .andExpect(status().isConflict())
+          .andExpect(
+              content()
+                  .string(
+                      containsString(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED.getCode())));
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 자리 다시 넣기 API 테스트")
+  class AddMemberTest {
+
+    private ResultActions perform(final String body) throws Exception {
+      return mockMvc.perform(
+          post("/v1/buncheols/{id}/members", 10L)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(body)
+              .with(mockAuth()));
+    }
+
+    @Test
+    void 자리를_넣으면_201과_새_자리_id_를_반환한다() throws Exception {
+      given(
+              buncheolService.addMember(
+                  eq(HOST_ID),
+                  eq(10L),
+                  argThat(r -> r.memberId().equals(200L) && r.price().equals(15_000L))))
+          .willReturn(30L);
+
+      perform("{\"memberId\": 200, \"price\": 15000}")
+          .andExpect(status().isCreated())
+          .andExpect(jsonPath("$.buncheolMemberId").value(30));
+    }
+
+    @Test
+    void memberId_가_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"price\": 15000}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).addMember(any(), any(), any());
+    }
+
+    @Test
+    void 가격이_음수면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"memberId\": 200, \"price\": -100}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).addMember(any(), any(), any());
     }
   }
 
@@ -891,7 +1155,8 @@ class BuncheolControllerTest {
                   new RequestedShippingAddressResponse("GS25_HALF", "GS25 강남역점")),
               FlowType.LEGACY,
               null,
-              null);
+              null,
+              false);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -916,7 +1181,8 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.myParticipation.participatedMemberCount").value(1))
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))
-          .andExpect(jsonPath("$.myParticipation.participations[0].status").value("AWAITING_PAYMENT"));
+          .andExpect(jsonPath("$.myParticipation.participations[0].status").value("AWAITING_PAYMENT"))
+          .andExpect(jsonPath("$.termsEditable").value(false));
     }
 
     @Test
@@ -937,7 +1203,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null);
+              null, FlowType.LEGACY, null, null, false);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -967,7 +1233,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null);
+              null, FlowType.LEGACY, null, null, false);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc

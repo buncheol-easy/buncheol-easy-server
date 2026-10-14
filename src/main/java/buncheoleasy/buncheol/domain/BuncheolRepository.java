@@ -91,6 +91,15 @@ public interface BuncheolRepository {
       Long buncheolId, BuncheolStatus expectedStatus, BuncheolStatus newStatus, Instant now);
 
   /**
+   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED, {@code finalized_at} 기록). {@link #finalizeIfStatus} 와 달리
+   * <b>마감 시각을 다시 본다</b>({@code deadline <= now}) — 폴링이 옛 마감으로 고른 뒤 개최자가 마감을 연장했으면 0행이다.
+   * C2C 분철에만 적용된다. {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 RECRUITING 이 아니거나, C2C 가 아니거나, 마감이 아직 안 지남)
+   */
+  int cancelExpiredC2cIfRecruiting(Long buncheolId, Instant now);
+
+  /**
    * 마감 판정 전용 CAS. 입금확인된(CONFIRMED) 참여 수가 {@code minHeadcount} 이상이면 CONFIRMED, 미만이면 CANCELLED 로 {@code
    * RECRUITING} 인 분철을 단일 UPDATE 로 원자 전이한다(카운트·비교·전이를 한 current-read 쿼리로 묶어 stale count 오판을 방지).
    *
@@ -160,8 +169,40 @@ public interface BuncheolRepository {
   int hostCancelIfCollectingAndNoConfirmed(Long buncheolId, Instant now);
 
   /**
+   * 모집중({@link BuncheolStatus#RECRUITING}) 분철의 최소 인원이 {@code slotCount} 보다 크면 {@code slotCount} 로
+   * 낮춘다. 개최자가 자리를 뺀 직후 「최소 인원 ≤ 자리 수」를 다시 맞추는 용도다. {@code @Modifying} bulk UPDATE 이므로 호출 측
+   * 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 모집중이 아니거나 이미 자리 수 이하)
+   */
+  int lowerMinHeadcountIfRecruiting(Long buncheolId, int slotCount, Instant now);
+
+  /**
    * C2C 참여 생성 직렬화용 잠금 조회 (SELECT ... FOR UPDATE). 다슬롯 첫 참여 판정(배송비 1회·배송지/입금자명 스냅샷 일치)의
    * check-then-insert 레이스를 분철 행 락으로 막는다 (docs/46 §4.7-A1·A2). 호출 측 트랜잭션이 필수다.
+   *
+   * <p>⚠️ 같은 트랜잭션에서 이 분철을 <b>이미 읽었다면</b> 락은 잡히지만 돌려받는 인스턴스의 값은 그때 읽은 값 그대로다(영속성
+   * 컨텍스트가 같은 인스턴스를 돌려주고 필드를 덮지 않는다). 그런 경로는 {@link #findLatestByIdForUpdate} 를 쓴다.
    */
   Optional<Buncheol> findByIdForUpdate(Long id);
+
+  /**
+   * {@link #findByIdForUpdate} 로 락을 잡은 뒤 <b>잠금 읽기로 값을 다시 채운다</b> — 락을 기다리는 사이 커밋된 변경(개최자의
+   * 조건 수정 등)이 돌려받는 인스턴스에 반영된다. 일반 조회로 다시 읽으면 트랜잭션 스냅샷이라 여전히 낡을 수 있어 잠금 읽기여야 한다.
+   *
+   * <p>⚠️ 다시 채우므로 그 인스턴스에 flush 전 변경이 있으면 버려진다 — 쓰기 전 조회 경로에서만 쓴다. 호출 측 트랜잭션이 필수다.
+   */
+  Optional<Buncheol> findLatestByIdForUpdate(Long id);
+
+  /**
+   * 거래 조건(마감·최소 인원·배송비·구매처)을 바꾸는 조건부 UPDATE. 모집중·마감 전인 C2C 분철에 <b>활성 참여가 하나도 없을 때만</b>
+   * 쓴다 — 신청 여부 판정과 쓰기를 한 문장으로 묶어, 판정 뒤 들어온 신청이 바뀐 조건을 보지 못한 채 남는 일을 막는다. 활성 판정은
+   * UPDATE 의 서브쿼리라 최신 커밋을 본다(current read).
+   *
+   * <p>네 칸 모두 {@code terms} 값으로 쓴다(바뀌지 않은 칸은 지금 값). 호출 측이 분철 행을 먼저 잠가 그 사이 다른 쓰기가 끼어들지
+   * 않는다는 전제다. {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 갱신된 행 수 (0 이면 활성 참여가 있거나, 모집중·마감 전·C2C 가 아님)
+   */
+  int changeTermsIfNoApplicant(Long buncheolId, BuncheolTerms terms, Instant now);
 }

@@ -59,7 +59,13 @@ public class BuncheolImageEventListener {
             event.buncheolId(),
             event.thumbnailIndex());
       }
-      buncheolImageDomainService.createBuncheolImages(event.buncheolId(), urls, thumbnailPosition);
+      if (event.initialUpload()) {
+        buncheolImageDomainService.createInitialBuncheolImages(
+            event.buncheolId(), urls, thumbnailPosition);
+      } else {
+        buncheolImageDomainService.createBuncheolImages(
+            event.buncheolId(), urls, thumbnailPosition);
+      }
     }
   }
 

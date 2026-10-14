@@ -8,6 +8,8 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTerms;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.global.query.LikeEscaper;
 import buncheoleasy.global.query.SearchText;
@@ -433,6 +435,285 @@ class JpaBuncheolRepositoryAdapterTest {
 
       assertThat(affected).isZero();
       assertThat(statusOf(buncheol.getId())).isEqualTo(BuncheolStatus.RECRUITING.name());
+    }
+  }
+
+  @Nested
+  @DisplayName("신청자 0명 거래 조건 수정 CAS 테스트")
+  class ChangeTermsIfNoApplicantTest {
+
+    private final Instant newDeadline =
+        Instant.now().plus(10, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+    private final BuncheolTerms newTerms =
+        new BuncheolTerms(newDeadline, 1, ShippingFeePolicy.of(null, 2500), "새 구매처");
+
+    private Long persistC2c() {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params =
+          new BuncheolParams(
+              groupId, "조건 분철", null, "공식 스토어", deadline, 3, 3000, null, FlowType.C2C, null);
+      return persistAndDetach(Buncheol.create(hostId, params, Instant.now())).getId();
+    }
+
+    // 시각 칸은 JDBC 로 읽으면 JVM 시간대에 따라 어긋나 엔티티로 다시 읽는다(Hibernate jdbc.time_zone=UTC).
+    private BuncheolTerms reloadTerms(final Long buncheolId) {
+      em.clear();
+      Buncheol reloaded = em.find(Buncheol.class, buncheolId);
+      return new BuncheolTerms(
+          reloaded.getDeadline(),
+          reloaded.getMinHeadcount(),
+          reloaded.getShippingFeePolicy(),
+          reloaded.getPurchaseSite());
+    }
+
+    private void assertUnchanged(final Long buncheolId) {
+      BuncheolTerms terms = reloadTerms(buncheolId);
+      assertThat(terms.minHeadcount()).isEqualTo(3);
+      assertThat(terms.shippingFeePolicy()).isEqualTo(ShippingFeePolicy.of(3000, null));
+      assertThat(terms.purchaseSite()).isEqualTo("공식 스토어");
+    }
+
+    @Test
+    void 활성_참여가_없으면_네_칸을_한_번에_바꾼다() {
+      Long buncheolId = persistC2c();
+
+      int affected = buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now());
+
+      assertThat(affected).isOne();
+      // 배송비는 정책 전체 교체 — 보내지 않은 GS25 는 지원 안 함(NULL)이 된다.
+      assertThat(reloadTerms(buncheolId)).isEqualTo(newTerms);
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT gs25_shipping_fee FROM buncheols WHERE id = ?", Integer.class, buncheolId))
+          .isNull();
+    }
+
+    // 이 테스트가 가드 본체다 — NOT EXISTS 를 지우면 신청자가 있는 분철의 조건이 바뀌어 빨개진다.
+    @ParameterizedTest
+    @ValueSource(strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED"})
+    void 활성_참여가_하나라도_있으면_바꾸지_않는다(final String participationStatus) {
+      Long buncheolId = persistC2c();
+      insertParticipation(buncheolId, participationStatus);
+
+      int affected = buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now());
+
+      assertThat(affected).isZero();
+      assertUnchanged(buncheolId);
+    }
+
+    // 「신청자 0명」은 이 분철 기준이다 — 서브쿼리의 분철 조건을 빼면 다른 분철 신청 하나로 모든 분철이 막혀 빨개진다.
+    @Test
+    void 다른_분철의_활성_참여는_보지_않는다() {
+      Long buncheolId = persistC2c();
+      Long otherBuncheolId = persistC2c();
+      insertParticipation(otherBuncheolId, "APPLIED");
+
+      assertThat(buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now()))
+          .isOne();
+      assertThat(reloadTerms(buncheolId)).isEqualTo(newTerms);
+    }
+
+    @Test
+    void 취소된_참여만_있으면_신청자로_보지_않고_바꾼다() {
+      Long buncheolId = persistC2c();
+      insertParticipation(buncheolId, "CANCELLED");
+
+      assertThat(buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now()))
+          .isOne();
+    }
+
+    @Test
+    void 마감이_지났으면_바꾸지_않는다() {
+      Long buncheolId = persistC2c();
+      forceDeadline(buncheolId, Instant.now().minus(1, ChronoUnit.HOURS));
+
+      assertThat(buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now()))
+          .isZero();
+      assertUnchanged(buncheolId);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING"},
+        mode = EnumSource.Mode.EXCLUDE)
+    void 모집중이_아니면_바꾸지_않는다(final BuncheolStatus status) {
+      Long buncheolId = persistC2c();
+      forceStatus(buncheolId, status);
+
+      assertThat(buncheolRepository.changeTermsIfNoApplicant(buncheolId, newTerms, Instant.now()))
+          .isZero();
+      assertUnchanged(buncheolId);
+    }
+
+    @Test
+    void LEGACY_분철은_바꾸지_않는다() {
+      Buncheol legacy = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+
+      assertThat(
+              buncheolRepository.changeTermsIfNoApplicant(legacy.getId(), newTerms, Instant.now()))
+          .isZero();
+      assertThat(reloadTerms(legacy.getId()).purchaseSite()).isEqualTo("공식 스토어");
+    }
+  }
+
+  @Nested
+  @DisplayName("C2C 자동 마감 취소 CAS 테스트")
+  class CancelExpiredC2cIfRecruitingTest {
+
+    // 정각(초 단위)으로 맞춰 DB 정밀도와 무관하게 경계를 고정한다.
+    private final Instant deadline = Instant.now().truncatedTo(ChronoUnit.HOURS);
+
+    private Long persistC2cWithDeadline(final FlowType flowType) {
+      Instant future = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params =
+          new BuncheolParams(
+              groupId, "자동 마감 분철", null, "공식 스토어", future, 2, 3000, null, flowType, null);
+      Long id = persistAndDetach(Buncheol.create(hostId, params, Instant.now())).getId();
+      forceDeadline(id, deadline);
+      return id;
+    }
+
+    private String statusOf(final Long buncheolId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+    }
+
+    @Test
+    void 마감이_지났으면_취소한다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+
+      int affected = buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.plusSeconds(60));
+
+      assertThat(affected).isOne();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.CANCELLED.name());
+    }
+
+    // 폴링 쿼리(deadline <= now)와 같은 경계 — 마감 정각에 고른 분철은 여기서도 통과해야 한다.
+    @Test
+    void 마감_정각이면_취소한다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+
+      assertThat(buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline)).isOne();
+    }
+
+    // 🔴 이 테스트가 가드 본체다. 폴링이 옛 마감으로 고른 뒤 개최자가 연장했으면 0행으로 건너뛰고, 다음 폴링이 새 마감으로 다시
+    // 판정한다. 마감 조건을 지우면 연장된 분철이 취소돼 빨개진다.
+    @Test
+    void 마감이_연장돼_아직_안_지났으면_취소하지_않고_다음_폴링에_맡긴다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+
+      int affected = buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.minusSeconds(1));
+
+      assertThat(affected).isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.RECRUITING.name());
+    }
+
+    @Test
+    void LEGACY_분철은_취소하지_않는다() {
+      Long buncheolId = persistC2cWithDeadline(FlowType.LEGACY);
+
+      assertThat(buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.plusSeconds(60)))
+          .isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(BuncheolStatus.RECRUITING.name());
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING"},
+        mode = EnumSource.Mode.EXCLUDE)
+    void 모집중이_아니면_취소하지_않는다(final BuncheolStatus status) {
+      Long buncheolId = persistC2cWithDeadline(FlowType.C2C);
+      forceStatus(buncheolId, status);
+
+      assertThat(buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, deadline.plusSeconds(60)))
+          .isZero();
+      assertThat(statusOf(buncheolId)).isEqualTo(status.name());
+    }
+  }
+
+  @Nested
+  @DisplayName("최신 값 잠금 조회 테스트")
+  class FindLatestByIdForUpdateTest {
+
+    // 같은 트랜잭션에서 먼저 읽은 분철은 잠금 조회가 그 인스턴스를 그대로 돌려준다 — 그 사이 커밋된 값(여기서는 JDBC UPDATE)을
+    // 놓친다. 최신 값 잠금 조회는 잠금 읽기로 다시 채워 이를 본다. 동시성 자체가 아니라 「다시 채우는가」를 고정한다.
+    @Test
+    void 먼저_읽은_인스턴스도_잠금_시점_값으로_다시_채운다() {
+      Buncheol saved = persistAndDetach(Buncheol.create(hostId, validParams(), Instant.now()));
+      Buncheol loaded = em.find(Buncheol.class, saved.getId());
+      jdbcTemplate.update(
+          "UPDATE buncheols SET gs25_shipping_fee = 1500, min_headcount = 4 WHERE id = ?",
+          saved.getId());
+
+      Buncheol stale = buncheolRepository.findByIdForUpdate(saved.getId()).orElseThrow();
+      assertThat(stale).isSameAs(loaded);
+      assertThat(stale.getShippingFeePolicy().gs25ShippingFee()).isEqualTo(3000);
+
+      Buncheol latest = buncheolRepository.findLatestByIdForUpdate(saved.getId()).orElseThrow();
+
+      assertThat(latest).isSameAs(loaded);
+      assertThat(latest.getShippingFeePolicy().gs25ShippingFee()).isEqualTo(1500);
+      assertThat(latest.getMinHeadcount()).isEqualTo(4);
+    }
+
+    @Test
+    void 분철이_없으면_비어_있다() {
+      assertThat(buncheolRepository.findLatestByIdForUpdate(Long.MAX_VALUE)).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 빼기 뒤 최소 인원 낮추기 CAS 테스트")
+  class LowerMinHeadcountIfRecruitingTest {
+
+    private Long persistWithMinHeadcount(final int minHeadcount) {
+      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+      BuncheolParams params =
+          new BuncheolParams(
+              groupId, "최소 인원 분철", null, "공식 스토어", deadline, minHeadcount, 3000, null,
+              FlowType.C2C, null);
+      return persistAndDetach(Buncheol.create(hostId, params, Instant.now())).getId();
+    }
+
+    private int minHeadcountOf(final Long buncheolId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT min_headcount FROM buncheols WHERE id = ?", Integer.class, buncheolId);
+    }
+
+    @Test
+    void 모집중이고_최소_인원이_남은_자리보다_크면_남은_자리_수로_낮춘다() {
+      Long buncheolId = persistWithMinHeadcount(3);
+
+      int affected = buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, 2, Instant.now());
+
+      assertThat(affected).isOne();
+      assertThat(minHeadcountOf(buncheolId)).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3})
+    void 최소_인원이_남은_자리_수_이하면_그대로_둔다(final int slotCount) {
+      Long buncheolId = persistWithMinHeadcount(2);
+
+      int affected =
+          buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, slotCount, Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(minHeadcountOf(buncheolId)).isEqualTo(2);
+    }
+
+    // 입금 수집중은 이미 성사 확정이라 최소 인원이 판정에 쓰이지 않는다 — 건드리지 않는다.
+    @Test
+    void 입금_수집중이면_낮추지_않는다() {
+      Long buncheolId = persistWithMinHeadcount(3);
+      forceStatus(buncheolId, BuncheolStatus.PAYMENT_COLLECTING);
+
+      int affected = buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, 2, Instant.now());
+
+      assertThat(affected).isZero();
+      assertThat(minHeadcountOf(buncheolId)).isEqualTo(3);
     }
   }
 

@@ -111,11 +111,12 @@ public class BuncheolDomainService {
     throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
   }
 
-  /** C2C 확정 유예 경과 미성사 취소 CAS (RECRUITING → CANCELLED — docs/46 §7.1-5). 호출 측 {@code @Transactional} 필수. */
+  /**
+   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED — 확정 유예 경과 docs/46 §7.1-5, 마감 시각 인원 미달). 마감이 아직 안 지났으면
+   * (그 사이 연장됨) 취소하지 않는다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수.
+   */
   public boolean cancelUnconfirmedC2c(final Long buncheolId, final Instant now) {
-    return buncheolRepository.finalizeIfStatus(
-            buncheolId, BuncheolStatus.RECRUITING, BuncheolStatus.CANCELLED, now)
-        > 0;
+    return buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, now) > 0;
   }
 
   /** 호스트에게 아직 끝나지 않은 분철이 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
@@ -162,10 +163,57 @@ public class BuncheolDomainService {
     return buncheolRepository.cancelIfCollectingAndEmpty(buncheolId, now) > 0;
   }
 
+  /**
+   * 최소 인원 ≤ 자리 수. 성사 판정은 참여 행 수를 세고 활성 참여는 자리당 1건이라, 최소 인원이 자리 수를 넘으면 성사될 수 없는
+   * 분철이 열린다. 개최(·수정) 요청 검사용이다 — 엔티티 불변식으로 두지 않는 이유는 입금 수집중 자리 빼기가 최소 인원을 일부러
+   * 낮추지 않기 때문이다({@link #lowerMinHeadcountToSlotCount}).
+   */
+  public void validateMinHeadcountWithinSlots(final int minHeadcount, final int slotCount) {
+    if (minHeadcount > slotCount) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS);
+    }
+  }
+
+  /**
+   * 개최자가 자리를 뺀 뒤 모집중 분철의 최소 인원을 남은 자리 수로 낮춘다 — 포트 javadoc 참고. 입금 수집중이거나 이미 자리 수
+   * 이하면 그대로 둔다. 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 낮췄으면 true
+   */
+  public boolean lowerMinHeadcountToSlotCount(
+      final Long buncheolId, final int slotCount, final Instant now) {
+    // 엔티티 검증(Buncheol#validateMinHeadcount)을 거치지 않는 UPDATE 라 「최소 인원 ≥ 1」을 여기서 지킨다.
+    if (slotCount < 1) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_INVALID);
+    }
+    return buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, slotCount, now) > 0;
+  }
+
   /** C2C 참여 생성 직렬화용 잠금 조회 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
   public Buncheol getBuncheolForUpdate(final Long id) {
     return buncheolRepository
         .findByIdForUpdate(id)
         .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+  }
+
+  /**
+   * 잠금 조회 + 잠금 시점 최신 값으로 다시 채우기 — 같은 트랜잭션에서 잠금 전에 이미 분철을 읽은 경로용(포트 javadoc).
+   * 호출 측 {@code @Transactional} 필수.
+   */
+  public Buncheol getLatestBuncheolForUpdate(final Long id) {
+    return buncheolRepository
+        .findLatestByIdForUpdate(id)
+        .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+  }
+
+  /**
+   * 활성 신청이 없는 모집중 C2C 분철의 거래 조건을 바꾼다 — 포트 javadoc 참고. 값은 {@code Buncheol#applyTermsChange} 로 검증을
+   * 마친 것이어야 한다(UPDATE 는 엔티티 검증을 거치지 않는다). 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 바꿨으면 true (false = 그 사이 신청이 들어왔거나 모집중·마감 전이 아님)
+   */
+  public boolean changeTermsIfNoApplicant(
+      final Long buncheolId, final BuncheolTerms terms, final Instant now) {
+    return buncheolRepository.changeTermsIfNoApplicant(buncheolId, terms, now) > 0;
   }
 }

@@ -1,8 +1,10 @@
 package buncheoleasy.buncheol.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -14,10 +16,13 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -126,6 +131,97 @@ class BuncheolDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("최소 인원 ≤ 자리 수 검사 테스트")
+  class ValidateMinHeadcountWithinSlotsTest {
+
+    @ParameterizedTest
+    @CsvSource({"3, 3", "1, 3", "1, 1"})
+    void 최소_인원이_자리_수_이하면_통과한다(final int minHeadcount, final int slotCount) {
+      assertThatCode(
+              () -> buncheolDomainService.validateMinHeadcountWithinSlots(minHeadcount, slotCount))
+          .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"4, 3", "5, 3", "2, 1"})
+    void 최소_인원이_자리_수를_넘으면_BCH_123으로_거부한다(final int minHeadcount, final int slotCount) {
+      assertThatThrownBy(
+              () -> buncheolDomainService.validateMinHeadcountWithinSlots(minHeadcount, slotCount))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS);
+    }
+  }
+
+  @Nested
+  @DisplayName("자리 빼기 뒤 최소 인원 낮추기 테스트")
+  class LowerMinHeadcountToSlotCountTest {
+
+    @Test
+    void 남은_자리_수로_낮추기를_저장소에_위임한다() {
+      given(buncheolRepository.lowerMinHeadcountIfRecruiting(BUNCHEOL_ID, 2, NOW)).willReturn(1);
+
+      assertThat(buncheolDomainService.lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 2, NOW)).isTrue();
+    }
+
+    // 엔티티 검증을 거치지 않는 UPDATE 라 「최소 인원 ≥ 1」이 여기서 지켜져야 한다.
+    @Test
+    void 남은_자리가_0이면_최소_인원_규칙으로_거부하고_쓰지_않는다() {
+      assertThatThrownBy(
+              () -> buncheolDomainService.lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 0, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_INVALID);
+
+      then(buncheolRepository)
+          .should(never())
+          .lowerMinHeadcountIfRecruiting(anyLong(), anyInt(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("거래 조건 수정 위임 테스트")
+  class ChangeTermsTest {
+
+    private final BuncheolTerms terms =
+        new BuncheolTerms(
+            Instant.parse("2026-05-20T03:00:00Z"), 2, ShippingFeePolicy.of(3000, null), "스토어");
+
+    @Test
+    void 조건부_UPDATE_가_한_행을_바꾸면_true() {
+      given(buncheolRepository.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).willReturn(1);
+
+      assertThat(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).isTrue();
+    }
+
+    @Test
+    void 조건부_UPDATE_가_0행이면_false() {
+      given(buncheolRepository.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).willReturn(0);
+
+      assertThat(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).isFalse();
+    }
+
+    // 자동 마감 취소는 범용 finalizeIfStatus 가 아니라 마감 시각을 다시 보는 전용 CAS 를 쓴다.
+    @Test
+    void C2C_자동_마감_취소는_마감_조건이_있는_전용_CAS_에_위임한다() {
+      given(buncheolRepository.cancelExpiredC2cIfRecruiting(BUNCHEOL_ID, NOW)).willReturn(0);
+
+      assertThat(buncheolDomainService.cancelUnconfirmedC2c(BUNCHEOL_ID, NOW)).isFalse();
+      then(buncheolRepository).should(never()).finalizeIfStatus(any(), any(), any(), any());
+    }
+
+    @Test
+    void 최신_잠금_조회에서_분철이_없으면_404_로_거부한다() {
+      given(buncheolRepository.findLatestByIdForUpdate(BUNCHEOL_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
     }
   }
 }

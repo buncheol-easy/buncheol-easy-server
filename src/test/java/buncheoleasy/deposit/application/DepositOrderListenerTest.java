@@ -60,6 +60,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 class DepositOrderListenerTest {
 
   private static final Long PARTICIPATION_ID = 500L;
+  private static final Long BUNCHEOL_ID = 1L;
   private static final Long BUNDLE_ID = 77L;
 
   @InjectMocks private DepositOrderListener listener;
@@ -360,7 +361,8 @@ class DepositOrderListenerTest {
     cancelTarget(false, null);
 
     listener.onBuncheolCancelled(
-        new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.HOST_CANCELLED));
+        new BuncheolCancelledEvent(
+            BUNCHEOL_ID, List.of(PARTICIPATION_ID), BuncheolCancelReason.HOST_CANCELLED));
 
     then(payActionClient).should().cancelOrder(PARTICIPATION_ID);
   }
@@ -371,7 +373,8 @@ class DepositOrderListenerTest {
     cancelTarget(false, Instant.parse("2026-05-14T12:10:00Z"));
 
     listener.onBuncheolCancelled(
-        new BuncheolCancelledEvent(PARTICIPATION_ID, BuncheolCancelReason.HOST_CANCELLED));
+        new BuncheolCancelledEvent(
+            BUNCHEOL_ID, List.of(PARTICIPATION_ID), BuncheolCancelReason.HOST_CANCELLED));
 
     then(payActionClient).should(never()).cancelOrder(anyLong());
   }
@@ -387,21 +390,116 @@ class DepositOrderListenerTest {
         .doesNotThrowAnyException();
   }
 
+  // 분철 취소 이벤트는 분철 단위다. 입금확인 이력이 있는 참여만 빼고 나머지는 참여마다 주문을 취소한다.
+  @Test
+  void 분철_취소로_여러_참여가_취소되면_입금확인_이력이_없는_참여의_주문만_취소한다() {
+    Long confirmedId = 501L;
+    Long otherUnconfirmedId = 502L;
+    cancelTarget(PARTICIPATION_ID, null);
+    cancelTarget(confirmedId, Instant.parse("2026-05-14T12:10:00Z"));
+    cancelTarget(otherUnconfirmedId, null);
+    buncheolOfFlow(false);
+    given(payActionClient.isEnabled()).willReturn(true);
+
+    listener.onBuncheolCancelled(
+        new BuncheolCancelledEvent(
+            BUNCHEOL_ID,
+            List.of(PARTICIPATION_ID, confirmedId, otherUnconfirmedId),
+            BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
+
+    then(payActionClient).should().cancelOrder(PARTICIPATION_ID);
+    then(payActionClient).should().cancelOrder(otherUnconfirmedId);
+    then(payActionClient).should(never()).cancelOrder(confirmedId);
+  }
+
+  // 참여마다 따로 돌던 비동기 태스크가 한 루프로 합쳐졌다. 앞 건의 실패가 뒤 건의 주문을 살려 두면 안 된다.
+  @Test
+  void 분철_취소에서_앞_참여의_주문_취소가_실패해도_다음_참여의_주문은_취소한다() {
+    Long nextId = 501L;
+    cancelTarget(PARTICIPATION_ID, null);
+    cancelTarget(nextId, null);
+    buncheolOfFlow(false);
+    given(payActionClient.isEnabled()).willReturn(true);
+    willThrow(new PayActionSendException("페이액션 호출 거부"))
+        .given(payActionClient)
+        .cancelOrder(PARTICIPATION_ID);
+
+    assertThatCode(
+            () ->
+                listener.onBuncheolCancelled(
+                    new BuncheolCancelledEvent(
+                        BUNCHEOL_ID,
+                        List.of(PARTICIPATION_ID, nextId),
+                        BuncheolCancelReason.HOST_CANCELLED)))
+        .doesNotThrowAnyException();
+
+    then(payActionClient).should().cancelOrder(nextId);
+    assertThat(logMessages())
+        .contains(
+            "페이액션 주문 취소 실패 - participationId=" + PARTICIPATION_ID + " cause=페이액션 호출 거부")
+        .noneMatch(message -> message.contains("participationId=" + nextId));
+  }
+
+  @Test
+  void C2C_분철이_취소되면_어느_참여의_주문도_취소하지_않는다() {
+    Long otherId = 501L;
+    cancelTarget(PARTICIPATION_ID, null);
+    cancelTarget(otherId, null);
+    buncheolOfFlow(true);
+
+    listener.onBuncheolCancelled(
+        new BuncheolCancelledEvent(
+            BUNCHEOL_ID, List.of(PARTICIPATION_ID, otherId), BuncheolCancelReason.HOST_CANCELLED));
+
+    then(payActionClient).should(never()).cancelOrder(anyLong());
+  }
+
+  // 참여 조회가 실패한 건은 LEGACY·미확정으로 간주해 취소를 시도한다(주문이 없으면 no-op). C2C 판정을 분철로
+  // 한 번만 하도록 루프 밖으로 빼면 이 건까지 건너뛰게 된다 — 그 회귀를 고정한다.
+  @Test
+  void 분철_취소에서_참여_조회가_실패한_건은_취소를_시도하고_나머지_판정은_그대로_한다() {
+    Long unreadableId = 501L;
+    cancelTarget(PARTICIPATION_ID, null);
+    given(participationDomainService.getParticipation(unreadableId))
+        .willThrow(new DataAccessResourceFailureException("DB 일시 장애"));
+    buncheolOfFlow(true);
+    given(payActionClient.isEnabled()).willReturn(true);
+
+    listener.onBuncheolCancelled(
+        new BuncheolCancelledEvent(
+            BUNCHEOL_ID,
+            List.of(PARTICIPATION_ID, unreadableId),
+            BuncheolCancelReason.HOST_CANCELLED));
+
+    then(payActionClient).should().cancelOrder(unreadableId);
+    then(payActionClient).should(never()).cancelOrder(PARTICIPATION_ID);
+  }
+
   private void cancelTarget(final boolean c2c, final Instant confirmedAt) {
-    Participation participation = newInstance(Participation.class);
-    setField(participation, "id", PARTICIPATION_ID);
-    setField(participation, "buncheolId", 1L);
-    setField(participation, "status", ParticipationStatus.CANCELLED);
-    setField(participation, "confirmedAt", confirmedAt);
-    given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
+    cancelTarget(PARTICIPATION_ID, confirmedAt);
     if (confirmedAt == null) {
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.isC2c()).willReturn(c2c);
-      given(buncheolDomainService.getBuncheol(1L)).willReturn(buncheol);
+      buncheolOfFlow(c2c);
       if (!c2c) {
         given(payActionClient.isEnabled()).willReturn(true);
       }
     }
+  }
+
+  // 분철 취소 cascade 로 CANCELLED 가 된 참여. 분철 스텁은 따로 건다 — 여러 참여가 한 분철을 공유하므로
+  // 참여마다 걸면 덮어쓴 스텁이 안 쓰인 채 남아 strict stubs 에 걸린다.
+  private void cancelTarget(final Long participationId, final Instant confirmedAt) {
+    Participation participation = newInstance(Participation.class);
+    setField(participation, "id", participationId);
+    setField(participation, "buncheolId", BUNCHEOL_ID);
+    setField(participation, "status", ParticipationStatus.CANCELLED);
+    setField(participation, "confirmedAt", confirmedAt);
+    given(participationDomainService.getParticipation(participationId)).willReturn(participation);
+  }
+
+  private void buncheolOfFlow(final boolean c2c) {
+    Buncheol buncheol = mock(Buncheol.class);
+    given(buncheol.isC2c()).willReturn(c2c);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
   }
 
   private static Logger listenerLogger() {

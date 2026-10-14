@@ -7,14 +7,18 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTerms;
+import buncheoleasy.buncheol.domain.BuncheolTermsChange;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
+import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
@@ -29,6 +33,7 @@ import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -76,21 +81,35 @@ public class BuncheolService {
 
     List<Long> memberIds = extractDistinctMemberIds(request.buncheolMembers());
     groupDomainService.getGroupMembersByIdsInGroup(request.groupId(), memberIds);
+    // 개최 시 자리 수 = 요청 멤버 수 (중복은 위에서, 닫힌 자리는 아래에서 거부된다).
+    buncheolDomainService.validateMinHeadcountWithinSlots(
+        request.minHeadcount(), request.buncheolMembers().size());
 
     Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, request.toParams(flowType));
 
     List<BuncheolMemberParams> memberParams =
         request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();
+    validateNoClosedSlots(memberParams);
     validateCodeOnlySlotsAllowed(flowType, memberParams);
     validateCodeOnlySlotsAreFree(memberParams);
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), memberParams);
 
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
-          new BuncheolImageUploadEvent(buncheol.getId(), images, request.thumbnailIndex()));
+          BuncheolImageUploadEvent.ofHold(buncheol.getId(), images, request.thumbnailIndex()));
     }
 
     return buncheol.getId();
+  }
+
+  /**
+   * CLOSED 는 개최자가 신청을 받다가 「빼기」로 닫을 때만 생기는 값이다. 개최 요청으로 만들게 두면 LEGACY 에도 닫힌 자리가 생기고, 이
+   * 값을 모르는 옛 서버로 롤백할 때 "닫힌 자리는 빼기 기능이 쓰인 뒤에만 있다" 는 대비 전제가 깨진다.
+   */
+  private void validateNoClosedSlots(final List<BuncheolMemberParams> memberParams) {
+    if (memberParams.stream().anyMatch(param -> param.accessType().isClosed())) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+    }
   }
 
   /** 코드 발급 API 가 관리자 전용이라, C2C 에 코드 슬롯을 만들면 아무도 발급할 수 없는 영구 잠긴 슬롯이 된다. */
@@ -169,15 +188,31 @@ public class BuncheolService {
     return HostingEligibilityResponse.allowed();
   }
 
+  /**
+   * 분철 수정 — 모집중·마감 전에만. 제목·설명·사진·오픈채팅 링크는 신청자가 있어도 바꿀 수 있고, 거래 조건(마감·최소 인원·배송비·구매처)은
+   * <b>활성 신청이 하나도 없는 C2C 분철</b>에서만 바꾼다. 조건 칸은 지금 값과 다를 때만 바뀐 것으로 본다 — 조건 칸을 보내지 않거나 지금 값을
+   * 그대로 보낸 요청은 이전과 같다.
+   *
+   * <p>거래 조건 쓰기는 더티체킹이 아니라 「활성 신청 없음」을 함께 보는 조건부 UPDATE 다. 앞의 판정({@link
+   * Buncheol#termsEditability})은 안내용이고, 판정 뒤 들어온 신청은 그 UPDATE 가 막아 409 로 전부 롤백된다(제목·사진 변경 포함).
+   *
+   * <p>락 순서는 분철 행(X) → 자리 행(S, 최소 인원을 바꿀 때) → 참여 행(UPDATE 의 NOT EXISTS) 으로, C2C 신청·자리 빼기와 같은
+   * 방향이다.
+   */
   @Transactional
   public void modifyBuncheol(
       final Long hostId,
       final Long buncheolId,
       final BuncheolModifyRequest request,
       final List<ImageFile> images) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    final Instant now = Instant.now(clock);
+    // 🔴 잠금 조회가 이 트랜잭션의 첫 분철 조회여야 한다 — lockForSlotEdit 주석과 같은 함정. 신청과 분철 행에서 한 줄로 서고, 조건
+    // 칸은 잠근 최신 값과 비교한다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
     buncheol.validateOwner(hostId);
-    buncheol.validateRecruiting(Instant.now(clock));
+    buncheol.validateRecruiting(now);
+
+    Optional<BuncheolTerms> newTerms = resolveTermsChange(buncheol, request.toTermsChange(), now);
 
     buncheolImageDomainService.validateModifyImageCount(
         buncheolId, request.keepImageIds(), images.size());
@@ -186,6 +221,13 @@ public class BuncheolService {
 
     buncheolDomainService.updateBuncheolContent(buncheol, request.title(), request.description());
     buncheolDomainService.updateBuncheolOpenChatUrl(buncheol, request.openChatUrl());
+
+    // 조건 쓰기는 제목·설명 변경 뒤에 둔다 — 이 UPDATE 가 영속성 컨텍스트를 먼저 flush 하고 비우므로, 앞의 더티체킹 변경이 함께
+    // 나가고 이후 엔티티 flush 가 조건 칸을 되쓰지 않는다. 실패하면 예외로 전부 롤백되고 아래 이미지 벌크도 돌지 않는다.
+    if (newTerms.isPresent()
+        && !buncheolDomainService.changeTermsIfNoApplicant(buncheolId, newTerms.get(), now)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT);
+    }
 
     // ⚠️ 이 지점 이후는 clearAutomatically=true 벌크 쿼리(삭제·플래그 해제/지정)가 이어져 영속성 컨텍스트가 비워진다.
     // buncheol 엔티티 변경(더티체킹)은 반드시 이 앞에서 끝내야 한다 — 이후 변경은 조용히 유실된다.
@@ -203,8 +245,46 @@ public class BuncheolService {
 
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
-          new BuncheolImageUploadEvent(buncheolId, images, request.thumbnailIndex()));
+          BuncheolImageUploadEvent.ofModify(buncheolId, images, request.thumbnailIndex()));
     }
+  }
+
+  /**
+   * 요청이 거래 조건을 실제로 바꾸면 수정 가능 여부를 판정하고 바뀐 칸을 검증해 새 조건을 돌려준다. 바뀐 칸이 없으면 비어 있다 — 그때는
+   * 신청자 여부를 묻지 않는다(신청자가 있어도 제목·사진 수정은 열려 있다).
+   */
+  private Optional<BuncheolTerms> resolveTermsChange(
+      final Buncheol buncheol, final BuncheolTermsChange change, final Instant now) {
+    if (!buncheol.changesTerms(change)) {
+      return Optional.empty();
+    }
+    // 안내용 사전 검사 — 상세 응답의 termsEditable 과 같은 판정이다. 최종 차단은 조건부 UPDATE 가 한다.
+    // 분철 행을 잠근 뒤라 신청이 새로 커밋될 수 없어, 여기서 본 「신청자 없음」이 그 UPDATE 까지 유지된다.
+    boolean hasActiveParticipation =
+        !participationDomainService.findActiveByBuncheolId(buncheol.getId()).isEmpty();
+    // switch 식이라 판정 값이 늘면 컴파일 에러로 매핑을 강제한다(cancelBuncheol 과 같은 이유).
+    ErrorCode blockedCode =
+        switch (buncheol.termsEditability(now, hasActiveParticipation)) {
+          case EDITABLE -> null;
+          case BLOCKED_BY_STATUS -> ErrorCode.BUNCHEOL_NOT_RECRUITING;
+          case BLOCKED_BY_FLOW -> ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED;
+          case BLOCKED_BY_APPLICANT -> ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT;
+        };
+    if (blockedCode != null) {
+      throw new BusinessException(blockedCode);
+    }
+
+    BuncheolTerms terms = buncheol.applyTermsChange(change, now);
+    if (terms.minHeadcount() != buncheol.getMinHeadcount()) {
+      // 닫힌 자리는 신청을 받지 않으므로 세지 않는다 — 자리 빼기의 최소 인원 하향과 같은 수다. 분철 잠금 뒤 잠금 읽기라 최신이다.
+      int openSlotCount =
+          (int)
+              buncheolMemberDomainService.findAllByBuncheolIdForShare(buncheol.getId()).stream()
+                  .filter(slot -> !slot.isClosed())
+                  .count();
+      buncheolDomainService.validateMinHeadcountWithinSlots(terms.minHeadcount(), openSlotCount);
+    }
+    return Optional.of(terms);
   }
 
   /**
@@ -360,16 +440,158 @@ public class BuncheolService {
     // cascade 는 참여를 한 번의 UPDATE 로 전이시켜 어느 묶음이 비었는지 개별로 알 수 없다 — 같은 CAS 조건을
     // 분철 범위로 넓혀 일괄 판정한다. 안 닫으면 취소된 분철에 활성 묶음이 영구히 남는다.
     participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
-    List<Participation> cancelled =
-        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
+    List<Long> cancelledIds =
+        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId).stream()
+            .map(Participation::getId)
+            .sorted()
+            .toList();
     // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
-    deliveryDomainService.deleteByParticipationIds(
-        cancelled.stream().map(Participation::getId).toList());
-    cancelled.forEach(
-        participation ->
-            eventPublisher.publishEvent(
-                new BuncheolCancelledEvent(
-                    participation.getId(), BuncheolCancelReason.HOST_CANCELLED)));
+    deliveryDomainService.deleteByParticipationIds(cancelledIds);
+    // 분철 단위로 1번 발행한다 — 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다.
+    if (!cancelledIds.isEmpty()) {
+      eventPublisher.publishEvent(
+          new BuncheolCancelledEvent(
+              buncheolId, cancelledIds, BuncheolCancelReason.HOST_CANCELLED));
+    }
+  }
+
+  /**
+   * C2C 개최자가 신청을 받는 동안(모집중·입금 수집중) 빈 자리를 분철에서 뺀다 — 다른 곳에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
+   *
+   * <ul>
+   *   <li>참여·참여 코드 기록이 하나도 없는 자리는 행을 지운다 — 상세·목록·찜·멤버 검색에서 처음부터 없던 멤버처럼 사라진다.
+   *   <li>기록(취소 등)만 남은 자리는 FK 때문에 지울 수 없어 {@code CLOSED} 로 닫는다 — 상세에 「마감」으로 남고 신청은 막힌다.
+   *   <li>이미 닫힌 자리는 그대로 둔다(멱등). 활성 신청자가 있는 자리는 BCH-118.
+   * </ul>
+   *
+   * <p>「남은 자리」는 <b>열린 자리</b>(닫히지 않은 자리)다. 마지막 열린 자리는 뺄 수 없다(BCH-120) — 신청을 받을 자리가 0 인
+   * 분철은 어디에서도 전제하지 않는다. 단 그 자리에 신청자가 있으면 BCH-118 이 먼저다 — 신청자가 있는 분철에 「분철을 취소해
+   * 주세요」를 권하면 안 된다.
+   *
+   * <p>모집중에 빼서 열린 자리 수가 최소 인원보다 작아지면 최소 인원을 열린 자리 수로 낮춘다. 그대로 두면 C2C 는 마감 정각에 인원
+   * 미달로 즉시 취소되어 신청자까지 전원 취소된다.
+   *
+   * <p>락 순서는 분철 행(X) → 자리 행(X) → 참여·참여 코드 행(S, DELETE·닫기 CAS 의 NOT EXISTS) 이다. C2C 신청(분철 X → 자리
+   * S → 참여 INSERT)·개최자 취소 CAS 와 같은 「분철 → 자리 → 참여」 방향이라 신청과는 분철 행에서 한 줄로 선다. 입금확인(참여 →
+   * 분철)과는 역방향이지만, 겹치려면 개최자가 같은 자리의 입금확인과 빼기를 동시에 눌러야 하고 실패 모드는 기존과 같은 데드락
+   * 롤백이다(ParticipationService#publishFullIfAllSlotsApplied).
+   */
+  @Transactional
+  public void removeMember(final Long hostId, final Long buncheolId, final Long buncheolMemberId) {
+    final Instant now = Instant.now(clock);
+    lockForSlotEdit(hostId, buncheolId, now);
+
+    // 잠금 조회라 분철 락을 기다리는 동안 커밋된 다른 빼기까지 센다 — 스냅샷으로 세면 두 탭에서 동시에 빼기를 눌렀을 때
+    // 둘 다 "2자리 남음" 을 보고 자리가 0 이 될 수 있다.
+    List<BuncheolMember> slots =
+        buncheolMemberDomainService.findAllByBuncheolIdForUpdate(buncheolId);
+    BuncheolMember target =
+        slots.stream()
+            .filter(slot -> slot.getId().equals(buncheolMemberId))
+            .findFirst()
+            .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND));
+    // 화면이 낡았거나 두 번 누른 경우 — 이미 닫혔으니 할 일이 없다. 열린 자리 수도 그대로라 최소 인원도 건드리지 않는다.
+    if (target.isClosed()) {
+      return;
+    }
+    // 닫힌 자리는 신청을 받지 않으므로 「남은 자리」로 세지 않는다. 마지막 자리 판정과 최소 인원 하향이 같은 수를 쓴다.
+    int openSlotCount = (int) slots.stream().filter(slot -> !slot.isClosed()).count();
+    if (openSlotCount <= 1) {
+      // 판정은 위 잠금 조회로 끝났고, 여기서 다시 읽는 것은 어느 안내를 줄지뿐이다(지우지 않으므로 원자성과 무관).
+      throw new BusinessException(
+          participationDomainService.hasActiveParticipationOnSlot(buncheolMemberId)
+              ? ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT
+              : ErrorCode.BUNCHEOL_MEMBER_REMOVE_LAST);
+    }
+
+    // 기록이 하나도 없으면 행을 지우고, 기록(취소 등)만 남아 FK 로 못 지우면 닫는다. 둘 다 원자적 CAS 라 그 사이 들어온
+    // 신청은 닫기 CAS 의 NOT EXISTS(활성 참여)가 막는다 — 둘 다 실패하면 활성 신청자가 있는 것이다.
+    if (!buncheolMemberDomainService.removeIfUnreferenced(buncheolMemberId, buncheolId)
+        && !buncheolMemberDomainService.closeIfUnoccupied(buncheolMemberId, buncheolId)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT);
+    }
+
+    // 모집중 여부는 UPDATE 조건이 판정한다(입금 수집중이면 0행). 위 DELETE·닫기가 영속성 컨텍스트를 비웠으므로 엔티티
+    // 더티체킹이 아니라 UPDATE 로 쓴다.
+    buncheolDomainService.lowerMinHeadcountToSlotCount(buncheolId, openSlotCount - 1, now);
+  }
+
+  /**
+   * C2C 개최자가 신청을 받는 동안 그 분철 그룹의 멤버를 자리로 (다시) 넣는다 — 실수로 뺀 자리를 되살리는 경로다. 개최와 같은
+   * 검사(그룹 소속·중복 금지·가격 규칙)를 하고, 선착순(OPEN) 자리로 만든다. 최소 인원은 올리지 않는다.
+   *
+   * <p>같은 멤버의 닫힌({@code CLOSED}) 자리가 있으면 새로 만들지 않고 <b>그 자리를 다시 연다</b>(가격은 새로 받은 값) — 기록이 FK 로
+   * 붙어 있어 지울 수 없고 (분철, 멤버) 유니크라 새 행도 만들 수 없다. 열린 자리가 있으면 BCH-121.
+   *
+   * @return 새로 만들었거나 다시 연 자리 id
+   */
+  @Transactional
+  public Long addMember(
+      final Long hostId, final Long buncheolId, final BuncheolMemberAddRequest request) {
+    final Instant now = Instant.now(clock);
+    Buncheol buncheol = lockForSlotEdit(hostId, buncheolId, now);
+
+    groupDomainService.getGroupMembersByIdsInGroup(
+        buncheol.getGroupId(), List.of(request.memberId()));
+    // 사전 조회는 어느 경로로 갈지만 정한다. 경합은 분철 락이 직렬화하고, 다시 열기는 CAS(닫힌 자리만)가, 새 자리는 유니크
+    // 인덱스가 마지막 선이다.
+    Optional<BuncheolMember> existing =
+        buncheolMemberDomainService.findInBuncheol(buncheolId, request.memberId());
+    if (existing.isPresent()) {
+      Long slotId = existing.get().getId();
+      if (existing.get().isClosed()
+          && buncheolMemberDomainService.reopenClosedSlot(slotId, buncheolId, request.price())) {
+        return slotId;
+      }
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_ALREADY_EXISTS);
+    }
+    return buncheolMemberDomainService
+        .addOpenSlot(buncheolId, request.memberId(), request.price())
+        .getId();
+  }
+
+  /**
+   * C2C 개최자가 <b>모집중·마감 전</b>에 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 — 그 자리에 활성 신청자가 있으면 바꾸지
+   * 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
+   *
+   * <p>🔴 빼기·넣기와 달리 <b>입금 수집중(추가 모집)에는 열지 않는다</b>. 추가 모집 신청은 바로 입금 대기라, 옛 가격을 띄워 둔 화면이 그
+   * 값으로 입금액을 안내해 틀린 금액이 송금될 수 있다. 모집중 신청은 입금을 성사 확정 뒤 서버 금액으로 안내받는다. 추가 모집 중 가격은 빼고
+   * 다시 넣기로 바꾼다.
+   *
+   * <p>닫힌 자리는 바꾸지 않는다 — 다시 넣기({@link #addMember})가 가격을 받아 연다. 판정과 쓰기는 조건부 UPDATE 하나이고, 락 순서는
+   * 분철 행(X) → 자리 행(X, UPDATE) → 참여 행(S, NOT EXISTS) 으로 빼기와 같다.
+   */
+  @Transactional
+  public void changeMemberPrice(
+      final Long hostId, final Long buncheolId, final Long buncheolMemberId, final long price) {
+    final Instant now = Instant.now(clock);
+    Buncheol buncheol = lockForSlotEdit(hostId, buncheolId, now);
+    buncheol.validateRecruiting(now);
+
+    if (!buncheolMemberDomainService.changePriceIfUnoccupied(buncheolMemberId, buncheolId, price)) {
+      // 판정은 위 UPDATE 로 끝났고, 여기서 읽는 것은 어느 안내를 줄지뿐이다 — 그 분철의 자리가 아니면 빼기와 같은 404.
+      buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId);
+      throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED);
+    }
+  }
+
+  /**
+   * 자리 빼기·넣기·가격 바꾸기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다.
+   *
+   * <p>🔴 이 잠금 조회가 트랜잭션의 <b>첫 분철 조회</b>여야 한다. 앞에서 {@code getBuncheol} 을 부르면 영속성 컨텍스트가 락 이전에
+   * 읽은 인스턴스를 그대로 돌려줘 상태 판정이 낡는다(ParticipationService#participateC2c 주석과 같은 함정).
+   */
+  private Buncheol lockForSlotEdit(final Long hostId, final Long buncheolId, final Instant now) {
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
+    buncheol.validateOwner(hostId);
+    if (!buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    // 참여 가드·상세의 공석 표시와 같은 술어 — 신청을 받는 구간에서만 자리를 바꾼다.
+    if (!buncheol.acceptsNewParticipation(now)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+    return buncheol;
   }
 
   private List<Long> extractDistinctMemberIds(final List<BuncheolMemberRequest> requests) {

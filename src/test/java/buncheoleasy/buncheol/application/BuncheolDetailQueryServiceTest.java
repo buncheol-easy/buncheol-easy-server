@@ -54,6 +54,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -445,6 +447,34 @@ class BuncheolDetailQueryServiceTest {
           .isEqualTo(BuncheolMemberSaleStatus.CODE_ONLY);
     }
 
+    // 개최자가 「빼기」로 닫은 자리는 새 응답 값 없이 기존 CLOSED(「마감」)로 — 신청을 받는 분철의 빈 자리가 CLOSED 면
+    // 이 경우뿐이라 화면이 구분할 수 있다.
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+    void 신청을_받는_분철에서도_개최자가_닫은_자리는_CLOSED_로_내려간다(final BuncheolStatus status) {
+      stubBasicBuncheol(status, ShippingFeePolicy.of(3000, null), FlowType.C2C, DEADLINE);
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      BuncheolMember openSlot = buncheolMember(101L, BUNCHEOL_ID, 1001L, 20_000L);
+      BuncheolMember closedSlot = buncheolMember(102L, BUNCHEOL_ID, 1002L, 20_000L);
+      setField(closedSlot, "accessType", BuncheolMemberAccessType.CLOSED);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(openSlot, closedSlot));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(
+              List.of(
+                  groupMember(1001L, "민지", "minji.png"), groupMember(1002L, "하니", "hanni.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members())
+          .extracting(BuncheolMemberDetailResponse::saleStatus)
+          .containsExactly(BuncheolMemberSaleStatus.AVAILABLE, BuncheolMemberSaleStatus.CLOSED);
+    }
+
     // 닫힌 분철에선 코드가 있어도 참여 INSERT 가 막힌다.
     @Test
     void 닫힌_분철에서는_코드_참여_슬롯도_CLOSED_로_내려간다() {
@@ -679,6 +709,86 @@ class BuncheolDetailQueryServiceTest {
       stubBuncheolWithLink(active(1L, 101L, ME, ParticipationStatus.CANCELLED));
 
       assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).openChatUrl()).isNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("거래 조건 수정 가능 여부(termsEditable)")
+  class TermsEditableTest {
+
+    /** 멤버 슬롯 1개짜리 분철. 활성 참여는 인자로 받은 것만 둔다. */
+    private void stub(
+        final BuncheolStatus status,
+        final FlowType flowType,
+        final Instant deadline,
+        final Participation... activeParticipations) {
+      stubBasicBuncheol(status, ShippingFeePolicy.of(3000, null), flowType, deadline);
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, BUNCHEOL_ID, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지", "minji.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(activeParticipations));
+    }
+
+    @Test
+    void 개최자에게_신청자_0명인_모집중_C2C_는_true() {
+      stub(BuncheolStatus.RECRUITING, FlowType.C2C, DEADLINE);
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID).termsEditable())
+          .isTrue();
+      // 상세가 이미 읽는 활성 참여로 판정한다 — 조회가 더 늘지 않는다.
+      then(participationRepository).should().findActiveByBuncheolId(BUNCHEOL_ID);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED"})
+    void 활성_신청이_하나라도_있으면_false(final ParticipationStatus status) {
+      stub(BuncheolStatus.RECRUITING, FlowType.C2C, DEADLINE, active(1L, 101L, ME, status));
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID).termsEditable())
+          .isFalse();
+    }
+
+    // 판정은 개최자 화면용이다 — 남에게는 조건이 열려 있어도 false.
+    @Test
+    void 개최자가_아니거나_비로그인이면_false() {
+      stub(BuncheolStatus.RECRUITING, FlowType.C2C, DEADLINE);
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME).termsEditable()).isFalse();
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null).termsEditable())
+          .isFalse();
+    }
+
+    @Test
+    void LEGACY_는_false() {
+      stub(BuncheolStatus.RECRUITING, FlowType.LEGACY, DEADLINE);
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID).termsEditable())
+          .isFalse();
+    }
+
+    @Test
+    void 마감이_지난_모집중이면_false() {
+      stub(BuncheolStatus.RECRUITING, FlowType.C2C, NOW);
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID).termsEditable())
+          .isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"PAYMENT_COLLECTING", "CONFIRMED", "CANCELLED"})
+    void 모집중이_아니면_false(final BuncheolStatus status) {
+      stub(status, FlowType.C2C, DEADLINE);
+
+      assertThat(buncheolDetailQueryService.getDetail(BUNCHEOL_ID, HOST_ID).termsEditable())
+          .isFalse();
     }
   }
 

@@ -108,6 +108,11 @@ public class BuncheolAutoCloseService {
    * 돈이 오간 적 없는 단계라 환불은 발생하지 않는다.
    */
   private boolean finalizeExpiredC2c(final Buncheol buncheol, final Instant now) {
+    // 신청자 0명이면 개최자가 마감을 연장할 수 있다 — 폴링이 옛 마감으로 골랐어도 지금 마감이 안 지났으면 판정하지 않는다.
+    // 이 읽기는 낡을 수 있어 최종 판정은 아래 취소 CAS 의 마감 조건이다.
+    if (buncheol.getDeadline().isAfter(now)) {
+      return false;
+    }
     // 🔴 최소 인원 미달이면 유예를 기다리지 않는다 (2026-08-31 사용자 결정). 개최자가 확정을 눌러도 인원이
     // 채워지지 않는 분철을 48시간 붙잡아 두면, 참여자는 그동안 자기 자리가 살아 있는 줄 안다. LEGACY 가 마감
     // 시각에 인원 미달로 바로 취소하는 것과 같은 규칙이다.
@@ -122,7 +127,8 @@ public class BuncheolAutoCloseService {
       return false;
     }
     if (!buncheolDomainService.cancelUnconfirmedC2c(buncheol.getId(), now)) {
-      return false; // 그 사이 확정·취소됨 (CAS 경합).
+      // 그 사이 확정·취소됐거나 마감이 연장됨(CAS 경합). 참여·알림은 건드리지 않고 다음 폴링에 맡긴다.
+      return false;
     }
     // 사유를 가른다 — 참여자에게 "인원이 모이지 않았어요" 와 "개최자가 확정하지 않았어요" 는 다른 안내다.
     finalizeAsCancelled(
@@ -150,14 +156,16 @@ public class BuncheolAutoCloseService {
     // 취소된 참여의 묶음도 함께 닫는다 (개최자 취소 경로와 같은 이유 — BuncheolService#cancelBuncheol).
     participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
     // 스냅샷이 아니라 cascade 로 실제 전이된 참여만 재조회해 발행 — 그 사이 자발취소·만료된 참여에 중복 알림이 가지 않도록.
-    List<Participation> cancelled =
-        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId);
+    List<Long> cancelledIds =
+        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId).stream()
+            .map(Participation::getId)
+            .sorted()
+            .toList();
     // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
-    deliveryDomainService.deleteByParticipationIds(
-        cancelled.stream().map(Participation::getId).toList());
-    cancelled.forEach(
-        participation ->
-            eventPublisher.publishEvent(
-                new BuncheolCancelledEvent(participation.getId(), reason)));
+    deliveryDomainService.deleteByParticipationIds(cancelledIds);
+    // 분철 단위로 1번 발행한다 — 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다.
+    if (!cancelledIds.isEmpty()) {
+      eventPublisher.publishEvent(new BuncheolCancelledEvent(buncheolId, cancelledIds, reason));
+    }
   }
 }

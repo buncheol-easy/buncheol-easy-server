@@ -72,6 +72,10 @@ public class BuncheolMember extends TimestampedEntity {
     return accessType.requiresCode();
   }
 
+  public boolean isClosed() {
+    return accessType.isClosed();
+  }
+
   public boolean isFree() {
     return price == 0L;
   }
@@ -110,8 +114,8 @@ public class BuncheolMember extends TimestampedEntity {
     }
   }
 
-  // 0원은 오픈 이벤트 무료 분철(운영진 발행) 슬롯으로 허용한다.
-  private void validatePrice(final long price) {
+  // 0원은 오픈 이벤트 무료 분철(운영진 발행) 슬롯으로 허용한다. 다시 열기 CAS 도 같은 규칙을 쓰도록 패키지에 연다.
+  static void validatePrice(final long price) {
     if (price < 0 || price % PRICE_UNIT != 0) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_PRICE_INVALID);
     }

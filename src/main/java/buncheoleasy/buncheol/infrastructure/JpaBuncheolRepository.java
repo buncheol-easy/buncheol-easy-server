@@ -323,10 +323,68 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 
+  // 개최자 자리 빼기 뒤 「최소 인원 ≤ 자리 수」 복원. 모집중에만 낮춘다 — C2C 는 마감 정각에 신청 인원이 최소 인원
+  // 미만이면 유예 없이 취소되므로(findIdsByStatusAndDeadlineBefore), 뺀 자리만큼 영영 못 채울 최소 인원이 남으면 신청자까지
+  // 전원 취소된다. 입금 수집중은 이미 성사 확정이라 최소 인원이 판정에 쓰이지 않는다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.minHeadcount = :slotCount, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus "
+          + "AND b.minHeadcount > :slotCount")
+  int lowerMinHeadcountIfRecruiting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("slotCount") int slotCount,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("now") Instant now);
+
   /** C2C 참여 생성 직렬화용 잠금 조회 — 다슬롯 첫 참여 판정(배송비 1회·스냅샷 일치)의 TOCTOU 방지 (docs/46 §4.7-A1·A2). */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT b FROM Buncheol b WHERE b.id = :id")
   Optional<Buncheol> findByIdForUpdate(@Param("id") Long id);
+
+  // 신청자 0명 C2C 분철의 거래 조건 수정. 활성 참여 판정이 UPDATE 서브쿼리라 최신 커밋을 본다 — 별도 SELECT 로 먼저 세면 그 사이
+  // 커밋된 신청이 바뀐 조건을 못 본 채 남는다. b.deadline > :now 는 바꾸기 전 마감이다(WHERE 는 SET 이전 값을 본다).
+  // 활성 상태 집합은 상세 응답의 termsEditable 판정(findActiveByBuncheolId)과 같은 ParticipationStatus.active() 다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.deadline = :deadline, b.minHeadcount = :minHeadcount, "
+          + "    b.shippingFeePolicy.gs25ShippingFee = :gs25ShippingFee, "
+          + "    b.shippingFeePolicy.cuShippingFee = :cuShippingFee, "
+          + "    b.purchaseSite = :purchaseSite, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus AND b.flowType = :c2cFlow "
+          + "AND b.deadline > :now "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)")
+  int changeTermsIfNoActiveParticipation(
+      @Param("buncheolId") Long buncheolId,
+      @Param("deadline") Instant deadline,
+      @Param("minHeadcount") int minHeadcount,
+      @Param("gs25ShippingFee") Integer gs25ShippingFee,
+      @Param("cuShippingFee") Integer cuShippingFee,
+      @Param("purchaseSite") String purchaseSite,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("c2cFlow") FlowType c2cFlow,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
+      @Param("now") Instant now);
+
+  // C2C 자동 마감(미성사·인원 미달 취소) 전용 CAS. finalizeIfStatus 와 달리 마감 시각을 다시 본다 — 신청자 0명이면 개최자가 마감을
+  // 바꿀 수 있어, 폴링이 옛 마감으로 고른 뒤 연장이 커밋되면 상태만 보는 CAS 는 연장된 분철을 취소한다(되돌릴 수 없다).
+  // :now 는 폴링 쿼리와 같은 값이라 마감이 그대로면 폴링이 고른 분철은 여기서도 통과한다. 연장돼 0행이면 다음 폴링이 새 마감으로
+  // 다시 판정한다. 개최자 수정은 반대로 deadline > :now 를 요구해(changeTermsIfNoActiveParticipation) 경계에서 한쪽만 이긴다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :cancelledStatus, b.finalizedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :recruitingStatus AND b.flowType = :c2cFlow "
+          + "AND b.deadline <= :now")
+  int cancelExpiredC2cIfRecruiting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("recruitingStatus") BuncheolStatus recruitingStatus,
+      @Param("c2cFlow") FlowType c2cFlow,
+      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
+      @Param("now") Instant now);
 
   // expectedStatus → newStatus CAS UPDATE (호스트 취소 공용: RECRUITING/CANCELLED → HOST_CANCELLED).
   // 선점한 단일 인스턴스만 1 을 회수해 다중 인스턴스 중복 마감과 마감/취소 경합을 막는다.

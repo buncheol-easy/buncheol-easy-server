@@ -62,10 +62,10 @@ public enum ErrorCode {
 
   // LEGACY(운영진 방식) 개최는 운영이 지정한 계정(can_host)만 가능하다.
   USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
-  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(재동의로 해결 가능 — 409)와
-  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "카카오 재동의 유도" 안내를 분기할 수 있다.
+  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(연령대 추가 동의로 해결 가능 — 409)와
+  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "연령대 추가 동의 유도" 안내를 분기할 수 있다.
   USER_AGE_NOT_VERIFIED(
-      "USR-032", "연령대 확인이 필요합니다. 카카오 로그인에서 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
+      "USR-032", "연령대 확인이 필요합니다. 카카오 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
   USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
@@ -243,6 +243,33 @@ public enum ErrorCode {
       "회원 개최 분철은 참여 묶음 단위로만 입금 확인할 수 있어요. 묶음 화면에서 한 번에 확인해 주세요.",
       HttpStatus.CONFLICT),
   
+  // ── 개최자 자리 빼기·다시 넣기 (C2C) ──
+  // 기록(취소 등)만 남은 자리는 지우지 않고 닫으므로(CLOSED) 빼기를 막는 것은 활성 참여(신청자)뿐이다.
+  BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT(
+      "BCH-118", "신청자가 있는 자리는 뺄 수 없어요.", HttpStatus.CONFLICT),
+  // 조건부 삭제가 모르는 FK 가 자리를 붙잡았을 때의 마지막 선 — 지금 스키마로는 닫기로 넘어가 나오지 않는다.
+  BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY(
+      "BCH-119", "이전 신청 기록이 있는 자리는 뺄 수 없어요.", HttpStatus.CONFLICT),
+  BUNCHEOL_MEMBER_REMOVE_LAST(
+      "BCH-120", "마지막 멤버는 뺄 수 없어요. 분철을 취소해 주세요.", HttpStatus.CONFLICT),
+  // BCH-021 은 개최 요청 안의 중복(400)이다. 이건 이미 분철에 있는 멤버와의 충돌이라 따로 둔다.
+  BUNCHEOL_MEMBER_ALREADY_EXISTS("BCH-121", "이미 분철에 있는 멤버예요.", HttpStatus.CONFLICT),
+  // 개최자가 「빼기」로 닫은 자리(CLOSED)에 신청. 없는 멤버(BCH-061)와 나눠야 화면이 "다른 멤버를 고르라" 고 안내할 수 있다.
+  PARTICIPATION_MEMBER_CLOSED(
+      "BCH-122", "개최자가 마감한 멤버예요. 다른 멤버를 골라 주세요.", HttpStatus.CONFLICT),
+  // BCH-008(1명 이상)과 나눈다 — 최소 인원이 자리 수보다 크면 성사 판정(참여 수 ≥ 최소 인원)이 참이 될 수 없는
+  // 분철이 열린다. BCH-008 문구로는 무엇을 고쳐야 하는지 보이지 않는다.
+  BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS(
+      "BCH-123", "최소 진행 인원은 대상 멤버 수 이하로 정해 주세요.", HttpStatus.BAD_REQUEST),
+
+  // ── 신청자 0명 C2C 분철의 조건 수정 ──
+  // 마감·최소 인원·배송비·구매처는 신청자가 보고 신청한 거래 조건이라, 활성 신청이 하나라도 있으면 바꾸지 않는다.
+  BUNCHEOL_TERMS_EDIT_HAS_APPLICANT(
+      "BCH-124", "신청자가 있어 마감·최소 인원·배송비·구매처는 바꿀 수 없어요.", HttpStatus.CONFLICT),
+  // 빼기(BCH-118)와 같은 규칙 — 신청자가 본 가격은 바꾸지 않는다. 닫힌 자리는 다시 넣기로 가격과 함께 연다.
+  BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED(
+      "BCH-125", "신청자가 있거나 마감한 자리는 가격을 바꿀 수 없어요.", HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

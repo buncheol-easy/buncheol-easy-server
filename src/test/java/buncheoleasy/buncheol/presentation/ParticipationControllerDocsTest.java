@@ -143,6 +143,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 403 | `BCH-066` (`PARTICIPATION_HOST_CANNOT_PARTICIPATE`) | 개최자 본인 참여 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
+                            | 409 | `BCH-122` (`PARTICIPATION_MEMBER_CLOSED`) | 개최자가 닫은 멤버 슬롯(상세 `saleStatus=CLOSED`). 다중 슬롯이면 전체가 실패한다 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님. **다중 슬롯을 추가 모집(성사 확정 후) 구간에 보낸 경우도 여기** |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철에 다중 슬롯을 보냄 (C2C 전용) |
                             | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |

@@ -76,11 +76,9 @@ public class ParticipationService {
    * 성립한다 — 한 번에 보내면 <b>어느 묶음에도 안 맞는다</b>. 알림톡도 슬롯 단위 금액으로 N건이 따로 나가
    * 화면과 어긋난다. 그래서 다중은 아래에서 <b>모집중 전용</b>으로 막는다.
    *
-   * <p>이 가드가 안전한 이유: 여기서 읽는 상태는 락 이전 값이지만, {@code getBuncheol} 이 올려 둔 인스턴스를
-   * 뒤의 {@code getBuncheolForUpdate} 도 <b>영속성 컨텍스트에서 그대로 돌려받는다</b>(같은 트랜잭션).
-   * 즉 이 가드가 본 상태와 {@code participateC2c} 의 분기 판정이 <b>같은 값</b>이라, 가드를 통과하면 반드시
-   * {@code applyC2c} 로 간다. 실제로는 이미 모집이 끝났다면 {@code createParticipationIfRecruiting} 의
-   * 조건부 INSERT 가 0행을 돌려 전부 롤백되므로, 낡은 값은 안전한 방향으로만 틀린다.
+   * <p>이 가드가 안전한 이유: 여기서 읽는 상태는 락 이전 값이지만, {@code participateC2c} 는 락을 잡으며 최신 값으로
+   * 다시 읽고 <b>락 이전에 본 상태와 다르면 신청을 받지 않는다</b>(BCH-060). 즉 이 가드를 통과한 요청이 분기에서 볼 수
+   * 있는 상태는 모집중뿐이라 반드시 {@code applyC2c} 로 간다 — 그 사이 성사 확정돼 추가 모집 분기로 새는 일이 없다.
    *
    * <p>⚠️ 다중 슬롯은 <b>C2C 에서만</b> 열린다. LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있어 2번째
    * INSERT 가 그 자리에서 막힌다 — 요청 단계에서 먼저 거절해 원인이 드러나게 한다.
@@ -171,6 +169,10 @@ public class ParticipationService {
     // HTTP 경로에서는 @NotNull 이 먼저 걸러 C-001 로 응답하므로 이 분기는 도달하지 않는다.
     // 컨트롤러를 거치지 않는 직접 호출(배치·테스트 등)을 막는 최후 가드로만 동작한다.
     BuncheolMember member = buncheolMemberDomainService.getBuncheolMember(slotId, buncheolId);
+    // 닫힌 자리는 C2C 개최자 「빼기」로만 생겨 LEGACY 에는 없다 — 데이터 이상 방어(잠금 없음).
+    if (member.isClosed()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+    }
 
     Optional<ParticipationCode> code =
         participationCodeDomainService.validateForParticipation(
@@ -272,16 +274,28 @@ public class ParticipationService {
       final Long slotId,
       final Instant now,
       final boolean checkFull) {
+    // 락 이전에 본 상태 — 다중 신청 가드(participate)가 이 값으로 「모집중 전용」을 판정했다. loaded 와 아래 buncheol 은
+    // 같은 인스턴스라(영속성 컨텍스트) 다시 읽기 전에 잡아 둔다.
+    final BuncheolStatus statusBeforeLock = loaded.getStatus();
     // 분철 행 락으로 참여 생성을 직렬화한다 — 같은 유저의 동시 다슬롯 신청에서 "첫 참여 판정"(배송비 1회·배송지/입금자명
     // 스냅샷 재사용)이 둘 다 첫 참여로 오판되는 check-then-insert 레이스를 막는다 (docs/46 §4.7-A1·A2).
     // 성사 확정·취소 CAS 와도 직렬화되어 상태 판정이 안정된다. 분철당 참여 빈도가 낮아 락 경합 부담은 미미하다.
-    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(loaded.getId());
+    // 🔴 락과 함께 최신 값으로 다시 읽는다. 락 이전 인스턴스를 그대로 쓰면 락을 기다리는 사이 개최자가 바꾼 조건(신청자 0명일
+    // 때의 배송비·마감 수정)을 놓쳐, 옛 배송비가 묶음에 새겨진다 — 묶음 배송비는 updatable=false 라 되돌릴 수 없다.
+    Buncheol buncheol = buncheolDomainService.getLatestBuncheolForUpdate(loaded.getId());
 
     if (buncheol.isHost(participantId)) {
       throw new BusinessException(ErrorCode.PARTICIPATION_HOST_CANNOT_PARTICIPATE);
     }
+    // 🔴 자리는 <b>잠금 읽기</b>(FOR SHARE)로 읽는다. 이 트랜잭션의 스냅샷은 분철 락 전의 일반 조회
+    // (requireProfileCompleted·getBuncheol)가 이미 잡았으므로, 일반 조회로 읽으면 락을 기다리는 사이 개최자가 닫은
+    // 자리를 「열림」으로 볼 수 있다. 잠금 읽기는 최신 커밋을 본다. 락 순서는 분철(X) → 자리(S) 로, 개최자 빼기·닫기
+    // (분철 X → 자리 X)와 같은 방향이다 — 둘 다 분철 락을 먼저 잡아 자리 락에서 서로를 기다리지 않는다.
     BuncheolMember member =
-        buncheolMemberDomainService.getBuncheolMember(slotId, buncheol.getId());
+        buncheolMemberDomainService.getBuncheolMemberForShare(slotId, buncheol.getId());
+    if (member.isClosed()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_MEMBER_CLOSED);
+    }
     // C2C 에는 코드 슬롯을 만들 수 없다(개최 가드) — 도달했다면 데이터 이상이다.
     if (member.requiresCode()
         || ParticipationCodeDomainService.submitted(request.participationCode())) {
@@ -290,14 +304,12 @@ public class ParticipationService {
     // 상태는 한 번만 읽고 여기서 먼저 거른다. 스냅샷 계산 뒤로 미루면 모집이 끝난 분철에 재참여할 때
     // BUNCHEOL_NOT_RECRUITING 대신 배송지·계좌 예외가 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다.
     //
-    // ⚠️ 이 값이 <b>최신이라는 보장은 락이 주지 않는다</b>. 위 getBuncheolForUpdate 는 SELECT ... FOR UPDATE 를
-    // 내보내지만, 같은 트랜잭션에서 getBuncheol 이 이미 올려 둔 인스턴스가 영속성 컨텍스트에 있으면 Hibernate 는
-    // 그 인스턴스를 그대로 돌려주고 필드를 덮지 않는다 — 즉 락 이전에 읽은 값일 수 있다.
-    // 그래도 안전한 이유는 <b>INSERT CAS</b> 다: 상태를 낡게 봐 RECRUITING 으로 오판하면 상속 분기를 타지만
-    // createParticipationIfRecruiting 의 조건부 INSERT 가 0행을 돌려 전부 롤백된다. 0원 배송비가 커밋되는
-    // 경로는 없다. 돈 판정을 이 값에 매달았으므로 그 근거를 여기 남긴다.
+    // 이 값은 락 시점 최신이다(위 다시 읽기). 락을 기다리는 사이 상태가 바뀌었으면 받지 않는다 — 락 이전 값으로 판정한
+    // 가드(다중 신청 = 모집중 전용)가 있고, 바뀐 방향은 전부 이 신청이 이전 값으로 진행했어도 조건부 INSERT 가 0행으로
+    // 막았던 경우다(모집중 → 입금 수집중·종료, 입금 수집중 → 종료). 결과(BCH-060)는 같고 더 일찍 나갈 뿐이다.
     final BuncheolStatus status = buncheol.getStatus();
-    if (status != BuncheolStatus.RECRUITING && status != BuncheolStatus.PAYMENT_COLLECTING) {
+    if (status != statusBeforeLock
+        || (status != BuncheolStatus.RECRUITING && status != BuncheolStatus.PAYMENT_COLLECTING)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
@@ -429,9 +441,10 @@ public class ParticipationService {
   /**
    * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 미충족→충족 전이마다 발행하고, 취소→재신청 루프의 중복
    * 발송 차단은 리스너의 인메모리 가드가 담당한다. 카운트는 반드시 잠금 조회(current read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행
-   * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다.
+   * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다. <b>분모(열린 자리 수)도 같다</b> — 스냅샷으로 세면 락
+   * 대기 중 개최자가 닫은 자리를 「열림」으로 세어 충족을 놓치고, 다시 연 자리를 「닫힘」으로 세어 빈 자리가 있는데 발행한다.
    *
-   * <p>락 순서 규약: 이 경로는 분철 행(X) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
+   * <p>락 순서 규약: 이 경로는 분철 행(X) → 자리 행(S) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
    * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
    * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 는 슬롯 확인 뒤
    * {@code confirmIfAllSlotsConfirmed} 로, C2C 는 {@code ParticipationBundleService#confirmPayment} 가 묶음
@@ -472,7 +485,13 @@ public class ParticipationService {
    * </ul>
    */
   private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
-    long totalSlots = buncheolMemberDomainService.findAllByBuncheolId(buncheol.getId()).size();
+    // 개최자가 닫은 자리는 채워질 수 없으므로 정원에서 뺀다 — 안 빼면 남은 자리가 다 차도 알림이 영영 안 나간다.
+    // 자리도 잠금 읽기(FOR SHARE)로 센다(javadoc). 락 순서는 분철(X, 이미 보유) → 자리(S) → 참여(X) 로, 자리를 쓰는 개최자
+    // 빼기·닫기·다시 열기(분철 X → 자리 X)와 같은 방향이다.
+    long totalSlots =
+        buncheolMemberDomainService.findAllByBuncheolIdForShare(buncheol.getId()).stream()
+            .filter(slot -> !slot.isClosed())
+            .count();
     List<Long> participantIds =
         participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
     if (participantIds.size() >= totalSlots) {

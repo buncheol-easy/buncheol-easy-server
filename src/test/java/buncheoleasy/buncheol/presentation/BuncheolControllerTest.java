@@ -480,6 +480,30 @@ class BuncheolControllerTest {
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }
+
+    // 핵심 회귀 지점은 레코드가 아니라 컨트롤러 — toImageFile 의 catch 가 IOException 을 넘어
+    // BusinessException 까지 삼키도록 넓어지면 ImageFileTest 는 초록인 채 조용히 회귀한다.
+    @Test
+    void 허용되지_않은_확장자가_섞이면_201_전에_400_FILE_002_로_거부하고_서비스를_호출하지_않는다()
+        throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      MockMultipartFile gif =
+          new MockMultipartFile("images", "s.gif", MediaType.IMAGE_GIF_VALUE, new byte[] {1});
+
+      mockMvc
+          .perform(
+              multipart("/v1/buncheols")
+                  .file(requestPart)
+                  .file(validImagePart())
+                  .file(gif)
+                  .with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value(ErrorCode.FILE_EXTENSION_INVALID.getCode()));
+
+      then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
+    }
   }
 
   @Nested
@@ -654,6 +678,32 @@ class BuncheolControllerTest {
           .perform(modifyMultipartRequest(10L).file(requestPart).with(mockAuth()))
           .andExpect(status().isNotFound())
           .andExpect(content().string(containsString(ErrorCode.BUNCHEOL_NOT_FOUND.getCode())));
+    }
+
+    // 수정은 기존 사진을 트랜잭션 안에서 먼저 지우므로, 서비스까지 가면 사진이 0장이 된다 — 서비스 전에 막는지 고정한다.
+    @Test
+    void 허용되지_않은_확장자면_204_전에_400_FILE_002_로_거부하고_서비스를_호출하지_않는다()
+        throws Exception {
+      String keepNothingJson =
+          """
+                    {
+                      "title": "수정 분철 제목",
+                      "keepImageIds": [],
+                      "thumbnailIndex": 0
+                    }
+                    """;
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, keepNothingJson.getBytes());
+      MockMultipartFile gif =
+          new MockMultipartFile("images", "s.gif", MediaType.IMAGE_GIF_VALUE, new byte[] {1});
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).file(gif).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value(ErrorCode.FILE_EXTENSION_INVALID.getCode()));
+
+      then(buncheolService).should(never()).modifyBuncheol(any(), any(), any(), any());
     }
   }
 

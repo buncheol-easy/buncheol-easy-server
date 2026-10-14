@@ -94,7 +94,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
           "cuShippingFee": null,
           "thumbnailIndex": 0,
           "buncheolMembers": [
-            {"memberId": 200, "price": 50000}
+            {"memberId": 200, "price": 50000},
+            {"memberId": 201, "price": 50000},
+            {"memberId": 202, "price": 45000}
           ]
         }
         """
@@ -150,7 +152,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "description": String?,         // 선택, 700자 이하
                               "purchaseSite": String,         // 1~200자
                               "deadline": Instant,            // 미래 시점 (UTC ISO-8601, 예: 2026-06-01T03:00:00Z)
-                              "minHeadcount": Integer,        // 양수, 분철 진행 최소 인원
+                              "minHeadcount": Integer,        // 1 이상, buncheolMembers 개수 이하 — 분철 진행 최소 인원
                               "gs25ShippingFee": Integer?,    // 0 이상 (0원 = 무료 배송), gs25/cu 중 최소 1개 필수
                               "cuShippingFee": Integer?,      // 0 이상 (0원 = 무료 배송), gs25/cu 중 최소 1개 필수
                               "openChatUrl": String?,         // 선택, https://open.kakao.com/ 시작·200자 이하 — 참여자 소통 채널
@@ -183,8 +185,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-040` (`BUNCHEOL_IMAGE_LIMIT_EXCEEDED`) | 이미지가 5장 초과 |
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
+                            | 400 | `BCH-123` (`BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS`) | `minHeadcount` 가 `buncheolMembers` 개수보다 큼 (성사될 수 없는 분철) |
+                            | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 이미지 파일명이 없거나 확장자가 없음 |
+                            | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 이미지가 한 장이라도 있음 — 분철을 만들지 않는다 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
-                            | 409 | `BCH-103` (`PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
+                            | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
                             | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | `accessType: "CODE_ONLY"` 슬롯의 `price` 가 0이 아님 (코드 참여는 무상 제공 전제) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
@@ -266,6 +271,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-048` (`BUNCHEOL_THUMBNAIL_IMAGE_INVALID`) | `thumbnailImageId` 가 `keepImageIds` 에 없음 |
                             | 400 | `BCH-049` (`BUNCHEOL_THUMBNAIL_SELECTION_DUPLICATED`) | `thumbnailImageId` 와 `thumbnailIndex` 동시 지정 |
                             | 400 | `BCH-083` (`BUNCHEOL_THUMBNAIL_REQUIRED`) | 대표사진 지정(`thumbnailImageId`/`thumbnailIndex`) 누락 |
+                            | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 새 이미지 파일명이 없거나 확장자가 없음 |
+                            | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 새 이미지가 한 장이라도 있음 — 아무것도 바꾸지 않는다(기존 이미지 유지) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

@@ -4,7 +4,6 @@ import buncheoleasy.buncheol.application.image.BuncheolImageUploader;
 import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +22,6 @@ public class S3BuncheolImageUploader implements BuncheolImageUploader {
 
   private static final String BUNCHEOL_DIR = "buncheols/";
   private static final String IMAGE_DIR = "/images/";
-  private static final List<String> ALLOWED_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".webp");
 
   private final S3Client s3Client;
 
@@ -34,27 +32,11 @@ public class S3BuncheolImageUploader implements BuncheolImageUploader {
   private String origin;
 
   public String uploadBuncheolImageAndGetUrl(final Long buncheolId, final ImageFile imageFile) {
-    String key =
-        buildKey(
-            buncheolId,
-            UUID.randomUUID().toString(),
-            extractExtension(imageFile.originalFilename()));
+    // 확장자는 ImageFile 생성 시점에 검증돼 있다 — 여기서 재검증하면 허용 목록이 두 곳으로 갈라진다.
+    String key = buildKey(buncheolId, UUID.randomUUID().toString(), imageFile.extension());
     uploadObject(key, imageFile);
 
     return origin + "/" + key;
-  }
-
-  private String extractExtension(final String originalFilename) {
-    if (originalFilename == null || !originalFilename.contains(".")) {
-      throw new BusinessException(ErrorCode.FILE_NAME_INVALID);
-    }
-
-    String extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
-    if (!ALLOWED_EXTENSIONS.contains(extension)) {
-      throw new BusinessException(ErrorCode.FILE_EXTENSION_INVALID);
-    }
-
-    return extension;
   }
 
   private void uploadObject(final String key, final ImageFile imageFile) {

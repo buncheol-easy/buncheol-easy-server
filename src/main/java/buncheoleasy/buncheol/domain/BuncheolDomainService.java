@@ -163,6 +163,17 @@ public class BuncheolDomainService {
   }
 
   /**
+   * 최소 인원 ≤ 자리 수. 성사 판정은 참여 행 수를 세고 활성 참여는 자리당 1건이라, 최소 인원이 자리 수를 넘으면 성사될 수 없는
+   * 분철이 열린다. 개최(·수정) 요청 검사용이다 — 엔티티 불변식으로 두지 않는 이유는 입금 수집중 자리 빼기가 최소 인원을 일부러
+   * 낮추지 않기 때문이다({@link #lowerMinHeadcountToSlotCount}).
+   */
+  public void validateMinHeadcountWithinSlots(final int minHeadcount, final int slotCount) {
+    if (minHeadcount > slotCount) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS);
+    }
+  }
+
+  /**
    * 개최자가 자리를 뺀 뒤 모집중 분철의 최소 인원을 남은 자리 수로 낮춘다 — 포트 javadoc 참고. 입금 수집중이거나 이미 자리 수
    * 이하면 그대로 둔다. 호출 측 {@code @Transactional} 필수.
    *

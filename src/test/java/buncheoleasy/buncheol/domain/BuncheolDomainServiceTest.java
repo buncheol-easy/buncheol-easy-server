@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -127,6 +130,29 @@ class BuncheolDomainServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
+    }
+  }
+
+  @Nested
+  @DisplayName("최소 인원 ≤ 자리 수 검사 테스트")
+  class ValidateMinHeadcountWithinSlotsTest {
+
+    @ParameterizedTest
+    @CsvSource({"3, 3", "1, 3", "1, 1"})
+    void 최소_인원이_자리_수_이하면_통과한다(final int minHeadcount, final int slotCount) {
+      assertThatCode(
+              () -> buncheolDomainService.validateMinHeadcountWithinSlots(minHeadcount, slotCount))
+          .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"4, 3", "5, 3", "2, 1"})
+    void 최소_인원이_자리_수를_넘으면_BCH_123으로_거부한다(final int minHeadcount, final int slotCount) {
+      assertThatThrownBy(
+              () -> buncheolDomainService.validateMinHeadcountWithinSlots(minHeadcount, slotCount))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS);
     }
   }
 

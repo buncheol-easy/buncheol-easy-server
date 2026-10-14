@@ -4,10 +4,14 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.BuncheolTerms;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.delivery.domain.DeliveryStatus;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +26,8 @@ import org.springframework.stereotype.Repository;
 public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
 
   private final JpaBuncheolRepository jpaBuncheolRepository;
+
+  @PersistenceContext private EntityManager entityManager;
 
   @Override
   public Buncheol save(Buncheol buncheol) {
@@ -226,6 +232,30 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   @Override
   public Optional<Buncheol> findByIdForUpdate(final Long id) {
     return jpaBuncheolRepository.findByIdForUpdate(id);
+  }
+
+  @Override
+  public Optional<Buncheol> findLatestByIdForUpdate(final Long id) {
+    Optional<Buncheol> locked = jpaBuncheolRepository.findByIdForUpdate(id);
+    // 잠금 읽기(FOR UPDATE)로 다시 채운다 — 일반 refresh 는 MySQL 반복 읽기 스냅샷을 읽어 락 대기 중 커밋된 값을 놓칠 수 있다.
+    locked.ifPresent(buncheol -> entityManager.refresh(buncheol, LockModeType.PESSIMISTIC_WRITE));
+    return locked;
+  }
+
+  @Override
+  public int changeTermsIfNoApplicant(
+      final Long buncheolId, final BuncheolTerms terms, final Instant now) {
+    return jpaBuncheolRepository.changeTermsIfNoActiveParticipation(
+        buncheolId,
+        terms.deadline(),
+        terms.minHeadcount(),
+        terms.shippingFeePolicy().gs25ShippingFee(),
+        terms.shippingFeePolicy().cuShippingFee(),
+        terms.purchaseSite(),
+        BuncheolStatus.RECRUITING,
+        FlowType.C2C,
+        ParticipationStatus.active(),
+        now);
   }
 
   @Override

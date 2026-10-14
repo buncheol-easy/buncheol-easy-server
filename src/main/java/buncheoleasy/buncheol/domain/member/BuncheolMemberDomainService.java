@@ -93,6 +93,18 @@ public class BuncheolMemberDomainService {
     return buncheolMemberRepository.reopenIfClosed(buncheolMemberId, buncheolId, price);
   }
 
+  /**
+   * 신청자가 없는 선착순 자리의 가격을 바꾼다. 가격은 개최와 같은 규칙으로 먼저 검사한다(UPDATE 는 엔티티 검증을 거치지 않는다).
+   * 호출 측 {@code @Transactional} 필수.
+   *
+   * @return 바꿨으면 true (false = 활성 참여가 있거나, 닫힌 자리거나, 그 분철의 자리가 아님)
+   */
+  public boolean changePriceIfUnoccupied(
+      final Long buncheolMemberId, final Long buncheolId, final long price) {
+    BuncheolMember.validatePrice(price);
+    return buncheolMemberRepository.changePriceIfUnoccupied(buncheolMemberId, buncheolId, price);
+  }
+
   /** 분철의 자리를 잠금 조회한다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
   public List<BuncheolMember> findAllByBuncheolIdForUpdate(final Long buncheolId) {
     return buncheolMemberRepository.findAllByBuncheolIdForUpdate(buncheolId);

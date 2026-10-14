@@ -16,6 +16,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -179,6 +180,39 @@ class BuncheolDomainServiceTest {
       then(buncheolRepository)
           .should(never())
           .lowerMinHeadcountIfRecruiting(anyLong(), anyInt(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("거래 조건 수정 위임 테스트")
+  class ChangeTermsTest {
+
+    private final BuncheolTerms terms =
+        new BuncheolTerms(
+            Instant.parse("2026-05-20T03:00:00Z"), 2, ShippingFeePolicy.of(3000, null), "스토어");
+
+    @Test
+    void 조건부_UPDATE_가_한_행을_바꾸면_true() {
+      given(buncheolRepository.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).willReturn(1);
+
+      assertThat(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).isTrue();
+    }
+
+    @Test
+    void 조건부_UPDATE_가_0행이면_false() {
+      given(buncheolRepository.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).willReturn(0);
+
+      assertThat(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).isFalse();
+    }
+
+    @Test
+    void 최신_잠금_조회에서_분철이_없으면_404_로_거부한다() {
+      given(buncheolRepository.findLatestByIdForUpdate(BUNCHEOL_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
     }
   }
 }

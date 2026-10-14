@@ -65,6 +65,22 @@ interface JpaBuncheolMemberRepository extends JpaRepository<BuncheolMember, Long
       @Param("openType") BuncheolMemberAccessType openType,
       @Param("closedType") BuncheolMemberAccessType closedType);
 
+  // 빼기(changeAccessTypeIfUnoccupied)와 같은 NOT EXISTS — 신청자가 본 가격은 바꾸지 않는다. 엔티티 더티체킹(updatePrice)으로 쓰면
+  // BuncheolMember 에 @DynamicUpdate 가 없어 행 전체를 로드 시점 값으로 다시 써 그 사이 닫힌 자리(access_type)를 되돌린다.
+  // updated_at 은 reopenIfClosed 처럼 컬럼의 ON UPDATE CURRENT_TIMESTAMP 에 맡긴다.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE BuncheolMember m SET m.price = :price "
+          + "WHERE m.id = :id AND m.buncheolId = :buncheolId AND m.accessType = :openType "
+          + "AND NOT EXISTS (SELECT p FROM Participation p "
+          + "  WHERE p.buncheolMemberId = m.id AND p.status IN :activeStatuses)")
+  int changePriceIfUnoccupied(
+      @Param("id") Long id,
+      @Param("buncheolId") Long buncheolId,
+      @Param("price") long price,
+      @Param("openType") BuncheolMemberAccessType openType,
+      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT m FROM BuncheolMember m WHERE m.buncheolId = :buncheolId")
   List<BuncheolMember> findAllByBuncheolIdForUpdate(@Param("buncheolId") Long buncheolId);

@@ -53,6 +53,14 @@ public interface BuncheolMemberRepository {
   boolean reopenIfClosed(Long buncheolMemberId, Long buncheolId, long price);
 
   /**
+   * 선착순({@code OPEN}) 자리의 가격을 <b>그 자리에 활성 참여가 없을 때만</b> 바꾼다 — 빼기와 같은 판정이다. 판정과 쓰기를 한 UPDATE
+   * 로 묶어, 그 사이 들어온 신청자가 본 가격이 바뀌지 않게 한다.
+   *
+   * @return 바꿨으면 true (false = 활성 참여가 있거나, 닫힌 자리거나, 그 분철의 자리가 아님)
+   */
+  boolean changePriceIfUnoccupied(Long buncheolMemberId, Long buncheolId, long price);
+
+  /**
    * 분철의 자리를 잠금 조회(SELECT ... FOR UPDATE)한다. 잠금 조회는 트랜잭션 스냅샷이 아니라 최신 커밋을 읽으므로, 분철
    * 락을 기다리는 사이 커밋된 다른 빼기까지 센다. 호출 측 트랜잭션이 필수다.
    */

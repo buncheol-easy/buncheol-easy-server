@@ -391,6 +391,83 @@ class JpaBuncheolMemberRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("빈 자리 가격 바꾸기 CAS 테스트")
+  class ChangePriceIfUnoccupiedTest {
+
+    private long priceColumn(final Long slotId) {
+      return jdbcTemplate.queryForObject(
+          "SELECT price FROM buncheol_members WHERE id = ?", Long.class, slotId);
+    }
+
+    @Test
+    void 신청자가_없는_선착순_자리는_가격이_바뀐다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isTrue();
+
+      assertThat(priceColumn(slotId)).isEqualTo(15_000L);
+    }
+
+    // 이 테스트가 가드 본체다 — NOT EXISTS 를 지우면 신청자가 본 가격이 바뀌어 빨개진다.
+    @ParameterizedTest
+    @ValueSource(strings = {"APPLIED", "AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED"})
+    void 활성_참여가_있는_자리는_바꾸지_않는다(final String status) {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, status);
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isFalse();
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    @Test
+    void 취소_기록만_있는_자리는_바뀐다() {
+      Long slotId = saveSlot(memberId);
+      insertParticipationOn(slotId, "CANCELLED");
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isTrue();
+    }
+
+    // 닫힌 자리는 다시 넣기(가격 포함)로만 연다 — 가격만 바꿔 두면 다시 열 때의 가격과 갈린다.
+    @Test
+    void 닫힌_자리는_바꾸지_않는다() {
+      Long slotId = saveSlot(memberId);
+      jdbcTemplate.update(
+          "UPDATE buncheol_members SET access_type = 'CLOSED' WHERE id = ?", slotId);
+
+      assertThat(buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L))
+          .isFalse();
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    @Test
+    void 다른_분철의_자리는_바꾸지_않는다() {
+      Long slotId = saveSlot(memberId);
+
+      assertThat(
+              buncheolMemberRepository.changePriceIfUnoccupied(
+                  slotId, buncheolId + 9_999L, 15_000L))
+          .isFalse();
+      assertThat(priceColumn(slotId)).isEqualTo(10_000L);
+    }
+
+    // 접근 정책·다른 칸은 그대로 둔다 — 행 전체를 다시 쓰는 더티체킹(updatePrice)을 쓰지 않는 이유다.
+    @Test
+    void 가격만_바꾸고_접근_정책은_그대로_둔다() {
+      Long slotId = saveSlot(memberId);
+
+      buncheolMemberRepository.changePriceIfUnoccupied(slotId, buncheolId, 15_000L);
+
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT access_type FROM buncheol_members WHERE id = ?", String.class, slotId))
+          .isEqualTo("OPEN");
+    }
+  }
+
+  @Nested
   @DisplayName("자리 닫기·다시 열기 테스트")
   class CloseAndReopenTest {
 

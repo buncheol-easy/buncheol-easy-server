@@ -542,6 +542,10 @@ class JpaParticipationBundleRepositoryAdapterTest {
     }
   }
 
+  /**
+   * 「제외」 CAS 는 {@code ParticipationRepository} 에 있지만 묶음 픽스처가 여기 있어 함께 둔다. 검증 대상이
+   * <b>가드가 UPDATE WHERE 안에서 원자적으로 도는가</b> 라 실제 DB 로 돌려야 의미가 있다.
+   */
   @Nested
   @DisplayName("releaseBundleIfDue — 개최자 「제외」")
   class ReleaseBundleIfDueTest {

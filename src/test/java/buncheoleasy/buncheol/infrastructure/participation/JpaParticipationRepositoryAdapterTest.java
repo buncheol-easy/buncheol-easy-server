@@ -2040,6 +2040,17 @@ class JpaParticipationRepositoryAdapterTest {
     }
   }
 
+  /**
+   * 자발 취소 가드(docs/56 H-09)가 기대는 판정 — {@code participations.created_at}(DB 시계)과 {@code
+   * buncheols.finalized_at}(성사 확정 CAS 가 앱 시계로 기록)의 선후 — 을 <b>두 값이 실제로 DB 에 쓰이고 다시 읽히는 경로로</b>
+   * 검증한다. 도메인 술어 테스트({@code BuncheolTest})와 서비스 테스트는 각각 판정식과 배선만 보므로, 두 컬럼이 만나는 조합은 여기서만
+   * 실행된다.
+   *
+   * <p>참여 생성은 프로덕션 경로({@code saveIfRecruiting}/{@code saveIfCollecting})가 아니라 이 클래스의 raw INSERT
+   * 헬퍼를 쓴다 — 조건부 INSERT 는 {@code UTC_TIMESTAMP()} 를 쓰는데 H2 에 없는 함수라 테스트 DB 에서 실행되지 않는다. 헬퍼도
+   * {@code created_at} 을 명시하지 않아 스키마 기본값({@code CURRENT_TIMESTAMP})으로 채워지므로 <b>DB 시계</b>라는 전제는
+   * 같다. 시각 차는 분 단위로 벌려 DATETIME 초 반올림에 흔들리지 않게 한다.
+   */
   @Nested
   @DisplayName("성사 확정 시각과 참여 생성 시각의 선후 (docs/56 H-09)")
   class FinalizeOrderTest {

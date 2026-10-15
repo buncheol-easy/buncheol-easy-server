@@ -304,7 +304,7 @@ class AlimtalkTemplateTest {
   @DisplayName("C2C 입금 확인 요청(C2C_PAYMENT_SENT)")
   class C2cPaymentSent {
 
-    // 관리 화면에 반려 버튼이 없어(API 만 있음) 반려를 안내하면 개최자가 없는 버튼을 찾게 된다.
+    // 반려 기능이 없어 반려를 안내하면 개최자가 없는 버튼을 찾게 된다.
     @Test
     @DisplayName("반려는 안내하지 않고 참여자·입금자명·입금 금액을 치환하며 미치환 토큰을 남기지 않는다")
     void render() {

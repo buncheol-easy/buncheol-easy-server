@@ -43,6 +43,7 @@ public class SocialLoginService {
             command.phoneNumber(),
             command.ageRange(),
             command.ageRangeWithdrawn());
+    log.info("소셜 로그인: userId={}, name={}, phone={}", user.getId(), command.name(), command.phoneNumber());
 
     if (command.serviceTerms() != null && !command.serviceTerms().isEmpty()) {
       try {

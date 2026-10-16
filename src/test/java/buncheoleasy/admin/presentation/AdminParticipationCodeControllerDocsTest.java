@@ -293,9 +293,10 @@ class AdminParticipationCodeControllerDocsTest extends DocsTestSupport {
                             | 상태 | 코드 | 의미 |
                             |------|------|------|
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 분철 없음 |
-                            | 409 | `BCH-103` (`PARTICIPATION_CODE_MEMBER_NOT_CODE_ONLY`) | C2C 분철을 코드 참여로 전환 시도 |
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `CLOSED` 로 전환 시도 (C2C 개최자 「빼기」 전용 값) |
+                            | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 분철을 코드 참여로 전환 시도 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | C2C 분철 자리를 선착순으로 전환 시도 (열고 닫기는 개최자 「빼기·다시 넣기」 몫) |
                             | 409 | `BCH-107` (`BUNCHEOL_MEMBER_ACCESS_TYPE_CHANGE_NOT_ALLOWED`) | 참여자가 있는 슬롯이거나 슬롯 없음 |
-                            | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | 유료 슬롯을 코드 참여로 전환 시도 (코드 참여는 0원 전제) |
                             """)
                         .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(

@@ -127,7 +127,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
 
                             코드 참여는 **결제 구간이 통째로 없다**:
 
-                            - 슬롯 금액과 배송비가 모두 0원으로 처리되어 참여 즉시 확정(CONFIRMED)된다
+                            - 슬롯 가격과 관계없이 참여 금액과 배송비가 모두 0원으로 처리되어 참여 즉시 확정(CONFIRMED)된다 —
+                              상세 조회에서 코드 전용 슬롯에도 다른 슬롯과 같은 `price` 가 보일 수 있다
                             - 응답의 `amount` 는 `0`, `dueAt`·`hostAccount` 는 `null` 이다 — **입금 안내 화면을 띄우면 안 된다**
                             - 다만 **정산 계좌는 0원 참여에도 필요하다** — 미등록이면 다른 참여와 똑같이 `409 USR-025` 로
                               거부되므로 코드 참여 화면에서도 계좌 등록을 유도해야 한다

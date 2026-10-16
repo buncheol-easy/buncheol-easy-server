@@ -97,28 +97,6 @@ class AdminParticipationCodeServiceTest {
     then(participationCodeDomainService).should(never()).reissue(any(), any(), any(), any());
   }
 
-  // 유료 슬롯을 코드 참여로 바꾸면 화면은 "0원" 을 안내하는데 서버는 유상 참여로 처리해 참여가 실패한다.
-  @Test
-  void 유료_슬롯은_코드_참여로_전환할_수_없다() {
-    Buncheol buncheol = newInstance(Buncheol.class);
-    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-    BuncheolMember paidSlot = codeSlot();
-    setField(paidSlot, "price", 20_700L);
-    setField(paidSlot, "accessType", BuncheolMemberAccessType.OPEN);
-    given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
-        .willReturn(paidSlot);
-
-    assertThatThrownBy(
-            () ->
-                adminParticipationCodeService.changeBuncheolMemberAccessType(
-                    BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.CODE_ONLY))
-        .isInstanceOf(BusinessException.class)
-        .extracting("errorCode")
-        .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
-
-    then(buncheolMemberDomainService).should(never()).changeAccessType(any(), any(), any());
-  }
-
   // CLOSED 는 C2C 개최자 「빼기」 전용 — 운영진이 아무 자리나 닫을 수 있으면 안 된다.
   @Test
   void 운영진은_CLOSED_로_바꿀_수_없다() {
@@ -185,14 +163,10 @@ class AdminParticipationCodeServiceTest {
   }
 
   @Test
-  void LEGACY_분철의_0원_자리는_코드_참여로_바꾼다() {
+  void LEGACY_분철_자리는_가격을_보지_않고_코드_참여로_바꾼다() {
     Buncheol legacy = newInstance(Buncheol.class);
     setField(legacy, "flowType", FlowType.LEGACY);
     given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(legacy);
-    BuncheolMember freeSlot = codeSlot();
-    setField(freeSlot, "accessType", BuncheolMemberAccessType.OPEN);
-    given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID))
-        .willReturn(freeSlot);
 
     adminParticipationCodeService.changeBuncheolMemberAccessType(
         BUNCHEOL_ID, SLOT_ID, BuncheolMemberAccessType.CODE_ONLY);
@@ -200,6 +174,7 @@ class AdminParticipationCodeServiceTest {
     then(buncheolMemberDomainService)
         .should()
         .changeAccessType(SLOT_ID, BUNCHEOL_ID, BuncheolMemberAccessType.CODE_ONLY);
+    then(buncheolMemberDomainService).should(never()).getBuncheolMember(any(), any());
   }
 
   @Test

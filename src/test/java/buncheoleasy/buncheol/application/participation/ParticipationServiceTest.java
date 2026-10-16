@@ -1663,7 +1663,11 @@ class ParticipationServiceTest {
   class CodeParticipationTest {
 
     private BuncheolMember codeSlotMember() {
-      BuncheolMember member = buncheolMember(BUNCHEOL_MEMBER_ID, 0L);
+      return codeSlotMember(0L);
+    }
+
+    private BuncheolMember codeSlotMember(final long price) {
+      BuncheolMember member = buncheolMember(BUNCHEOL_MEMBER_ID, price);
       setField(member, "accessType", BuncheolMemberAccessType.CODE_ONLY);
       return member;
     }
@@ -1686,6 +1690,10 @@ class ParticipationServiceTest {
     }
 
     private ParticipationCode givenCodeParticipation() {
+      return givenCodeParticipation(0L);
+    }
+
+    private ParticipationCode givenCodeParticipation(final long slotPrice) {
       Buncheol buncheol = mock(Buncheol.class);
       ParticipationCode code = participationCode();
       givenParticipantAccount();
@@ -1694,7 +1702,7 @@ class ParticipationServiceTest {
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheol.getDeadline()).willReturn(NOW.plus(Duration.ofDays(30)));
       given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
-          .willReturn(codeSlotMember());
+          .willReturn(codeSlotMember(slotPrice));
       given(participationCodeDomainService.validateForParticipation(any(), eq("ABCD2345"), eq(NOW)))
           .willReturn(Optional.of(code));
       given(
@@ -1708,7 +1716,7 @@ class ParticipationServiceTest {
                 return true;
               });
       given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of(codeSlotMember()));
+          .willReturn(List.of(codeSlotMember(slotPrice)));
       return code;
     }
 
@@ -1807,6 +1815,36 @@ class ParticipationServiceTest {
       // 개최자 조회가 되살아나도 인자가 null 이라 그 어서션은 공허하게 통과한다.
       then(userDomainService).should(times(1)).getUser(PARTICIPANT_ID);
       then(userDomainService).should(never()).getUser(HOST_ID);
+    }
+
+    @Test
+    void 유료_코드_전용_자리도_코드로_참여하면_0원으로_바로_확정된다() {
+      givenCodeParticipation(15_000L);
+
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      then(participationDomainService)
+          .should()
+          .createParticipationIfRecruiting(participationCaptor.capture());
+      Participation saved = participationCaptor.getValue();
+      assertThat(saved.getAmount()).isZero();
+      assertThat(saved.getShippingFee()).isZero();
+      then(participationDomainService).should().confirmPayment(PARTICIPATION_ID, NOW);
+      assertThat(result.totalAmount()).isZero();
+      assertThat(result.dueAt()).isNull();
+      assertThat(result.hostAccount()).isNull();
+    }
+
+    @Test
+    void 유료_코드_전용_자리의_코드_참여도_분철_X_락을_먼저_잡는다() {
+      givenCodeParticipation(15_000L);
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      InOrder inOrder = Mockito.inOrder(buncheolDomainService, participationDomainService);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(participationDomainService).createParticipationIfRecruiting(any());
     }
 
     @Test

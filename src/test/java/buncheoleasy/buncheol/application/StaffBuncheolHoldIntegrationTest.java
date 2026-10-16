@@ -97,7 +97,8 @@ class StaffBuncheolHoldIntegrationTest {
         0,
         List.of(
             new BuncheolMemberRequest(memberId, 15_000L),
-            new BuncheolMemberRequest(codeMemberId, 0L, BuncheolMemberAccessType.CODE_ONLY)));
+            new BuncheolMemberRequest(
+                codeMemberId, 15_000L, BuncheolMemberAccessType.CODE_ONLY)));
   }
 
   private static List<ImageFile> images() {
@@ -129,12 +130,12 @@ class StaffBuncheolHoldIntegrationTest {
     assertThat(countSettings(buncheolId)).isZero();
   }
 
-  // 코드 전용 유상 자리는 분철 INSERT 뒤에 거절된다(BCH-109). holdStaffBuncheol 자신의 트랜잭션이 없으면 그 INSERT 가
+  // 닫힌 자리는 분철 INSERT 뒤에 거절된다(C-001). holdStaffBuncheol 자신의 트랜잭션이 없으면 그 INSERT 가
   // 따로 커밋돼 분철이 남는다. 이미지 이벤트 발행 전에 실패하므로 비동기 업로드와 겹치지 않는다.
   @Test
   void 바깥_트랜잭션_없이도_분철_INSERT_뒤에_실패하면_분철이_남지_않는다() {
     Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-    HoldStaffBuncheolRequest paidCodeSlot =
+    HoldStaffBuncheolRequest closedSlot =
         new HoldStaffBuncheolRequest(
             groupId,
             "몬엑 분철",
@@ -148,13 +149,12 @@ class StaffBuncheolHoldIntegrationTest {
             null,
             0,
             List.of(
-                new BuncheolMemberRequest(
-                    codeMemberId, 15_000L, BuncheolMemberAccessType.CODE_ONLY)));
+                new BuncheolMemberRequest(memberId, 15_000L, BuncheolMemberAccessType.CLOSED)));
 
-    assertThatThrownBy(() -> buncheolService.holdStaffBuncheol(staffId, paidCodeSlot, images()))
+    assertThatThrownBy(() -> buncheolService.holdStaffBuncheol(staffId, closedSlot, images()))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode")
-        .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
+        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 
     assertThat(countBuncheols()).isZero();
   }

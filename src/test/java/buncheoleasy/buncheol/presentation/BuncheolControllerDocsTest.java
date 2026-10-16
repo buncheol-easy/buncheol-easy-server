@@ -195,7 +195,6 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 이미지가 한 장이라도 있음 — 분철을 만들지 않는다 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
                             | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
-                            | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | `accessType: "CODE_ONLY"` 슬롯의 `price` 가 0이 아님 (코드 참여는 무상 제공 전제) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
                             | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 연령대 추가 동의(`/oauth2/authorization/kakao/age-range`)로 해소 가능 |

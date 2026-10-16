@@ -21,6 +21,8 @@ import buncheoleasy.buncheol.dto.response.RequestedShippingAddressResponse;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSetting;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingRepository;
 import buncheoleasy.buncheol.dto.response.ShippingOptionResponse;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -52,6 +54,7 @@ public class BuncheolDetailQueryService {
   private final ParticipationDomainService participationDomainService;
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final ShippingAddressRepository shippingAddressRepository;
+  private final StaffBuncheolSettingRepository staffBuncheolSettingRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -104,6 +107,12 @@ public class BuncheolDetailQueryService {
     final Instant now = Instant.now(clock);
     // 공석 슬롯을 "신청 가능"으로 내릴지의 기준 — 참여 가드와 같은 도메인 술어를 쓴다 (docs/53 Q-14).
     boolean openForNewParticipation = buncheol.acceptsNewParticipation(now);
+    // 예약 오픈은 운영진 분철에만 있다. 회원 개최는 읽지 않는다 — 공개 엔드포인트라 헛쿼리를 안 낸다(아래 묶음 조회와 같은 이유).
+    Optional<StaffBuncheolSetting> staffSetting =
+        buncheol.isC2c()
+            ? Optional.empty()
+            : staffBuncheolSettingRepository.findByBuncheolId(buncheolId);
+    boolean beforeOpen = staffSetting.map(setting -> setting.isBeforeOpen(now)).orElse(false);
     // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 그 값이 「제외」 게이트가 보는 값이고,
     // 카드 계약이 "이 시각이 지나면 슬롯이 공석으로 풀린다" 이기 때문이다. 배치 1회로 붙인다.
     // LEGACY 는 dueAtOf 가 조기 반환이라 이 맵을 한 번도 읽지 않는다. 공개 엔드포인트라 헛쿼리를 안 낸다.
@@ -122,6 +131,7 @@ public class BuncheolDetailQueryService {
                         bundleById,
                         buncheol.isC2c(),
                         openForNewParticipation,
+                        beforeOpen,
                         userId))
             .toList();
 
@@ -180,7 +190,9 @@ public class BuncheolDetailQueryService {
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
         visibleOpenChatUrl,
-        termsEditable);
+        termsEditable,
+        staffSetting.map(StaffBuncheolSetting::getOpensAt).orElse(null),
+        now);
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(
@@ -190,11 +202,12 @@ public class BuncheolDetailQueryService {
       final Map<Long, ParticipationBundle> bundleById,
       final boolean c2c,
       final boolean openForNewParticipation,
+      final boolean beforeOpen,
       final Long userId) {
     GroupMember groupMember = groupMemberByGroupMemberId.get(buncheolMember.getMemberId());
     Participation active = activeByMemberId.get(buncheolMember.getId());
     BuncheolMemberSaleStatus saleStatus =
-        toSaleStatus(active, openForNewParticipation, buncheolMember.getAccessType());
+        toSaleStatus(active, openForNewParticipation, beforeOpen, buncheolMember.getAccessType());
     return new BuncheolMemberDetailResponse(
         buncheolMember.getId(),
         buncheolMember.getMemberId(),
@@ -221,9 +234,10 @@ public class BuncheolDetailQueryService {
   private BuncheolMemberSaleStatus toSaleStatus(
       final Participation active,
       final boolean openForNewParticipation,
+      final boolean beforeOpen,
       final BuncheolMemberAccessType accessType) {
     if (active == null) {
-      return emptySlotStatus(openForNewParticipation, accessType);
+      return emptySlotStatus(openForNewParticipation, beforeOpen, accessType);
     }
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
@@ -233,7 +247,7 @@ public class BuncheolDetailQueryService {
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).
-      case CANCELLED -> emptySlotStatus(openForNewParticipation, accessType);
+      case CANCELLED -> emptySlotStatus(openForNewParticipation, beforeOpen, accessType);
     };
   }
 
@@ -243,15 +257,21 @@ public class BuncheolDetailQueryService {
    *
    * <p>개최자가 닫은 자리({@code CLOSED} 접근)도 기존 값 {@code CLOSED}(「마감」)로 내려 새 응답 값을 만들지 않는다. 신청을 받는
    * 분철의 빈 자리가 {@code CLOSED} 면 개최자가 닫은 자리뿐이라 화면이 구분할 수 있다.
+   *
+   * <p>예약 오픈 전({@code beforeOpen})은 닫힘 판정 뒤에 본다 — 닫힌 분철은 오픈 전이어도 {@code CLOSED} 다. 코드 전용 자리는 코드
+   * 참여가 오픈 전에도 되므로 그대로 {@code CODE_ONLY} 다.
    */
   private BuncheolMemberSaleStatus emptySlotStatus(
-      final boolean openForNewParticipation, final BuncheolMemberAccessType accessType) {
+      final boolean openForNewParticipation,
+      final boolean beforeOpen,
+      final BuncheolMemberAccessType accessType) {
     if (!openForNewParticipation) {
       return BuncheolMemberSaleStatus.CLOSED;
     }
     // switch 식이라 접근 정책이 늘면 컴파일 에러로 매핑을 강제한다.
     return switch (accessType) {
-      case OPEN -> BuncheolMemberSaleStatus.AVAILABLE;
+      case OPEN ->
+          beforeOpen ? BuncheolMemberSaleStatus.NOT_OPEN : BuncheolMemberSaleStatus.AVAILABLE;
       case CODE_ONLY -> BuncheolMemberSaleStatus.CODE_ONLY;
       case CLOSED -> BuncheolMemberSaleStatus.CLOSED;
     };

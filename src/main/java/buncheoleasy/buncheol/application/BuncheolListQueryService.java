@@ -9,6 +9,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
@@ -57,6 +58,7 @@ public class BuncheolListQueryService {
   private final BuncheolMemberRepository buncheolMemberRepository;
   private final ParticipationRepository participationRepository;
   private final ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+  private final StaffBuncheolSettingRepository staffBuncheolSettingRepository;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -113,6 +115,11 @@ public class BuncheolListQueryService {
             ? Set.copyOf(buncheolMemberRepository.findAllFreeSlotBuncheolIds(buncheolIds))
             : Set.of();
 
+    // 예약 오픈은 운영진 분철에만 있다. 페이지에 운영진 분철이 없으면 어댑터가 조회를 건너뛴다.
+    final Map<Long, Instant> opensAtByBuncheolId =
+        staffBuncheolSettingRepository.findOpensAtByBuncheolIds(
+            visible.stream().filter(b -> !b.isC2c()).map(Buncheol::getId).toList());
+
     final Instant now = Instant.now(clock);
     final List<BuncheolSummaryResponse> items =
         visible.stream()
@@ -133,7 +140,8 @@ public class BuncheolListQueryService {
                         shippingFeePaybackPolicy.isEventTargetBuncheol(
                             b.getFlowType(), freeSlotBuncheolIds.contains(b.getId())),
                         b.isFreeShippingEventTarget(),
-                        b.getCreatedAt()))
+                        b.getCreatedAt(),
+                        opensAtByBuncheolId.get(b.getId())))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;

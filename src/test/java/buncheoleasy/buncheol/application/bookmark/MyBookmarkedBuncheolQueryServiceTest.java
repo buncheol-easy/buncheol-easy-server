@@ -2,7 +2,10 @@ package buncheoleasy.buncheol.application.bookmark;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolMemberNameResolver;
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -15,6 +18,7 @@ import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingRepository;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -52,6 +56,7 @@ class MyBookmarkedBuncheolQueryServiceTest {
   @Mock private BuncheolMemberNameResolver buncheolMemberNameResolver;
   @Mock private ParticipationRepository participationRepository;
   @Mock private UserFavoriteGroupRepository userFavoriteGroupRepository;
+  @Mock private StaffBuncheolSettingRepository staffBuncheolSettingRepository;
 
   // 픽스처 마감(2026-06-01)보다 앞선 고정 시각 — RECRUITING 분철은 신규 참여를 받는 상태로 읽힌다.
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-20T00:00:00Z"), ZoneOffset.UTC);
@@ -409,6 +414,38 @@ class MyBookmarkedBuncheolQueryServiceTest {
               USER_ID, BookmarkSortOption.LATEST, false, false);
 
       assertThat(result.get(0).createdAt()).isEqualTo(hostedAt);
+    }
+
+    @Test
+    void 운영진_분철_카드에_오픈_시각을_싣고_설정은_운영진_분철_id_로_한_번만_조회한다() {
+      BuncheolBookmark staffBookmark = bookmark(500L, USER_ID, 10L);
+      BuncheolBookmark memberBookmark = bookmark(501L, USER_ID, 20L);
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(staffBookmark, memberBookmark));
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Buncheol staff = buncheol(10L, 100L, "운영진", BuncheolStatus.RECRUITING, deadline);
+      Buncheol member = buncheol(20L, 100L, "회원", BuncheolStatus.RECRUITING, deadline);
+      setField(member, "flowType", FlowType.C2C);
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L))).willReturn(List.of(staff, member));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "몬엑")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+      Instant opensAt = Instant.parse("2026-05-20T11:00:00Z");
+      given(staffBuncheolSettingRepository.findOpensAtByBuncheolIds(List.of(10L)))
+          .willReturn(Map.of(10L, opensAt));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, false);
+
+      assertThat(result)
+          .extracting(MyBookmarkedBuncheolResponse::buncheolId, MyBookmarkedBuncheolResponse::opensAt)
+          .containsExactly(tuple(10L, opensAt), tuple(20L, null));
+      then(staffBuncheolSettingRepository).should(times(1)).findOpensAtByBuncheolIds(anyList());
     }
 
     @Test

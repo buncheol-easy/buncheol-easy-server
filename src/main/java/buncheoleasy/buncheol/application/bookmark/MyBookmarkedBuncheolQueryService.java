@@ -9,6 +9,7 @@ import buncheoleasy.buncheol.domain.bookmark.BuncheolBookmarkRepository;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingRepository;
 import buncheoleasy.buncheol.dto.request.BookmarkSortOption;
 import buncheoleasy.buncheol.dto.response.MyBookmarkedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -37,6 +38,7 @@ public class MyBookmarkedBuncheolQueryService {
   private final BuncheolMemberNameResolver buncheolMemberNameResolver;
   private final ParticipationRepository participationRepository;
   private final UserFavoriteGroupRepository userFavoriteGroupRepository;
+  private final StaffBuncheolSettingRepository staffBuncheolSettingRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -100,6 +102,15 @@ public class MyBookmarkedBuncheolQueryService {
     BuncheolMemberNameResolver.MemberNames memberNames =
         buncheolMemberNameResolver.resolveNames(visibleBuncheolIds, takenBuncheolMemberIds);
 
+    // 예약 오픈은 운영진 분철에만 있다(공개 목록과 같은 조회).
+    Map<Long, Instant> opensAtByBuncheolId =
+        staffBuncheolSettingRepository.findOpensAtByBuncheolIds(
+            visibleBuncheolIds.stream()
+                .map(buncheolById::get)
+                .filter(b -> !b.isC2c())
+                .map(Buncheol::getId)
+                .toList());
+
     // 기준 시각은 응답당 한 번만 뽑는다 — 카드마다 now 를 새로 읽으면 마감 경계에 걸친 분철이
     // 같은 목록 안에서 서로 다른 기준으로 판정된다 (공개 목록 조회와 같은 방식).
     Instant now = Instant.now(clock);
@@ -108,7 +119,13 @@ public class MyBookmarkedBuncheolQueryService {
         .map(
             bm ->
                 toResponse(
-                    bm, buncheolById, groupNameById, thumbnailByBuncheolId, memberNames, now))
+                    bm,
+                    buncheolById,
+                    groupNameById,
+                    thumbnailByBuncheolId,
+                    memberNames,
+                    opensAtByBuncheolId,
+                    now))
         .toList();
   }
 
@@ -169,6 +186,7 @@ public class MyBookmarkedBuncheolQueryService {
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId,
       final BuncheolMemberNameResolver.MemberNames memberNames,
+      final Map<Long, Instant> opensAtByBuncheolId,
       final Instant now) {
     Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
     return new MyBookmarkedBuncheolResponse(
@@ -182,7 +200,8 @@ public class MyBookmarkedBuncheolQueryService {
         memberNames.all().getOrDefault(buncheol.getId(), List.of()),
         availableMemberNames(buncheol, memberNames, now),
         buncheol.isFreeShippingEventTarget(),
-        buncheol.getCreatedAt());
+        buncheol.getCreatedAt(),
+        opensAtByBuncheolId.get(buncheol.getId()));
   }
 
   /**

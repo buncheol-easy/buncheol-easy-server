@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.restdocs.payload.JsonFieldType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("BuncheolBookmarkController 문서화 테스트")
@@ -103,7 +104,8 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
             List.of("민지", "하니", "다니엘", "해린", "혜인"),
             List.of("민지", "다니엘", "혜인"),
             true,
-            Instant.parse("2026-05-15T08:00:00Z"));
+            Instant.parse("2026-05-15T08:00:00Z"),
+            null);
     given(
             myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
                 USER_ID, BookmarkSortOption.LATEST, false, false))
@@ -186,7 +188,12 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
                                     "배송비 0원 이벤트 대상 분철 여부 — 운영진(`LEGACY`) 분철이면서 이용 가능한 배송수단의 배송비가 모두 0원(등록하지 않은 배송수단은 판정에서 제외). 카드의 \"배송비 0원 이벤트\" 배지 판정용 — 공개 목록 조회와 동일 기준"),
                             fieldWithPath("[].createdAt")
                                 .description(
-                                    "분철 개최 시각 (UTC ISO-8601, 예: `2026-05-15T08:00:00Z`). 찜한 시각이 아니다. 카드의 \"신규\" 배지 판정용 — 공개 목록 조회와 같은 값"))
+                                    "분철 개최 시각 (UTC ISO-8601, 예: `2026-05-15T08:00:00Z`). 찜한 시각이 아니다. 카드의 \"신규\" 배지 판정용 — 공개 목록 조회와 같은 값"),
+                            fieldWithPath("[].opensAt")
+                                .type(JsonFieldType.STRING)
+                                .description(
+                                    "예약 오픈 시각 (UTC ISO-8601). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null. 카드의 \"M/D HH:mm 오픈\" 표시용 — 공개 목록 조회와 같은 값")
+                                .optional())
                         .build())));
   }
 }

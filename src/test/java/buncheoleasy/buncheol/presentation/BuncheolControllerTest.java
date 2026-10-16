@@ -1159,7 +1159,8 @@ class BuncheolControllerTest {
               List.of("민지"),
               false,
               false,
-              Instant.parse("2026-05-15T08:00:00Z"));
+              Instant.parse("2026-05-15T08:00:00Z"),
+              null);
       CursorResponse<BuncheolSummaryResponse> response =
           new CursorResponse<>(List.of(item), null, false);
 
@@ -1220,7 +1221,9 @@ class BuncheolControllerTest {
               FlowType.LEGACY,
               null,
               null,
-              false);
+              false,
+              null,
+              Instant.parse("2026-05-14T12:00:00Z"));
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -1267,7 +1270,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false);
+              null, FlowType.LEGACY, null, null, false, null, Instant.now());
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -1297,7 +1300,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false);
+              null, FlowType.LEGACY, null, null, false, null, Instant.now());
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc

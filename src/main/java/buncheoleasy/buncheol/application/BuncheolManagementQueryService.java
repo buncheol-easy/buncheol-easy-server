@@ -185,7 +185,9 @@ public class BuncheolManagementQueryService {
         buncheol.getStatus(),
         buncheol.getDeadline(),
         buncheol.getMinHeadcount(),
-        buncheolMembers.size(),
+        // 열린 자리 수(removeMember 와 같은 수). 목록 자체는 거르지 않는다 — 취소 참여의 멤버 이름을
+        // 풀 때 닫힌 자리도 필요하다.
+        (int) buncheolMembers.stream().filter(bm -> !bm.isClosed()).count(),
         confirmed.size(),
         participants,
         cancelledParticipants,

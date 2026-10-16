@@ -42,8 +42,11 @@ public class MyHostedBuncheolQueryService {
     List<Long> buncheolIds = buncheols.stream().map(Buncheol::getId).toList();
     List<Long> groupIds = buncheols.stream().map(Buncheol::getGroupId).distinct().toList();
 
+    // 닫힌 자리는 신청을 받지 않으므로 세지 않는다 — removeMember 의 열린 자리 수(BuncheolService)와 같은 수.
+    // CODE_ONLY 도 자리라 부정형으로 거른다(`= OPEN` 으로 쓰면 LEGACY 코드 자리가 빠진다).
     Map<Long, Long> slotCountByBuncheolId =
         buncheolMemberRepository.findAllByBuncheolIds(buncheolIds).stream()
+            .filter(bm -> !bm.isClosed())
             .collect(Collectors.groupingBy(BuncheolMember::getBuncheolId, Collectors.counting()));
 
     Map<Long, Long> activeCountByBuncheolId =

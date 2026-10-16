@@ -13,6 +13,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
@@ -176,6 +177,45 @@ class MyHostedBuncheolQueryServiceTest {
   }
 
   @Nested
+  @DisplayName("열린 자리 수 집계 테스트")
+  class OpenSlotCountTest {
+
+    // 「멤버 N명」은 removeMember 가 마지막 자리 판정에 쓰는 수와 같아야 한다 — 닫힌 자리만 빼고 코드 자리는 센다.
+    @Test
+    void 닫힌_자리는_memberSlotCount에서_빠지고_코드_자리는_센다() {
+      Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
+      Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
+      Buncheol withClosed =
+          buncheol(10L, 100L, "닫힌 자리가 있는 분철", BuncheolStatus.RECRUITING, deadline, createdAt);
+      Buncheol withoutClosed =
+          buncheol(20L, 100L, "닫힌 자리가 없는 분철", BuncheolStatus.RECRUITING, deadline, createdAt);
+
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(List.of(withClosed, withoutClosed));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(
+              List.of(
+                  buncheolMember(101L, 10L, 1001L, BuncheolMemberAccessType.OPEN),
+                  buncheolMember(102L, 10L, 1002L, BuncheolMemberAccessType.CLOSED),
+                  buncheolMember(103L, 10L, 1003L, BuncheolMemberAccessType.CODE_ONLY),
+                  buncheolMember(201L, 20L, 1001L, BuncheolMemberAccessType.OPEN),
+                  buncheolMember(202L, 20L, 1002L, BuncheolMemberAccessType.OPEN)));
+      given(participationRepository.countActiveByBuncheolIds(List.of(10L, 20L))).willReturn(List.of());
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of());
+
+      List<MyHostedBuncheolResponse> result =
+          myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+
+      assertThat(result)
+          .extracting(
+              MyHostedBuncheolResponse::buncheolId, MyHostedBuncheolResponse::memberSlotCount)
+          .containsExactly(tuple(10L, 2), tuple(20L, 2));
+    }
+  }
+
+  @Nested
   @DisplayName("취소 가능 여부 노출 테스트 (docs/56 S-2)")
   class CancellabilityTest {
 
@@ -310,6 +350,13 @@ class MyHostedBuncheolQueryServiceTest {
     setField(member, "id", id);
     setField(member, "buncheolId", buncheolId);
     setField(member, "memberId", memberId);
+    return member;
+  }
+
+  private BuncheolMember buncheolMember(
+      Long id, Long buncheolId, Long memberId, BuncheolMemberAccessType accessType) {
+    BuncheolMember member = buncheolMember(id, buncheolId, memberId);
+    setField(member, "accessType", accessType);
     return member;
   }
 

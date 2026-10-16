@@ -297,7 +297,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("[].buncheolId").description("분철 ID"),
                             fieldWithPath("[].buncheolTitle").description("분철 제목"),
-                            fieldWithPath("[].buncheolMemberCount").description("분철에 포함된 멤버 슬롯 수"),
+                            fieldWithPath("[].buncheolMemberCount").description("열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)"),
                             fieldWithPath("[].memberName").description("내가 참여한 멤버 이름"),
                             fieldWithPath("[].amount").description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("[].shippingFee")

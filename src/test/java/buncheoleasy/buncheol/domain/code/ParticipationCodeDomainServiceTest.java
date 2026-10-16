@@ -44,11 +44,15 @@ class ParticipationCodeDomainServiceTest {
   @Mock private CodeGenerator codeGenerator;
 
   private BuncheolMember member(final BuncheolMemberAccessType accessType) {
+    return member(accessType, 0L);
+  }
+
+  private BuncheolMember member(final BuncheolMemberAccessType accessType, final long price) {
     BuncheolMember member = newInstance();
     setField(member, "id", SLOT_ID);
     setField(member, "buncheolId", BUNCHEOL_ID);
     setField(member, "memberId", 1001L);
-    setField(member, "price", 0L);
+    setField(member, "price", price);
     setField(member, "accessType", accessType);
     return member;
   }
@@ -106,6 +110,18 @@ class ParticipationCodeDomainServiceTest {
               () ->
                   participationCodeDomainService.validateForParticipation(
                       member(BuncheolMemberAccessType.CODE_ONLY), "  ", NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CODE_REQUIRED);
+    }
+
+    // 유료 코드 전용 자리는 화면에 다른 자리와 같은 가격으로 보이지만, 코드 없이 정가로 사 가는 길은 없다.
+    @Test
+    void 유료_코드_슬롯도_코드가_없으면_예외가_발생한다() {
+      assertThatThrownBy(
+              () ->
+                  participationCodeDomainService.validateForParticipation(
+                      member(BuncheolMemberAccessType.CODE_ONLY, 15_000L), null, NOW))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CODE_REQUIRED);

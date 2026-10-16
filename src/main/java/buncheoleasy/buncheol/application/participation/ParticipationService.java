@@ -194,7 +194,10 @@ public class ParticipationService {
     ShippingAddress shippingAddress =
         participationShippingAddressResolver.resolve(
             participantId, buncheol, request.shippingAddressId());
-    // 0으로 눌러 두지 않으면 "0원 슬롯 + 배송비 있음" 이 되어 배송비 환급 이벤트 대상으로 잡힌다
+    // 코드 참여는 자리 가격과 관계없이 0원이다. 그래서 코드 전용 자리에도 다른 멤버와 같은 가격을 걸 수 있고, 화면에서
+    // 특별한 자리로 드러나지 않는다.
+    long amount = code.isPresent() ? 0L : member.getPrice();
+    // 0으로 눌러 두지 않으면 "0원 참여 + 배송비 있음" 이 되어 배송비 환급 이벤트 대상으로 잡힌다
     // (ShippingFeePaybackPolicy) — 서포터즈 참여내역에 없는 환급 CTA 가 붙는다.
     long shippingFee =
         code.isPresent() ? 0L : buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
@@ -209,7 +212,7 @@ public class ParticipationService {
     // 저장된 행으로 판정하면 안 된다 — participations.shipping_fee 쓰기를 빼면 그 컬럼은 새 행에서
     // 항상 0 이라, 「상품 0원 + 배송비만 내는」 참여가 전부 무료로 뒤집혀 입금 없이 즉시 확정된다.
     // 방금 이 메서드가 정한 두 값으로만 판정한다.
-    final boolean free = member.getPrice() == 0L && shippingFee == 0L;
+    final boolean free = amount == 0L && shippingFee == 0L;
 
     // 0원 참여는 아래에서 분철 조기 확정 CAS(X 락)까지 간다. 참여 INSERT 가 buncheols 에 공유 락을
     // 걸므로 그대로 두면 한 트랜잭션 안에서 S→X 업그레이드가 생겨 동시 참여끼리 데드락이 난다.
@@ -224,7 +227,7 @@ public class ParticipationService {
             member.getId(),
             participantId,
             shippingAddress.getId(),
-            member.getPrice(),
+            amount,
             shippingFee,
             dueAt);
     // 저장 시점에도 분철이 모집중인지 원자적으로 재확인(없으면 false → 롤백). 멤버 슬롯이 이미 점유됐으면 DuplicateKey →

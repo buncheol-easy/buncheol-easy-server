@@ -94,7 +94,7 @@ class StaffBuncheolControllerDocsTest extends DocsTestSupport {
                             언제나 운영진 분철(`flowType = LEGACY`)을 만든다. 회원 개최(`POST /v1/buncheols`)는 이 API 와 무관하게 그대로다.
 
                             예약 오픈 시각(`opensAt`)을 넣으면 그 시각 전에는 코드 없는 참여를 받지 않는다(`409 BCH-128`).
-                            코드 전용 자리(`accessType: "CODE_ONLY"`, 0원)는 오픈 전에도 유효한 코드로 참여할 수 있다.
+                            코드 전용 자리(`accessType: "CODE_ONLY"`)는 오픈 전에도 유효한 코드로 참여할 수 있다.
                             분철과 오픈 시각은 한 트랜잭션에서 함께 저장된다 — 오픈 시각 없이 먼저 열린 분철이 보이는 순간은 없다.
                             오픈 시각을 고치는 API 는 없다.
 
@@ -118,7 +118,7 @@ class StaffBuncheolControllerDocsTest extends DocsTestSupport {
                                 {
                                   "memberId": Long,
                                   "price": Long,              // 0 이상, 100원 단위
-                                  "accessType": String?       // 선택 ("OPEN"|"CODE_ONLY") — 생략 시 OPEN. CODE_ONLY 는 0원 자리만
+                                  "accessType": String?       // 선택 ("OPEN"|"CODE_ONLY") — 생략 시 OPEN. CODE_ONLY 도 다른 자리와 같은 가격을 걸 수 있다(코드 참여는 가격과 관계없이 0원)
                                 }
                               ]
                             }
@@ -141,7 +141,6 @@ class StaffBuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 이미지 파일명이 없거나 확장자가 없음 |
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp` 밖의 이미지가 있음 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 운영진(`can_host`)이 아님 — 분철을 만들지 않는다 |
-                            | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | `CODE_ONLY` 자리의 `price` 가 0이 아님 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 |
                             """)
                         .requestHeaders(userAuthorizationHeader())

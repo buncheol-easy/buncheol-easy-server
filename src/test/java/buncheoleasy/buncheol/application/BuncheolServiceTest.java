@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -760,14 +761,48 @@ class BuncheolServiceTest {
               0,
               List.of(
                   new BuncheolMemberRequest(
-                      MEMBER_ID, 15_000L, BuncheolMemberAccessType.CODE_ONLY)));
+                      MEMBER_ID, 15_000L, BuncheolMemberAccessType.CLOSED)));
 
       assertThatThrownBy(() -> buncheolService.holdStaffBuncheol(HOST_ID, request, images))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
+          .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 
       then(buncheolMemberDomainService).should(never()).createBuncheolMembers(any(), anyList());
+    }
+
+    @Test
+    void 코드_전용_자리도_다른_멤버와_같은_가격으로_만든다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      givenCreatedBuncheol();
+      HoldStaffBuncheolRequest request =
+          new HoldStaffBuncheolRequest(
+              GROUP_ID,
+              "몬엑 분철",
+              null,
+              "공식 스토어",
+              deadline,
+              null,
+              1,
+              3000,
+              null,
+              null,
+              0,
+              List.of(
+                  new BuncheolMemberRequest(MEMBER_ID, 15_000L),
+                  new BuncheolMemberRequest(
+                      MEMBER_ID + 1, 15_000L, BuncheolMemberAccessType.CODE_ONLY)));
+
+      buncheolService.holdStaffBuncheol(HOST_ID, request, images);
+
+      then(buncheolMemberDomainService)
+          .should()
+          .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
+      assertThat(buncheolMemberParamsCaptor.getValue())
+          .extracting(BuncheolMemberParams::price, BuncheolMemberParams::accessType)
+          .containsExactly(
+              tuple(15_000L, BuncheolMemberAccessType.OPEN),
+              tuple(15_000L, BuncheolMemberAccessType.CODE_ONLY));
     }
 
     @Test

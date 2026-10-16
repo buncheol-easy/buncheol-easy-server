@@ -89,7 +89,8 @@ public class Participation extends TimestampedEntity {
   @Column(name = "shipping_address_id", insertable = false, updatable = false)
   private Long shippingAddressId;
 
-  // 멤버 금액(굿즈 가격). 점유 시점 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다. 배송비는 shippingFee 로 분리 보관한다.
+  // 참여자가 낼 굿즈 금액. 점유 시점의 멤버 금액 스냅샷이라 이후 멤버 금액 변경에 영향받지 않는다. 코드 참여는 멤버 금액과
+  // 관계없이 0 이다. 배송비는 shippingFee 로 분리 보관한다.
   @Column(nullable = false, updatable = false)
   private long amount;
 

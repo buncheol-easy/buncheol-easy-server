@@ -528,20 +528,19 @@ CREATE TABLE IF NOT EXISTS promo_events
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
--- 이벤트에 건 분철과 회차다. 분철 하나는 이벤트 하나에만 건다.
+-- 이벤트에 건 분철이다. 분철 하나는 이벤트 하나에만 건다. 회차 순서는 오픈 시각으로 본다.
 CREATE TABLE IF NOT EXISTS promo_event_buncheols
 (
     id             BIGINT   NOT NULL AUTO_INCREMENT,
     promo_event_id BIGINT   NOT NULL,
     buncheol_id    BIGINT   NOT NULL,
-    round          INT      NOT NULL COMMENT '회차 (1부터)',
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
     UNIQUE INDEX uq_promo_event_buncheols_buncheol (buncheol_id),
-    INDEX idx_promo_event_buncheols_promo_event_round (promo_event_id, round),
+    INDEX idx_promo_event_buncheols_promo_event (promo_event_id),
 
     CONSTRAINT fk_promo_event_buncheols_promo_event
         FOREIGN KEY (promo_event_id)

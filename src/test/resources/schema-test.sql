@@ -367,7 +367,6 @@ CREATE TABLE promo_event_buncheols
     id             BIGINT    NOT NULL AUTO_INCREMENT,
     promo_event_id BIGINT    NOT NULL,
     buncheol_id    BIGINT    NOT NULL,
-    round          INT       NOT NULL,
     created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -377,7 +376,7 @@ CREATE TABLE promo_event_buncheols
 );
 
 CREATE UNIQUE INDEX uq_promo_event_buncheols_buncheol ON promo_event_buncheols (buncheol_id);
-CREATE INDEX idx_promo_event_buncheols_promo_event_round ON promo_event_buncheols (promo_event_id, round);
+CREATE INDEX idx_promo_event_buncheols_promo_event ON promo_event_buncheols (promo_event_id);
 
 -- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)
 CREATE TABLE admins

@@ -42,9 +42,6 @@ public class StaffBuncheolSetting extends TimestampedEntity implements Persistab
 
   public static StaffBuncheolSetting create(
       final Long buncheolId, final Instant opensAt, final Instant deadline, final Instant now) {
-    if (buncheolId == null) {
-      throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
-    }
     Instant validOpensAt = validateOpensAt(opensAt, deadline, now);
     StaffBuncheolSetting setting = new StaffBuncheolSetting();
     setting.buncheolId = buncheolId;

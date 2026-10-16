@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.presentation;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,6 +27,7 @@ import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
+import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -61,6 +63,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -506,6 +509,48 @@ class BuncheolControllerTest {
 
       then(buncheolService).should(never()).holdBuncheol(any(), any(), any());
     }
+
+    // #224 — 보낸 Content-Type 으로 거절하지 않고 덮어쓴다. 지금 201 이던 요청은 계속 201 이고, 서비스에는 확장자로 정한 형식이 간다.
+    @Test
+    void 이미지_파트의_Content_Type_이_HTML_이어도_201이고_저장_형식은_확장자로_정해진다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      MockMultipartFile html =
+          new MockMultipartFile("images", "evil.png", MediaType.TEXT_HTML_VALUE, new byte[] {1});
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(html).with(mockAuth()))
+          .andExpect(status().isCreated());
+
+      assertThat(capturedHoldImages())
+          .extracting(ImageFile::contentType)
+          .containsExactly("image/png");
+    }
+
+    @Test
+    void 이미지_파트에_Content_Type_이_없어도_201이고_저장_형식은_확장자로_정해진다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      MockMultipartFile noType =
+          new MockMultipartFile("images", "buncheol-1.jpg", null, new byte[] {1});
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(noType).with(mockAuth()))
+          .andExpect(status().isCreated());
+
+      assertThat(capturedHoldImages())
+          .extracting(ImageFile::contentType)
+          .containsExactly("image/jpeg");
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ImageFile> capturedHoldImages() {
+      ArgumentCaptor<List<ImageFile>> captor = ArgumentCaptor.forClass((Class) List.class);
+      then(buncheolService).should().holdBuncheol(eq(HOST_ID), any(), captor.capture());
+      return captor.getValue();
+    }
   }
 
   @Nested
@@ -787,6 +832,25 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.code").value(ErrorCode.FILE_EXTENSION_INVALID.getCode()));
 
       then(buncheolService).should(never()).modifyBuncheol(any(), any(), any(), any());
+    }
+
+    // #224 — 수정도 개최와 같은 레코드를 거친다. 보낸 Content-Type 으로 거절하지 않고(204 그대로) 확장자로 정한 형식이 간다.
+    @Test
+    @SuppressWarnings("unchecked")
+    void 이미지_파트의_Content_Type_이_HTML_이어도_204이고_저장_형식은_확장자로_정해진다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validModifyRequestJson().getBytes());
+      MockMultipartFile html =
+          new MockMultipartFile("images", "evil.png", MediaType.TEXT_HTML_VALUE, new byte[] {1});
+
+      mockMvc
+          .perform(modifyMultipartRequest(10L).file(requestPart).file(html).with(mockAuth()))
+          .andExpect(status().isNoContent());
+
+      ArgumentCaptor<List<ImageFile>> captor = ArgumentCaptor.forClass((Class) List.class);
+      then(buncheolService).should().modifyBuncheol(eq(HOST_ID), eq(10L), any(), captor.capture());
+      assertThat(captor.getValue()).extracting(ImageFile::contentType).containsExactly("image/png");
     }
   }
 

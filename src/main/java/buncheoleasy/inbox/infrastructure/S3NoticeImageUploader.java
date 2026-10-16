@@ -56,6 +56,7 @@ public class S3NoticeImageUploader implements NoticeImageUploader {
           PutObjectRequest.builder()
               .bucket(bucketName)
               .key(key)
+              // ImageFile 이 확장자로 정한 값이다 — 클라가 보낸 Content-Type 이 아니다(#224).
               .contentType(imageFile.contentType())
               .contentLength((long) imageFile.bytes().length)
               .build();

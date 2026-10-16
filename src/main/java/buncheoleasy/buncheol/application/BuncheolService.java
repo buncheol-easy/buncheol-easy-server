@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
+import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.BuncheolTerms;
 import buncheoleasy.buncheol.domain.BuncheolTermsChange;
@@ -18,10 +19,12 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.request.HoldStaffBuncheolRequest;
 import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -52,6 +55,7 @@ public class BuncheolService {
   private final DeliveryDomainService deliveryDomainService;
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
+  private final StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -68,38 +72,89 @@ public class BuncheolService {
   public Long holdBuncheol(
       final Long hostId, final HoldBuncheolRequest request, final List<ImageFile> images) {
     FlowType flowType = resolveHostFlowType(hostId, request.flowType());
+    return createBuncheolWithMembers(
+            hostId,
+            request.toParams(flowType),
+            request.thumbnailIndex(),
+            request.buncheolMembers(),
+            images)
+        .getId();
+  }
 
+  /**
+   * 운영진 분철을 개최한다. 언제나 운영진 분철(LEGACY)이고, 예약 오픈 시각이 있으면 같은 트랜잭션에서 설정 행을 함께 저장한다.
+   *
+   * <p>🔴 설정 저장을 이벤트 리스너나 별도 트랜잭션으로 빼지 않는다. 분철이 먼저 커밋되면 오픈 시각 없이 열린 분철이 잠깐 보이고, 설정
+   * 저장이 실패하면 그대로 남는다. 한 트랜잭션이면 커밋 전에는 아무도 새 분철을 볼 수 없어 "분철은 있는데 설정은 없는" 순간이 없다.
+   *
+   * <p>자격 판정은 회원 개최의 운영진 경로({@link #resolveHostFlowType} 의 LEGACY)와 같다 — {@link #getHostingEligibility} 가
+   * 운영진을 LEGACY 기준으로 판정하는 것과도 맞는다.
+   *
+   * @return 생성된 분철 id
+   */
+  @Transactional
+  public Long holdStaffBuncheol(
+      final Long hostId, final HoldStaffBuncheolRequest request, final List<ImageFile> images) {
+    if (!userDomainService.canHost(hostId)) {
+      throw new BusinessException(ErrorCode.USER_CANNOT_HOST);
+    }
+    final Instant now = Instant.now(clock);
+    if (request.opensAt() != null) {
+      staffBuncheolSettingDomainService.validateOpensAt(request.opensAt(), request.deadline(), now);
+    }
+
+    Buncheol buncheol =
+        createBuncheolWithMembers(
+            hostId,
+            request.toParams(),
+            request.thumbnailIndex(),
+            request.buncheolMembers(),
+            images);
+
+    if (request.opensAt() != null) {
+      staffBuncheolSettingDomainService.create(
+          buncheol.getId(), request.opensAt(), request.deadline(), now);
+    }
+    return buncheol.getId();
+  }
+
+  /** 회원 개최와 운영진 개최가 함께 쓰는 본문: 자리 검증 → 분철 생성 → 자리 생성 → 이미지 업로드 이벤트. */
+  private Buncheol createBuncheolWithMembers(
+      final Long hostId,
+      final BuncheolParams params,
+      final Integer thumbnailIndex,
+      final List<BuncheolMemberRequest> members,
+      final List<ImageFile> images) {
     buncheolImageDomainService.validateImageCount(images.size());
 
     // 대표사진은 이미지 저장 순서를 바꾸지 않고 인덱스 플래그로만 지정한다 (필수 — DTO @NotNull 검증).
-    buncheolImageDomainService.validateThumbnailIndex(images.size(), request.thumbnailIndex());
+    buncheolImageDomainService.validateThumbnailIndex(images.size(), thumbnailIndex);
 
     // 정산 계좌가 등록된 호스트만 분철을 개최할 수 있다 (LEGACY·C2C 공통 — C2C 는 입금 안내 계좌 스냅샷의 원천).
     userDomainService.requireBankAccountRegistered(hostId);
 
-    groupDomainService.validateGroupExists(request.groupId());
+    groupDomainService.validateGroupExists(params.groupId());
 
-    List<Long> memberIds = extractDistinctMemberIds(request.buncheolMembers());
-    groupDomainService.getGroupMembersByIdsInGroup(request.groupId(), memberIds);
+    List<Long> memberIds = extractDistinctMemberIds(members);
+    groupDomainService.getGroupMembersByIdsInGroup(params.groupId(), memberIds);
     // 개최 시 자리 수 = 요청 멤버 수 (중복은 위에서, 닫힌 자리는 아래에서 거부된다).
-    buncheolDomainService.validateMinHeadcountWithinSlots(
-        request.minHeadcount(), request.buncheolMembers().size());
+    buncheolDomainService.validateMinHeadcountWithinSlots(params.minHeadcount(), members.size());
 
-    Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, request.toParams(flowType));
+    Buncheol buncheol = buncheolDomainService.createBuncheol(hostId, params);
 
     List<BuncheolMemberParams> memberParams =
-        request.buncheolMembers().stream().map(BuncheolMemberRequest::toParams).toList();
+        members.stream().map(BuncheolMemberRequest::toParams).toList();
     validateNoClosedSlots(memberParams);
-    validateCodeOnlySlotsAllowed(flowType, memberParams);
+    validateCodeOnlySlotsAllowed(params.flowType(), memberParams);
     validateCodeOnlySlotsAreFree(memberParams);
     buncheolMemberDomainService.createBuncheolMembers(buncheol.getId(), memberParams);
 
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
-          BuncheolImageUploadEvent.ofHold(buncheol.getId(), images, request.thumbnailIndex()));
+          BuncheolImageUploadEvent.ofHold(buncheol.getId(), images, thumbnailIndex));
     }
 
-    return buncheol.getId();
+    return buncheol;
   }
 
   /**

@@ -25,6 +25,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingRepository;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.global.page.CursorResponse;
@@ -67,6 +68,7 @@ class BuncheolListQueryServiceTest {
   @Mock private BuncheolMemberRepository buncheolMemberRepository;
   @Mock private ParticipationRepository participationRepository;
   @Mock private ShippingFeePaybackPolicy shippingFeePaybackPolicy;
+  @Mock private StaffBuncheolSettingRepository staffBuncheolSettingRepository;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   // 픽스처 마감(2026-06-01)보다 앞선 고정 시각 — RECRUITING 분철이 신규 참여를 받는 상태로 읽힌다.
@@ -318,6 +320,52 @@ class BuncheolListQueryServiceTest {
           buncheolMemberNameResolver,
           buncheolBookmarkRepository,
           buncheolImageRepository);
+    }
+  }
+
+  @Nested
+  @DisplayName("예약 오픈 시각")
+  class OpensAtTest {
+
+    @Test
+    void 운영진_분철_카드에_오픈_시각을_싣고_설정은_운영진_분철_id_로_한_번만_조회한다() {
+      Instant opensAt = Instant.parse("2026-05-20T11:00:00Z");
+      Buncheol staff = buncheol(10L, 100L, "운영진", Instant.parse("2026-05-15T08:00:00Z"));
+      Buncheol staffWithoutSetting =
+          buncheol(12L, 100L, "운영진 바로 열림", Instant.parse("2026-05-15T07:00:00Z"));
+      Buncheol member =
+          c2cBuncheol(
+              11L,
+              100L,
+              "회원",
+              Instant.parse("2026-05-14T08:00:00Z"),
+              ShippingFeePolicy.of(3000, 3000));
+      given(buncheolRepository.search(any(), any(), anyInt()))
+          .willReturn(List.of(staff, staffWithoutSetting, member));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "몬엑")));
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 12L, 11L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+      given(staffBuncheolSettingRepository.findOpensAtByBuncheolIds(List.of(10L, 12L)))
+          .willReturn(Map.of(10L, opensAt));
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items())
+          .extracting(BuncheolSummaryResponse::id, BuncheolSummaryResponse::opensAt)
+          .containsExactly(tuple(10L, opensAt), tuple(12L, null), tuple(11L, null));
+      verify(staffBuncheolSettingRepository, times(1)).findOpensAtByBuncheolIds(anyList());
+    }
+
+    @Test
+    void 결과가_비면_설정을_조회하지_않는다() {
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of());
+
+      buncheolListQueryService.search(
+          null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      verifyNoInteractions(staffBuncheolSettingRepository);
     }
   }
 

@@ -34,6 +34,8 @@ import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSetting;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
@@ -61,6 +63,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.Spy;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -89,6 +92,7 @@ class ParticipationServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ParticipationCodeDomainService participationCodeDomainService;
+  @Mock private StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
   @Mock private ParticipationShippingAddressResolver participationShippingAddressResolver;
   @Mock private UserDomainService userDomainService;
   @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
@@ -171,8 +175,8 @@ class ParticipationServiceTest {
       ParticipateResult result =
           participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
-      // 30분 창이 deadline 보다 빠르므로 dueAt = now + 30분.
-      Instant expectedDueAt = NOW.plus(Duration.ofMinutes(30));
+      // 10분 창이 deadline 보다 빠르므로 dueAt = now + 10분.
+      Instant expectedDueAt = NOW.plus(Duration.ofMinutes(10));
       assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
       assertThat(result.dueAt()).isEqualTo(expectedDueAt);
       assertThat(result.hostAccount()).isEqualTo(HOST_ACCOUNT);
@@ -410,7 +414,7 @@ class ParticipationServiceTest {
     }
 
     @Test
-    void 마감이_30분_이내면_입금만료시각이_deadline으로_클램프된다() {
+    void 마감이_10분_이내면_입금만료시각이_deadline으로_클램프된다() {
       Instant deadline = NOW.plus(Duration.ofMinutes(5));
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
@@ -440,7 +444,7 @@ class ParticipationServiceTest {
       ParticipateResult result =
           participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
-      // deadline(5분 후)이 30분 창보다 빠르므로 dueAt = deadline.
+      // deadline(5분 후)이 10분 창보다 빠르므로 dueAt = deadline.
       assertThat(result.dueAt()).isEqualTo(deadline);
     }
 
@@ -1042,7 +1046,7 @@ class ParticipationServiceTest {
               eq(SHIPPING_ADDRESS_ID),
               eq(SHIPPING_FEE),
               any(),
-              eq(NOW.plus(Duration.ofMinutes(30))),
+              eq(NOW.plus(Duration.ofMinutes(10))),
               eq(NOW));
     }
 
@@ -1487,6 +1491,174 @@ class ParticipationServiceTest {
   }
 
   @Nested
+  @DisplayName("운영진 분철 예약 오픈 테스트")
+  class StaffOpenTest {
+
+    private final Instant deadline = NOW.plus(Duration.ofDays(7));
+
+    private StaffBuncheolSetting settingOpeningAt(final Instant opensAt) {
+      return StaffBuncheolSetting.create(
+          BUNCHEOL_ID, opensAt, deadline, NOW.minus(Duration.ofDays(1)));
+    }
+
+    private Buncheol givenStaffBuncheolWithSetting(final Optional<StaffBuncheolSetting> setting) {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMember(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      givenOpenSlot();
+      given(staffBuncheolSettingDomainService.findSetting(BUNCHEOL_ID)).willReturn(setting);
+      return buncheol;
+    }
+
+    private void givenReadyToInsert(final Buncheol buncheol) {
+      given(buncheol.getDeadline()).willReturn(deadline);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      givenParticipantAccount();
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+    }
+
+    private void givenHostAccount(final Buncheol buncheol) {
+      given(buncheol.getHostId()).willReturn(HOST_ID);
+      User host = mock(User.class);
+      given(host.getBankAccount()).willReturn(HOST_ACCOUNT);
+      given(userDomainService.getUser(HOST_ID)).willReturn(host);
+    }
+
+    private static Boolean savedWithId(final InvocationOnMock invocation) {
+      setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+      return true;
+    }
+
+    @Test
+    void 오픈_전_코드_없는_참여는_BCH_128_이고_쓰기_전에_실패한다() {
+      givenStaffBuncheolWithSetting(Optional.of(settingOpeningAt(NOW.plusSeconds(1))));
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
+
+      then(participationShippingAddressResolver).should(never()).resolve(any(), any(), any());
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(participationDomainService).should(never()).createParticipationIfRecruitingAndOpen(any());
+    }
+
+    @Test
+    void 오픈_뒤에는_오픈_조건_INSERT_로_받고_기한은_참여_후_10분이다() {
+      Buncheol buncheol = givenStaffBuncheolWithSetting(Optional.of(settingOpeningAt(NOW)));
+      givenReadyToInsert(buncheol);
+      givenHostAccount(buncheol);
+      given(participationDomainService.createParticipationIfRecruitingAndOpen(any()))
+          .willAnswer(StaffOpenTest::savedWithId);
+
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      assertThat(result.dueAt()).isEqualTo(NOW.plus(Duration.ofMinutes(10)));
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(staffBuncheolSettingDomainService).should(never()).isBeforeOpenByDbClock(any());
+    }
+
+    @Test
+    void 설정_행이_없으면_지금_INSERT_로_받는다() {
+      Buncheol buncheol = givenStaffBuncheolWithSetting(Optional.empty());
+      givenReadyToInsert(buncheol);
+      givenHostAccount(buncheol);
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(StaffOpenTest::savedWithId);
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationDomainService).should(never()).createParticipationIfRecruitingAndOpen(any());
+      then(staffBuncheolSettingDomainService).should(never()).isBeforeOpenByDbClock(any());
+    }
+
+    // 앱 시각으로는 열렸는데 DB 시각으로는 아직인 정각 직후 몇 ms — 모집 종료(BCH-060)로 잘못 나가면 안 된다.
+    @Test
+    void 오픈_조건_INSERT_가_0행이고_DB_시각으로_오픈_전이면_BCH_128() {
+      Buncheol buncheol = givenStaffBuncheolWithSetting(Optional.of(settingOpeningAt(NOW)));
+      givenReadyToInsert(buncheol);
+      given(participationDomainService.createParticipationIfRecruitingAndOpen(any()))
+          .willReturn(false);
+      given(staffBuncheolSettingDomainService.isBeforeOpenByDbClock(BUNCHEOL_ID)).willReturn(true);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
+    }
+
+    @Test
+    void 오픈_조건_INSERT_가_0행이고_DB_시각으로도_열렸으면_BCH_060() {
+      Buncheol buncheol = givenStaffBuncheolWithSetting(Optional.of(settingOpeningAt(NOW)));
+      givenReadyToInsert(buncheol);
+      given(participationDomainService.createParticipationIfRecruitingAndOpen(any()))
+          .willReturn(false);
+      given(staffBuncheolSettingDomainService.isBeforeOpenByDbClock(BUNCHEOL_ID)).willReturn(false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    @Test
+    void 설정_행이_없는_분철의_INSERT_0행은_DB_시각을_보지_않고_BCH_060() {
+      Buncheol buncheol = givenStaffBuncheolWithSetting(Optional.empty());
+      givenReadyToInsert(buncheol);
+      given(participationDomainService.createParticipationIfRecruiting(any())).willReturn(false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+
+      then(staffBuncheolSettingDomainService).should(never()).isBeforeOpenByDbClock(any());
+    }
+
+    @Test
+    void 회원_개최_신청은_오픈_설정을_읽지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
+      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember());
+      given(
+              participationShippingAddressResolver.resolve(
+                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(StaffOpenTest::savedWithId);
+      givenParticipantAccount();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(staffBuncheolSettingDomainService).shouldHaveNoInteractions();
+      then(participationDomainService).should(never()).createParticipationIfRecruitingAndOpen(any());
+    }
+  }
+
+  @Nested
   @DisplayName("참여 코드(서포터즈 배정 슬롯) 테스트")
   class CodeParticipationTest {
 
@@ -1553,6 +1725,18 @@ class ParticipationServiceTest {
       Participation saved = participationCaptor.getValue();
       assertThat(saved.getAmount()).isZero();
       assertThat(saved.getShippingFee()).isZero();
+    }
+
+    // 코드 전용 자리는 예약 오픈 전에도 받는다(주헌 자리). 오픈 설정을 읽지 않고 지금 INSERT 로 간다.
+    @Test
+    void 코드_참여는_오픈_설정을_보지_않고_지금_INSERT_로_받는다() {
+      givenCodeParticipation();
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, codeRequest());
+
+      then(staffBuncheolSettingDomainService).shouldHaveNoInteractions();
+      then(participationDomainService).should().createParticipationIfRecruiting(any());
+      then(participationDomainService).should(never()).createParticipationIfRecruitingAndOpen(any());
     }
 
     // 0원이라 환불할 돈은 없지만 예금주가 개최자 통장 대조 키이고, 참여 묶음이 계좌를 NOT NULL 로 요구한다 (docs/80 결정 1).

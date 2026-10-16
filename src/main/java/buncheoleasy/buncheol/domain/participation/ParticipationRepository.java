@@ -15,6 +15,14 @@ public interface ParticipationRepository {
   boolean saveIfRecruiting(Participation participation);
 
   /**
+   * {@link #saveIfRecruiting} 의 조건에 더해, 분철의 예약 오픈 시각(staff_buncheol_settings)이 지났을 때만 INSERT 한다
+   * (원자적, DB 시각 기준, 정각이면 열림). 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return INSERT 된 경우 true, 모집중이 아니거나 마감됐거나 아직 열리지 않았으면 false
+   */
+  boolean saveIfRecruitingAndOpen(Participation participation);
+
+  /**
    * C2C 추가 모집: 분철이 입금 수집중({@code PAYMENT_COLLECTING})일 때만 참여를 INSERT 한다 (원자적 — docs/46 §4.7-E1).
    * 진행확정(CONFIRMED) 이후에는 삽입되지 않는다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
    *

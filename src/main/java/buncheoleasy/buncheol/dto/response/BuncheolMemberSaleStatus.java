@@ -21,7 +21,9 @@ public enum BuncheolMemberSaleStatus {
   // C2C 개최자가 「빼기」로 닫은 자리(접근 정책 CLOSED)도 이 값이다 — 신청을 받는 분철의 빈 자리가 CLOSED 면 그 경우뿐이다.
   CLOSED("마감"),
   // 코드 보유자에게 배정된 공석. CLOSED 로 뭉뚱그리면 오픈 직후부터 절반이 마감으로 보여 조작 의심을 부른다.
-  CODE_ONLY("서포터즈 배정");
+  CODE_ONLY("서포터즈 배정"),
+  // 예약 오픈 전인 운영진 분철의 선착순 빈 자리. 오픈 시각이 되면 AVAILABLE 이 된다. 코드 전용 자리는 오픈 전에도 CODE_ONLY 다.
+  NOT_OPEN("오픈 전");
 
   private final String description;
 }

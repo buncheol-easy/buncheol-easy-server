@@ -21,6 +21,9 @@ import java.util.List;
  * @param termsEditable 개최자가 지금 거래 조건(마감·최소 인원·배송비·구매처)을 바꿀 수 있는지 — 수정 API 와 같은 판정({@code
  *     BuncheolTermsEditability}). 개최자 본인이 아니면 항상 false. 조회 시점 값이라 저장이 409 일 수 있다. 응답 맨 뒤에 둔다 —
  *     이 필드를 모르는 클라이언트는 무시하고, 옛 서버 응답에는 없어 클라이언트가 false 로 폴백한다
+ * @param opensAt 예약 오픈 시각(UTC). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null 이다. 이 시각 전에는 선착순 빈 자리가
+ *     {@code NOT_OPEN} 이고 코드 없는 참여는 409(BCH-128)다. 정각이면 열린다
+ * @param serverTime 이 응답을 만든 서버 시각(UTC). 화면이 기기 시계 대신 이 값에 맞춰 오픈까지 남은 시간을 센다
  */
 public record BuncheolDetailResponse(
     Long id,
@@ -40,4 +43,6 @@ public record BuncheolDetailResponse(
     FlowType flowType,
     Instant paymentDueAt,
     String openChatUrl,
-    boolean termsEditable) {}
+    boolean termsEditable,
+    Instant opensAt,
+    Instant serverTime) {}

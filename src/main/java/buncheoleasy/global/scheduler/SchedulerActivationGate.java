@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  * <p>유예 기본 300s 는 전환 스크립트(scripts/blue-green.sh)의 최악 경로 — 헬스 게이트 180s +
  * 웜업 15s + 드레인 30s + 생존 프로브 9s ≈ 234s — 에 여유를 더해 유도했다. 스크립트의 예산
  * (HEALTH_DEADLINE·DRAIN_SECONDS)을 늘리면 이 값도 같이 검토해야 한다. 트레이드오프는 재기동
- * 후 스케줄 재개가 유예만큼 늦는 것뿐이다(정각 마감은 fallback 폴링이, 입금 만료는 30분 단위
+ * 후 스케줄 재개가 유예만큼 늦는 것뿐이다(정각 마감은 fallback 폴링이, 입금 만료는 10분 단위
  * 기한이 흡수 — 각 스케줄러 주석 참조).
  *
  * <p>⚠️ <b>계약: 주기가 긴 fixedDelay 스케줄러의 initial-delay 는 이 유예보다 커야 한다.</b>

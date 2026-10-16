@@ -36,8 +36,8 @@ public class ParticipationPaymentExpiryScheduler {
       fixedDelayString = "${app.participation.payment-expiry.interval-ms}",
       initialDelayString = "${app.participation.payment-expiry.initial-delay-ms}")
   public void expireOverduePayments() {
-    // 블루-그린 전환 전 인스턴스의 만료 취소·알림 발송 차단 (docs/39). 만료 판정은 10분 단위
-    // 기한이라 유예(기본 300s)만큼의 재개 지연은 무해하다.
+    // 블루-그린 전환 전 인스턴스의 만료 취소·알림 발송 차단 (docs/39). 유예(기본 300s) 동안은 만료가
+    // 10분 기한의 절반까지 늦어질 수 있어, 운영진 분철 오픈 시간대에는 배포를 피한다.
     if (!schedulerActivationGate.isActive()) {
       log.info("기동 유예 중 — 입금 만료 처리 건너뜀 (블루-그린 전환 전 부작용 차단)");
       return;

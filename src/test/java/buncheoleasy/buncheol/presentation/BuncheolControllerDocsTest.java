@@ -1283,7 +1283,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
 
                             **응답 동작**
                             - 분철 상태(`RECRUITING` / `CONFIRMED` / `CANCELLED` / `HOST_CANCELLED`) 무관하게 호출 가능
-                            - `memberCount` = 분철에 등록된 멤버 슬롯 수
+                            - `memberCount` = 열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)
                             - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
                             - `participants[].depositorName` = **입금자명**(= 참여 시점 참여자의 정산 계좌 예금주 스냅샷). 개최자의 통장 대조 키.

@@ -183,11 +183,11 @@ public class ParticipationService {
 
     // 예약 오픈은 코드 없는 참여에만 걸린다 — 코드 전용 자리는 오픈 전에도 받는다. 설정 행은 분철과 같은 트랜잭션에서만
     // 생기므로 분철이 보이면 행도 이미 보인다. 앱 시각으로 먼저 거르고, 최종 판정은 아래 INSERT 가 DB 시각으로 한다.
-    Optional<StaffBuncheolSetting> openSetting =
+    Optional<StaffBuncheolSetting> staffSetting =
         code.isPresent()
             ? Optional.empty()
             : staffBuncheolSettingDomainService.findSetting(buncheolId);
-    if (openSetting.isPresent() && openSetting.get().isBeforeOpen(now)) {
+    if (staffSetting.isPresent() && staffSetting.get().isBeforeOpen(now)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
     }
 
@@ -231,12 +231,12 @@ public class ParticipationService {
     // PARTICIPATION_ALREADY_EXISTS 로 롤백. 오픈 조건 INSERT 는 설정 행이 있는 분철에만 쓴다 — 행이 없는 분철에 NOT EXISTS 를
     // 돌리면 없는 행 자리에 간격 잠금이 걸린다.
     boolean inserted =
-        openSetting.isPresent()
+        staffSetting.isPresent()
             ? participationDomainService.createParticipationIfRecruitingAndOpen(participation)
             : participationDomainService.createParticipationIfRecruiting(participation);
     if (!inserted) {
       // 0행의 원인을 INSERT 와 같은 DB 시계로 가른다. 앱 시계로 보면 정각 직후 시계 차이 동안 BCH-060 으로 잘못 나간다.
-      if (openSetting.isPresent()
+      if (staffSetting.isPresent()
           && staffBuncheolSettingDomainService.isBeforeOpenByDbClock(buncheolId)) {
         throw new BusinessException(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
       }

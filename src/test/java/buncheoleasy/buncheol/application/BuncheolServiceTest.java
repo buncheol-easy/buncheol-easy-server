@@ -50,6 +50,7 @@ import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
+import java.lang.reflect.RecordComponent;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -773,7 +774,7 @@ class BuncheolServiceTest {
     void 요청에는_개최_방식_칸이_없고_언제나_운영진_분철이다() {
       assertThat(staffRequest(null).toParams().flowType()).isEqualTo(FlowType.LEGACY);
       assertThat(HoldStaffBuncheolRequest.class.getRecordComponents())
-          .extracting(java.lang.reflect.RecordComponent::getName)
+          .extracting(RecordComponent::getName)
           .doesNotContain("flowType");
     }
   }

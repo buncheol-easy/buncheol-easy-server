@@ -127,7 +127,7 @@ class JpaStaffBuncheolSettingRepositoryAdapterTest {
   }
 
   @Test
-  void 빈_id_목록이면_조회하지_않고_빈_맵이다() {
+  void 빈_id_목록이면_빈_맵이다() {
     assertThat(staffBuncheolSettingRepository.findOpensAtByBuncheolIds(List.of())).isEmpty();
   }
 

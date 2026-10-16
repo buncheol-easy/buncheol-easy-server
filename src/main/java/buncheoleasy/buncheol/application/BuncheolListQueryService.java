@@ -118,7 +118,7 @@ public class BuncheolListQueryService {
     // 예약 오픈은 운영진 분철에만 있다. 페이지에 운영진 분철이 없으면 어댑터가 조회를 건너뛴다.
     final Map<Long, Instant> opensAtByBuncheolId =
         staffBuncheolSettingRepository.findOpensAtByBuncheolIds(
-            visible.stream().filter(b -> !b.isC2c()).map(Buncheol::getId).toList());
+            visible.stream().filter(Buncheol::isStaff).map(Buncheol::getId).toList());
 
     final Instant now = Instant.now(clock);
     final List<BuncheolSummaryResponse> items =

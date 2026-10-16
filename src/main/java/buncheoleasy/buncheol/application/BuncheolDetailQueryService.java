@@ -109,9 +109,9 @@ public class BuncheolDetailQueryService {
     boolean openForNewParticipation = buncheol.acceptsNewParticipation(now);
     // 예약 오픈은 운영진 분철에만 있다. 회원 개최는 읽지 않는다 — 공개 엔드포인트라 헛쿼리를 안 낸다(아래 묶음 조회와 같은 이유).
     Optional<StaffBuncheolSetting> staffSetting =
-        buncheol.isC2c()
-            ? Optional.empty()
-            : staffBuncheolSettingRepository.findByBuncheolId(buncheolId);
+        buncheol.isStaff()
+            ? staffBuncheolSettingRepository.findByBuncheolId(buncheolId)
+            : Optional.empty();
     boolean beforeOpen = staffSetting.map(setting -> setting.isBeforeOpen(now)).orElse(false);
     // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 그 값이 「제외」 게이트가 보는 값이고,
     // 카드 계약이 "이 시각이 지나면 슬롯이 공석으로 풀린다" 이기 때문이다. 배치 1회로 붙인다.

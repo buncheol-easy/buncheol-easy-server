@@ -343,6 +343,31 @@ class BuncheolTest {
   }
 
   @Nested
+  @DisplayName("운영진 분철 판정 테스트")
+  class IsStaffTest {
+
+    @Test
+    void LEGACY_분철은_운영진_분철이다() {
+      Buncheol buncheol = Buncheol.create(HOST_ID, validParams(), Instant.now());
+
+      assertThat(buncheol.isStaff()).isTrue();
+      assertThat(buncheol.isC2c()).isFalse();
+    }
+
+    @Test
+    void C2C_분철은_운영진_분철이_아니다() {
+      BuncheolParams params =
+          new BuncheolParams(
+              1L, "테스트 분철 제목", null, "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null,
+              FlowType.C2C, null);
+      Buncheol buncheol = Buncheol.create(HOST_ID, params, Instant.now());
+
+      assertThat(buncheol.isStaff()).isFalse();
+      assertThat(buncheol.isC2c()).isTrue();
+    }
+  }
+
+  @Nested
   @DisplayName("초기 상태 테스트")
   class InitialStatusTest {
 

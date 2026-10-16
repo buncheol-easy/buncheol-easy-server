@@ -107,7 +107,7 @@ public class MyBookmarkedBuncheolQueryService {
         staffBuncheolSettingRepository.findOpensAtByBuncheolIds(
             visibleBuncheolIds.stream()
                 .map(buncheolById::get)
-                .filter(b -> !b.isC2c())
+                .filter(Buncheol::isStaff)
                 .map(Buncheol::getId)
                 .toList());
 

@@ -232,9 +232,9 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   /**
    * 개최자 「제외」 CAS — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다.
    *
-   * <p>🔴 <b>기한 가드는 UPDATE 의 WHERE 안에 있다.</b> 밖에서 판정하고 넘기면 개최자가 반려로 기한을 민 사이
-   * 옛 기한으로 통과시키는 창이 남는다. {@code b.dueAt IS NOT NULL AND b.dueAt <= :now} 라 기한이
-   * 없으면(모집 중) <b>거부</b>이므로 fail-closed 다.
+   * <p>🔴 <b>기한 가드는 UPDATE 의 WHERE 안에 있다.</b> 호출부의 사전 판정은 사유를 고르는 용도이고, 최종 차단은
+   * 이 조건이 한다. {@code b.dueAt IS NOT NULL AND b.dueAt <= :now} 라 기한이 없으면(모집 중) <b>거부</b>이므로
+   * fail-closed 다.
    *
    * <p>⚠️ <b>확정 슬롯 검사는 여기 없다.</b> 같은 테이블을 서브쿼리로 참조하면 MySQL 이 거부하기 때문이다
    * (error 1093). 대신 호출부가 {@link #findAllByBundleIdForUpdate} 로 슬롯을 잠근 뒤 판정한다 — 그 락이
@@ -298,22 +298,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   // --- C2C 플로우 CAS (docs/46 §4) ---
 
   /**
-   * C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT). 기한 경과 검사 없음 — 기한 직전 입금 보호가 목적이며, 만료
-   * 스케줄러 CAS 와 경합하면 정확히 한쪽만 성공한다 (docs/46 §4.2).
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Participation p "
-          + "SET p.status = :sentStatus, p.paymentSentAt = :now, "
-          + "    p.paymentRejectedAt = NULL, p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.status = :awaitingStatus")
-  int markPaymentSentIfAwaiting(
-      @Param("id") Long id,
-      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
-      @Param("sentStatus") ParticipationStatus sentStatus,
-      @Param("now") Instant now);
-
-  /**
    * 묶음 단위 입금확인 CAS — 한 묶음의 확인 가능 슬롯 전부를 한 번에 CONFIRMED 로 전이한다.
    *
    * <p>C2C 는 「보냈어요」(PAYMENT_SENT)도 확인 대상이고, 개최자 확인이 늦어도 유효하도록 <b>기한 경과를
@@ -345,34 +329,12 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "
-          + "SET p.status = :sentStatus, p.paymentSentAt = :now, "
-          + "    p.paymentRejectedAt = NULL, p.updatedAt = :now "
+          + "SET p.status = :sentStatus, p.paymentSentAt = :now, p.updatedAt = :now "
           + "WHERE p.bundleId = :bundleId AND p.status = :awaitingStatus")
   int markBundlePaymentSent(
       @Param("bundleId") Long bundleId,
       @Param("awaitingStatus") ParticipationStatus awaitingStatus,
       @Param("sentStatus") ParticipationStatus sentStatus,
-      @Param("now") Instant now);
-
-  /**
-   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT 복귀). 참여자 철회(기한 유지)와 개최자 반려(기한 연장 — docs/46
-   * §4.5)가 공용하며, {@code paymentSentAt} 은 분쟁 증거로 보존한다.
-   *
-   * <p>{@code rejectedAt} 으로 두 경로를 구분한다 (docs/53 Q-03) — 개최자 반려는 현재 시각, 참여자 셀프 철회는 {@code null}. 응답에
-   * 그대로 실어 FE 가 "입금 확인 안 됨 · 재확인 필요" 를 띄운다.
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Participation p "
-          + "SET p.status = :awaitingStatus, p.dueAt = :dueAt, "
-          + "    p.paymentRejectedAt = :rejectedAt, p.updatedAt = :now "
-          + "WHERE p.id = :id AND p.status = :sentStatus")
-  int revertPaymentSentIfSent(
-      @Param("id") Long id,
-      @Param("sentStatus") ParticipationStatus sentStatus,
-      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
-      @Param("dueAt") Instant dueAt,
-      @Param("rejectedAt") Instant rejectedAt,
       @Param("now") Instant now);
 
   /**

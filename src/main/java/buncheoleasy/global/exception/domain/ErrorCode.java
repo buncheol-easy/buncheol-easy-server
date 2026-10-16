@@ -163,9 +163,8 @@ public enum ErrorCode {
   // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
   BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
       "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
-  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등
-  // C2C 전용 액션 <b>8곳</b>이 공유하므로(BuncheolService 2 · ParticipationService 3 ·
-  // ParticipationBundleService 3, 2026-09-03 실측), 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·제외·보냈어요·자리 빼기와 넣기 등
+  // C2C 전용 액션 여러 곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
   // 엉뚱한 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
   PARTICIPATION_CANCEL_NOT_SUPPORTED(
       "BCH-091",

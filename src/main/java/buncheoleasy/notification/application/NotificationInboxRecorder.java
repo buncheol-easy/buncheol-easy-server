@@ -70,7 +70,6 @@ public class NotificationInboxRecorder {
               C2C_BUNCHEOL_FINALIZED,
               C2C_PAYMENT_EXPIRED,
               C2C_BUNCHEOL_NOT_FINALIZED,
-              C2C_PAYMENT_RECHECK,
               C2C_PAYMENT_CONFIRMED,
               C2C_BUNCHEOL_CONFIRMED,
               C2C_BUNCHEOL_CANCELLED ->

@@ -278,29 +278,12 @@ public class ParticipationBundleDomainService {
   }
 
   /**
-   * 묶음 기한을 뒤로 민다 (개최자 반려). 이미 더 뒤인 기한은 건드리지 않는다 — 반려가 기한을 <b>앞으로</b> 당기면
-   * 「제외」가 열려 버린다.
-   *
-   * <p>{@code bundleId} 가 {@code null}(미연결 참여)이면 조용히 넘어간다.
-   */
-  public void extendDueAt(final Long bundleId, final Instant dueAt, final Instant now) {
-    if (bundleId == null) {
-      return;
-    }
-    participationBundleRepository.extendDueAt(bundleId, dueAt, now);
-  }
-
-  /**
    * 「보냈어요」 시각을 묶음에 기록한다 — <b>이 값이 정본</b>이다. 이체가 한 번이므로 신고도 한 번이다.
    *
    * <p>자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸이다) 그건 사본이고, 읽기가 전부 이쪽으로
    * 옮겨진 뒤 제거한다 — 배송비·배송지와 같은 순서다. 호출 측 {@code @Transactional} 필수.
    */
   public void markPaymentSent(final Long bundleId, final Instant now) {
-    if (bundleId == null) {
-      // 배포선 창에서 생긴 미연결 행 — 쓸 묶음이 없다. 사본이 폴백을 받아 준다(closeIfEmpty 와 같은 규약).
-      return;
-    }
     if (participationBundleRepository.markPaymentSent(bundleId, now) == 0) {
       // CAS 에 closedAt IS NULL 이 붙어 있어, 슬롯 마킹은 성공했는데 묶음 쓰기가 0행인 조합이
       // 원리적으로 가능하다. 그 결과가 「상태는 PAYMENT_SENT 인데 정본 시각이 없는」 행이다.
@@ -354,8 +337,8 @@ public class ParticipationBundleDomainService {
    * 않는다.</b>
    *
    * <p>배송지에서 값 단위 폴백을 금지한 이유(묶음 값 {@code NULL} = 참조 배송지 하드 삭제라는 별개
-   * 의미)가 여기엔 <b>없다</b> — 새 쓰기는 두 칸에 같은 시각을 찍고, 반려·철회는 양쪽 모두 보존하며,
-   * 묶음 값을 {@code NULL} 로 되돌리는 경로가 없다. 사본이 정본과 다른 값을 갖는 상태 자체가 안 생긴다.
+   * 의미)가 여기엔 <b>없다</b> — 새 쓰기는 두 칸에 같은 시각을 찍고, 묶음 값을 {@code NULL} 로 되돌리는
+   * 경로가 없다. 사본이 정본과 다른 값을 갖는 상태 자체가 안 생긴다.
    */
   public static Instant paymentSentAtOf(
       final Map<Long, ParticipationBundle> bundleById, final Participation participation) {

@@ -365,7 +365,7 @@ public class BuncheolManagementQueryService {
     // 없었으므로 환불 절차가 없다</b>", "이미 입금한 뒤 취소되면 개최자에게 반환을 요구할 수 있다".
     // 실제로 보냈는데 확인을 못 받은 경우는 약관이 "개최자에게 반환 요구 → 고객문의" 경로로 이미 정해 뒀다.
     //
-    // ⚠️ LEGACY 는 영향이 없다. markPaymentSent 가 requireC2c 가드로 막혀 있어 LEGACY 행의
+    // ⚠️ LEGACY 는 영향이 없다. 「보냈어요」(ParticipationBundleService#markPaymentSent)가 C2C 전용이라 LEGACY 행의
     // payment_sent_at 은 구조적으로 항상 NULL 이다(prod 42건·staging 48건 전건 실측). 즉 LEGACY 는
     // 이미 실질적으로 confirmedAt 하나로 판정하고 있었다.
     if (participation.getStatus() != ParticipationStatus.CANCELLED) {

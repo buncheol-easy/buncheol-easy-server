@@ -366,32 +366,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public boolean markPaymentSentIfAwaiting(final Long participationId, final Instant now) {
-    return jpaParticipationRepository.markPaymentSentIfAwaiting(
-            participationId,
-            ParticipationStatus.AWAITING_PAYMENT,
-            ParticipationStatus.PAYMENT_SENT,
-            now)
-        > 0;
-  }
-
-  @Override
-  public boolean revertPaymentSentIfSent(
-      final Long participationId,
-      final Instant dueAt,
-      final Instant rejectedAt,
-      final Instant now) {
-    return jpaParticipationRepository.revertPaymentSentIfSent(
-            participationId,
-            ParticipationStatus.PAYMENT_SENT,
-            ParticipationStatus.AWAITING_PAYMENT,
-            dueAt,
-            rejectedAt,
-            now)
-        > 0;
-  }
-
-  @Override
   public boolean linkBundle(
       final Long participationId, final Long bundleId, final Instant now) {
     return jpaParticipationRepository.linkBundleIfUnlinked(participationId, bundleId, now) > 0;

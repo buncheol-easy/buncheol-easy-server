@@ -13,8 +13,6 @@ import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
-import buncheoleasy.buncheol.application.participation.PaymentRecheckRequestedEvent;
-import buncheoleasy.buncheol.application.participation.PaymentSentEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -294,33 +292,6 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인해 달라고 요청한다. 마킹(슬롯) 건당 1건이라 다슬롯 참여자는
-   * 슬롯 수만큼 발송될 수 있고, 금액도 슬롯별 금액이다 — 이체 1건과의 대조는 입금자명(환불 계좌 예금주, docs/46 §4.7-A1)으로 한다.
-   */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onPaymentSent(final PaymentSentEvent event) {
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    Map<String, String> variables =
-        Map.of(
-            "닉네임", view.host().getNickname().value(),
-            "분철명", view.buncheol().getTitle(),
-            "멤버명", view.memberName(),
-            "참여자닉네임", view.participant().getNickname().value(),
-            // ⚠️ Map.of 는 null 에 NPE 를 던진다. 정본(묶음)이 비어 있어도 대체 문자열로 채워 발송을 살린다 —
-            // 스킵하면 「보냈어요」 알림이 개최자에게 영영 안 간다.
-            "입금자명", depositorNameOf(view),
-            "입금금액", AlimtalkFormats.amount(view.paymentAmount()),
-            "분철ID", String.valueOf(view.buncheol().getId()));
-    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
-    String hostPhone = hostPhoneOrNull(view.host(), view.buncheol().getId());
-    if (hostPhone == null) {
-      return;
-    }
-    sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
-  }
-
-  /**
    * (참여자) 개최자가 <b>묶음</b>의 입금을 확인함 — <b>묶음 1통</b>으로 알린다. 이체가 1회였으므로 확인도 1회다.
    *
    * <p>금액은 확정된 슬롯 합산, 멤버명은 나열한다. 0원 묶음(서포터즈 코드만으로 채워진 경우)은 등록 문안이
@@ -367,8 +338,7 @@ public class AlimtalkNotificationListener {
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBundlePaymentSent(final BundlePaymentSentEvent event) {
-    // 🔴 <b>묶음 전체</b>의 마킹분으로 만든다. 이번 호출분만 합산하면, 슬롯 단위 API 로 먼저 마킹된 슬롯이
-    // 빠져 개최자가 <b>실제 이체액보다 작은 금액</b>으로 통장을 대조하게 된다 — 그게 곧 반려로 이어진다.
+    // 🔴 <b>묶음 전체</b>의 마킹분으로 만든다 — 개최자는 이 금액으로 이체 1건을 통장과 대조한다.
     List<ParticipationView> views = loadViewsSafely(event.sentParticipationIds());
     if (views.isEmpty()) {
       return;
@@ -401,19 +371,6 @@ public class AlimtalkNotificationListener {
     sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
   }
 
-  /** (참여자) C2C 개최자가 "보냈어요" 를 반려함 — 연장된 새 기한을 담아 입금 재확인을 안내한다 (docs/46 §4.5). */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onPaymentRecheckRequested(final PaymentRecheckRequestedEvent event) {
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    sendC2cPaymentGuide(
-        view,
-        AlimtalkTemplate.C2C_PAYMENT_RECHECK,
-        view.memberName(),
-        view.paymentAmount(),
-        view.paymentDueAt());
-  }
-
   // 다슬롯 참여자에게는 멤버명 나열·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).
   private void sendFinalizedNotice(final List<ParticipationView> group) {
     ParticipationView first = group.get(0);
@@ -423,9 +380,8 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         mergedMemberName(group),
         totalAmount,
-        // 묶음 값을 쓴다. 다슬롯이라 first 를 고르지만 assignDueAtByBuncheolId 가 그 분철의 활성 묶음
-        // 「전부」에 같은 값을 심으므로 어느 것을 골라도 같다. 분철 값을 읽으면 반려 연장을 못 받는
-        // 별개 칸이라 이 알림만 「제외」 게이트와 다른 기한을 말하게 된다.
+        // 묶음 값을 쓴다 — 「제외」 게이트가 보는 기한이 묶음이다. 다슬롯이라 first 를 고르지만
+        // assignDueAtByBuncheolId 가 그 분철의 활성 묶음 「전부」에 같은 값을 심으므로 어느 것을 골라도 같다.
         first.paymentDueAt());
   }
 
@@ -510,7 +466,7 @@ public class AlimtalkNotificationListener {
     return listed + " 외 " + (names.size() - listedCount);
   }
 
-  // C2C 입금 안내 계열(성사 확정·추가 모집·재확인) 공용 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
+  // C2C 입금 안내 계열(성사 확정·추가 모집) 공용 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
   private void sendC2cPaymentGuide(
       final ParticipationView view,
       final AlimtalkTemplate template,
@@ -656,7 +612,7 @@ public class AlimtalkNotificationListener {
       return view.bundle().getRefundAccount().holder();
     }
     // 값이 실명이 아님을 드러낸다 — 그냥 닉네임만 내보내면 개최자가 통장에 없는 이름으로 대조하다
-    // 정상 입금을 반려로 처리할 수 있다(같은 메시지의 「참여자닉네임」과 값이 정확히 같아진다).
+    // 정상 입금을 못 찾은 것으로 볼 수 있다(같은 메시지의 「참여자닉네임」과 값이 정확히 같아진다).
     return "%s(닉네임)".formatted(view.participant().getNickname().value());
   }
 }

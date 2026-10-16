@@ -16,9 +16,8 @@ import java.util.List;
  * <p>{@code amount} 는 배송비 포함 입금 총액이고, 이 참여에 부과된 배송비를 {@code shippingFee} 로 분리 노출해
  * 프론트가 멤버 가격(= amount - shippingFee)과 배송비를 나눠 그릴 수 있게 한다.
  *
- * <p>{@code bundleId} 는 이 참여가 속한 <b>묶음</b>이다 — 이체 1회 · 배송비 1회 · 택배 1개의 단위이고, <b>앞으로 추가될</b> 묶음 단위 API
- * (「보냈어요」 마킹 등)의 주소이기도 하다 — 이 PR 시점의 참여 API 는 아직 전부 슬롯 단위다. 배포선 창에서 생긴 미연결 참여는 {@code null} 일 수 있으므로
- * 프론트는 null 이면 슬롯 단위 경로로 폴백해야 한다.
+ * <p>{@code bundleId} 는 이 참여가 속한 <b>묶음</b>이다 — 이체 1회 · 배송비 1회 · 택배 1개의 단위이고, C2C 「보냈어요」 API 의
+ * 주소다. 모든 참여가 묶음을 갖지만 타입상 {@code null} 일 수 있다.
  *
  * <p>{@code payback} 은 오픈 이벤트 배송비 환급(배송비 돌려받기) 상태로, 비대상이어도 status=NONE 으로 항상 내려준다.
  *
@@ -57,8 +56,5 @@ public record MyParticipationResponse(
     ShippingFeePaybackResponse payback,
     FlowType flowType,
     Instant paymentSentAt,
-    // 개최자 반려 시각. status=AWAITING_PAYMENT 와 함께 오면 참여 카드에 "입금 확인 안 됨 · 재확인 필요" 를
-    // 강조 표시한다 (docs/53 Q-03). 재마킹 시 null 로 초기화된다.
-    Instant paymentRejectedAt,
     String openChatUrl,
     ParticipationCancellability cancellability) {}

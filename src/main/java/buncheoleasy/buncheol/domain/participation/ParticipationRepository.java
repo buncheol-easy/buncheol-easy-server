@@ -136,9 +136,6 @@ public interface ParticipationRepository {
 
   // --- C2C 플로우 CAS (docs/46 §4) ---
 
-  /** C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT, 기한 경과 검사 없음). */
-  boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
-
   /**
    * 묶음 단위 「보냈어요」 — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다. 기한이 지난 뒤에도 열려 있다.
    *
@@ -152,15 +149,6 @@ public interface ParticipationRepository {
    * @return 실제로 확정된 슬롯 수
    */
   int confirmBundleIfPayable(Long bundleId, Instant now);
-
-  /**
-   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code
-   * dueAt} 을 함께 세팅한다. {@code paymentSentAt} 은 보존.
-   *
-   * @param rejectedAt 개최자 반려면 반려 시각, 참여자 셀프 철회면 {@code null} (docs/53 Q-03 — 두 경로 구분용)
-   */
-  boolean revertPaymentSentIfSent(
-      Long participationId, Instant dueAt, Instant rejectedAt, Instant now);
 
   /**
    * C2C 참여자 자발 취소 CAS — APPLIED·AWAITING_PAYMENT 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은

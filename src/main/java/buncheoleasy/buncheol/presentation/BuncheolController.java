@@ -143,7 +143,7 @@ public class BuncheolController {
 
   /**
    * C2C 입금 수집 종료(부분 확정) API (docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행을 확정한다.
-   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 확인/반려로 먼저 정리).
+   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 입금확인하거나 기한 뒤 「제외」로 먼저 정리).
    */
   @PostMapping("/{id}/finalize-collected")
   public ResponseEntity<Void> finalizeCollected(

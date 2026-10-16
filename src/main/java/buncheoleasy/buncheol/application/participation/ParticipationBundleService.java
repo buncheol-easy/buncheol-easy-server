@@ -48,7 +48,7 @@ public class ParticipationBundleService {
    * BuncheolService#finalizeCollected})를 한 번 더 눌러야 분철이 진행확정된다.
    *
    * <p>판정({@link BundleReleasability})으로 <b>사유를 가려 에러코드로 바꾸고</b>, 실제 차단은 CAS 가 한다 —
-   * 판정과 실행 사이에 마지막 슬롯이 입금확인되거나 개최자가 반려로 기한을 미는 창이 있기 때문이다. 판정을 조회 응답과
+   * 판정과 실행 사이에 마지막 슬롯이 입금확인되거나 참여자가 자발 취소하는 창이 있기 때문이다. 판정을 조회 응답과
    * 공유해 "버튼은 있는데 누르면 409" 가 생기지 않게 한다.
    */
   @Transactional
@@ -172,7 +172,7 @@ public class ParticipationBundleService {
             .filter(p -> writtenAt(p.getPaymentSentAt(), now))
             .map(Participation::getId)
             .toList();
-    // 알림은 <b>묶음 전체</b>의 마킹분으로 만든다 — 부분 마킹에서 금액이 축소되면 통장 대조가 어긋난다.
+    // 알림은 <b>묶음 전체</b>의 마킹분으로 만든다 — 개최자는 이 금액으로 이체 1건을 대조한다(BundlePaymentSentEvent).
     eventPublisher.publishEvent(new BundlePaymentSentEvent(bundleId, markedIds, sentIds));
     return markedIds;
   }

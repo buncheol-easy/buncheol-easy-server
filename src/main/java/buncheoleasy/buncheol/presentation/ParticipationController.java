@@ -49,42 +49,15 @@ public class ParticipationController {
    * 개최자 수동 입금확인 API — <b>LEGACY(운영진 개최) 전용</b>. 입금확인중(AWAITING_PAYMENT) 참여를 입금 기한 내에
    * CONFIRMED 로 전환한다 (docs/46 §4.3).
    *
-   * <p>🔴 <b>C2C 는 409(BUNCHEOL_FLOW_NOT_SUPPORTED) 다.</b> C2C 의 돈 단위는 참여 한 건이 아니라 묶음이라
+   * <p>🔴 <b>C2C 는 409(BUNDLE_CONFIRM_REQUIRED) 다.</b> C2C 의 돈 단위는 참여 한 건이 아니라 묶음이라
    * (이체 1회·배송비 1회·택배 1개) 확정도 묶음 통째로여야 한다 — {@code POST
-   * /v1/participation-bundles/{bundleId}/confirm} 을 쓴다. 슬롯 하나만 확정된 혼합 묶음은 「제외」·자동만료·
+   * /v1/participation-bundles/{bundleId}/confirm} 을 쓴다. 슬롯 하나만 확정된 혼합 묶음은 「제외」·
    * 「입금 수집 종료」·묶음 확정이 동시에 닫혀 되살릴 수 없다.
    */
   @PostMapping("/{participationId}/confirm")
   public ResponseEntity<Void> confirmPayment(
       @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
     participationService.confirmPayment(hostId, participationId);
-    return ResponseEntity.noContent().build();
-  }
-
-  /** C2C 참여자 "보냈어요" 마킹 API (docs/46 §4.2). 입금 후 마킹하면 만료 대상에서 제외되고 개최자 확인을 기다린다. 멱등. */
-  @PostMapping("/{participationId}/payment-sent")
-  public ResponseEntity<Void> markPaymentSent(
-      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
-    participationService.markPaymentSent(participantId, participationId);
-    return ResponseEntity.noContent().build();
-  }
-
-  /** C2C 참여자 마킹 철회 API — 오마킹 셀프 수정 (PAYMENT_SENT → AWAITING_PAYMENT 복귀, 기한 유지). 멱등. */
-  @DeleteMapping("/{participationId}/payment-sent")
-  public ResponseEntity<Void> revertPaymentSent(
-      @AuthenticationPrincipal final Long participantId, @PathVariable final Long participationId) {
-    participationService.revertPaymentSent(participantId, participationId);
-    return ResponseEntity.noContent().build();
-  }
-
-  /**
-   * C2C 개최자 미입금 반려 API (docs/46 §4.5). 입금 내역을 찾지 못한 "보냈어요" 를 입금 대기로 되돌리고 기한을 연장(+24h)하며, 참여자에게
-   * 입금 재확인 안내가 발송된다.
-   */
-  @PostMapping("/{participationId}/reject-payment")
-  public ResponseEntity<Void> rejectPaymentSent(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long participationId) {
-    participationService.rejectPaymentSent(hostId, participationId);
     return ResponseEntity.noContent().build();
   }
 

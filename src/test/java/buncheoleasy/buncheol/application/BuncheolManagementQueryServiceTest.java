@@ -16,6 +16,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
@@ -929,6 +930,44 @@ class BuncheolManagementQueryServiceTest {
     }
   }
 
+  @Nested
+  @DisplayName("열린 자리 수 집계")
+  class OpenSlotCountTest {
+
+    // 닫힌 자리는 취소 기록이 붙어 있어 남은 자리다. 세는 수에서만 빼고, 그 취소 참여의 멤버 이름은 계속 풀려야 한다.
+    @Test
+    void 닫힌_자리는_memberCount에서_빠지고_그_자리의_취소_참여는_멤버_이름을_유지한다() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(
+              List.of(
+                  buncheolMember(101L, 1001L, BuncheolMemberAccessType.OPEN),
+                  buncheolMember(102L, 1002L, BuncheolMemberAccessType.CLOSED),
+                  buncheolMember(103L, 1003L, BuncheolMemberAccessType.CODE_ONLY)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L, 1003L)))
+          .willReturn(
+              List.of(
+                  groupMember(1001L, "안유진"), groupMember(1002L, "레이"), groupMember(1003L, "가을")));
+      Participation cancelledOnClosedSlot =
+          participation(601L, 102L, PARTICIPANT_USER, 50_000L, ParticipationStatus.CANCELLED);
+      setField(cancelledOnClosedSlot, "cancelReason", ParticipationCancelReason.USER_CANCELLED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(cancelledOnClosedSlot));
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.memberCount()).isEqualTo(2);
+      assertThat(response.cancelledParticipants())
+          .extracting(BuncheolManagementParticipantResponse::memberName)
+          .containsExactly("레이");
+    }
+  }
+
   // 개최 목록 카드가 「종료」인데 관리 화면 머리가 「진행 확정」이면 한 곳만 고친 사고다 — 같은 조회를 쓰는지 본다.
   @Nested
   @DisplayName("종료 여부 노출")
@@ -1004,6 +1043,13 @@ class BuncheolManagementQueryServiceTest {
     setField(member, "buncheolId", BUNCHEOL_ID);
     setField(member, "memberId", memberId);
     setField(member, "price", 50_000L);
+    return member;
+  }
+
+  private BuncheolMember buncheolMember(
+      final Long id, final Long memberId, final BuncheolMemberAccessType accessType) {
+    BuncheolMember member = buncheolMember(id, memberId);
+    setField(member, "accessType", accessType);
     return member;
   }
 

@@ -103,6 +103,51 @@ class NoticeControllerTest {
     verify(noticeCommandService, never()).createNotice(any(), any(), any());
   }
 
+  // #224 — 보낸 Content-Type 으로 거절하지 않고 덮어쓴다. 지금 201 이던 요청은 계속 201 이고, 본문·배너 모두 확장자로 정한 형식이 간다.
+  @Test
+  void 이미지_파트의_Content_Type_이_HTML_SVG_여도_201이고_저장_형식은_확장자로_정해진다() throws Exception {
+    given(noticeCommandService.createNotice(any(), any(), any())).willReturn(1L);
+    MockMultipartFile html =
+        new MockMultipartFile("image", "evil.png", MediaType.TEXT_HTML_VALUE, new byte[] {1});
+    MockMultipartFile svg =
+        new MockMultipartFile("bannerImage", "banner.png", "image/svg+xml", new byte[] {1});
+
+    mockMvc
+        .perform(
+            multipart("/v1/notices")
+                .file(
+                    requestPart(
+                        "{\"title\":\"제목\",\"description\":\"설명\",\"pinned\":false,"
+                            + "\"banner\":{\"title\":\"여름 이벤트\"}}"))
+                .file(html)
+                .file(svg))
+        .andExpect(status().isCreated());
+
+    ArgumentCaptor<ImageFile> imageCaptor = ArgumentCaptor.forClass(ImageFile.class);
+    ArgumentCaptor<ImageFile> bannerCaptor = ArgumentCaptor.forClass(ImageFile.class);
+    verify(noticeCommandService)
+        .createNotice(any(), imageCaptor.capture(), bannerCaptor.capture());
+    assertThat(imageCaptor.getValue().contentType()).isEqualTo("image/png");
+    assertThat(bannerCaptor.getValue().contentType()).isEqualTo("image/png");
+  }
+
+  @Test
+  void 이미지_파트에_Content_Type_이_없어도_201이고_저장_형식은_확장자로_정해진다() throws Exception {
+    given(noticeCommandService.createNotice(any(), any(), any())).willReturn(1L);
+    MockMultipartFile noType = new MockMultipartFile("image", "notice.jpg", null, new byte[] {1});
+
+    mockMvc
+        .perform(
+            multipart("/v1/notices")
+                .file(requestPart("{\"title\":\"제목\",\"description\":\"설명\",\"pinned\":false}"))
+                .file(noType))
+        .andExpect(status().isCreated());
+
+    ArgumentCaptor<ImageFile> imageCaptor = ArgumentCaptor.forClass(ImageFile.class);
+    verify(noticeCommandService).createNotice(any(), imageCaptor.capture(), any());
+    assertThat(imageCaptor.getValue().contentType()).isEqualTo("image/jpeg");
+  }
+
   @Test
   void 배너_제목만_있고_배너_이미지가_없으면_400_INB_006_을_반환한다() throws Exception {
     // 배너 JSON 만 있고 bannerImage 파트가 없는 실수 시나리오. 서비스가 던지는 INB-006 이 400 으로 매핑되는지 확인.

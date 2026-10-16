@@ -511,7 +511,7 @@ CREATE TABLE IF NOT EXISTS staff_buncheol_settings
   COLLATE = utf8mb4_unicode_ci;
 
 -- 이벤트 하나에 한 행이다. 앱은 아직 이 표를 읽지 않는다.
-CREATE TABLE IF NOT EXISTS events
+CREATE TABLE IF NOT EXISTS promo_events
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     name       VARCHAR(100) NOT NULL COMMENT '이벤트 이름',
@@ -523,30 +523,30 @@ CREATE TABLE IF NOT EXISTS events
 
     PRIMARY KEY (id),
 
-    CONSTRAINT ck_events_period CHECK (ends_at > starts_at)
+    CONSTRAINT ck_promo_events_period CHECK (ends_at > starts_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
 -- 이벤트에 건 분철과 회차다. 분철 하나는 이벤트 하나에만 건다.
-CREATE TABLE IF NOT EXISTS event_buncheols
+CREATE TABLE IF NOT EXISTS promo_event_buncheols
 (
-    id          BIGINT   NOT NULL AUTO_INCREMENT,
-    event_id    BIGINT   NOT NULL,
-    buncheol_id BIGINT   NOT NULL,
-    round       INT      NOT NULL COMMENT '회차 (1부터)',
-    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id             BIGINT   NOT NULL AUTO_INCREMENT,
+    promo_event_id BIGINT   NOT NULL,
+    buncheol_id    BIGINT   NOT NULL,
+    round          INT      NOT NULL COMMENT '회차 (1부터)',
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
 
-    UNIQUE INDEX uq_event_buncheols_buncheol (buncheol_id),
-    INDEX idx_event_buncheols_event_round (event_id, round),
+    UNIQUE INDEX uq_promo_event_buncheols_buncheol (buncheol_id),
+    INDEX idx_promo_event_buncheols_promo_event_round (promo_event_id, round),
 
-    CONSTRAINT fk_event_buncheols_event
-        FOREIGN KEY (event_id)
-            REFERENCES events (id) ON DELETE CASCADE,
-    CONSTRAINT fk_event_buncheols_buncheol
+    CONSTRAINT fk_promo_event_buncheols_promo_event
+        FOREIGN KEY (promo_event_id)
+            REFERENCES promo_events (id) ON DELETE CASCADE,
+    CONSTRAINT fk_promo_event_buncheols_buncheol
         FOREIGN KEY (buncheol_id)
             REFERENCES buncheols (id) ON DELETE CASCADE
 ) ENGINE = InnoDB

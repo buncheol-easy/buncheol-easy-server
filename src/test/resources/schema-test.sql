@@ -11,8 +11,8 @@ DROP TABLE IF EXISTS participation_bundles;
 DROP TABLE IF EXISTS buncheol_images;
 DROP TABLE IF EXISTS buncheol_members;
 DROP TABLE IF EXISTS buncheol_bookmarks;
-DROP TABLE IF EXISTS event_buncheols;
-DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS promo_event_buncheols;
+DROP TABLE IF EXISTS promo_events;
 DROP TABLE IF EXISTS staff_buncheol_settings;
 DROP TABLE IF EXISTS buncheols;
 DROP TABLE IF EXISTS user_recent_searches;
@@ -348,7 +348,7 @@ CREATE TABLE staff_buncheol_settings
     CONSTRAINT fk_staff_buncheol_settings_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE
 );
 
-CREATE TABLE events
+CREATE TABLE promo_events
 (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     name       VARCHAR(100) NOT NULL,
@@ -359,25 +359,25 @@ CREATE TABLE events
     updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
-    CONSTRAINT ck_events_period CHECK (ends_at > starts_at)
+    CONSTRAINT ck_promo_events_period CHECK (ends_at > starts_at)
 );
 
-CREATE TABLE event_buncheols
+CREATE TABLE promo_event_buncheols
 (
-    id          BIGINT    NOT NULL AUTO_INCREMENT,
-    event_id    BIGINT    NOT NULL,
-    buncheol_id BIGINT    NOT NULL,
-    round       INT       NOT NULL,
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id             BIGINT    NOT NULL AUTO_INCREMENT,
+    promo_event_id BIGINT    NOT NULL,
+    buncheol_id    BIGINT    NOT NULL,
+    round          INT       NOT NULL,
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
-    CONSTRAINT fk_event_buncheols_event FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE,
-    CONSTRAINT fk_event_buncheols_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE
+    CONSTRAINT fk_promo_event_buncheols_promo_event FOREIGN KEY (promo_event_id) REFERENCES promo_events (id) ON DELETE CASCADE,
+    CONSTRAINT fk_promo_event_buncheols_buncheol FOREIGN KEY (buncheol_id) REFERENCES buncheols (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX uq_event_buncheols_buncheol ON event_buncheols (buncheol_id);
-CREATE INDEX idx_event_buncheols_event_round ON event_buncheols (event_id, round);
+CREATE UNIQUE INDEX uq_promo_event_buncheols_buncheol ON promo_event_buncheols (buncheol_id);
+CREATE INDEX idx_promo_event_buncheols_promo_event_round ON promo_event_buncheols (promo_event_id, round);
 
 -- Test H2 Database용 admins 테이블 생성 (관리자 계정 — 독립 ID/PW 계정)
 CREATE TABLE admins

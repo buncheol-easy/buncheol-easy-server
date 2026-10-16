@@ -357,7 +357,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].status")
                                 .description("분철 진행 상태 (RECRUITING | CONFIRMED | CANCELLED)"),
                             fieldWithPath("[].deadline").description("분철 모집 마감일"),
-                            fieldWithPath("[].memberSlotCount").description("분철에 포함된 멤버 슬롯 수"),
+                            fieldWithPath("[].memberSlotCount").description("열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)"),
                             fieldWithPath("[].activeParticipationCount")
                                 .description("활성 참여자 수 (AWAITING_PAYMENT/CONFIRMED)"),
                             fieldWithPath("[].createdAt").description("분철 개최 일시"),
@@ -1378,7 +1378,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED / HOST_CANCELLED)"),
                             fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
-                            fieldWithPath("memberCount").description("분철에 등록된 멤버 슬롯 수"),
+                            fieldWithPath("memberCount").description("열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)"),
                             fieldWithPath("confirmedCount").description("입금확인된 참여자 수"),
                             fieldWithPath("participants")
                                 .description("활성 참여자 배열 (AWAITING_PAYMENT + CONFIRMED)"),

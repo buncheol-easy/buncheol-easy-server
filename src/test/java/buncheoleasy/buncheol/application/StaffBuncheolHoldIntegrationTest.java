@@ -1,12 +1,15 @@
 package buncheoleasy.buncheol.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.HoldStaffBuncheolRequest;
 import buncheoleasy.buncheol.infrastructure.TestGroupFixture;
+import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.exception.domain.ErrorCode;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -24,12 +27,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 운영진 개최는 분철·자리·오픈 시각을 <b>한 트랜잭션</b>으로 저장한다. 설정 저장을 커밋 뒤 이벤트로 빼면 커밋 전에는 설정 행이 안 보이고,
- * 별도 트랜잭션으로 빼면 바깥을 롤백해도 설정 행이 남는다 — 둘 다 아래 테스트가 잡는다. 단위 테스트(mock)로는 커밋 경계가 보이지 않아 실제
- * H2 로 확인한다.
+ * 별도 트랜잭션으로 빼면 바깥을 롤백해도 설정 행이 남고, 서비스의 트랜잭션이 빠지면 중간 실패 때 분철이 남는다 — 셋 다 아래 테스트가
+ * 잡는다. 단위 테스트(mock)로는 커밋 경계가 보이지 않아 실제 H2 로 확인한다.
  *
- * <p>빈 교체 없이 다른 어댑터 테스트와 같은 컨텍스트를 쓴다(테스트 JVM 힙 상한 512m 에서 컨텍스트를 더 늘리지 않는다). 그래서 실패 주입
- * 대신 바깥 트랜잭션을 롤백해 원자성을 본다. 커밋하는 경로는 이미지 업로드가 커밋 뒤 비동기로 돌아 정리와 겹치므로 여기서 다루지 않는다.
- * 픽스처는 커밋되므로 직접 지운다.
+ * <p>빈 교체 없이 다른 어댑터 테스트와 같은 컨텍스트를 쓴다(테스트 JVM 힙 상한 512m 에서 컨텍스트를 더 늘리지 않는다). 그래서 실패는
+ * 설정 저장소를 바꿔 끼우는 대신 바깥 트랜잭션 롤백과 실제 검증 오류로 만든다. 커밋하는 경로는 이미지 업로드가 커밋 뒤 비동기로 돌아
+ * 정리와 겹치므로 여기서 다루지 않는다. 픽스처는 커밋되므로 직접 지운다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -124,6 +127,36 @@ class StaffBuncheolHoldIntegrationTest {
     assertThat(countBuncheols()).isZero();
     assertThat(countMembers(buncheolId)).isZero();
     assertThat(countSettings(buncheolId)).isZero();
+  }
+
+  // 코드 전용 유상 자리는 분철 INSERT 뒤에 거절된다(BCH-109). holdStaffBuncheol 자신의 트랜잭션이 없으면 그 INSERT 가
+  // 따로 커밋돼 분철이 남는다. 이미지 이벤트 발행 전에 실패하므로 비동기 업로드와 겹치지 않는다.
+  @Test
+  void 바깥_트랜잭션_없이도_분철_INSERT_뒤에_실패하면_분철이_남지_않는다() {
+    Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+    HoldStaffBuncheolRequest paidCodeSlot =
+        new HoldStaffBuncheolRequest(
+            groupId,
+            "몬엑 분철",
+            null,
+            "공식 스토어",
+            deadline,
+            deadline.minus(1, ChronoUnit.DAYS),
+            1,
+            3000,
+            null,
+            null,
+            0,
+            List.of(
+                new BuncheolMemberRequest(
+                    codeMemberId, 15_000L, BuncheolMemberAccessType.CODE_ONLY)));
+
+    assertThatThrownBy(() -> buncheolService.holdStaffBuncheol(staffId, paidCodeSlot, images()))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
+
+    assertThat(countBuncheols()).isZero();
   }
 
   private String flowTypeOf(final Long buncheolId) {

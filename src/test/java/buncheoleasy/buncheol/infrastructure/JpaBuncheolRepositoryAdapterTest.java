@@ -1059,6 +1059,30 @@ class JpaBuncheolRepositoryAdapterTest {
       em.clear();
     }
 
+    private void linkMember(Long buncheolId, Long memberId, String accessType) {
+      jdbcTemplate.update(
+          "INSERT INTO buncheol_members (buncheol_id, member_id, price, access_type)"
+              + " VALUES (?, ?, ?, ?)",
+          buncheolId,
+          memberId,
+          10000L,
+          accessType);
+      em.clear();
+    }
+
+    // 상태 묶음(모집중·마감·취소)마다 다른 쿼리를 타므로, 모집중으로 저장한 뒤 상태만 바꿔 같은 모양으로 검증한다.
+    private Long persistInStatus(Long gId, String title, BuncheolStatus status) {
+      Long id =
+          persistWithCreatedAt(
+              hostId,
+              paramsWithTitleAndDescription(gId, title, "설명"),
+              Instant.parse("2026-05-15T08:00:00Z"));
+      if (status != BuncheolStatus.RECRUITING) {
+        forceStatus(id, status);
+      }
+      return id;
+    }
+
     // 검색어 정규화는 BuncheolListQueryService 의 책임이라, 어댑터 테스트는 서비스가 만들어 넘기는 형태를 그대로 재현한다.
     private BuncheolSearchCondition keywordCondition(String keyword) {
       return keywordCondition(keyword, List.of(), List.of());
@@ -1307,6 +1331,87 @@ class JpaBuncheolRepositoryAdapterTest {
               10);
 
       assertThat(result).extracting(Buncheol::getId).containsExactly(withMember);
+    }
+
+    // 닫힌 자리는 신청을 받지 않으므로 그 멤버로 찾아 들어가도 고를 자리가 없다. 조건이 부정형이라 코드 자리는 계속 걸린다.
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CONFIRMED", "CANCELLED"})
+    void memberId_검색은_닫힌_자리로만_걸리는_분철을_빼고_코드_자리는_계속_건다(
+        final BuncheolStatus status) {
+      Long target = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "판저이");
+      Long other = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "로완");
+      Long openSlot = persistInStatus(groupId, "열린 자리 분철", status);
+      linkMember(openSlot, target, "OPEN");
+      Long codeSlot = persistInStatus(groupId, "코드 자리 분철", status);
+      linkMember(codeSlot, target, "CODE_ONLY");
+      Long closedOnly = persistInStatus(groupId, "닫힌 자리 분철", status);
+      linkMember(closedOnly, target, "CLOSED");
+      linkMember(closedOnly, other, "OPEN");
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              new BuncheolSearchCondition(null, target, null), BuncheolListCursor.firstPage(), 10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactlyInAnyOrder(openSlot, codeSlot);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CONFIRMED", "CANCELLED"})
+    void 검색어_멤버는_닫힌_자리로는_걸지_않고_다른_열린_멤버나_코드_자리로는_건다(
+        final BuncheolStatus status) {
+      Long closedMember = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "판저이");
+      Long otherMatched = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "판저이2");
+      Long unmatched = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "로완");
+      Long closedOnly = persistInStatus(groupId, "무관 분철 A", status);
+      linkMember(closedOnly, closedMember, "CLOSED");
+      linkMember(closedOnly, unmatched, "OPEN");
+      Long viaOtherOpenMember = persistInStatus(groupId, "무관 분철 B", status);
+      linkMember(viaOtherOpenMember, closedMember, "CLOSED");
+      linkMember(viaOtherOpenMember, otherMatched, "OPEN");
+      Long viaCodeSlot = persistInStatus(groupId, "무관 분철 C", status);
+      linkMember(viaCodeSlot, closedMember, "CODE_ONLY");
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              keywordCondition("무관한검색어", List.of(), List.of(closedMember, otherMatched)),
+              BuncheolListCursor.firstPage(),
+              10);
+
+      assertThat(result)
+          .extracting(Buncheol::getId)
+          .containsExactlyInAnyOrder(viaOtherOpenMember, viaCodeSlot);
+    }
+
+    // 닫힌 자리는 멤버 조건 하나만 끈다 — 같은 검색어가 제목·그룹명에 걸리면 그 분철은 그대로 나온다.
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CONFIRMED", "CANCELLED"})
+    void 검색어가_닫힌_멤버와_함께_제목이나_그룹명에_걸리면_계속_검색된다(final BuncheolStatus status) {
+      Long otherGroupId = TestGroupFixture.insertGroup(jdbcTemplate, "판저이 그룹");
+      Long closedMember = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "판저이");
+      Long unmatched = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "로완");
+      Long titleMatch = persistInStatus(groupId, "판저이 포카 분철", status);
+      linkMember(titleMatch, closedMember, "CLOSED");
+      linkMember(titleMatch, unmatched, "OPEN");
+      Long groupMatch = persistInStatus(otherGroupId, "무관 분철 A", status);
+      linkMember(groupMatch, closedMember, "CLOSED");
+      linkMember(groupMatch, unmatched, "OPEN");
+      Long closedOnly = persistInStatus(groupId, "무관 분철 B", status);
+      linkMember(closedOnly, closedMember, "CLOSED");
+      linkMember(closedOnly, unmatched, "OPEN");
+
+      List<Buncheol> result =
+          buncheolRepository.search(
+              keywordCondition("판저이", List.of(otherGroupId), List.of(closedMember)),
+              BuncheolListCursor.firstPage(),
+              10);
+
+      assertThat(result).extracting(Buncheol::getId).containsExactlyInAnyOrder(titleMatch, groupMatch);
     }
 
     @Test

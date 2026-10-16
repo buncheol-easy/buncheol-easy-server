@@ -269,6 +269,12 @@ public enum ErrorCode {
   BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED(
       "BCH-125", "신청자가 있거나 마감한 자리는 가격을 바꿀 수 없어요.", HttpStatus.CONFLICT),
 
+  // ── 운영진 분철 예약 오픈 ──
+  // 코드 참여는 오픈 전에도 받는다(코드 전용 자리). 이 거절은 코드 없는 참여에만 나간다.
+  BUNCHEOL_NOT_OPEN_YET("BCH-128", "아직 열리지 않은 분철이에요.", HttpStatus.CONFLICT),
+  BUNCHEOL_OPENS_AT_INVALID(
+      "BCH-129", "오픈 시각은 지금 이후, 마감 전으로 정해 주세요.", HttpStatus.BAD_REQUEST),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

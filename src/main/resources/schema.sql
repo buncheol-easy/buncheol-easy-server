@@ -374,7 +374,7 @@ CREATE TABLE IF NOT EXISTS participations
     refund_bank                  VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 은행 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_account               VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 계좌번호 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_holder                VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 예금주 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
-    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+30분, deadline), 지나면 자동 취소 | C2C=성사 확정 시 일괄 24h·추가 모집은 참여+24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
+    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+10분, deadline), 지나면 자동 취소 | C2C=성사 확정 시 일괄 24h·추가 모집은 참여+24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',
     cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT(LEGACY 입금 만료) | BUNCHEOL_CANCELLED(분철 취소 연쇄) | USER_CANCELLED(C2C 자발 취소) | HOST_RELEASED(C2C 개최자 「제외」)',
@@ -489,6 +489,66 @@ CREATE TABLE IF NOT EXISTS participation_codes
     CONSTRAINT fk_participation_codes_member
         FOREIGN KEY (buncheol_member_id)
             REFERENCES buncheol_members (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- 운영진 분철에만 있는 값이다. 행이 없는 분철은 등록하자마자 열린다.
+CREATE TABLE IF NOT EXISTS staff_buncheol_settings
+(
+    buncheol_id BIGINT   NOT NULL,
+    opens_at    DATETIME NOT NULL COMMENT '예약 오픈 시각 (UTC). 이 시각 전에는 코드 없는 참여를 받지 않는다',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (buncheol_id),
+
+    CONSTRAINT fk_staff_buncheol_settings_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- 이벤트 하나에 한 행이다. 앱은 아직 이 표를 읽지 않는다.
+CREATE TABLE IF NOT EXISTS events
+(
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    name       VARCHAR(100) NOT NULL COMMENT '이벤트 이름',
+    starts_at  DATETIME     NOT NULL COMMENT '시작 시각 (UTC)',
+    ends_at    DATETIME     NOT NULL COMMENT '끝 시각 (UTC)',
+    memo       TEXT         NULL COMMENT '운영 메모',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    CONSTRAINT ck_events_period CHECK (ends_at > starts_at)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- 이벤트에 건 분철과 회차다. 분철 하나는 이벤트 하나에만 건다.
+CREATE TABLE IF NOT EXISTS event_buncheols
+(
+    id          BIGINT   NOT NULL AUTO_INCREMENT,
+    event_id    BIGINT   NOT NULL,
+    buncheol_id BIGINT   NOT NULL,
+    round       INT      NOT NULL COMMENT '회차 (1부터)',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE INDEX uq_event_buncheols_buncheol (buncheol_id),
+    INDEX idx_event_buncheols_event_round (event_id, round),
+
+    CONSTRAINT fk_event_buncheols_event
+        FOREIGN KEY (event_id)
+            REFERENCES events (id) ON DELETE CASCADE,
+    CONSTRAINT fk_event_buncheols_buncheol
+        FOREIGN KEY (buncheol_id)
+            REFERENCES buncheols (id) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

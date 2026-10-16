@@ -90,3 +90,12 @@ aligo:
     user-id: test-aligo-user-id
     sender-key: test-aligo-sender-key
     sender: "01000000000"
+
+slack:
+  webhook:
+    # application.yaml 이 로컬 .env 를 import 하므로 테스트에도 실제 웹훅 URL 이 들어온다 — 빈 값으로 고정해
+    # .env 와 무관하게 발송을 끈다. SlackChannel 에 채널을 추가하면 여기에도 추가한다.
+    urls:
+      NEW_PARTICIPATION: ""
+      SHIPPING_FEE_PAYBACK: ""
+      FEEDBACK: ""

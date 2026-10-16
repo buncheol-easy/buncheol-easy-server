@@ -11,7 +11,7 @@ public enum ParticipationStatus {
   // C2C 신청(무입금 슬롯 선점). 개최자 성사 확정 시 일괄로 AWAITING_PAYMENT 로 전이한다. dueAt 없음(NULL).
   APPLIED("신청됨"),
   // 입금 대기. 개최자 계좌가 노출되고 개최자의 입금확인을 기다린다.
-  // LEGACY 는 유상 참여 즉시 이 상태이고(0원 참여는 바로 CONFIRMED) 기한(30분)이 지나면 만료 스케줄러가 취소한다
+  // LEGACY 는 유상 참여 즉시 이 상태이고(0원 참여는 바로 CONFIRMED) 기한(10분)이 지나면 만료 스케줄러가 취소한다
   // (PAYMENT_TIMEOUT). C2C 는 성사 확정 일괄 전이 또는 추가 모집으로 들어오며(기한 24h), 기한이 지나도 자동 취소하지
   // 않는다 — 기한이 지나 빠지는 출구는 개최자 「제외」(HOST_RELEASED)뿐이다.
   AWAITING_PAYMENT("입금 확인 중"),

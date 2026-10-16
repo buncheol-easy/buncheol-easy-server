@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ParticipationCancelReason {
-  // LEGACY: 입금 기한(dueAt = min(참여+30분, deadline)) 내 입금확인이 안 되어 입금 만료 스케줄러가 자동 취소. 마감 시점에
+  // LEGACY: 입금 기한(dueAt = min(참여+10분, deadline)) 내 입금확인이 안 되어 입금 만료 스케줄러가 자동 취소. 마감 시점에
   // 남은 입금확인중 참여도 dueAt 가 이미 지난 상태라 같은 스케줄러가 처리한다. 모집 중이면 멤버 슬롯이 다시 선착순 대상이 된다.
   // C2C 는 자동 만료가 없어 새로 생기지 않는다(docs/70 결정 9) — C2C 행의 이 값은 그 전에 만료된 기록이다.
   PAYMENT_TIMEOUT("입금 시간 초과"),

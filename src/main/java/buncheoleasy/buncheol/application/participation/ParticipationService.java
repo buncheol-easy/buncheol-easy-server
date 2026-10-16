@@ -17,6 +17,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSetting;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -40,8 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ParticipationService {
 
-  // 참여(개최자 계좌 노출) 시점부터 입금 만료까지의 기본 창. 단, deadline 을 넘지 않도록 클램프한다.
-  private static final Duration PAYMENT_WINDOW = Duration.ofMinutes(30);
+  // 운영진 분철 참여(개최자 계좌 노출) 시점부터 입금 만료까지. 단, deadline 을 넘지 않도록 클램프한다.
+  private static final Duration STAFF_PAYMENT_TIME_LIMIT = Duration.ofMinutes(10);
 
   // C2C 입금 창(24h — docs/46 §7.1-3). 성사 확정 후 일괄 기한과 추가 모집(즉시입금 진입)의 개별 기한이 같은 창을 쓴다.
   public static final Duration C2C_PAYMENT_WINDOW = Duration.ofHours(24);
@@ -51,6 +53,7 @@ public class ParticipationService {
   private final ParticipationDomainService participationDomainService;
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final ParticipationCodeDomainService participationCodeDomainService;
+  private final StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
@@ -178,6 +181,16 @@ public class ParticipationService {
         participationCodeDomainService.validateForParticipation(
             member, request.participationCode(), now);
 
+    // 예약 오픈은 코드 없는 참여에만 걸린다 — 코드 전용 자리는 오픈 전에도 받는다. 설정 행은 분철과 같은 트랜잭션에서만
+    // 생기므로 분철이 보이면 행도 이미 보인다. 앱 시각으로 먼저 거르고, 최종 판정은 아래 INSERT 가 DB 시각으로 한다.
+    Optional<StaffBuncheolSetting> openSetting =
+        code.isPresent()
+            ? Optional.empty()
+            : staffBuncheolSettingDomainService.findSetting(buncheolId);
+    if (openSetting.isPresent() && openSetting.get().isBeforeOpen(now)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
+    }
+
     ShippingAddress shippingAddress =
         participationShippingAddressResolver.resolve(
             participantId, buncheol, request.shippingAddressId());
@@ -215,8 +228,18 @@ public class ParticipationService {
             shippingFee,
             dueAt);
     // 저장 시점에도 분철이 모집중인지 원자적으로 재확인(없으면 false → 롤백). 멤버 슬롯이 이미 점유됐으면 DuplicateKey →
-    // PARTICIPATION_ALREADY_EXISTS 로 롤백.
-    if (!participationDomainService.createParticipationIfRecruiting(participation)) {
+    // PARTICIPATION_ALREADY_EXISTS 로 롤백. 오픈 조건 INSERT 는 설정 행이 있는 분철에만 쓴다 — 행이 없는 분철에 NOT EXISTS 를
+    // 돌리면 없는 행 자리에 간격 잠금이 걸린다.
+    boolean inserted =
+        openSetting.isPresent()
+            ? participationDomainService.createParticipationIfRecruitingAndOpen(participation)
+            : participationDomainService.createParticipationIfRecruiting(participation);
+    if (!inserted) {
+      // 0행의 원인을 INSERT 와 같은 DB 시계로 가른다. 앱 시계로 보면 정각 직후 시계 차이 동안 BCH-060 으로 잘못 나간다.
+      if (openSetting.isPresent()
+          && staffBuncheolSettingDomainService.isBeforeOpenByDbClock(buncheolId)) {
+        throw new BusinessException(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
+      }
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
@@ -244,7 +267,7 @@ public class ParticipationService {
   }
 
   /**
-   * 0원 참여는 참여 즉시 입금확인까지 진행한다 — 아무도 입금할 수 없는 참여를 입금 대기로 두면 30분 뒤 만료 스케줄러가 취소한다. 수동 입금확인과 같은 CAS·같은
+   * 0원 참여는 참여 즉시 입금확인까지 진행한다 — 아무도 입금할 수 없는 참여를 입금 대기로 두면 10분 뒤 만료 스케줄러가 취소한다. 수동 입금확인과 같은 CAS·같은
    * 부수효과를 그대로 태운다. 응답에 계좌·기한을 싣지 않아야 입금 안내 화면이 뜨지 않는다.
    */
   private ParticipateResult confirmFreeParticipation(
@@ -542,7 +565,7 @@ public class ParticipationService {
   }
 
   /**
-   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를
+   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(10분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를
    * 스냅샷(Delivery)으로 박제한다. 이 입금확인으로 분철의 모든 멤버 슬롯이 입금확인되면(매진+전원확정) deadline 전이라도 분철을 진행확정으로 조기 전이한다.
    *
    * <p>🔴 <b>LEGACY 전용이다.</b> C2C 는 {@link ParticipationBundleService#confirmPayment} 만 쓴다 —
@@ -761,7 +784,7 @@ public class ParticipationService {
   }
 
   private Instant paymentDueAt(final Instant now, final Instant deadline) {
-    Instant windowEnd = now.plus(PAYMENT_WINDOW);
+    Instant windowEnd = now.plus(STAFF_PAYMENT_TIME_LIMIT);
     return windowEnd.isBefore(deadline) ? windowEnd : deadline;
   }
 }

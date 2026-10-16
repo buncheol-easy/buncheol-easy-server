@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum FlowType {
-  // 즉시 입금(30분) + 페이액션 자동확인. 운영진(can_host) 개최 전용.
+  // 즉시 입금(10분) + 페이액션 자동확인. 운영진(can_host) 개최 전용.
   LEGACY("운영진 개최"),
   // 신청(무입금) → 개최자 확정 → 일괄 입금(24h) → "보냈어요" → 개최자 수동 확인. 개최자 개인 계좌 직거래.
   C2C("사용자 개최");

@@ -131,7 +131,7 @@ public class Participation extends TimestampedEntity {
   private FlowType flowType;
 
   // 입금 기한.
-  // LEGACY = min(점유 시각 + 30분, 분철 deadline) — 생성 시 확정돼 이후 불변. 지나면 만료 스케줄러가 자동 취소한다.
+  // LEGACY = min(점유 시각 + 10분, 분철 deadline) — 생성 시 확정돼 이후 불변. 지나면 만료 스케줄러가 자동 취소한다.
   // C2C = 성사 확정 시 일괄 24h(APPLIED 단계는 NULL)·추가 모집은 참여 시각 + 24h. 자동 취소하지 않으며 정본은
   // 묶음(participation_bundles.due_at)이다 — 이 칸은 사본이다.
   @Column(name = "due_at")

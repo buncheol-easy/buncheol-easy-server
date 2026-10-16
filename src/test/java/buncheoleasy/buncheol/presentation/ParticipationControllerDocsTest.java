@@ -133,6 +133,12 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                               거부되므로 코드 참여 화면에서도 계좌 등록을 유도해야 한다
                             - 이후 공유하는 것은 배송지·운송장 등 배송 기능뿐이다
 
+                            **예약 오픈 (운영진 분철)**
+
+                            오픈 시각(상세 `opensAt`)이 있는 운영진 분철은 그 시각 전에 코드 없이 참여하면 `409 BCH-128` 로 거절하고
+                            참여를 만들지 않는다. 판정은 DB 시각으로 하고 정각이면 열린다. 코드 전용 자리의 코드 참여는 오픈 전에도 받는다.
+                            운영진 분철에 새로 참여하면 입금 만료 시각(`dueAt`)은 참여 + 10분이다(마감이 더 이르면 마감).
+
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
@@ -145,6 +151,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
                             | 409 | `BCH-122` (`PARTICIPATION_MEMBER_CLOSED`) | 개최자가 닫은 멤버 슬롯(상세 `saleStatus=CLOSED`). 다중 슬롯이면 전체가 실패한다 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님. **다중 슬롯을 추가 모집(성사 확정 후) 구간에 보낸 경우도 여기** |
+                            | 409 | `BCH-128` (`BUNCHEOL_NOT_OPEN_YET`) | 예약 오픈 전인 운영진 분철에 코드 없이 참여 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철에 다중 슬롯을 보냄 (C2C 전용) |
                             | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
                             | 409 | `BCH-070` (`PARTICIPATION_ALREADY_EXISTS`) | 해당 멤버 슬롯이 이미 점유됨 |

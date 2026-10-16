@@ -20,6 +20,11 @@ public class ParticipationDomainService {
     return participationRepository.saveIfRecruiting(participation);
   }
 
+  /** 예약 오픈 시각이 있는 운영진 분철의 코드 없는 참여 INSERT — 모집중·마감 전에 더해 오픈 시각이 지났는지 원자 확인. */
+  public boolean createParticipationIfRecruitingAndOpen(final Participation participation) {
+    return participationRepository.saveIfRecruitingAndOpen(participation);
+  }
+
   /** C2C 추가 모집 INSERT — 분철이 입금 수집중(PAYMENT_COLLECTING)인지 원자 확인 (docs/46 §4.7-E1). */
   public boolean createParticipationIfCollecting(final Participation participation) {
     return participationRepository.saveIfCollecting(participation);

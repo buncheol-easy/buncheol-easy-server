@@ -10,15 +10,16 @@ import lombok.RequiredArgsConstructor;
 public enum ParticipationStatus {
   // C2C 신청(무입금 슬롯 선점). 개최자 성사 확정 시 일괄로 AWAITING_PAYMENT 로 전이한다. dueAt 없음(NULL).
   APPLIED("신청됨"),
-  // 참여(슬롯 점유) 직후. 개최자 계좌가 노출되고 입금 만료(dueAt)까지 호스트의 수동 입금확인을 기다리는 상태.
-  // C2C 에서는 성사 확정 후(또는 추가 모집 즉시입금 진입 후) 일괄 기한(24h) 동안 이 상태에 머문다.
+  // 입금 대기. 개최자 계좌가 노출되고 개최자의 입금확인을 기다린다.
+  // LEGACY 는 유상 참여 즉시 이 상태이고(0원 참여는 바로 CONFIRMED) 기한(10분)이 지나면 만료 스케줄러가 취소한다
+  // (PAYMENT_TIMEOUT). C2C 는 성사 확정 일괄 전이 또는 추가 모집으로 들어오며(기한 24h), 기한이 지나도 자동 취소하지
+  // 않는다 — 기한이 지나 빠지는 출구는 개최자 「제외」(HOST_RELEASED)뿐이다.
   AWAITING_PAYMENT("입금 확인 중"),
-  // C2C: 참여자가 "보냈어요" 를 눌러 입금을 주장한 상태. 만료 스케줄러 대상에서 제외되며(기한 직전 입금 보호),
-  // 개최자의 입금확인(CONFIRMED) 또는 반려(AWAITING_PAYMENT 복귀 + 기한 연장)를 기다린다.
+  // C2C: 참여자가 묶음 단위로 "보냈어요" 를 눌러 입금을 주장한 상태. 입금 대기로 되돌리는 경로는 없다.
   PAYMENT_SENT("보냈어요"),
   // 개최자가 입금을 수동 확인한 상태. 분철 진행 최소 인원 카운트 대상이며, 분철 진행 시 배송 대상이 된다.
   CONFIRMED("참여 확정"),
-  // 종료 상태. 취소 사유는 ParticipationCancelReason 로 구분한다 (입금 시간 초과 / 자발 취소 / 분철 취소).
+  // 종료 상태. 취소 사유는 ParticipationCancelReason 로 구분한다.
   CANCELLED("참여 취소");
 
   private final String description;

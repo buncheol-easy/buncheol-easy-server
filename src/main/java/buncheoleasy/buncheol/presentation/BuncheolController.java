@@ -5,7 +5,6 @@ import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
-import buncheoleasy.buncheol.application.image.ImageFile;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberPriceRequest;
@@ -21,12 +20,9 @@ import buncheoleasy.buncheol.dto.response.BuncheolSummaryResponse;
 import buncheoleasy.buncheol.dto.response.HoldBuncheolResponse;
 import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
-import buncheoleasy.global.exception.domain.BusinessException;
-import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.global.page.CursorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
-import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -126,7 +122,8 @@ public class BuncheolController {
       @AuthenticationPrincipal final Long hostId,
       @Valid @RequestPart("request") final HoldBuncheolRequest request,
       @RequestPart(value = "images") final List<MultipartFile> images) {
-    Long buncheolId = buncheolService.holdBuncheol(hostId, request, toImageFiles(images));
+    Long buncheolId =
+        buncheolService.holdBuncheol(hostId, request, MultipartImageFiles.from(images));
     return ResponseEntity.status(HttpStatus.CREATED).body(HoldBuncheolResponse.of(buncheolId));
   }
 
@@ -143,7 +140,7 @@ public class BuncheolController {
 
   /**
    * C2C 입금 수집 종료(부분 확정) API (docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행을 확정한다.
-   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 확인/반려로 먼저 정리).
+   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 입금확인하거나 기한 뒤 「제외」로 먼저 정리).
    */
   @PostMapping("/{id}/finalize-collected")
   public ResponseEntity<Void> finalizeCollected(
@@ -158,7 +155,7 @@ public class BuncheolController {
       @PathVariable final Long id,
       @Valid @RequestPart("request") final BuncheolModifyRequest request,
       @RequestPart(value = "images", required = false) final List<MultipartFile> images) {
-    buncheolService.modifyBuncheol(hostId, id, request, toImageFiles(images));
+    buncheolService.modifyBuncheol(hostId, id, request, MultipartImageFiles.from(images));
     return ResponseEntity.noContent().build();
   }
 
@@ -212,20 +209,5 @@ public class BuncheolController {
     Long buncheolMemberId = buncheolService.addMember(hostId, id, request);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(BuncheolMemberAddResponse.of(buncheolMemberId));
-  }
-
-  private List<ImageFile> toImageFiles(final List<MultipartFile> files) {
-    if (files == null) {
-      return List.of();
-    }
-    return files.stream().map(this::toImageFile).toList();
-  }
-
-  private ImageFile toImageFile(final MultipartFile file) {
-    try {
-      return new ImageFile(file.getOriginalFilename(), file.getContentType(), file.getBytes());
-    } catch (IOException e) {
-      throw new BusinessException(ErrorCode.FILE_READ_FAILED);
-    }
   }
 }

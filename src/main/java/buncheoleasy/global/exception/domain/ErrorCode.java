@@ -163,9 +163,8 @@ public enum ErrorCode {
   // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
   BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
       "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
-  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등
-  // C2C 전용 액션 <b>8곳</b>이 공유하므로(BuncheolService 2 · ParticipationService 3 ·
-  // ParticipationBundleService 3, 2026-09-03 실측), 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·제외·보냈어요·자리 빼기와 넣기 등
+  // C2C 전용 액션 여러 곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
   // 엉뚱한 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
   PARTICIPATION_CANCEL_NOT_SUPPORTED(
       "BCH-091",
@@ -213,10 +212,7 @@ public enum ErrorCode {
       "BCH-107", "참여자가 있는 슬롯의 접근 정책은 바꿀 수 없습니다.", HttpStatus.CONFLICT),
   PARTICIPATION_CODE_MEMBER_TAKEN(
       "BCH-108", "이미 참여자가 확정된 슬롯입니다. 발급해도 사용할 수 없어요.", HttpStatus.CONFLICT),
-  // 코드 참여는 무상 제공(0원 + 배송비 면제)이 전제다. 유료 슬롯을 코드 참여로 만들면 화면은 "0원" 을
-  // 안내하는데 서버는 유상 참여로 처리해 환불 계좌 누락(BCH-062)으로 실패한다.
-  PARTICIPATION_CODE_MEMBER_NOT_FREE(
-      "BCH-109", "코드 참여 슬롯은 0원이어야 합니다.", HttpStatus.CONFLICT),
+  // BCH-109 는 「코드 참여 슬롯은 0원만」 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
   BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED(
       "BCH-110", "회원 개최(C2C) 분철에는 코드 참여 멤버를 만들 수 없습니다.", HttpStatus.CONFLICT),
 
@@ -269,6 +265,12 @@ public enum ErrorCode {
   // 빼기(BCH-118)와 같은 규칙 — 신청자가 본 가격은 바꾸지 않는다. 닫힌 자리는 다시 넣기로 가격과 함께 연다.
   BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED(
       "BCH-125", "신청자가 있거나 마감한 자리는 가격을 바꿀 수 없어요.", HttpStatus.CONFLICT),
+
+  // ── 운영진 분철 예약 오픈 ──
+  // 코드 참여는 오픈 전에도 받는다(코드 전용 자리). 이 거절은 코드 없는 참여에만 나간다.
+  BUNCHEOL_NOT_OPEN_YET("BCH-128", "아직 열리지 않은 분철이에요.", HttpStatus.CONFLICT),
+  BUNCHEOL_OPENS_AT_INVALID(
+      "BCH-129", "오픈 시각은 지금 이후, 마감 전으로 정해 주세요.", HttpStatus.BAD_REQUEST),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

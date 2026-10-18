@@ -67,6 +67,31 @@ class JpaParticipationRepositoryAdapterBindingTest {
   }
 
   @Test
+  void 오픈_조건_INSERT_는_같은_바인딩에_오픈_조건을_WHERE_끝에_붙인다() throws Exception {
+    JpaParticipationRepositoryAdapter adapter = adapterCapturingSql();
+
+    adapter.saveIfRecruitingAndOpen(participation());
+
+    assertSqlShape("status = 'RECRUITING'");
+    assertBindingsInOrder("AWAITING_PAYMENT");
+    assertThat(capturedSql).contains("deadline > UTC_TIMESTAMP()");
+    // 정각이면 열림 — 도메인 판정(now.isBefore(opensAt))과 같은 경계다. >= 로 바뀌면 정각 1초 동안 막힌다.
+    assertThat(capturedSql)
+        .endsWith(
+            " AND NOT EXISTS (SELECT 1 FROM staff_buncheol_settings s"
+                + " WHERE s.buncheol_id = buncheols.id AND s.opens_at > UTC_TIMESTAMP())");
+  }
+
+  @Test
+  void 모집중_INSERT_에는_오픈_조건이_없다() throws Exception {
+    JpaParticipationRepositoryAdapter adapter = adapterCapturingSql();
+
+    adapter.saveIfRecruiting(participation());
+
+    assertThat(capturedSql).doesNotContain("staff_buncheol_settings");
+  }
+
+  @Test
   void 추가모집_INSERT_도_같은_바인딩을_쓴다() throws Exception {
     JpaParticipationRepositoryAdapter adapter = adapterCapturingSql();
 

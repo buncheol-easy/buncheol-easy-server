@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -34,10 +35,12 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
+import buncheoleasy.buncheol.dto.request.HoldStaffBuncheolRequest;
 import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -48,6 +51,7 @@ import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
+import java.lang.reflect.RecordComponent;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -102,6 +106,8 @@ class BuncheolServiceTest {
   @Mock private GroupDomainService groupDomainService;
 
   @Mock private UserDomainService userDomainService;
+
+  @Mock private StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
 
   @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -628,6 +634,183 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
+    }
+  }
+
+  @Nested
+  @DisplayName("운영진 분철 개최 테스트")
+  class HoldStaffBuncheolTest {
+
+    private final Instant deadline = NOW.plus(7, ChronoUnit.DAYS);
+    private final List<ImageFile> images =
+        List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+    private HoldStaffBuncheolRequest staffRequest(final Instant opensAt) {
+      return new HoldStaffBuncheolRequest(
+          GROUP_ID,
+          "몬엑 분철",
+          null,
+          "공식 스토어",
+          deadline,
+          opensAt,
+          1,
+          3000,
+          null,
+          null,
+          0,
+          List.of(
+              new BuncheolMemberRequest(MEMBER_ID, 15_000L),
+              new BuncheolMemberRequest(MEMBER_ID + 1, 0L, BuncheolMemberAccessType.CODE_ONLY)));
+    }
+
+    private void givenCreatedBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+    }
+
+    @Test
+    void 운영진이_아니면_USR_031_이고_분철을_만들지_않는다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(false);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.holdStaffBuncheol(
+                      HOST_ID, staffRequest(NOW.plus(1, ChronoUnit.DAYS)), images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_CANNOT_HOST);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(staffBuncheolSettingDomainService).shouldHaveNoInteractions();
+      // 회원 개최의 C2C 자격 게이트를 타지 않는다.
+      then(userDomainService).should(never()).requireC2cHostQualification(any());
+    }
+
+    @Test
+    void 오픈_시각이_없으면_운영진_분철만_만들고_설정은_저장하지_않는다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      givenCreatedBuncheol();
+
+      Long createdId = buncheolService.holdStaffBuncheol(HOST_ID, staffRequest(null), images);
+
+      assertThat(createdId).isEqualTo(BUNCHEOL_ID);
+      then(buncheolDomainService)
+          .should()
+          .createBuncheol(eq(HOST_ID), buncheolParamsCaptor.capture());
+      assertThat(buncheolParamsCaptor.getValue().flowType()).isEqualTo(FlowType.LEGACY);
+      then(buncheolMemberDomainService)
+          .should()
+          .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
+      assertThat(buncheolMemberParamsCaptor.getValue()).hasSize(2);
+      then(staffBuncheolSettingDomainService).shouldHaveNoInteractions();
+      then(eventPublisher).should().publishEvent(any(BuncheolImageUploadEvent.class));
+    }
+
+    @Test
+    void 오픈_시각이_있으면_만든_분철_id_로_설정을_저장한다() {
+      Instant opensAt = NOW.plus(1, ChronoUnit.DAYS);
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      givenCreatedBuncheol();
+
+      buncheolService.holdStaffBuncheol(HOST_ID, staffRequest(opensAt), images);
+
+      InOrder order = inOrder(staffBuncheolSettingDomainService, buncheolDomainService);
+      order.verify(staffBuncheolSettingDomainService).validateOpensAt(opensAt, deadline, NOW);
+      order.verify(buncheolDomainService).createBuncheol(eq(HOST_ID), any());
+      order.verify(staffBuncheolSettingDomainService).create(BUNCHEOL_ID, opensAt, deadline, NOW);
+    }
+
+    @Test
+    void 오픈_시각이_잘못되면_BCH_129_이고_분철을_만들지_않는다() {
+      Instant opensAt = deadline.plusSeconds(1);
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_OPENS_AT_INVALID))
+          .given(staffBuncheolSettingDomainService)
+          .validateOpensAt(opensAt, deadline, NOW);
+
+      assertThatThrownBy(
+              () -> buncheolService.holdStaffBuncheol(HOST_ID, staffRequest(opensAt), images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_OPENS_AT_INVALID);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(buncheolMemberDomainService).should(never()).createBuncheolMembers(any(), anyList());
+      then(staffBuncheolSettingDomainService).should(never()).create(any(), any(), any(), any());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    void 회원_개최와_같은_자리_검증을_탄다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.createBuncheol(eq(HOST_ID), any())).willReturn(buncheol);
+      HoldStaffBuncheolRequest request =
+          new HoldStaffBuncheolRequest(
+              GROUP_ID,
+              "몬엑 분철",
+              null,
+              "공식 스토어",
+              deadline,
+              null,
+              1,
+              3000,
+              null,
+              null,
+              0,
+              List.of(
+                  new BuncheolMemberRequest(
+                      MEMBER_ID, 15_000L, BuncheolMemberAccessType.CLOSED)));
+
+      assertThatThrownBy(() -> buncheolService.holdStaffBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+      then(buncheolMemberDomainService).should(never()).createBuncheolMembers(any(), anyList());
+    }
+
+    @Test
+    void 코드_전용_자리도_다른_멤버와_같은_가격으로_만든다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      givenCreatedBuncheol();
+      HoldStaffBuncheolRequest request =
+          new HoldStaffBuncheolRequest(
+              GROUP_ID,
+              "몬엑 분철",
+              null,
+              "공식 스토어",
+              deadline,
+              null,
+              1,
+              3000,
+              null,
+              null,
+              0,
+              List.of(
+                  new BuncheolMemberRequest(MEMBER_ID, 15_000L),
+                  new BuncheolMemberRequest(
+                      MEMBER_ID + 1, 15_000L, BuncheolMemberAccessType.CODE_ONLY)));
+
+      buncheolService.holdStaffBuncheol(HOST_ID, request, images);
+
+      then(buncheolMemberDomainService)
+          .should()
+          .createBuncheolMembers(eq(BUNCHEOL_ID), buncheolMemberParamsCaptor.capture());
+      assertThat(buncheolMemberParamsCaptor.getValue())
+          .extracting(BuncheolMemberParams::price, BuncheolMemberParams::accessType)
+          .containsExactly(
+              tuple(15_000L, BuncheolMemberAccessType.OPEN),
+              tuple(15_000L, BuncheolMemberAccessType.CODE_ONLY));
+    }
+
+    @Test
+    void 요청에는_개최_방식_칸이_없고_언제나_운영진_분철이다() {
+      assertThat(staffRequest(null).toParams().flowType()).isEqualTo(FlowType.LEGACY);
+      assertThat(HoldStaffBuncheolRequest.class.getRecordComponents())
+          .extracting(RecordComponent::getName)
+          .doesNotContain("flowType");
     }
   }
 
@@ -1544,7 +1727,7 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
     }
 
-    // BCH-084 는 성사 확정·진행 확정·반려·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
+    // BCH-084 는 성사 확정·진행 확정·제외·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
     // 문구(예: 취소 안내)를 여기에 넣으면 다른 액션에서 엉뚱한 안내가 나간다.
     @Test
     void LEGACY_분철의_진행_확정은_범용_플로우_가드로_막힌다() {

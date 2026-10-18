@@ -135,6 +135,11 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     return flowType == FlowType.C2C;
   }
 
+  /** 운영진 분철인가 — 예약 오픈처럼 운영진 분철에만 있는 규칙을 고를 때 쓴다. */
+  public boolean isStaff() {
+    return flowType == FlowType.LEGACY;
+  }
+
   /**
    * {@code createdAt} 에 만들어진 것이 <b>성사 확정보다 먼저</b>인지. C2C 참여가 입금 대기(AWAITING_PAYMENT)에 도달하는
    * 경로가 둘이라 이걸로 가른다 (docs/56 H-09):

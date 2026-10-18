@@ -49,26 +49,12 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       @Param("now") Instant now);
 
   /**
-   * 묶음 기한을 뒤로 민다 (개최자 반려). {@code b.dueAt < :dueAt} 조건이 핵심 — 없으면 반려가 기한을 <b>앞으로
-   * 당겨</b> 「제외」를 열어 버릴 수 있다.
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE ParticipationBundle b SET b.dueAt = :dueAt, b.updatedAt = :now "
-          + "WHERE b.id = :bundleId AND b.closedAt IS NULL "
-          + "AND (b.dueAt IS NULL OR b.dueAt < :dueAt)")
-  int extendDueAt(
-      @Param("bundleId") Long bundleId,
-      @Param("dueAt") Instant dueAt,
-      @Param("now") Instant now);
-
-  /**
    * 「보냈어요」 시각을 묶음에 기록한다 — <b>이 값이 정본</b>이다. 이체가 한 번이므로 신고도 한 번이다.
    *
    * <p>자리에도 같은 시각이 찍히지만(상태 전이 CAS 와 한 몸이다) 그건 사본이고, 읽기가 전부 이쪽으로
    * 옮겨진 뒤 제거한다 — 배송비·배송지와 같은 순서다.
    *
-   * <p>재마킹(더블탭·부분 마킹)에서도 덮어쓴다. 자리 칸이 이미 "가장 최근 신고 시각" 이라 의미를 맞춘다.
+   * <p>다시 기록되면 덮어쓴다. 자리 칸이 이미 "가장 최근 신고 시각" 이라 의미를 맞춘다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

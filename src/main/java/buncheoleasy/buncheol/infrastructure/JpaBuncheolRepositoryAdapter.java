@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.BuncheolTerms;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.delivery.domain.DeliveryStatus;
@@ -108,6 +109,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         condition.normalizedKeyword(),
         condition.keywordGroupIds(),
         condition.keywordMemberIds(),
+        BuncheolMemberAccessType.CLOSED,
         cursorCreatedAt,
         cursorId,
         PageRequest.of(0, limit));
@@ -130,6 +132,7 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         condition.normalizedKeyword(),
         condition.keywordGroupIds(),
         condition.keywordMemberIds(),
+        BuncheolMemberAccessType.CLOSED,
         fromCursor ? cursor.sortAt() : null,
         fromCursor ? cursor.id() : null,
         PageRequest.of(0, limit));

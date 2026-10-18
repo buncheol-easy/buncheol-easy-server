@@ -195,7 +195,6 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 이미지가 한 장이라도 있음 — 분철을 만들지 않는다 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
                             | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
-                            | 409 | `BCH-109` (`PARTICIPATION_CODE_MEMBER_NOT_FREE`) | `accessType: "CODE_ONLY"` 슬롯의 `price` 가 0이 아님 (코드 참여는 무상 제공 전제) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
                             | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 연령대 추가 동의(`/oauth2/authorization/kakao/age-range`)로 해소 가능 |
@@ -357,7 +356,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].status")
                                 .description("분철 진행 상태 (RECRUITING | CONFIRMED | CANCELLED)"),
                             fieldWithPath("[].deadline").description("분철 모집 마감일"),
-                            fieldWithPath("[].memberSlotCount").description("분철에 포함된 멤버 슬롯 수"),
+                            fieldWithPath("[].memberSlotCount").description("열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)"),
                             fieldWithPath("[].activeParticipationCount")
                                 .description("활성 참여자 수 (AWAITING_PAYMENT/CONFIRMED)"),
                             fieldWithPath("[].createdAt").description("분철 개최 일시"),
@@ -448,7 +447,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             List.of("혜인"),
             false,
             true,
-            createdAt);
+            createdAt,
+            null);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -564,6 +564,13 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " 잡은 C2C 분철은 제외"),
                             fieldWithPath("items[].createdAt")
                                 .description("분철 개최 시각 (UTC ISO-8601). 카드의 \"신규\" 배지 판정용"),
+                            fieldWithPath("items[].opensAt")
+                                .type(JsonFieldType.STRING)
+                                .description(
+                                    "예약 오픈 시각 (UTC ISO-8601). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는"
+                                        + " null. 지난 시각이어도 그대로 실리므로 화면이 지금 시각과 비교해 \"M/D HH:mm"
+                                        + " 오픈\" 을 붙인다. 오픈 전에도 availableMemberNames 는 빈 자리 이름을 싣는다")
+                                .optional(),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -612,7 +619,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
               FlowType.LEGACY,
               null,
               null,
-              false);
+              false,
+              Instant.parse("2026-05-20T10:00:00Z"),
+              Instant.parse("2026-05-20T10:25:00Z"));
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -644,7 +653,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               `CLOSED`(신규 참여를 받지 않는 분철의 공석 — 진행확정·취소 이후. 참여자가 없지만 신청도 불가.
                               **C2C 개최자가 「빼기」로 닫은 자리도 `CLOSED`** — 신청을 받는 분철의 빈 자리가 `CLOSED` 면 이 경우뿐이다) /
                               `CODE_ONLY`(참여 코드 보유자에게 배정된 공석 — 선착순으로는 참여 불가. "마감"이 아니라
-                              "배정된 자리"로 표시할 것)
+                              "배정된 자리"로 표시할 것) / `NOT_OPEN`(예약 오픈 전인 운영진 분철의 선착순 공석 — 아직 고를 수 없다.
+                              `opensAt` 이 되면 `AVAILABLE` 이 된다. 코드 전용 자리는 오픈 전에도 `CODE_ONLY`)
                             - 멤버별 `paymentDueAt` 은 선점한 참여의 입금 기한 (UTC ISO-8601). `AWAITING_PAYMENT` 일 때만
                               내려가며, 이 시각이 지나면 슬롯이 공석으로 풀린다 — 대기 중인 유저에게 재시도 시점 안내용.
                               단 그 시점에 분철이 신규 참여를 받지 않는 상태면 슬롯은 `AVAILABLE` 이 아니라 `CLOSED` 가 되므로,
@@ -660,6 +670,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               바꿀 수 있는지다. `true` = 개최자 본인 · 회원 개최(C2C) · 모집중(`RECRUITING`) · 마감 전 · 활성 신청
                               (신청·입금 확인 중·보냈어요·확정) 0건. 개최자가 아니면 항상 `false`. 조회 시점 값이라 그 사이 신청이 들어오면
                               저장이 `409 BCH-124` 일 수 있다. 이 필드가 없는 응답(옛 서버)은 `false` 로 읽을 것
+                            - `opensAt` 은 예약 오픈 시각 (UTC ISO-8601). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 `null` 이다.
+                              이 시각 전에는 선착순 공석이 `NOT_OPEN` 이고 코드 없는 참여는 `409 BCH-128` 이다. 정각이면 열린다.
+                              응답은 조회 시점 판정이라, 화면이 열어 둔 채 오픈 시각을 넘기면 다시 불러와야 `AVAILABLE` 로 바뀐다
+                            - `serverTime` 은 이 응답을 만든 서버 시각 (UTC ISO-8601). 기기 시계가 틀려도 오픈까지 남은 시간을 맞게 세도록
+                              화면이 이 값과 기기 시계의 차이를 보정해 쓴다
 
                             **응답 예시**
                             ```json
@@ -712,7 +727,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 "inheritanceApplies": true,
                                 "inheritedShippingAddress": {"shippingMethod": "GS25_HALF", "storeName": "GS25 강남역점"}
                               },
-                              "termsEditable": false
+                              "termsEditable": false,
+                              "opensAt": "2026-05-20T10:00:00Z",
+                              "serverTime": "2026-05-20T10:25:00Z"
                             }
                             ```
 
@@ -761,7 +778,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "판매 상태 (AVAILABLE=공석 | APPLIED=C2C 신청 선점 | AWAITING_PAYMENT=입금 확인 대기 중"
                                         + " | SOLD=판매 완료 | CLOSED=신규 참여를 받지 않는 분철의 공석 또는 개최자가 닫은 자리"
-                                        + " | CODE_ONLY=참여 코드 보유자에게 배정된 공석)"),
+                                        + " | CODE_ONLY=참여 코드 보유자에게 배정된 공석"
+                                        + " | NOT_OPEN=예약 오픈 전인 운영진 분철의 선착순 공석, 고를 수 없음)"),
                             fieldWithPath("members[].paymentDueAt")
                                 .description(
                                     "선점한 참여의 입금 기한 (UTC ISO-8601). AWAITING_PAYMENT 일 때만 값이 있고,"
@@ -829,7 +847,18 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "개최자가 지금 거래 조건(마감·최소 인원·배송비·구매처)을 수정 API 로 바꿀 수 있는지."
                                         + " true = 개최자 본인 · C2C · 모집중 · 마감 전 · 활성 신청 0건."
-                                        + " 개최자가 아니면 항상 false. 조회 시점 값이라 저장이 409(BCH-124)일 수 있다"))
+                                        + " 개최자가 아니면 항상 false. 조회 시점 값이라 저장이 409(BCH-124)일 수 있다"),
+                            fieldWithPath("opensAt")
+                                .type(JsonFieldType.STRING)
+                                .description(
+                                    "예약 오픈 시각 (UTC ISO-8601). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null."
+                                        + " 이 시각 전에는 선착순 공석이 NOT_OPEN 이고 코드 없는 참여는 409(BCH-128)."
+                                        + " 정각이면 열린다")
+                                .optional(),
+                            fieldWithPath("serverTime")
+                                .description(
+                                    "응답을 만든 서버 시각 (UTC ISO-8601). 오픈까지 남은 시간을 기기 시계 대신 이 값에"
+                                        + " 맞춰 센다"))
                         .build())));
   }
 
@@ -895,7 +924,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             """
                             입금 기한 경과로 미입금 슬롯이 정리된 뒤, 입금확인된 참여만으로 진행을 확정한다
                             (`PAYMENT_COLLECTING` → `CONFIRMED`). 미입금 활성 참여(입금 대기·보냈어요)가 남아 있거나
-                            확정 참여가 없으면 실패한다 — 보냈어요 잔여는 입금확인 또는 반려로 먼저 정리해야 한다.
+                            확정 참여가 없으면 실패한다 — 보냈어요 잔여는 입금확인하거나 기한 뒤 「제외」로 먼저 정리해야 한다.
                             전원 입금확인 시에는 자동으로 진행확정되므로 이 API 는 부분 확정에만 필요하다.
 
                             **발생 가능한 에러**
@@ -1283,7 +1312,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
 
                             **응답 동작**
                             - 분철 상태(`RECRUITING` / `CONFIRMED` / `CANCELLED` / `HOST_CANCELLED`) 무관하게 호출 가능
-                            - `memberCount` = 분철에 등록된 멤버 슬롯 수
+                            - `memberCount` = 열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)
                             - `minHeadcount` = 분철 진행 최소 인원, `confirmedCount` = 입금확인된 참여자 수
                             - `participants[]` = 활성 참여자 목록 (입금확인 대상 AWAITING_PAYMENT + 확정 CONFIRMED)
                             - `participants[].depositorName` = **입금자명**(= 참여 시점 참여자의 정산 계좌 예금주 스냅샷). 개최자의 통장 대조 키.
@@ -1378,7 +1407,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "분철 진행 상태 (RECRUITING / CONFIRMED / CANCELLED / HOST_CANCELLED)"),
                             fieldWithPath("deadline").description("모집 마감 시각 (UTC ISO-8601)"),
                             fieldWithPath("minHeadcount").description("분철 진행 최소 인원"),
-                            fieldWithPath("memberCount").description("분철에 등록된 멤버 슬롯 수"),
+                            fieldWithPath("memberCount").description("열린 멤버 자리 수 (개최자가 닫은 자리 제외, 코드 자리는 포함)"),
                             fieldWithPath("confirmedCount").description("입금확인된 참여자 수"),
                             fieldWithPath("participants")
                                 .description("활성 참여자 배열 (AWAITING_PAYMENT + CONFIRMED)"),

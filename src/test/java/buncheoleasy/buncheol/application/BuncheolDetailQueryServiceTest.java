@@ -26,6 +26,8 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSetting;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingRepository;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberDetailResponse;
@@ -76,6 +78,7 @@ class BuncheolDetailQueryServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ShippingAddressRepository shippingAddressRepository;
+  @Mock private StaffBuncheolSettingRepository staffBuncheolSettingRepository;
 
   private static final Long BUNCHEOL_ID = 10L;
   private static final Long GROUP_ID = 100L;
@@ -628,6 +631,115 @@ class BuncheolDetailQueryServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_FOUND);
+    }
+  }
+
+  @Nested
+  @DisplayName("예약 오픈 테스트")
+  class StaffOpenTest {
+
+    private StaffBuncheolSetting settingOpeningAt(final Instant opensAt) {
+      return StaffBuncheolSetting.create(BUNCHEOL_ID, opensAt, DEADLINE, NOW.minusSeconds(86_400));
+    }
+
+    /** 운영진 분철: 선착순 빈 자리 101, 코드 전용 빈 자리 102, 확정 참여가 있는 자리 103. */
+    private void stubStaffBuncheol(final BuncheolStatus status) {
+      stubBasicBuncheol(status, ShippingFeePolicy.of(3000, null), FlowType.LEGACY, DEADLINE);
+      given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      BuncheolMember openSlot = buncheolMember(101L, BUNCHEOL_ID, 1001L, 15_000L);
+      BuncheolMember codeSlot = buncheolMember(102L, BUNCHEOL_ID, 1002L, 0L);
+      setField(codeSlot, "accessType", BuncheolMemberAccessType.CODE_ONLY);
+      BuncheolMember soldSlot = buncheolMember(103L, BUNCHEOL_ID, 1003L, 15_000L);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(openSlot, codeSlot, soldSlot));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L, 1003L)))
+          .willReturn(
+              List.of(
+                  groupMember(1001L, "주헌", "a.png"),
+                  groupMember(1002L, "형원", "b.png"),
+                  groupMember(1003L, "기현", "c.png")));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(active(601L, 103L, OTHER_USER, ParticipationStatus.CONFIRMED)));
+    }
+
+    @Test
+    void 오픈_전에는_선착순_빈_자리만_NOT_OPEN_이고_코드_자리와_팔린_자리는_그대로다() {
+      Instant opensAt = NOW.plusSeconds(1);
+      stubStaffBuncheol(BuncheolStatus.RECRUITING);
+      given(staffBuncheolSettingRepository.findByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Optional.of(settingOpeningAt(opensAt)));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.members())
+          .extracting(BuncheolMemberDetailResponse::saleStatus)
+          .containsExactly(
+              BuncheolMemberSaleStatus.NOT_OPEN,
+              BuncheolMemberSaleStatus.CODE_ONLY,
+              BuncheolMemberSaleStatus.SOLD);
+      assertThat(response.opensAt()).isEqualTo(opensAt);
+      assertThat(response.serverTime()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 정각이면_열려서_선착순_빈_자리가_AVAILABLE_이다() {
+      stubStaffBuncheol(BuncheolStatus.RECRUITING);
+      given(staffBuncheolSettingRepository.findByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Optional.of(settingOpeningAt(NOW)));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.members())
+          .extracting(BuncheolMemberDetailResponse::saleStatus)
+          .containsExactly(
+              BuncheolMemberSaleStatus.AVAILABLE,
+              BuncheolMemberSaleStatus.CODE_ONLY,
+              BuncheolMemberSaleStatus.SOLD);
+      assertThat(response.opensAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 닫힌_분철은_오픈_전이어도_CLOSED_다() {
+      stubStaffBuncheol(BuncheolStatus.CANCELLED);
+      given(staffBuncheolSettingRepository.findByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Optional.of(settingOpeningAt(NOW.plusSeconds(3_600))));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.members())
+          .extracting(BuncheolMemberDetailResponse::saleStatus)
+          .containsExactly(
+              BuncheolMemberSaleStatus.CLOSED,
+              BuncheolMemberSaleStatus.CLOSED,
+              BuncheolMemberSaleStatus.SOLD);
+    }
+
+    @Test
+    void 설정_행이_없는_운영진_분철은_지금처럼_AVAILABLE_이고_opensAt_은_null() {
+      stubStaffBuncheol(BuncheolStatus.RECRUITING);
+      given(staffBuncheolSettingRepository.findByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Optional.empty());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+      assertThat(response.opensAt()).isNull();
+      assertThat(response.serverTime()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 회원_개최는_설정을_읽지_않는다() {
+      stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+      assertThat(response.opensAt()).isNull();
+      assertThat(response.serverTime()).isEqualTo(NOW);
+      then(staffBuncheolSettingRepository).shouldHaveNoInteractions();
     }
   }
 

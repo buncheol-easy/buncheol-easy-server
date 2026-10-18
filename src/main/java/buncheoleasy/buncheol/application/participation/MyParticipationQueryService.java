@@ -75,8 +75,11 @@ public class MyParticipationQueryService {
         buncheolMemberRepository.findAllByBuncheolIds(buncheolIds);
     Map<Long, BuncheolMember> buncheolMemberById =
         buncheolMembers.stream().collect(Collectors.toMap(BuncheolMember::getId, m -> m));
+    // 세는 줄에서만 닫힌 자리를 뺀다 — removeMember 의 열린 자리 수(BuncheolService)와 같은 수. 위 두 목록까지 거르면
+    // 닫힌 자리를 가리키는 취소 참여의 자리를 못 찾아 내 참여 목록 전체가 500 이 된다.
     Map<Long, Long> slotCountByBuncheolId =
         buncheolMembers.stream()
+            .filter(bm -> !bm.isClosed())
             .collect(Collectors.groupingBy(BuncheolMember::getBuncheolId, Collectors.counting()));
 
     // 응답에는 사용자가 실제로 참여한 슬롯의 멤버 이름만 노출되므로,
@@ -291,7 +294,6 @@ public class MyParticipationQueryService {
         buncheol.getFlowType(),
         // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
         ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
-        participation.getVisiblePaymentRejectedAt(),
         buncheol.getOpenChatUrl(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).
         ParticipationCancellability.of(participation, buncheol));

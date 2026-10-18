@@ -128,7 +128,6 @@ class AdminPaymentQueryServiceTest {
   class GetPaymentsTest {
 
     // 🔴 운영자가 통장 대사에 쓰는 화면이라 개최 관리와 갈리면 안 된다 — totalAmount 와 같은 이유다.
-    // 부분 반려가 슬롯 하나만 밀고 묶음 전체를 연장하므로 형제 슬롯에서 실제로 두 값이 갈린다.
     @Test
     void C2C_결제목록의_기한은_묶음_정본을_읽는다() {
       Instant 자리기한 = BASE_TIME.plus(1, ChronoUnit.DAYS);

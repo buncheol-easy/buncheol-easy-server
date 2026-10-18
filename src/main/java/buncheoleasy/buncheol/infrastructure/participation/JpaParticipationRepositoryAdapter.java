@@ -101,6 +101,18 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           + "FROM buncheols WHERE id = ? AND status = 'RECRUITING' AND deadline > UTC_TIMESTAMP()";
 
   /**
+   * 예약 오픈 시각이 있는 운영진 분철의 코드 없는 참여: 모집중·마감 전에 더해 오픈 시각이 지났을 때만 삽입한다(정각이면 열림).
+   *
+   * <p>설정 행은 PK 같음 검색이라 그 행 하나에만 공유 잠금이 걸린다(간격 잠금 없음). 정각에 몰리는 참여끼리는 분철 행·설정 행 모두 공유
+   * 잠금이라 서로 기다리지 않고, 설정 행을 바꾸는 것은 운영 SQL(오픈 시각 정정)뿐이다. 설정 행이 없는 분철에 이 문장을 쓰면 없는 행 자리에
+   * 간격 잠금이 걸리므로 행이 있는 분철에만 쓴다.
+   */
+  private static final String INSERT_IF_RECRUITING_AND_OPEN_SQL =
+      INSERT_IF_RECRUITING_SQL
+          + " AND NOT EXISTS (SELECT 1 FROM staff_buncheol_settings s"
+          + " WHERE s.buncheol_id = buncheols.id AND s.opens_at > UTC_TIMESTAMP())";
+
+  /**
    * C2C 추가 모집: 분철이 입금 수집중일 때만 삽입하는 conditional INSERT (docs/46 §4.7-E1). 입금 수집은 deadline 이후
    * 구간이므로 마감 조건 없이 상태만 확인한다 — 진행확정(CONFIRMED) 전이 후에는 삽입되지 않는다.
    */
@@ -110,6 +122,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_SQL);
+  }
+
+  @Override
+  public boolean saveIfRecruitingAndOpen(final Participation participation) {
+    return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_AND_OPEN_SQL);
   }
 
   @Override
@@ -315,7 +332,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
     // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9) — 기한은 "개최자가 「제외」로 정리에
     // 나설 수 있는 시각"이지 취소 시각이 아니다. 걸러내는 위치가 <b>쿼리</b>인 것이 중요하다: 루프 안에서
-    // skip 하면 안 죽는 C2C 행이 due_at ASC 앞자리를 영구 점유해 LEGACY 30분 칼컷이 기아 상태가 된다.
+    // skip 하면 안 죽는 C2C 행이 due_at ASC 앞자리를 영구 점유해 LEGACY 10분 칼컷이 기아 상태가 된다.
     return jpaParticipationRepository.findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
         ParticipationStatus.AWAITING_PAYMENT, FlowType.LEGACY, now, Limit.of(limit));
   }
@@ -363,32 +380,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   public int markBundlePaymentSent(final Long bundleId, final Instant now) {
     return jpaParticipationRepository.markBundlePaymentSent(
         bundleId, ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT, now);
-  }
-
-  @Override
-  public boolean markPaymentSentIfAwaiting(final Long participationId, final Instant now) {
-    return jpaParticipationRepository.markPaymentSentIfAwaiting(
-            participationId,
-            ParticipationStatus.AWAITING_PAYMENT,
-            ParticipationStatus.PAYMENT_SENT,
-            now)
-        > 0;
-  }
-
-  @Override
-  public boolean revertPaymentSentIfSent(
-      final Long participationId,
-      final Instant dueAt,
-      final Instant rejectedAt,
-      final Instant now) {
-    return jpaParticipationRepository.revertPaymentSentIfSent(
-            participationId,
-            ParticipationStatus.PAYMENT_SENT,
-            ParticipationStatus.AWAITING_PAYMENT,
-            dueAt,
-            rejectedAt,
-            now)
-        > 0;
   }
 
   @Override

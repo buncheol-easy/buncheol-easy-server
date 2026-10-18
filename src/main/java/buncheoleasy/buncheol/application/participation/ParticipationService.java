@@ -17,6 +17,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSetting;
+import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -40,8 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ParticipationService {
 
-  // 참여(개최자 계좌 노출) 시점부터 입금 만료까지의 기본 창. 단, deadline 을 넘지 않도록 클램프한다.
-  private static final Duration PAYMENT_WINDOW = Duration.ofMinutes(30);
+  // 운영진 분철 참여(개최자 계좌 노출) 시점부터 입금 만료까지. 단, deadline 을 넘지 않도록 클램프한다.
+  private static final Duration STAFF_PAYMENT_TIME_LIMIT = Duration.ofMinutes(10);
 
   // C2C 입금 창(24h — docs/46 §7.1-3). 성사 확정 후 일괄 기한과 추가 모집(즉시입금 진입)의 개별 기한이 같은 창을 쓴다.
   public static final Duration C2C_PAYMENT_WINDOW = Duration.ofHours(24);
@@ -51,6 +53,7 @@ public class ParticipationService {
   private final ParticipationDomainService participationDomainService;
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final ParticipationCodeDomainService participationCodeDomainService;
+  private final StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
   private final ParticipationShippingAddressResolver participationShippingAddressResolver;
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
@@ -178,10 +181,23 @@ public class ParticipationService {
         participationCodeDomainService.validateForParticipation(
             member, request.participationCode(), now);
 
+    // 예약 오픈은 코드 없는 참여에만 걸린다 — 코드 전용 자리는 오픈 전에도 받는다. 설정 행은 분철과 같은 트랜잭션에서만
+    // 생기므로 분철이 보이면 행도 이미 보인다. 앱 시각으로 먼저 거르고, 최종 판정은 아래 INSERT 가 DB 시각으로 한다.
+    Optional<StaffBuncheolSetting> staffSetting =
+        code.isPresent()
+            ? Optional.empty()
+            : staffBuncheolSettingDomainService.findSetting(buncheolId);
+    if (staffSetting.isPresent() && staffSetting.get().isBeforeOpen(now)) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
+    }
+
     ShippingAddress shippingAddress =
         participationShippingAddressResolver.resolve(
             participantId, buncheol, request.shippingAddressId());
-    // 0으로 눌러 두지 않으면 "0원 슬롯 + 배송비 있음" 이 되어 배송비 환급 이벤트 대상으로 잡힌다
+    // 코드 참여는 자리 가격과 관계없이 0원이다. 그래서 코드 전용 자리에도 다른 멤버와 같은 가격을 걸 수 있고, 화면에서
+    // 특별한 자리로 드러나지 않는다.
+    long amount = code.isPresent() ? 0L : member.getPrice();
+    // 0으로 눌러 두지 않으면 "0원 참여 + 배송비 있음" 이 되어 배송비 환급 이벤트 대상으로 잡힌다
     // (ShippingFeePaybackPolicy) — 서포터즈 참여내역에 없는 환급 CTA 가 붙는다.
     long shippingFee =
         code.isPresent() ? 0L : buncheol.shippingFeeFor(shippingAddress.getShippingMethod());
@@ -196,7 +212,7 @@ public class ParticipationService {
     // 저장된 행으로 판정하면 안 된다 — participations.shipping_fee 쓰기를 빼면 그 컬럼은 새 행에서
     // 항상 0 이라, 「상품 0원 + 배송비만 내는」 참여가 전부 무료로 뒤집혀 입금 없이 즉시 확정된다.
     // 방금 이 메서드가 정한 두 값으로만 판정한다.
-    final boolean free = member.getPrice() == 0L && shippingFee == 0L;
+    final boolean free = amount == 0L && shippingFee == 0L;
 
     // 0원 참여는 아래에서 분철 조기 확정 CAS(X 락)까지 간다. 참여 INSERT 가 buncheols 에 공유 락을
     // 걸므로 그대로 두면 한 트랜잭션 안에서 S→X 업그레이드가 생겨 동시 참여끼리 데드락이 난다.
@@ -211,12 +227,22 @@ public class ParticipationService {
             member.getId(),
             participantId,
             shippingAddress.getId(),
-            member.getPrice(),
+            amount,
             shippingFee,
             dueAt);
     // 저장 시점에도 분철이 모집중인지 원자적으로 재확인(없으면 false → 롤백). 멤버 슬롯이 이미 점유됐으면 DuplicateKey →
-    // PARTICIPATION_ALREADY_EXISTS 로 롤백.
-    if (!participationDomainService.createParticipationIfRecruiting(participation)) {
+    // PARTICIPATION_ALREADY_EXISTS 로 롤백. 오픈 조건 INSERT 는 설정 행이 있는 분철에만 쓴다 — 행이 없는 분철에 NOT EXISTS 를
+    // 돌리면 없는 행 자리에 간격 잠금이 걸린다.
+    boolean inserted =
+        staffSetting.isPresent()
+            ? participationDomainService.createParticipationIfRecruitingAndOpen(participation)
+            : participationDomainService.createParticipationIfRecruiting(participation);
+    if (!inserted) {
+      // 0행의 원인을 INSERT 와 같은 DB 시계로 가른다. 앱 시계로 보면 정각 직후 시계 차이 동안 BCH-060 으로 잘못 나간다.
+      if (staffSetting.isPresent()
+          && staffBuncheolSettingDomainService.isBeforeOpenByDbClock(buncheolId)) {
+        throw new BusinessException(ErrorCode.BUNCHEOL_NOT_OPEN_YET);
+      }
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
@@ -244,7 +270,7 @@ public class ParticipationService {
   }
 
   /**
-   * 0원 참여는 참여 즉시 입금확인까지 진행한다 — 아무도 입금할 수 없는 참여를 입금 대기로 두면 30분 뒤 만료 스케줄러가 취소한다. 수동 입금확인과 같은 CAS·같은
+   * 0원 참여는 참여 즉시 입금확인까지 진행한다 — 아무도 입금할 수 없는 참여를 입금 대기로 두면 10분 뒤 만료 스케줄러가 취소한다. 수동 입금확인과 같은 CAS·같은
    * 부수효과를 그대로 태운다. 응답에 계좌·기한을 싣지 않아야 입금 안내 화면이 뜨지 않는다.
    */
   private ParticipateResult confirmFreeParticipation(
@@ -463,10 +489,9 @@ public class ParticipationService {
    * 잡고 그 서브쿼리가 새 참여 행에 S 를 요청한다. 원인은 같다 — <b>취소 경로가 분철 행 락을 잡지 않아</b> 두 경로가
    * 직렬화되지 않는다. 레포에 데드락 재시도 핸들러가 없어 실패 모드는 500 이다.
    *
-   * <p><b>2026-08-31 추가된 세 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
+   * <p><b>2026-08-31 추가된 두 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
    *
    * <ul>
-   *   <li>{@code rejectPaymentSent} — 참여 행(X) → 묶음 행(X). 기존 「참여 → 묶음」 방향과 같다.
    *   <li>{@code ParticipationBundleService#confirmPayment} — ⚠️ <b>참여 행(X) → 분철 행(X) → 다른
    *       묶음 포함 참여 행(S)</b>. {@code confirmIfAllCollected} 의 서브쿼리가 그 분철의 참여 전체에
    *       공유 락을 건다. <b>같은 분철의 두 묶음을 개최자가 연속 확인</b>하면(목록을 위에서 아래로 클릭하는
@@ -543,7 +568,7 @@ public class ParticipationService {
   }
 
   /**
-   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(30분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를
+   * 개최자의 수동 입금확인 (AWAITING_PAYMENT → CONFIRMED). 입금 기한(10분 칼컷) 내에만 가능하다. 입금확인 시점에 배송지를
    * 스냅샷(Delivery)으로 박제한다. 이 입금확인으로 분철의 모든 멤버 슬롯이 입금확인되면(매진+전원확정) deadline 전이라도 분철을 진행확정으로 조기 전이한다.
    *
    * <p>🔴 <b>LEGACY 전용이다.</b> C2C 는 {@link ParticipationBundleService#confirmPayment} 만 쓴다 —
@@ -636,87 +661,6 @@ public class ParticipationService {
     confirmBuncheolIfAllSlotsConfirmed(buncheol, now);
   }
 
-  // --- C2C 참여자·개최자 액션 (docs/46 §4.2·§4.4·§4.5) ---
-
-  /**
-   * C2C 참여자 "보냈어요" 마킹 (AWAITING_PAYMENT → PAYMENT_SENT, docs/46 §4.2). 기한 경과 검사 없음 — 기한 직전 입금 보호가
-   * 목적이며, 만료 스케줄러가 먼저 취소했으면 상태 위반으로 안내한다. 더블탭 등 재요청은 멱등 처리한다.
-   */
-  @Transactional
-  public void markPaymentSent(final Long participantId, final Long participationId) {
-    final Instant now = Instant.now(clock);
-    Participation participation = participationDomainService.getParticipation(participationId);
-    participation.validateOwnedBy(participantId);
-    requireC2c(participation);
-
-    if (participationDomainService.markPaymentSent(participationId, now)) {
-      // 🔴 정본은 묶음이다. 이 슬롯 단위 경로도 같이 써야 한다 — 안 쓰면 상태는 PAYMENT_SENT 인데
-      // 읽기 세 곳이 전부 null 을 내려 <b>마킹이 화면에서 통째로 사라진다.</b>
-      // (rejectPaymentSent 가 슬롯 상태를 되돌리며 묶음 기한을 같이 미는 것과 같은 패턴이다.)
-      participationBundleDomainService.markPaymentSent(participation.getBundleId(), now);
-      // 실제 전이 시에만 발행 — 멱등 리턴 경로로 옮기면 개최자 알림이 중복된다.
-      eventPublisher.publishEvent(new PaymentSentEvent(participationId));
-      return;
-    }
-    if (participationDomainService.getParticipation(participationId).getStatus()
-        == ParticipationStatus.PAYMENT_SENT) {
-      return; // 멱등: 이미 마킹됨
-    }
-    throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
-  }
-
-  /**
-   * C2C 참여자 마킹 철회 (PAYMENT_SENT → AWAITING_PAYMENT 복귀, 기한 유지 — 오마킹 셀프 수정). {@code paymentSentAt} 은
-   * 분쟁 증거로 보존된다. 이미 입금 대기로 돌아가 있으면 멱등 처리한다.
-   */
-  @Transactional
-  public void revertPaymentSent(final Long participantId, final Long participationId) {
-    final Instant now = Instant.now(clock);
-    Participation participation = participationDomainService.getParticipation(participationId);
-    participation.validateOwnedBy(participantId);
-    requireC2c(participation);
-
-    if (participationDomainService.revertPaymentSent(
-        participationId, participation.getDueAt(), now)) {
-      return;
-    }
-    if (participationDomainService.getParticipation(participationId).getStatus()
-        == ParticipationStatus.AWAITING_PAYMENT) {
-      return; // 멱등: 이미 철회됨
-    }
-    throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
-  }
-
-  /**
-   * C2C 개최자 미입금 반려 (docs/46 §4.5 — 취소가 아니라 재입금 기회). PAYMENT_SENT 를 AWAITING_PAYMENT 로 되돌리고 기한을
-   * max(기존, now+24h) 로 연장한 뒤, 커밋 후 재확인 알림(연장된 새 기한 포함)을 트리거한다.
-   */
-  @Transactional
-  public void rejectPaymentSent(final Long hostId, final Long participationId) {
-    final Instant now = Instant.now(clock);
-    Participation participation = participationDomainService.getParticipation(participationId);
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
-    buncheol.validateOwner(hostId);
-    if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
-    }
-
-    Instant extended = now.plus(C2C_PAYMENT_WINDOW);
-    Instant newDueAt =
-        participation.getDueAt() != null && participation.getDueAt().isAfter(extended)
-            ? participation.getDueAt()
-            : extended;
-    // 셀프 철회와 달리 반려 시각을 남긴다 — 참여자 화면의 "입금 확인 안 됨 · 재확인 필요" 판정 근거 (docs/53 Q-03).
-    if (!participationDomainService.rejectPaymentSent(participationId, newDueAt, now)) {
-      throw new BusinessException(ErrorCode.PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED);
-    }
-    // 🔴 묶음 기한도 함께 민다. 기한의 정본은 묶음이고(「제외」 가드가 그 값을 본다), 슬롯만 밀면 반려로 기한을
-    // 연장받은 정상 입금 대기자를 개최자가 바로 「제외」할 수 있게 된다 — 복구 경로가 문의뿐이다.
-    participationBundleDomainService.extendDueAt(participation.getBundleId(), newDueAt, now);
-
-    eventPublisher.publishEvent(new PaymentRecheckRequestedEvent(participationId));
-  }
-
   /**
    * C2C 참여자 자발 취소 (docs/46 §5 + docs/56 H-09). 신청(APPLIED)과 <b>성사 확정을 거치지 않은</b> 입금
    * 대기(AWAITING_PAYMENT)에서만 허용한다. 보냈어요·입금확인 이후는 돈이 개최자에게 간 구간이라 문의 경유로 안내한다(§5 구간 ②′·③).
@@ -765,19 +709,6 @@ public class ParticipationService {
   }
 
   /**
-   * C2C 전용 액션 가드 — LEGACY 참여에는 새 플로우 API 를 제공하지 않는다 (docs/46 §4.4).
-   *
-   * <p>{@link ErrorCode#BUNCHEOL_FLOW_NOT_SUPPORTED} 는 C2C 전용 액션 여러 곳이 공유하는 범용 문구다. 사용자가 누른 버튼이
-   * 특정되는 경로(자발 취소)는 이 헬퍼를 쓰지 않고 전용 코드로 직접 던진다 (docs/53 Q-12 와 같은 유형의 혼선 방지).
-   */
-  private void requireC2c(final Participation participation) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
-    if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
-    }
-  }
-
-  /**
    * 🔴 <b>슬롯 단위 입금확인 가드 — C2C 는 묶음 단위로만 확정한다.</b>
    *
    * <p>C2C 의 돈 단위는 참여 한 건이 아니라 <b>묶음</b>이다(이체 1회 · 배송비 1회 · 택배 1개). 그래서 확정도 묶음
@@ -803,8 +734,7 @@ public class ParticipationService {
    * <p>⚠️ <b>엔드포인트 자체를 지우지도 마라.</b> LEGACY(운영진 개최) 개최 관리 화면이 아직 이 API 를 쓴다.
    * "C2C 만 409" 가 정확한 처방이다.
    *
-   * <p>🔴 <b>미연결 행(bundle_id = NULL)을 예외로 빼지 않았다 — 의도된 선택이다.</b> 슬롯 단위 「보냈어요」를
-   * 안 막은 이유("배포선 창에서 생긴 행의 마지막 통로")가 확인 쪽에는 적용되지 않는다. 그런 C2C 행은 이 가드
+   * <p>🔴 <b>미연결 행(bundle_id = NULL)을 예외로 빼지 않았다 — 의도된 선택이다.</b> 그런 C2C 행은 이 가드
    * 뒤에 <b>모든 출구가 닫힌다</b> — 묶음 확인·「제외」는 {@code bundleId} 를 인자로 받아 호출 자체가 불가고,
    * 자동 만료는 C2C 를 안 보며, 자발 취소도 그 상태에선 막힌다. 그럼에도 빼지 않은 근거는 둘이다:
    *
@@ -857,7 +787,7 @@ public class ParticipationService {
   }
 
   private Instant paymentDueAt(final Instant now, final Instant deadline) {
-    Instant windowEnd = now.plus(PAYMENT_WINDOW);
+    Instant windowEnd = now.plus(STAFF_PAYMENT_TIME_LIMIT);
     return windowEnd.isBefore(deadline) ? windowEnd : deadline;
   }
 }

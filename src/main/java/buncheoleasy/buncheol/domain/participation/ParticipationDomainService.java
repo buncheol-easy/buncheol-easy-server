@@ -20,6 +20,11 @@ public class ParticipationDomainService {
     return participationRepository.saveIfRecruiting(participation);
   }
 
+  /** 예약 오픈 시각이 있는 운영진 분철의 코드 없는 참여 INSERT — 모집중·마감 전에 더해 오픈 시각이 지났는지 원자 확인. */
+  public boolean createParticipationIfRecruitingAndOpen(final Participation participation) {
+    return participationRepository.saveIfRecruitingAndOpen(participation);
+  }
+
   /** C2C 추가 모집 INSERT — 분철이 입금 수집중(PAYMENT_COLLECTING)인지 원자 확인 (docs/46 §4.7-E1). */
   public boolean createParticipationIfCollecting(final Participation participation) {
     return participationRepository.saveIfCollecting(participation);
@@ -175,32 +180,6 @@ public class ParticipationDomainService {
   }
 
   // --- C2C 플로우 전이 (docs/46 §4) ---
-
-  /** C2C "보냈어요" 마킹 CAS. 멱등 분기(이미 PAYMENT_SENT)는 호출 측이 재조회로 판단한다. */
-  public boolean markPaymentSent(final Long participationId, final Instant now) {
-    return participationRepository.markPaymentSentIfAwaiting(participationId, now);
-  }
-
-  /**
-   * C2C 참여자 셀프 철회 — 오마킹 자가 수정(기한 유지). 반려가 아니므로 반려 시각을 남기지 않는다.
-   *
-   * <p>paymentSentAt 은 분쟁 증거로 보존된다.
-   */
-  public boolean revertPaymentSent(
-      final Long participationId, final Instant dueAt, final Instant now) {
-    return participationRepository.revertPaymentSentIfSent(participationId, dueAt, null, now);
-  }
-
-  /**
-   * C2C 개최자 반려("입금 못 찾음") — 기한 연장 + 반려 시각 기록 (docs/53 Q-03).
-   *
-   * <p>셀프 철회와 같은 CAS 를 쓰지만 {@code paymentRejectedAt} 유무로 갈린다. 두 경로가 응답상 구분되지 않아 참여자에게 재확인 안내를
-   * 띄우지 못하던 문제를 해소한다. 메서드를 나눈 건 호출 측이 플래그를 잘못 넘기는 사고를 막기 위해서다.
-   */
-  public boolean rejectPaymentSent(
-      final Long participationId, final Instant dueAt, final Instant now) {
-    return participationRepository.revertPaymentSentIfSent(participationId, dueAt, now, now);
-  }
 
   /** C2C 참여자 자발 취소 CAS — 신청·입금 대기 상태에서만 (docs/46 §5 구간 ①·②). */
   public boolean cancelByUser(final Long participationId, final Instant now) {

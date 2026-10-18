@@ -255,7 +255,7 @@ class ParticipationBundleServiceTest {
               List.of(
                   // 이번 호출이 마킹 (DB 가 초 단위로 잘라 저장한 값)
                   sentSlot(233L, NOW.truncatedTo(ChronoUnit.SECONDS)),
-                  // 슬롯 단위 API 로 <b>먼저</b> 마킹돼 있던 슬롯 — 알림 금액에는 포함돼야 한다
+                  // 이미 마킹돼 있던 슬롯(지금 코드로는 생기지 않는 방어 케이스) — 알림 금액에는 포함돼야 한다
                   sentSlot(232L, NOW.minusSeconds(600))));
 
       List<Long> marked = participationBundleService.markPaymentSent(PARTICIPANT_ID, BUNDLE_ID);
@@ -265,7 +265,7 @@ class ParticipationBundleServiceTest {
           ArgumentCaptor.forClass(BundlePaymentSentEvent.class);
       then(eventPublisher).should().publishEvent(captor.capture());
       assertThat(captor.getValue().markedParticipationIds()).containsExactly(233L);
-      // 🔴 부분 마킹에서 이번 호출분만 합산하면 개최자가 실제 이체액보다 작은 금액으로 대조하게 된다.
+      // 🔴 이번 호출분만 합산하면 개최자가 실제 이체액보다 작은 금액으로 대조하게 된다.
       assertThat(captor.getValue().sentParticipationIds()).containsExactly(233L, 232L);
     }
 

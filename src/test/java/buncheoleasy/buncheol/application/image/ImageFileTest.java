@@ -55,4 +55,24 @@ class ImageFileTest {
 
     assertThat(imageFile.extension()).isEqualTo(expectedExtension);
   }
+
+  // #224 — 보낸 Content-Type 을 그대로 저장하면 png 이름의 HTML·SVG 가 이미지 주소에서 웹 페이지로 열린다.
+  // 거절이 아니라 덮어쓰기라 헤더가 없거나 엉뚱해도 생성은 성공해야 한다(새 400 없음).
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "evil.png, text/html, image/png",
+        "evil.png, image/svg+xml, image/png",
+        "a.jpg, NULL, image/jpeg",
+        "a.JPEG, application/octet-stream, image/jpeg",
+        "a.webp, image/png, image/webp",
+        "buncheol-1.jpg, image/jpeg, image/jpeg"
+      },
+      nullValues = "NULL")
+  void 저장_형식은_보낸_Content_Type_과_무관하게_확장자로_정한다(
+      final String filename, final String sentContentType, final String expectedContentType) {
+    ImageFile imageFile = new ImageFile(filename, sentContentType, new byte[] {1});
+
+    assertThat(imageFile.contentType()).isEqualTo(expectedContentType);
+  }
 }

@@ -145,13 +145,8 @@ public class AdminParticipationCodeService {
       throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
     }
     Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    if (accessType == BuncheolMemberAccessType.CODE_ONLY) {
-      if (buncheol.isC2c()) {
-        throw new BusinessException(ErrorCode.BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED);
-      }
-      if (!buncheolMemberDomainService.getBuncheolMember(buncheolMemberId, buncheolId).isFree()) {
-        throw new BusinessException(ErrorCode.PARTICIPATION_CODE_MEMBER_NOT_FREE);
-      }
+    if (accessType == BuncheolMemberAccessType.CODE_ONLY && buncheol.isC2c()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED);
     }
     // C2C 자리의 열고 닫기는 개최자 「빼기·다시 넣기」가 쥔다 — 여기서 OPEN 으로 바꾸면 개최자가 닫은 자리가 말없이 다시 열린다.
     if (buncheol.isC2c()) {

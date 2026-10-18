@@ -10,12 +10,14 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ParticipationCancelReason {
-  // 입금 기한(dueAt = min(참여+30분, deadline)) 내 입금확인이 안 되어 입금 만료 스케줄러가 자동 취소. 마감 시점에 남은 입금확인중
-  // 참여도 dueAt 가 이미 지난 상태라 같은 스케줄러가 처리한다. 모집 중이면 멤버 슬롯이 다시 선착순 대상이 된다.
+  // LEGACY: 입금 기한(dueAt = min(참여+10분, deadline)) 내 입금확인이 안 되어 입금 만료 스케줄러가 자동 취소. 마감 시점에
+  // 남은 입금확인중 참여도 dueAt 가 이미 지난 상태라 같은 스케줄러가 처리한다. 모집 중이면 멤버 슬롯이 다시 선착순 대상이 된다.
+  // C2C 는 자동 만료가 없어 새로 생기지 않는다(docs/70 결정 9) — C2C 행의 이 값은 그 전에 만료된 기록이다.
   PAYMENT_TIMEOUT("입금 시간 초과"),
   // 분철이 취소(호스트 취소 또는 최소 인원 미달/미성사)되어 함께 취소. 입금확인된 참여는 개최자의 수동 환불처리가 필요하다.
   BUNCHEOL_CANCELLED("분철 취소"),
-  // C2C 참여자 자발 취소 (docs/46 §5 — 신청~확정 전 자유 / 확정~입금확인 전 허용). 돈이 오가기 전 구간이라 환불 없음.
+  // C2C 참여자 자발 취소 — 신청(APPLIED)과 성사 확정을 거치지 않은 입금 대기(추가 모집)에서만 열린다
+  // (ParticipationCancellability). 돈이 오가기 전 구간이라 환불 없음.
   USER_CANCELLED("자발 취소"),
   // 개최자가 입금 기한이 지난 묶음을 「제외」 (docs/70 결정 8). C2C 는 자동 만료가 없어 이것이 미입금자를 빼는 유일한
   // 출구다. 묶음 통째로만 적용되고, 확정 슬롯이 하나라도 있으면 열리지 않는다.

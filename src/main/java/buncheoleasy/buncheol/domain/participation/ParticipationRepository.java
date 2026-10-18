@@ -15,6 +15,14 @@ public interface ParticipationRepository {
   boolean saveIfRecruiting(Participation participation);
 
   /**
+   * {@link #saveIfRecruiting} 의 조건에 더해, 분철의 예약 오픈 시각(staff_buncheol_settings)이 지났을 때만 INSERT 한다
+   * (원자적, DB 시각 기준, 정각이면 열림). 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return INSERT 된 경우 true, 모집중이 아니거나 마감됐거나 아직 열리지 않았으면 false
+   */
+  boolean saveIfRecruitingAndOpen(Participation participation);
+
+  /**
    * C2C 추가 모집: 분철이 입금 수집중({@code PAYMENT_COLLECTING})일 때만 참여를 INSERT 한다 (원자적 — docs/46 §4.7-E1).
    * 진행확정(CONFIRMED) 이후에는 삽입되지 않는다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
    *
@@ -136,9 +144,6 @@ public interface ParticipationRepository {
 
   // --- C2C 플로우 CAS (docs/46 §4) ---
 
-  /** C2C "보냈어요" 마킹 CAS (AWAITING_PAYMENT → PAYMENT_SENT, 기한 경과 검사 없음). */
-  boolean markPaymentSentIfAwaiting(Long participationId, Instant now);
-
   /**
    * 묶음 단위 「보냈어요」 — 한 묶음의 입금 대기 슬롯 전부를 한 번에 마킹한다. 기한이 지난 뒤에도 열려 있다.
    *
@@ -152,15 +157,6 @@ public interface ParticipationRepository {
    * @return 실제로 확정된 슬롯 수
    */
   int confirmBundleIfPayable(Long bundleId, Instant now);
-
-  /**
-   * C2C 마킹 해제 CAS (PAYMENT_SENT → AWAITING_PAYMENT). 참여자 철회(기한 유지)·개최자 반려(기한 연장)가 공용하며 {@code
-   * dueAt} 을 함께 세팅한다. {@code paymentSentAt} 은 보존.
-   *
-   * @param rejectedAt 개최자 반려면 반려 시각, 참여자 셀프 철회면 {@code null} (docs/53 Q-03 — 두 경로 구분용)
-   */
-  boolean revertPaymentSentIfSent(
-      Long participationId, Instant dueAt, Instant rejectedAt, Instant now);
 
   /**
    * C2C 참여자 자발 취소 CAS — APPLIED·AWAITING_PAYMENT 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은

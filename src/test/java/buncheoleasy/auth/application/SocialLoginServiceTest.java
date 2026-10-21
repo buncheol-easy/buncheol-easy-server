@@ -19,6 +19,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.AgeRangeRefreshResult;
 import buncheoleasy.user.domain.SocialInfo;
+import buncheoleasy.user.domain.SocialLoginUser;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
@@ -73,11 +74,12 @@ class SocialLoginServiceTest {
       given(
               userDomainService.getOrCreateBySocialLogin(
                   any(SocialInfo.class), eq(email), isNull(), isNull(), isNull(), eq(false)))
-          .willReturn(user);
+          .willReturn(new SocialLoginUser(user, false));
       given(jwtTokenProvider.issueTokens(userId)).willReturn(expected);
 
       // when
-      TokenPair result = socialLoginService.login(SocialLoginCommand.of(provider, providerId, email));
+      SocialLoginResult result =
+          socialLoginService.login(SocialLoginCommand.of(provider, providerId, email));
 
       // then
       ArgumentCaptor<SocialInfo> captor = ArgumentCaptor.forClass(SocialInfo.class);
@@ -88,7 +90,8 @@ class SocialLoginServiceTest {
       assertThat(captor.getValue().providerId()).isEqualTo(providerId);
 
       then(jwtTokenProvider).should().issueTokens(userId);
-      assertThat(result).isEqualTo(expected);
+      assertThat(result.token()).isEqualTo(expected);
+      assertThat(result.newAccount()).isFalse();
       then(userDomainService)
           .should(org.mockito.Mockito.never())
           .updateServiceTermAgreements(anyLong(), anyList(), anyString());
@@ -111,7 +114,7 @@ class SocialLoginServiceTest {
                   eq("01012345678"),
                   eq("20~29"),
                   eq(false)))
-          .willReturn(user);
+          .willReturn(new SocialLoginUser(user, false));
       given(jwtTokenProvider.issueTokens(userId))
           .willReturn(new TokenPair("access", "refresh"));
 
@@ -139,19 +142,40 @@ class SocialLoginServiceTest {
       given(
               userDomainService.getOrCreateBySocialLogin(
                   any(SocialInfo.class), eq("sync2@example.com"), isNull(), isNull(), isNull(), eq(false)))
-          .willReturn(user);
+          .willReturn(new SocialLoginUser(user, false));
       willThrow(new RuntimeException("DB 오류"))
           .given(userDomainService)
           .updateServiceTermAgreements(userId, terms, MARKETING_TAG);
       given(jwtTokenProvider.issueTokens(userId)).willReturn(expected);
 
       // when
-      TokenPair result =
+      SocialLoginResult result =
           socialLoginService.login(
               new SocialLoginCommand("KAKAO", "sync_2", "sync2@example.com", null, null, null, false, terms));
 
       // then
-      assertThat(result).isEqualTo(expected);
+      assertThat(result.token()).isEqualTo(expected);
+    }
+
+    @Test
+    void 이번_로그인으로_계정을_새로_만들었으면_새_계정으로_알린다() {
+      // given
+      Long userId = 4L;
+      User user = User.create("KAKAO", "new_1", "new@example.com");
+      ReflectionTestUtils.setField(user, "id", userId);
+
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), eq("new@example.com"), isNull(), isNull(), isNull(), eq(false)))
+          .willReturn(new SocialLoginUser(user, true));
+      given(jwtTokenProvider.issueTokens(userId)).willReturn(new TokenPair("access", "refresh"));
+
+      // when
+      SocialLoginResult result =
+          socialLoginService.login(SocialLoginCommand.of("KAKAO", "new_1", "new@example.com"));
+
+      // then
+      assertThat(result.newAccount()).isTrue();
     }
   }
 

@@ -50,11 +50,13 @@ class UserDomainServiceTest {
       given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
 
       // when
-      User result =
+      SocialLoginUser loginUser =
           userDomainService.getOrCreateBySocialLogin(
               socialInfo, "test@example.com", "김카카오", "01099998888", null, false);
 
       // then
+      User result = loginUser.user();
+      assertThat(loginUser.newAccount()).isFalse();
       assertThat(result).isEqualTo(existingUser);
       assertThat(result.getName()).isEqualTo("김기존");
       assertThat(result.getPhoneNumber()).isNull();
@@ -72,7 +74,7 @@ class UserDomainServiceTest {
       // when
       User result =
           userDomainService.getOrCreateBySocialLogin(
-              socialInfo, "test@example.com", null, null, "20~29", false);
+              socialInfo, "test@example.com", null, null, "20~29", false).user();
 
       // then
       assertThat(result.getAgeRange()).isEqualTo("20~29");
@@ -89,7 +91,7 @@ class UserDomainServiceTest {
       // when
       User result =
           userDomainService.getOrCreateBySocialLogin(
-              socialInfo, "test@example.com", null, null, null, false);
+              socialInfo, "test@example.com", null, null, null, false).user();
 
       // then
       assertThat(result.getAgeRange()).isEqualTo("20~29");
@@ -106,7 +108,7 @@ class UserDomainServiceTest {
       // when
       User result =
           userDomainService.getOrCreateBySocialLogin(
-              socialInfo, "test@example.com", null, null, null, true);
+              socialInfo, "test@example.com", null, null, null, true).user();
 
       // then
       assertThat(result.getAgeRange()).isNull();
@@ -122,10 +124,12 @@ class UserDomainServiceTest {
       given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
 
       // when
-      User result =
+      SocialLoginUser loginUser =
           userDomainService.getOrCreateBySocialLogin(socialInfo, email, null, null, null, false);
 
       // then
+      User result = loginUser.user();
+      assertThat(loginUser.newAccount()).isTrue();
       assertThat(result.getEmail().value()).isEqualTo(email);
       assertThat(result.getSocialInfo().provider()).isEqualTo(SocialProvider.KAKAO);
       assertThat(result.getNickname().value()).isEqualTo("용감한까마귀12");
@@ -144,7 +148,7 @@ class UserDomainServiceTest {
       // when
       User result =
           userDomainService.getOrCreateBySocialLogin(
-              socialInfo, "sync@example.com", "김실명", "01012345678", "20~29", false);
+              socialInfo, "sync@example.com", "김실명", "01012345678", "20~29", false).user();
 
       // then
       assertThat(result.getName()).isEqualTo("김실명");

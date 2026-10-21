@@ -7,6 +7,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.AgeRangeRefreshResult;
 import buncheoleasy.user.domain.SocialInfo;
+import buncheoleasy.user.domain.SocialLoginUser;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import lombok.extern.slf4j.Slf4j;
@@ -33,9 +34,9 @@ public class SocialLoginService {
     this.marketingTermTag = marketingTermTag;
   }
 
-  public TokenPair login(final SocialLoginCommand command) {
+  public SocialLoginResult login(final SocialLoginCommand command) {
     SocialInfo socialInfo = SocialInfo.of(command.provider(), command.providerId());
-    User user =
+    SocialLoginUser loginUser =
         userDomainService.getOrCreateBySocialLogin(
             socialInfo,
             command.email(),
@@ -43,6 +44,7 @@ public class SocialLoginService {
             command.phoneNumber(),
             command.ageRange(),
             command.ageRangeWithdrawn());
+    User user = loginUser.user();
 
     if (command.serviceTerms() != null && !command.serviceTerms().isEmpty()) {
       try {
@@ -53,7 +55,7 @@ public class SocialLoginService {
         log.warn("약관 동의 내역 저장 실패: userId={}, reason={}", user.getId(), exception.getMessage());
       }
     }
-    return jwtTokenProvider.issueTokens(user.getId());
+    return new SocialLoginResult(jwtTokenProvider.issueTokens(user.getId()), loginUser.newAccount());
   }
 
   /** 연령대 추가 동의 결과를 반영한다. 로그인 상태는 바꾸지 않으므로 토큰을 발급하지 않는다. */

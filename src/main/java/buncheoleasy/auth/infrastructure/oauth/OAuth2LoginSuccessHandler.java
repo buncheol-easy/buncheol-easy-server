@@ -2,6 +2,7 @@ package buncheoleasy.auth.infrastructure.oauth;
 
 import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.application.SocialLoginCommand;
+import buncheoleasy.auth.application.SocialLoginResult;
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -76,7 +77,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       }
     }
 
-    TokenPair token =
+    SocialLoginResult loginResult =
         socialLoginService.login(
             new SocialLoginCommand(
                 profile.provider().name(),
@@ -87,6 +88,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 profile.ageRange(),
                 profile.ageRangeWithdrawn(),
                 serviceTerms));
+    TokenPair token = loginResult.token();
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
 
@@ -98,14 +100,19 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     // 지우기 전에 이미 전송된다. 브라우저 히스토리에도 남는다. 콜백 진입 즉시 해시를 읽고
     // history.replaceState 로 제거하는 후속 조치가 클라 쪽에 필요하다 (server#116 리뷰 참고).
     //
-    // encodeFragment 는 현재 토큰(base64url + '.')과 '=' 에 대해 no-op 이다 — RFC 3986 의
-    // fragment 는 pchar 를 허용하고 pchar 에 sub-delims('=')와 unreserved 가 포함된다.
+    // encodeFragment 는 현재 토큰(base64url + '.')과 '='·'&' 에 대해 no-op 이다 — RFC 3986 의
+    // fragment 는 pchar 를 허용하고 pchar 에 sub-delims('='·'&')와 unreserved 가 포함된다.
     // 토큰 형식이 바뀌어 '%'·공백·'#' 이 섞이면 그때 자동으로 올바르게 이스케이프된다.
+    //
+    // signup=1 은 이번 로그인으로 계정을 새로 만들었다는 표시다(프로필 완료 여부와 별개).
+    // 키는 클라 AUTH_SIGNUP_PARAM 과 짝이다.
+    String fragment = "accessToken=" + token.accessToken();
+    if (loginResult.newAccount()) {
+      fragment += "&signup=1";
+    }
     String redirectUrl =
         UriComponentsBuilder.fromUriString(loginCallbackUrl)
-            .fragment(
-                UriUtils.encodeFragment(
-                    "accessToken=" + token.accessToken(), StandardCharsets.UTF_8))
+            .fragment(UriUtils.encodeFragment(fragment, StandardCharsets.UTF_8))
             .build()
             .toUriString();
     response.sendRedirect(redirectUrl);

@@ -27,7 +27,7 @@ public class UserDomainService {
    * 갱신한다.
    */
   @Transactional
-  public User getOrCreateBySocialLogin(
+  public SocialLoginUser getOrCreateBySocialLogin(
       final SocialInfo socialInfo,
       final String email,
       final String name,
@@ -36,8 +36,11 @@ public class UserDomainService {
       final boolean ageRangeWithdrawn) {
     return userRepository
         .findBySocialInfo(socialInfo)
-        .map(user -> applyAgeRange(user, ageRange, ageRangeWithdrawn))
-        .orElseGet(() -> createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange));
+        .map(user -> new SocialLoginUser(applyAgeRange(user, ageRange, ageRangeWithdrawn), false))
+        .orElseGet(
+            () ->
+                new SocialLoginUser(
+                    createNewSocialUser(socialInfo, email, name, phoneNumber, ageRange), true));
   }
 
   /** 연령대 추가 동의 결과를 가입한 회원에게 반영하고, 반영 뒤 회원에게 연령대가 있는지 돌려준다. */

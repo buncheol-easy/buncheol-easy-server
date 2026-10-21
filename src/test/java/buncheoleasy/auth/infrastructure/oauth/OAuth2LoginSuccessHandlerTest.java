@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 
 import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.application.SocialLoginCommand;
+import buncheoleasy.auth.application.SocialLoginResult;
 import buncheoleasy.auth.application.SocialLoginService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -105,7 +106,8 @@ class OAuth2LoginSuccessHandlerTest {
 
       given(profileExtractor.supports("kakao")).willReturn(true);
       given(profileExtractor.extract(principal)).willReturn(profile);
-      given(socialLoginService.login(any(SocialLoginCommand.class))).willReturn(tokenPair);
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willReturn(new SocialLoginResult(tokenPair, false));
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -130,6 +132,31 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
+    void 이번_로그인으로_계정이_생겼으면_프래그먼트에_가입_표시를_붙인다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      OAuth2UserProfile profile =
+          new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com");
+
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal)).willReturn(profile);
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willReturn(new SocialLoginResult(new TokenPair("access", "refresh"), true));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(FRONTEND_CALLBACK_URL + "#accessToken=access&signup=1");
+    }
+
+    @Test
     void JWT_는_인코딩_없이_프래그먼트에_원문_그대로_보존된다() throws Exception {
       // base64url([A-Za-z0-9_-]) + '.' 은 프래그먼트에서 이스케이프가 불필요하다는 전제를 고정한다.
       // given
@@ -144,7 +171,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(profileExtractor.supports("kakao")).willReturn(true);
       given(profileExtractor.extract(principal)).willReturn(profile);
       given(socialLoginService.login(any(SocialLoginCommand.class)))
-          .willReturn(new TokenPair(jwt, "refresh"));
+          .willReturn(new SocialLoginResult(new TokenPair(jwt, "refresh"), false));
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -172,7 +199,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(profileExtractor.supports("kakao")).willReturn(true);
       given(profileExtractor.extract(principal)).willReturn(profile);
       given(socialLoginService.login(any(SocialLoginCommand.class)))
-          .willReturn(new TokenPair("access", "refresh"));
+          .willReturn(new SocialLoginResult(new TokenPair("access", "refresh"), false));
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -214,7 +241,7 @@ class OAuth2LoginSuccessHandlerTest {
           .willReturn(new KakaoApiClient.KakaoUserInfo("김실명", "01012345678", "20~29", false));
       given(kakaoApiClient.getServiceTerms("kakao-access-token")).willReturn(terms);
       given(socialLoginService.login(any(SocialLoginCommand.class)))
-          .willReturn(new TokenPair("access", "refresh"));
+          .willReturn(new SocialLoginResult(new TokenPair("access", "refresh"), false));
 
       // when
       handler.onAuthenticationSuccess(
@@ -259,7 +286,7 @@ class OAuth2LoginSuccessHandlerTest {
       given(kakaoApiClient.getServiceTerms("kakao-access-token"))
           .willThrow(new RuntimeException("kapi 오류"));
       given(socialLoginService.login(any(SocialLoginCommand.class)))
-          .willReturn(new TokenPair("access", "refresh"));
+          .willReturn(new SocialLoginResult(new TokenPair("access", "refresh"), false));
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 

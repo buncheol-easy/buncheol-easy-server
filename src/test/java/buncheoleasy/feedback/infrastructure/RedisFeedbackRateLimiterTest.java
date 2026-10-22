@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
 import buncheoleasy.global.exception.domain.BusinessException;
+import buncheoleasy.global.infrastructure.redis.RedisFixedWindowCounter;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +29,8 @@ class RedisFeedbackRateLimiterTest {
     redisTemplate = mock(StringRedisTemplate.class);
     rateLimiter =
         new RedisFeedbackRateLimiter(
-            redisTemplate, new FeedbackRateLimitProperties(5, 60, Duration.ofMinutes(10)));
+            new RedisFixedWindowCounter(redisTemplate),
+            new FeedbackRateLimitProperties(5, 60, Duration.ofMinutes(10)));
   }
 
   @SuppressWarnings("unchecked")

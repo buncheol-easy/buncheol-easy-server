@@ -18,6 +18,7 @@ import buncheoleasy.admin.dto.response.AdminLoginResponse;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.infrastructure.redis.RedisFixedWindowCounter;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +60,7 @@ class AdminAuthServiceTest {
             adminRepository,
             passwordEncoder,
             jwtTokenProvider,
-            redisTemplate,
+            new RedisFixedWindowCounter(redisTemplate),
             5,
             Duration.ofMinutes(10));
   }

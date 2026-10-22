@@ -1,11 +1,15 @@
 package buncheoleasy.feedback.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.infrastructure.redis.RedisFixedWindowCounter;
@@ -14,6 +18,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -61,6 +66,22 @@ class RedisFeedbackRateLimiterTest {
 
     assertThatThrownBy(() -> rateLimiter.checkAndRecord("ip:매번-다른-키"))
         .isInstanceOf(BusinessException.class);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void 전역_키와_주체_키를_차례로_윈도우_밀리초와_함께_센다() {
+    // 키 이름이 바뀌면 배포 순간 기존 카운터와 이어지지 않아 윈도우 하나만큼 한도가 풀린다.
+    givenCounts(1L, 1L);
+
+    rateLimiter.checkAndRecord("ip:1.2.3.4");
+
+    ArgumentCaptor<List<String>> keys = ArgumentCaptor.forClass(List.class);
+    then(redisTemplate)
+        .should(times(2))
+        .execute(any(RedisScript.class), keys.capture(), eq("600000"));
+    assertThat(keys.getAllValues())
+        .containsExactly(List.of("FB:global"), List.of("FB:ip:1.2.3.4"));
   }
 
   @Test

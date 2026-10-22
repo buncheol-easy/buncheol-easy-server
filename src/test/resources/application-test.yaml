@@ -77,6 +77,13 @@ delivery:
     connect-timeout: 3s
     read-timeout: 5s
 
+ai:
+  draft:
+    # 로컬 .env 의 값과 무관하게 엔진 호출을 끈다 — 엔진 클라이언트·서비스 테스트는 설정을 직접 만든다.
+    enabled: false
+    worker-base-url: ""
+    worker-internal-token: ""
+
 payaction:
   # 웹훅 인증 경로를 테스트할 수 있게 더미 키를 채운다. base-url 은 비워 아웃바운드 호출은 꺼둔 상태로 남긴다.
   base-url: ""
@@ -99,3 +106,4 @@ slack:
       NEW_PARTICIPATION: ""
       SHIPPING_FEE_PAYBACK: ""
       FEEDBACK: ""
+      AI_USAGE: ""

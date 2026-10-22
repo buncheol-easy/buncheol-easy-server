@@ -16,10 +16,10 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -64,12 +64,8 @@ public class AiWorkerClient {
               .body(DraftResponse.class);
     } catch (RestClientResponseException e) {
       throw fromErrorResponse(e);
-    } catch (ResourceAccessException e) {
-      throw fromIoFailure(e);
     } catch (RestClientException e) {
-      // 200 인데 본문을 읽지 못했다 — 엔진은 이미 AI 를 불렀다.
-      log.error("AI 엔진 응답 해석 실패", e);
-      throw new BusinessException(ErrorCode.AI_DRAFT_GENERATION_FAILED, e);
+      throw fromTransportFailure(e);
     }
     if (response == null || response.draft() == null) {
       log.error("AI 엔진 응답에 초안이 없음");
@@ -116,24 +112,34 @@ public class AiWorkerClient {
   }
 
   /**
-   * 연결 자체가 안 됐으면 엔진은 아무 일도 하지 않았다(AI-005). 연결된 뒤의 실패(응답 대기 시간 초과·끊김)는 AI 를 이미 불렀을 수 있다(AI-004).
-   * 연결 시간 초과와 읽기 시간 초과는 같은 예외 타입이라 JDK 메시지("Connect timed out" / "Read timed out")로 가른다.
+   * 응답 상태를 받지 못한 실패. 연결 자체가 안 됐으면 엔진은 아무 일도 하지 않았다(AI-005). 연결된 뒤의 실패 — 응답 대기 시간 초과·끊김·본문을 읽지
+   * 못함 — 는 AI 를 이미 불렀을 수 있다(AI-004).
+   *
+   * <p>예외 타입이 아니라 가장 안쪽 원인으로 가른다. JDK 연결(HttpURLConnection)은 읽기 시간 초과를 {@code ResourceAccessException} 이
+   * 아니라 본문 추출 실패로 감싸 올리기도 한다. 연결 시간 초과와 읽기 시간 초과는 같은 예외 타입이라 JDK 메시지("Connect timed out" / "Read
+   * timed out")로 가른다.
    */
-  private BusinessException fromIoFailure(final ResourceAccessException e) {
-    Throwable cause = e.getCause();
-    boolean notConnected =
-        cause instanceof ConnectException
-            || cause instanceof UnknownHostException
-            || cause instanceof NoRouteToHostException
-            || cause instanceof SocketTimeoutException timeout
-                && timeout.getMessage() != null
-                && timeout.getMessage().toLowerCase(Locale.ROOT).contains("connect");
-    if (notConnected) {
+  private BusinessException fromTransportFailure(final RestClientException e) {
+    Throwable cause = NestedExceptionUtils.getMostSpecificCause(e);
+    if (isNotConnected(cause)) {
       log.error("AI 엔진에 연결하지 못함 - baseUrl={}", properties.workerBaseUrl(), e);
       return new BusinessException(ErrorCode.AI_DRAFT_UNAVAILABLE, e);
     }
-    log.error("AI 엔진 응답을 받지 못함(시간 초과·연결 끊김)", e);
+    if (cause instanceof SocketTimeoutException) {
+      log.error("AI 엔진 응답 대기 시간 초과 - readTimeout={}", properties.readTimeout(), e);
+      return new BusinessException(ErrorCode.AI_DRAFT_GENERATION_FAILED, e);
+    }
+    log.error("AI 엔진 응답을 끝까지 받지 못했거나 해석하지 못함", e);
     return new BusinessException(ErrorCode.AI_DRAFT_GENERATION_FAILED, e);
+  }
+
+  private static boolean isNotConnected(final Throwable cause) {
+    return cause instanceof ConnectException
+        || cause instanceof UnknownHostException
+        || cause instanceof NoRouteToHostException
+        || cause instanceof SocketTimeoutException timeout
+            && timeout.getMessage() != null
+            && timeout.getMessage().toLowerCase(Locale.ROOT).contains("connect");
   }
 
   /** 본문이 엔진 오류 모양이 아니면(게이트웨이 HTML·검증 오류 등) 코드 없이 상태로만 판단한다. */

@@ -579,8 +579,10 @@ class AiDraftServiceTest {
       service.createDraft(USER_ID, URL_REQUEST);
       service.createDraft(USER_ID, URL_REQUEST);
 
+      // 99·101 에서는 아무 이벤트도 없어야 한다 — 기준을 넘긴 뒤 매 요청마다 알리면 채널이 도배된다.
+      then(eventPublisher).should(times(1)).publishEvent(any(Object.class));
       then(eventPublisher)
-          .should(times(1))
+          .should()
           .publishEvent(new AiDraftDailyTotalReachedEvent(TODAY.date(), 100L));
     }
 

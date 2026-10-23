@@ -32,6 +32,8 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.test.context.ActiveProfiles;
@@ -74,11 +76,26 @@ class GlobalExceptionHandlerTest {
 
   private Captured perform(final CapturedOutput output, final MockHttpServletRequestBuilder request)
       throws Exception {
+    return perform(output, mockMvc, request);
+  }
+
+  private static Captured perform(
+      final CapturedOutput output, final MockMvc mvc, final MockHttpServletRequestBuilder request)
+      throws Exception {
     final String mark = "test-mark-" + UUID.randomUUID();
     System.out.println(mark);
-    final ResultActions result = mockMvc.perform(request);
+    final ResultActions result = mvc.perform(request);
     final String all = output.getAll();
     return new Captured(result, all.substring(all.lastIndexOf(mark) + mark.length()));
+  }
+
+  /*
+  다시 던질 때 같은 예외 인스턴스가 아니면(새 예외로 감싸면) 상태는 그대로인데
+  「Failure in @ExceptionHandler」 WARN·스택이 새로 찍힌다.
+   */
+  private static void assertNoNewLogs(final Captured captured) {
+    assertThat(captured.errorLineCount()).isZero();
+    assertThat(captured.logs()).doesNotContain("Failure in @ExceptionHandler");
   }
 
   @Nested
@@ -179,6 +196,24 @@ class GlobalExceptionHandlerTest {
           .andExpect(jsonPath("$.code").value("C-001"));
       assertThat(captured.errorLineCount()).isZero();
     }
+
+    @Test
+    void 다시_던질_예외에_감싸여도_원인_풀기가_먼저다(final CapturedOutput output) throws Exception {
+      given(bannerQueryService.getBanners())
+          .willThrow(
+              new HttpMessageNotReadableException(
+                  "JSON 변환 실패",
+                  new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND),
+                  new MockHttpInputMessage(new byte[0])));
+
+      final Captured captured = perform(output, get(BANNERS));
+
+      captured
+          .result()
+          .andExpect(status().isNotFound())
+          .andExpect(jsonPath("$.code").value("BCH-043"));
+      assertThat(captured.errorLineCount()).isZero();
+    }
   }
 
   @Nested
@@ -190,7 +225,7 @@ class GlobalExceptionHandlerTest {
           .result()
           .andExpect(status().is(expectedStatus))
           .andExpect(content().string(not(containsString("C-002"))));
-      assertThat(captured.errorLineCount()).isZero();
+      assertNoNewLogs(captured);
     }
 
     @Test
@@ -260,7 +295,7 @@ class GlobalExceptionHandlerTest {
       final Captured captured = perform(output, get(BANNERS));
 
       captured.result().andExpect(content().string(not(containsString("C-002"))));
-      assertThat(captured.errorLineCount()).isZero();
+      assertNoNewLogs(captured);
     }
   }
 
@@ -271,32 +306,42 @@ class GlobalExceptionHandlerTest {
     @Autowired private WebApplicationContext context;
     @Autowired private JwtTokenProvider jwtTokenProvider;
 
-    private ResultActions performWithSecurity(final MockHttpServletRequestBuilder request)
-        throws Exception {
+    private Captured performWithSecurity(
+        final CapturedOutput output, final MockHttpServletRequestBuilder request) throws Exception {
       final MockMvc secured =
           MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
-      return secured.perform(
+      return perform(
+          output,
+          secured,
           request.header(
               HttpHeaders.AUTHORIZATION, "Bearer " + jwtTokenProvider.createAccessToken(1L)));
     }
 
     @Test
-    void AccessDeniedException_은_403() throws Exception {
+    void AccessDeniedException_은_403(final CapturedOutput output) throws Exception {
       given(bannerQueryService.getBanners()).willThrow(new AccessDeniedException("거부"));
 
-      performWithSecurity(get(BANNERS))
+      final Captured captured = performWithSecurity(output, get(BANNERS));
+
+      captured
+          .result()
           .andExpect(status().isForbidden())
           .andExpect(content().string(not(containsString("C-002"))));
+      assertNoNewLogs(captured);
     }
 
     @Test
-    void AuthenticationException_은_401() throws Exception {
+    void AuthenticationException_은_401(final CapturedOutput output) throws Exception {
       given(bannerQueryService.getBanners())
           .willThrow(new InsufficientAuthenticationException("인증 부족"));
 
-      performWithSecurity(get(BANNERS))
+      final Captured captured = performWithSecurity(output, get(BANNERS));
+
+      captured
+          .result()
           .andExpect(status().isUnauthorized())
           .andExpect(jsonPath("$.code").value("AUTH-005"));
+      assertNoNewLogs(captured);
     }
   }
 }

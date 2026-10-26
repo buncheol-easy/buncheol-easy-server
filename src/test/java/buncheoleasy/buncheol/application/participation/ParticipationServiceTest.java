@@ -16,7 +16,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
-import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
@@ -98,6 +98,7 @@ class ParticipationServiceTest {
   @Mock private UserDomainService userDomainService;
   @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
   @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  @Mock private PaymentStarter paymentStarter;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -868,7 +869,7 @@ class ParticipationServiceTest {
   }
 
   @Nested
-  @DisplayName("C2C 신청 정원 충족 테스트")
+  @DisplayName("C2C 신청 정원 충족(입금 단계 시작) 테스트")
   class C2cBuncheolFullTest {
 
     private Buncheol stubC2cRecruitingBuncheol() {
@@ -896,61 +897,40 @@ class ParticipationServiceTest {
       return buncheol;
     }
 
+    // 정원 충족 판정(열린 자리 = 살아 있는 참여, 최소 인원)은 PaymentStarter 가 한다(PaymentStarterTest). 신청 경로는 잠금으로
+    // 읽은 분철을 넘겨 같은 트랜잭션에서 판정을 맡긴다 — 마지막 열린 자리를 채운 요청 안에서 입금 단계가 시작된다.
     @Test
-    void 이_신청으로_전_슬롯이_채워지면_신청_인원을_사람_수로_담아_정원_충족_이벤트를_발행한다() {
-      stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(Collections.nCopies(3, buncheolMember()));
-      // 3슬롯을 2명이 채움(한 명이 2슬롯) — 신청 인원은 distinct 참여자 수여야 한다.
-      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
-          .willReturn(List.of(100L, 100L, 200L));
+    void 신청_뒤_잠금으로_읽은_분철로_입금_단계_시작_판정을_맡긴다() {
+      Buncheol buncheol = stubC2cRecruitingBuncheol();
 
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
       then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
-      then(eventPublisher)
-          .should()
-          .publishEvent(
-              argThat(
-                  (Object event) ->
-                      event instanceof BuncheolFullEvent full && full.applicantCount() == 2));
+      then(paymentStarter).should().startIfFull(buncheol, NOW);
+      // 응답 모양은 그대로다 — 입금 단계가 시작돼도 계좌·기한은 알림톡으로 안내한다.
+      assertThat(result.dueAt()).isNull();
+      assertThat(result.hostAccount()).isNull();
     }
 
-
-    // 개최자가 닫은 자리는 채워질 수 없다 — 정원에서 빼지 않으면 열린 자리가 다 차도 알림이 영영 안 나간다.
+    // 중간 슬롯에서는 남은 슬롯이 아직 비어 있어 정원이 찰 수 없다 — 비싼 판정을 마지막 슬롯에서 한 번만 돌린다.
     @Test
-    void 닫힌_자리는_정원에서_빼고_열린_자리가_다_차면_정원_충족_이벤트를_발행한다() {
-      stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(
-              List.of(buncheolMember(), buncheolMember(), closedMember(SECOND_MEMBER_ID)));
-      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
-          .willReturn(List.of(100L, 200L));
+    void 다슬롯_신청은_마지막_슬롯에서만_입금_단계_시작을_판정한다() {
+      Buncheol buncheol = stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(SECOND_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE));
 
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+      participationService.participate(
+          BUNCHEOL_ID,
+          PARTICIPANT_ID,
+          new ParticipateRequest(
+              null, List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID), SHIPPING_ADDRESS_ID, null, null));
 
-      then(eventPublisher).should().publishEvent(any(BuncheolFullEvent.class));
-      // 🔴 분모(열린 자리 수)는 잠금 읽기로 센다 — 스냅샷으로 세면 락 대기 중 닫히거나 다시 열린 자리를 잘못 센다.
-      then(buncheolMemberDomainService).should().findAllByBuncheolIdForShare(BUNCHEOL_ID);
-      then(buncheolMemberDomainService).should(never()).findAllByBuncheolId(anyLong());
+      then(paymentStarter).should(times(1)).startIfFull(buncheol, NOW);
     }
 
     @Test
-    void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
-      stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(Collections.nCopies(3, buncheolMember()));
-      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
-          .willReturn(List.of(100L, 200L));
-
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
-
-      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
-      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
-    }
-
-    @Test
-    void 추가_모집_참여는_정원_충족_판정을_하지_않는다() {
+    void 추가_모집_참여는_입금_단계_시작_판정을_하지_않는다() {
       // 정원 충족 판정이 RECRUITING 한정이라는 전제는 락 순서(분철 행 → 참여 행) 규약의 근거이기도 하다.
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
@@ -977,10 +957,7 @@ class ParticipationServiceTest {
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
       then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
-      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
-      then(participationDomainService)
-          .should(never())
-          .findActiveParticipantIdsByBuncheolIdForUpdate(anyLong());
+      then(paymentStarter).shouldHaveNoInteractions();
     }
   }
 
@@ -1015,8 +992,6 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember()));
     }
 
     /** 추가 모집(AWAITING_PAYMENT) INSERT 성공. */
@@ -1224,7 +1199,7 @@ class ParticipationServiceTest {
               eq(SHIPPING_ADDRESS_ID),
               eq(SHIPPING_FEE),
               any(),
-              eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
+              eq(NOW.plus(PaymentStarter.PAYMENT_TIME_LIMIT)),
               eq(NOW));
     }
 
@@ -1344,7 +1319,7 @@ class ParticipationServiceTest {
                       PARTICIPANT_ACCOUNT.bank(),
                       PARTICIPANT_ACCOUNT.account(),
                       PARTICIPANT_ACCOUNT.holder())),
-              eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
+              eq(NOW.plus(PaymentStarter.PAYMENT_TIME_LIMIT)),
               eq(NOW));
       // 추가 모집에서 상속은 구조적으로 불가능하다. 그 판정은 이제 findInheritanceSource 안에 있고
       // (쓰기·읽기 공유), 거기서 RECRUITING 이 아니면 조회 없이 empty 를 낸다 —
@@ -1394,8 +1369,6 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember()));
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
@@ -2211,8 +2184,6 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember()));
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 

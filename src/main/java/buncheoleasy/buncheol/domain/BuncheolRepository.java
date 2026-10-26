@@ -71,12 +71,11 @@ public interface BuncheolRepository {
    */
   List<Long> findGroupIdsByBuncheolCountSince(Instant since, int limit);
 
-  /** {@code now} 기준 deadline 이 지난 RECRUITING 분철 id 를 deadline 오름차순으로 최대 {@code limit} 개 조회. 자동 마감 폴링용. */
   /**
-   * 마감 판정 대상 모집중 분철 id. LEGACY 는 deadline 경과 즉시, C2C 는 {@code c2cGraceCutoff}(= now - 확정 유예 48h)
-   * 이전 deadline 만 대상이다 — 유예 중 C2C 분철이 폴링 배치를 잠식하지 않게 쿼리에서 거른다 (docs/46 §7.1-5).
+   * {@code now} 기준 deadline 이 지난 RECRUITING 분철 id 를 deadline 오름차순으로 최대 {@code limit} 개 조회. 자동 마감 폴링용.
+   * 운영진 분철과 회원 개최 모두 마감 즉시 대상이다.
    */
-  List<Long> findRecruitingIdsPastDeadline(Instant now, Instant c2cGraceCutoff, int limit);
+  List<Long> findRecruitingIdsPastDeadline(Instant now, int limit);
 
   /**
    * 분철이 {@code expectedStatus} 일 때만 {@code newStatus} 로 전이하는 CAS UPDATE ({@code finalized_at}
@@ -91,7 +90,7 @@ public interface BuncheolRepository {
       Long buncheolId, BuncheolStatus expectedStatus, BuncheolStatus newStatus, Instant now);
 
   /**
-   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED, {@code finalized_at} 기록). {@link #finalizeIfStatus} 와 달리
+   * 회원 개최 마감 미달 취소 CAS (RECRUITING → CANCELLED, {@code finalized_at} 기록). {@link #finalizeIfStatus} 와 달리
    * <b>마감 시각을 다시 본다</b>({@code deadline <= now}) — 폴링이 옛 마감으로 고른 뒤 개최자가 마감을 연장했으면 0행이다.
    * C2C 분철에만 적용된다. {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
    *
@@ -124,7 +123,7 @@ public interface BuncheolRepository {
   // --- C2C 플로우 CAS (docs/46 §4) ---
 
   /**
-   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * 회원 개최 입금 단계 시작 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 그 시점 개최자 계좌 스냅샷을 함께 기록한다.
    * C2C 분철에만 적용된다(flow_type 조건). {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
    *
    * @return 갱신된 행 수 (0 이면 RECRUITING 이 아니거나 C2C 분철이 아님)

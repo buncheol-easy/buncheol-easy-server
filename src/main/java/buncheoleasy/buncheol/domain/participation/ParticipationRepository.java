@@ -108,10 +108,10 @@ public interface ParticipationRepository {
   int releaseBundleIfDue(Long bundleId, Instant now);
 
   /**
-   * 단일 분철의 활성 참여별 참여자 id 잠금 조회(current read, 행당 1건 — 다슬롯 참여자는 중복 포함) — RR 스냅샷이 아닌 최신 커밋 기준이
-   * 필요한 C2C 정원 충족 판정용. 리스트 크기 = 채워진 슬롯 수, distinct = 신청 인원.
+   * 단일 분철의 살아 있는 참여 <b>잠금 조회</b>(배타 잠금, 최신 커밋 기준). 입금 단계 시작·진행 확정처럼 센 뒤 바로 그 행을 바꾸는 판정용.
+   * 호출 측 {@code @Transactional} 필수.
    */
-  List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(Long buncheolId);
+  List<Participation> findActiveByBuncheolIdForUpdate(Long buncheolId);
 
   /**
    * 단일 분철의 취소된 참여 전체 — 개최자 관리 화면에서 환불 계좌를 보여주기 위한 목록. 취소되면 활성 참여 조회에서 빠져 환불 계좌에 닿을 길이 없어지는데,
@@ -184,7 +184,7 @@ public interface ParticipationRepository {
   boolean linkBundle(Long participationId, Long bundleId, Instant now);
 
   /**
-   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1).
+   * 입금 단계 시작: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 ({@code PaymentStarter}).
    *
    * @return 전이된 참여 수
    */

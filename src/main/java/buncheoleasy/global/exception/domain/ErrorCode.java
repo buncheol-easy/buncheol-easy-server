@@ -149,7 +149,7 @@ public enum ErrorCode {
   // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
   BUNCHEOL_FLOW_NOT_SUPPORTED(
       "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  // BCH-085 는 개최자 「성사 확정」 실패로 배포됐다가 그 단계가 없어져 폐기된 번호라 재사용하지 않는다.
   PARTICIPATION_CANCEL_NOT_ALLOWED(
       "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
   PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED(
@@ -159,10 +159,7 @@ public enum ErrorCode {
   // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
   BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
       "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
-  // 성사 확정(BCH-085)과 분리한다 — 개최자가 누른 건 "진행 확정"인데 "성사 확정" 실패라고 뜨면
-  // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
-  BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
-      "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-090", "현재 상태에서는 진행 확정을 할 수 없어요.", HttpStatus.CONFLICT),
   // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·제외·보냈어요·자리 빼기와 넣기 등
   // C2C 전용 액션 여러 곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
   // 엉뚱한 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.

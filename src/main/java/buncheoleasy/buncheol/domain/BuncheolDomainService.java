@@ -112,10 +112,10 @@ public class BuncheolDomainService {
   }
 
   /**
-   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED — 확정 유예 경과 docs/46 §7.1-5, 마감 시각 인원 미달). 마감이 아직 안 지났으면
-   * (그 사이 연장됨) 취소하지 않는다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수.
+   * 회원 개최 마감 미달 취소 CAS (RECRUITING → CANCELLED). 마감이 아직 안 지났으면(그 사이 연장됨) 취소하지 않는다 — 포트 javadoc
+   * 참고. 호출 측 {@code @Transactional} 필수.
    */
-  public boolean cancelUnconfirmedC2c(final Long buncheolId, final Instant now) {
+  public boolean cancelBelowMinHeadcount(final Long buncheolId, final Instant now) {
     return buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, now) > 0;
   }
 
@@ -127,7 +127,7 @@ public class BuncheolDomainService {
   // --- C2C 플로우 전이 (docs/46 §4) ---
 
   /**
-   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * 회원 개최 입금 단계 시작 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 그 시점 개최자 계좌 스냅샷을 함께 기록한다.
    * 호출 측 {@code @Transactional} 필수.
    *
    * @return 전이에 성공하면 true (false 면 RECRUITING 이 아니거나 C2C 분철이 아님)

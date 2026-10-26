@@ -166,12 +166,12 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("participantId") Long participantId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 
-  /** 활성 참여의 참여자 id 잠금 조회(current read, 행당 1건) — 정원 충족 판정용. 집계 + FOR UPDATE 는 H2 미지원이라 프로젝션으로 세운다. */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
-      "SELECT p.participantId FROM Participation p "
-          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses")
-  List<Long> findParticipantIdsByBuncheolIdAndStatusInForUpdate(
+      "SELECT p FROM Participation p "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses "
+          + "ORDER BY p.createdAt ASC, p.id ASC")
+  List<Participation> findByBuncheolIdAndStatusInForUpdate(
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 
@@ -382,7 +382,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 
-  /** C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). */
+  /** 입금 단계 시작: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (PaymentStarter). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "

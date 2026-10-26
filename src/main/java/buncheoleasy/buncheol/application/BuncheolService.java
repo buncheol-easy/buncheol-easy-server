@@ -2,7 +2,6 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
 import buncheoleasy.buncheol.application.image.ImageFile;
-import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
@@ -18,7 +17,6 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
@@ -30,7 +28,6 @@ import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
-import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
@@ -48,6 +45,7 @@ public class BuncheolService {
 
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final PaymentStarter paymentStarter;
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
@@ -366,54 +364,6 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 개최자 성사 확정 (RECRUITING → PAYMENT_COLLECTING, docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금
-   * 대기로 전이하고, 확정 시점 개최자 계좌를 분철에 스냅샷한다(§4.7-B1). 정원 미달이어도 개최자 재량으로 확정할 수 있고(§7.1-2), deadline
-   * 전 조기 확정도 허용한다(§4.7-E2) — 미달 경고·재확인은 FE 가 담당한다.
-   */
-  @Transactional
-  public BuncheolConfirmResult confirmRecruitment(final Long hostId, final Long buncheolId) {
-    final Instant now = Instant.now(clock);
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    buncheol.validateOwner(hostId);
-    if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
-    }
-
-    // 입금 안내를 보낼 계좌 필수 — 개최 시점에도 검증하지만 이후 삭제됐을 수 있어 확정 시점에 재검증하고 스냅샷 소스로 쓴다.
-    userDomainService.requireBankAccountRegistered(hostId);
-    BankAccount hostAccount = userDomainService.getUser(hostId).getBankAccount();
-
-    Instant paymentDueAt = now.plus(ParticipationService.C2C_PAYMENT_WINDOW);
-    if (!buncheolDomainService.startCollecting(buncheolId, paymentDueAt, hostAccount, now)) {
-      // 이미 확정·취소됐거나(중복 클릭·유예 취소 경합) RECRUITING 이 아님.
-      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
-    }
-
-    // 전이 대상 스냅샷 — 알림 이벤트에 실어 리스너가 "커밋 시점 전이 건"만 발송하게 한다 (실행 시점 재조회는 그 사이
-    // 들어온 추가 모집 참여와 중복 발송된다). 분철 CAS 선점 후라 이 목록과 아래 일괄 전이는 같은 집합이다.
-    List<Long> appliedIds =
-        participationDomainService.findActiveByBuncheolId(buncheolId).stream()
-            .filter(participation -> participation.getStatus() == ParticipationStatus.APPLIED)
-            .map(Participation::getId)
-            .toList();
-
-    int awaitingCount =
-        participationDomainService.startPaymentCollecting(buncheolId, paymentDueAt, now);
-    if (awaitingCount == 0) {
-      // 신청자가 전부 취소된 직후 — 확정이 무의미하므로 롤백해 RECRUITING 을 유지한다.
-      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
-    }
-    // 신청 구간의 묶음은 기한 없이 열려 있다 — 참여 행과 같은 기한을 묶음에도 채운다. 비워 두면 나중에 붙을
-    // 개최자 「제외」 기한 가드가 fail-open 된다(기한 안인데도 참여자를 뺄 수 있게 된다 — docs/71 §8-1).
-    participationBundleDomainService.assignDueAtByBuncheolId(buncheolId, paymentDueAt, now);
-
-    // 커밋 후 성사 확정·입금 안내 알림톡(신청자 전원, 유저 단위 합산 — docs/46 §4.7-A3)과 수신함 기록을 트리거한다.
-    eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId, appliedIds));
-    return new BuncheolConfirmResult(
-        buncheolId, BuncheolStatus.PAYMENT_COLLECTING, paymentDueAt, awaitingCount);
-  }
-
-  /**
    * C2C 입금 수집 종료(부분 확정 — docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행하겠다는 개최자
    * 선택이다. 미입금 활성 참여(입금 대기·보냈어요)가 남아 있거나 확정 참여가 없으면 CAS 조건에 막혀 실패한다 — 보냈어요 잔여는 입금확인하거나
    * 기한 뒤 「제외」로 먼저 정리해야 한다(§4.7-E1).
@@ -428,7 +378,7 @@ public class BuncheolService {
 
     if (!buncheolDomainService.confirmIfAllCollected(buncheolId, Instant.now(clock))) {
       // 성사 확정(confirmRecruitment)과 다른 단계라 전용 코드를 쓴다 (docs/53 Q-12).
-      throw new BusinessException(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
+      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
     buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
   }
@@ -517,12 +467,11 @@ public class BuncheolService {
    * 주세요」를 권하면 안 된다.
    *
    * <p>모집중에 빼서 열린 자리 수가 최소 인원보다 작아지면 최소 인원을 열린 자리 수로 낮춘다. 그대로 두면 C2C 는 마감 정각에 인원
-   * 미달로 즉시 취소되어 신청자까지 전원 취소된다.
+   * 미달로 즉시 취소되어 신청자까지 전원 취소된다. 빼고 나니 남은 열린 자리가 모두 신청됐으면 같은 트랜잭션에서 입금 단계를 시작한다
+   * ({@link PaymentStarter#startIfFull}, 신청 경로와 같은 판정).
    *
    * <p>락 순서는 분철 행(X) → 자리 행(X) → 참여·참여 코드 행(S, DELETE·닫기 CAS 의 NOT EXISTS) 이다. C2C 신청(분철 X → 자리
-   * S → 참여 INSERT)·개최자 취소 CAS 와 같은 「분철 → 자리 → 참여」 방향이라 신청과는 분철 행에서 한 줄로 선다. 입금확인(참여 →
-   * 분철)과는 역방향이지만, 겹치려면 개최자가 같은 자리의 입금확인과 빼기를 동시에 눌러야 하고 실패 모드는 기존과 같은 데드락
-   * 롤백이다(ParticipationService#publishFullIfAllSlotsApplied).
+   * S → 참여 INSERT)·개최자 취소와 같은 「분철 → 자리 → 참여」 방향이라 분철 행에서 한 줄로 선다.
    */
   @Transactional
   public void removeMember(final Long hostId, final Long buncheolId, final Long buncheolMemberId) {
@@ -562,6 +511,10 @@ public class BuncheolService {
     // 모집중 여부는 UPDATE 조건이 판정한다(입금 수집중이면 0행). 위 DELETE·닫기가 영속성 컨텍스트를 비웠으므로 엔티티
     // 더티체킹이 아니라 UPDATE 로 쓴다.
     buncheolDomainService.lowerMinHeadcountToSlotCount(buncheolId, openSlotCount - 1, now);
+
+    // 빼고 나니 남은 열린 자리가 모두 신청됐으면 이 요청 안에서 입금 단계가 시작된다. 방금 낮춘 최소 인원을 봐야 하므로
+    // 잠금 읽기로 다시 읽는다(위 UPDATE 들이 영속성 컨텍스트를 비웠다 — 앞의 인스턴스는 낡았다).
+    paymentStarter.startIfFull(buncheolDomainService.getLatestBuncheolForUpdate(buncheolId), now);
   }
 
   /**

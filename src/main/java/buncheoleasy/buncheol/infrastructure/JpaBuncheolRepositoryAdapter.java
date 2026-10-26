@@ -187,16 +187,9 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public List<Long> findRecruitingIdsPastDeadline(
-      final Instant now, final Instant c2cGraceCutoff, final int limit) {
+  public List<Long> findRecruitingIdsPastDeadline(final Instant now, final int limit) {
     return jpaBuncheolRepository.findIdsByStatusAndDeadlineBefore(
-        BuncheolStatus.RECRUITING,
-        FlowType.LEGACY,
-        FlowType.C2C,
-        now,
-        c2cGraceCutoff,
-        ParticipationStatus.active(),
-        PageRequest.of(0, limit));
+        BuncheolStatus.RECRUITING, FlowType.LEGACY, FlowType.C2C, now, PageRequest.of(0, limit));
   }
 
   @Override

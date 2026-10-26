@@ -8,7 +8,6 @@ import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -23,24 +22,18 @@ public class BuncheolAutoCloseService {
   // 한 폴링 주기에 처리할 분철 수 상한. 마감이 몰려도 트랜잭션·조회 부하를 제한하고, 남은 분철은 다음 주기에 처리한다.
   private static final int BATCH_SIZE = 100;
 
-  // C2C 확정 유예 — 신청 마감(deadline) 후 이 시간 안에 개최자가 확정하지 않으면 미성사 자동 취소한다 (docs/46 §7.1-5).
-  private static final Duration C2C_CONFIRM_GRACE = Duration.ofHours(48);
-
   private final BuncheolRepository buncheolRepository;
   private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final PaymentStarter paymentStarter;
   private final DeliveryDomainService deliveryDomainService;
   private final ApplicationEventPublisher eventPublisher;
 
-  /**
-   * {@code now} 기준 마감 판정 대상 RECRUITING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. C2C 는 확정
-   * 유예(48h)까지 지난 분철만 대상이다 — 유예 중 분철이 배치를 잠식하지 않게 쿼리에서 거른다.
-   */
+  /** {@code now} 기준 마감이 지난 RECRUITING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
   public List<Long> findExpiredBuncheolIds(final Instant now) {
-    return buncheolRepository.findRecruitingIdsPastDeadline(
-        now, now.minus(C2C_CONFIRM_GRACE), BATCH_SIZE);
+    return buncheolRepository.findRecruitingIdsPastDeadline(now, BATCH_SIZE);
   }
 
   /** {@code now} 기준 일괄 입금 기한이 지난 PAYMENT_COLLECTING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
@@ -78,11 +71,11 @@ public class BuncheolAutoCloseService {
    */
   @Transactional
   public boolean finalizeExpired(final Long buncheolId, final Instant now) {
-    // C2C 는 마감 판정 규칙이 다르다 — deadline 은 신청 마감일 뿐이고, 확정 유예(48h) 안에는 개최자의 성사 확정을
-    // 기다린다. 분기 없이 LEGACY 판정을 태우면 전원 무입금 신청(APPLIED)이라 정각에 전부 미달 취소돼 버린다 (docs/46 §1.2).
+    // 회원 개최는 마감 판정 규칙이 다르다 — 신청(무입금) 인원으로 입금 단계를 시작하거나 미달 취소한다. 분기 없이 운영진
+    // 판정(입금확인 인원)을 태우면 전원 무입금 신청(APPLIED)이라 정각에 전부 미달 취소돼 버린다.
     Buncheol target = buncheolDomainService.getBuncheol(buncheolId);
     if (target.isC2c()) {
-      return finalizeExpiredC2c(target, now);
+      return finalizeExpiredC2c(buncheolId, now);
     }
 
     // 입금확인 인원 카운트·최소 인원 비교·상태 전이를 단일 CAS(CASE+서브쿼리)로 원자화한다. 카운트를 별도 SELECT 로 먼저 읽으면
@@ -103,40 +96,24 @@ public class BuncheolAutoCloseService {
   }
 
   /**
-   * C2C 방치 분철 정리 (docs/46 §7.1-5). deadline+48h 유예 안에는 손대지 않고(개최자 확정 대기 — 확정되면
-   * PAYMENT_COLLECTING 으로 바뀌어 폴링 대상에서 빠진다), 유예가 지나면 미성사 취소(CANCELLED)하고 신청자 전원에게 취소를 알린다.
-   * 돈이 오간 적 없는 단계라 환불은 발생하지 않는다.
+   * 회원 개최 마감 판정. 신청 자리가 최소 인원 이상이면 입금 단계를 시작하고({@link PaymentStarter}), 미달이면 취소하고 신청자 전원에게
+   * 알린다. 미달 취소는 돈이 오간 적 없는 단계라 환불이 없다. 시작과 미달 취소를 한 트랜잭션, 분철 행 잠금 아래에서 판정한다.
    */
-  private boolean finalizeExpiredC2c(final Buncheol buncheol, final Instant now) {
+  private boolean finalizeExpiredC2c(final Long buncheolId, final Instant now) {
+    // 분철 행을 잠그고 최신 값으로 다시 읽는다 — 첫 조회(finalizeExpired)는 잠금 전이라 그 사이 신청·마감 연장·삭제를 못 본다.
+    Buncheol buncheol = buncheolDomainService.getLatestBuncheolForUpdate(buncheolId);
     // 신청자 0명이면 개최자가 마감을 연장할 수 있다 — 폴링이 옛 마감으로 골랐어도 지금 마감이 안 지났으면 판정하지 않는다.
-    // 이 읽기는 낡을 수 있어 최종 판정은 아래 취소 CAS 의 마감 조건이다.
-    if (buncheol.getDeadline().isAfter(now)) {
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING || buncheol.getDeadline().isAfter(now)) {
       return false;
     }
-    // 🔴 최소 인원 미달이면 유예를 기다리지 않는다 (2026-08-31 사용자 결정). 개최자가 확정을 눌러도 인원이
-    // 채워지지 않는 분철을 48시간 붙잡아 두면, 참여자는 그동안 자기 자리가 살아 있는 줄 안다. LEGACY 가 마감
-    // 시각에 인원 미달로 바로 취소하는 것과 같은 규칙이다.
-    //
-    // 신청 인원으로 센다 — C2C 는 확정 전이라 입금확인 건이 0 이다(LEGACY 는 CONFIRMED 로 센다).
-    boolean belowMinHeadcount =
-        participationDomainService.findActiveByBuncheolId(buncheol.getId()).size()
-            < buncheol.getMinHeadcount();
-    // 폴링 쿼리가 대상만 주지만, cron 경계·수동 호출 대비 이중 방어로 조건을 재확인한다.
-    if (!belowMinHeadcount
-        && now.isBefore(buncheol.getDeadline().plus(C2C_CONFIRM_GRACE))) {
+    if (paymentStarter.startAtDeadline(buncheol, now)) {
+      return true;
+    }
+    if (!buncheolDomainService.cancelBelowMinHeadcount(buncheolId, now)) {
+      // 잠금 아래라 오면 안 되는 경우다. 참여·알림은 건드리지 않고 다음 폴링에 맡긴다.
       return false;
     }
-    if (!buncheolDomainService.cancelUnconfirmedC2c(buncheol.getId(), now)) {
-      // 그 사이 확정·취소됐거나 마감이 연장됨(CAS 경합). 참여·알림은 건드리지 않고 다음 폴링에 맡긴다.
-      return false;
-    }
-    // 사유를 가른다 — 참여자에게 "인원이 모이지 않았어요" 와 "개최자가 확정하지 않았어요" 는 다른 안내다.
-    finalizeAsCancelled(
-        buncheol.getId(),
-        now,
-        belowMinHeadcount
-            ? BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET
-            : BuncheolCancelReason.NOT_FINALIZED);
+    finalizeAsCancelled(buncheolId, now, BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET);
     return true;
   }
 
@@ -148,8 +125,8 @@ public class BuncheolAutoCloseService {
     buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
   }
 
-  // 미성사 취소: 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 취소하고 참여자에게 사유와 함께 취소 알림을 보낸다.
-  // LEGACY 는 최소 인원 미달, C2C 는 개최자 미확정 마감(NOT_FINALIZED)이 사유다. 입금확인된 참여의 환불은 오프라인 처리.
+  // 미달 취소: 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 취소하고 참여자에게 사유와 함께 취소 알림을 보낸다.
+  // 운영진 분철은 입금확인 인원, 회원 개최는 신청 인원이 최소 인원에 못 미친 경우다. 입금확인된 참여의 환불은 오프라인 처리.
   private void finalizeAsCancelled(
       final Long buncheolId, final Instant now, final BuncheolCancelReason reason) {
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);

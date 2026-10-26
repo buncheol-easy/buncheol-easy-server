@@ -280,27 +280,6 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
-  @DisplayName("C2C 정원 충족(C2C_BUNCHEOL_FULL)")
-  class C2cBuncheolFull {
-
-    @Test
-    @DisplayName("개최자 닉네임·분철명·신청 인원을 치환하고 미치환 토큰을 남기지 않는다")
-    void render() {
-      Map<String, String> variables =
-          Map.of("닉네임", "개최자닉", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5");
-
-      String rendered = AlimtalkTemplate.C2C_BUNCHEOL_FULL.render(variables);
-
-      assertThat(rendered)
-          .startsWith("개최자닉님, 개최하신 분철의 정원이 모두 찼어요!")
-          .contains("진행 확정을 눌러주시면")
-          .contains("세븐틴 미니 12집 분철")
-          .contains("▶ 신청 인원: 5명")
-          .doesNotContain("#{");
-    }
-  }
-
-  @Nested
   @DisplayName("C2C 입금 확인 요청(C2C_PAYMENT_SENT)")
   class C2cPaymentSent {
 

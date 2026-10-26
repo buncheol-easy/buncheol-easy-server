@@ -205,12 +205,12 @@ class BuncheolDomainServiceTest {
       assertThat(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).isFalse();
     }
 
-    // 자동 마감 취소는 범용 finalizeIfStatus 가 아니라 마감 시각을 다시 보는 전용 CAS 를 쓴다.
+    // 마감 미달 취소는 범용 finalizeIfStatus 가 아니라 마감 시각을 다시 보는 전용 CAS 를 쓴다.
     @Test
-    void C2C_자동_마감_취소는_마감_조건이_있는_전용_CAS_에_위임한다() {
+    void 회원_개최_마감_미달_취소는_마감_조건이_있는_전용_CAS_에_위임한다() {
       given(buncheolRepository.cancelExpiredC2cIfRecruiting(BUNCHEOL_ID, NOW)).willReturn(0);
 
-      assertThat(buncheolDomainService.cancelUnconfirmedC2c(BUNCHEOL_ID, NOW)).isFalse();
+      assertThat(buncheolDomainService.cancelBelowMinHeadcount(BUNCHEOL_ID, NOW)).isFalse();
       then(buncheolRepository).should(never()).finalizeIfStatus(any(), any(), any(), any());
     }
 

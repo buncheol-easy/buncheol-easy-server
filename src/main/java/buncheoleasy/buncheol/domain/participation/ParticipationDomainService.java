@@ -108,9 +108,9 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId);
   }
 
-  /** 분철의 활성 참여별 참여자 id 잠금 조회(current read) — C2C 정원 충족 판정용, 포트 javadoc 참고. */
-  public List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(final Long buncheolId) {
-    return participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+  /** 분철의 살아 있는 참여 잠금 조회(최신 커밋) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public List<Participation> findActiveByBuncheolIdForUpdate(final Long buncheolId) {
+    return participationRepository.findActiveByBuncheolIdForUpdate(buncheolId);
   }
 
   /** 분철의 입금확인(CONFIRMED) 참여 전체. 진행확정 시 배송 스냅샷·알림 대상. */
@@ -190,7 +190,7 @@ public class ParticipationDomainService {
   }
 
   /**
-   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). 호출 측
+   * 입금 단계 시작: 분철의 APPLIED 전건을 일괄 기한과 함께 AWAITING_PAYMENT 로 전이 ({@code PaymentStarter}). 호출 측
    * {@code @Transactional} 필수.
    *
    * @return 전이된 참여 수

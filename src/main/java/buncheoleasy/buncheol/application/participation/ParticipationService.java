@@ -1,8 +1,8 @@
 package buncheoleasy.buncheol.application.participation;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
-import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
+import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -45,9 +45,6 @@ public class ParticipationService {
   // 운영진 분철 참여(개최자 계좌 노출) 시점부터 입금 만료까지. 단, deadline 을 넘지 않도록 클램프한다.
   private static final Duration STAFF_PAYMENT_TIME_LIMIT = Duration.ofMinutes(10);
 
-  // C2C 입금 창(24h — docs/46 §7.1-3). 성사 확정 후 일괄 기한과 추가 모집(즉시입금 진입)의 개별 기한이 같은 창을 쓴다.
-  public static final Duration C2C_PAYMENT_WINDOW = Duration.ofHours(24);
-
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
@@ -58,6 +55,7 @@ public class ParticipationService {
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final PaymentStarter paymentStarter;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -115,10 +113,9 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
     }
 
-    // 🔴 정원 충족 판정(publishFullIfAllSlotsApplied)은 <b>마지막 슬롯에서만</b> 돌린다. "지금 정원이 찼나" 를
-    // 묻는 멱등 판정이라 마지막 INSERT 뒤 한 번이면 충분한데, 반복 호출 중 가장 비싼 축이다 — 그 분철의 활성
-    // 참여를 FOR UPDATE 로 전건 스캔하고, 그게 전부 분철 행 락 안에서 돈다(같은 분철의 다른 참여자가 그동안
-    // 전부 대기한다). 중간 슬롯에서 돌려 봐야 아직 정원이 안 차 발행되지도 않는다.
+    // 🔴 정원 충족 판정(PaymentStarter#startIfFull)은 <b>마지막 슬롯에서만</b> 돌린다. 중간 슬롯에서 정원이 차는
+    // 일은 없고(남은 슬롯이 아직 비어 있다), 그 분철의 활성 참여를 FOR UPDATE 로 전건 스캔하는 비싼 판정이 분철 행
+    // 락 안에서 돈다(같은 분철의 다른 참여자가 그동안 전부 대기한다).
     List<ParticipateResult> results = new ArrayList<>(slotIds.size());
     for (int i = 0; i < slotIds.size(); i++) {
       final boolean last = i == slotIds.size() - 1;
@@ -135,7 +132,7 @@ public class ParticipationService {
   }
 
   /**
-   * 슬롯 1개 신청. {@code checkFull} 은 이 슬롯 뒤에 정원 충족 판정을 돌릴지다 — 다중 슬롯 루프는 마지막
+   * 슬롯 1개 신청. {@code checkFull} 은 이 슬롯 뒤에 정원 충족(입금 단계 시작) 판정을 돌릴지다 — 다중 슬롯 루프는 마지막
    * 슬롯에서만 켠다(호출부 주석 참조). C2C 모집중 경로에서만 의미가 있고 나머지 경로는 무시한다.
    */
   private ParticipateResult participateSingle(
@@ -449,80 +446,20 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 신청 구간에는 입금 기한이 없다 — 성사 확정 시 묶음에 일괄로 채운다(assignDueAt).
+    // 신청 구간에는 입금 기한이 없다 — 입금 단계 시작 때 묶음에 일괄로 채운다(PaymentStarter).
     participationBundleDomainService.attach(
         participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, null, now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
+    // 마지막 열린 자리가 채워지면 이 요청 안에서 입금 단계가 시작된다. 응답 모양은 그대로다(계좌·기한 null — 안내는 알림톡).
     if (checkFull) {
-      publishFullIfAllSlotsApplied(buncheol);
+      paymentStarter.startIfFull(buncheol, now);
     }
     // 🔴 배송비는 반드시 이 메서드가 받은 shippingFee 파라미터여야 한다(묶음의 원값이 아니라).
     // 모집중 재참여면 호출부가 이 값을 0 으로 눌러 넘긴다 — 묶음 원값을 읽으면 2번째 슬롯부터도
     // 만액이 되고, 다슬롯 신청의 합산이 그걸 슬롯 수만큼 곱한다.
     return ParticipateResult.single(
         participation.getId(), participation.getAmount() + shippingFee, null, null);
-  }
-
-  /**
-   * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 미충족→충족 전이마다 발행하고, 취소→재신청 루프의 중복
-   * 발송 차단은 리스너의 인메모리 가드가 담당한다. 카운트는 반드시 잠금 조회(current read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행
-   * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다. <b>분모(열린 자리 수)도 같다</b> — 스냅샷으로 세면 락
-   * 대기 중 개최자가 닫은 자리를 「열림」으로 세어 충족을 놓치고, 다시 연 자리를 「닫힘」으로 세어 빈 자리가 있는데 발행한다.
-   *
-   * <p>락 순서 규약: 이 경로는 분철 행(X) → 자리 행(S) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
-   * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
-   * 방향이다. LEGACY 슬롯 입금확인도 분철 행을 먼저 잠근다({@link #lockBuncheolBeforeConfirm}). 반면 C2C 입금확인은
-   * <b>역순</b>(참여 행 → 분철 행)이다 — {@code ParticipationBundleService#confirmPayment} 가 묶음 확정 뒤
-   * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
-   * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
-   *
-   * <p><b>P2-b 가 세 번째 방향을 더했다 — 참여 행 → 묶음 행 → 참여 행.</b> 묶음 종료 CAS 가 활성 슬롯 존재를 UPDATE 의
-   * 서브쿼리로 판정하는데(current read) InnoDB 가 그 참여 행들에 공유 락을 건다. 그래서 <b>같은 묶음의 두 슬롯을 동시에
-   * 취소하면</b> 서로 상대의 참여 행을 기다려 데드락이 날 수 있다 — 다슬롯 참여자가 두 슬롯을 연타 취소하는 경우다.
-   * 정합성은 지켜지고(롤백된 쪽은 취소 자체가 안 된다) 재시도하면 성공하지만, <b>실패 모드가 500 이라는 점</b>은 알고 있어야
-   * 한다. 이 판정을 밖으로 빼면 데드락은 사라지지만 그 대신 두 슬롯이 서로의 취소를 못 봐 <b>묶음이 영영 안 닫힌다</b> —
-   * 그쪽이 더 나쁘다(조용하고 되돌리기 어렵다).
-   *
-   * <p>같은 사이클의 쌍이 하나 더 있다 — <b>재참여 ↔ 자발 취소</b>. 재참여는 새 참여 행에 X 를 잡은 뒤 연결 CAS 의
-   * {@code EXISTS(묶음)} 로 묶음 행에 S 를 요청하고, 취소는 옛 참여 행에 X 를 잡은 뒤 종료 CAS 로 묶음 행에 X 를
-   * 잡고 그 서브쿼리가 새 참여 행에 S 를 요청한다. 원인은 같다 — <b>취소 경로가 분철 행 락을 잡지 않아</b> 두 경로가
-   * 직렬화되지 않는다. 레포에 데드락 재시도 핸들러가 없어 실패 모드는 500 이다.
-   *
-   * <p><b>2026-08-31 추가된 두 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
-   *
-   * <ul>
-   *   <li>{@code ParticipationBundleService#confirmPayment} — ⚠️ <b>참여 행(X) → 분철 행(X) → 다른
-   *       묶음 포함 참여 행(S)</b>. {@code confirmIfAllCollected} 의 서브쿼리가 그 분철의 참여 전체에
-   *       공유 락을 건다. <b>같은 분철의 두 묶음을 개최자가 연속 확인</b>하면(목록을 위에서 아래로 클릭하는
-   *       평범한 조작) Tx A 가 묶음1 슬롯 X → 분철 X 를 쥔 채 묶음2 슬롯 S 를 기다리고, Tx B 는 묶음2 슬롯
-   *       X 를 쥔 채 분철 X 를 기다려 <b>데드락</b>이 난다. 슬롯 단위 입금확인은 분철 행을 먼저 잠그게 바뀌어 이 역순은
-   *       C2C 묶음 확정에만 남았다. 이 경로는 ① 잡는 행이 슬롯 1개가 아니라 <b>묶음 전건</b>이고 ② 분철 락 <b>전에</b>
-   *       배송 스냅샷 N건(조회 2 + INSERT 1 × 슬롯 수)을 처리해 <b>락 보유 시간이 길어 창이 넓다</b>.
-   *       창을 줄이려면 {@code confirmIfAllCollected} 를 스냅샷 루프보다 앞으로 당기는 선택지가 있으나,
-   *       {@code applyPaymentConfirmed} 의 기존 순서와 달라지므로 별도 판단이 필요하다.
-   *   <li>{@code ParticipationBundleService#release} — ⚠️ <b>묶음 행에서 S → X 승격</b>이 일어난다.
-   *       {@code releaseBundleIfDue} 의 {@code EXISTS (SELECT b FROM ParticipationBundle ...)} 가
-   *       InnoDB 에서 묶음 행에 <b>공유 락</b>을 걸고({@code linkBundleIfUnlinked} 주석과 같은 성질),
-   *       이어지는 {@code closeIfEmpty} 가 같은 행의 <b>X 락</b>을 요청한다. 같은 묶음에 「제외」가 동시에
-   *       두 번 들어오면(개최자 더블클릭) 각자 S 를 쥔 채 X 를 기다려 <b>데드락</b>이 날 수 있다.
-   *       정합성은 CAS 가 지키고 실패 모드는 롤백(500)이라 기존에 문서화된 리스크와 같은 종류다.
-   * </ul>
-   */
-  private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
-    // 개최자가 닫은 자리는 채워질 수 없으므로 정원에서 뺀다 — 안 빼면 남은 자리가 다 차도 알림이 영영 안 나간다.
-    // 자리도 잠금 읽기(FOR SHARE)로 센다(javadoc). 락 순서는 분철(X, 이미 보유) → 자리(S) → 참여(X) 로, 자리를 쓰는 개최자
-    // 빼기·닫기·다시 열기(분철 X → 자리 X)와 같은 방향이다.
-    long totalSlots =
-        buncheolMemberDomainService.findAllByBuncheolIdForShare(buncheol.getId()).stream()
-            .filter(slot -> !slot.isClosed())
-            .count();
-    List<Long> participantIds =
-        participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
-    if (participantIds.size() >= totalSlots) {
-      long applicantCount = participantIds.stream().distinct().count();
-      eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), applicantCount));
-    }
   }
 
   /**
@@ -537,7 +474,7 @@ public class ParticipationService {
       final long shippingFee,
       final RefundAccount refundAccount,
       final Instant now) {
-    Instant dueAt = now.plus(C2C_PAYMENT_WINDOW);
+    Instant dueAt = now.plus(PaymentStarter.PAYMENT_TIME_LIMIT);
     Participation participation =
         Participation.create(
             buncheol.getId(),

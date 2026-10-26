@@ -87,18 +87,23 @@ class NotificationInboxRecorderTest {
   @Test
   void 개최자_알림의_경로는_분철ID를_치환한_분철_관리_화면을_가리킨다() {
     Map<String, String> variables =
-        Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5", "분철ID", "77");
+        Map.of(
+            "닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "참여자닉네임", "참여자",
+            "입금자명", "홍길동", "입금금액", "25,000", "분철ID", "77");
 
-    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
 
     assertThat(saved.getLinkPath()).isEqualTo("/products/77/manage");
   }
 
   @Test
   void 경로_변수가_누락되면_미치환_토큰이_남은_경로_대신_경로_없이_기록한다() {
-    Map<String, String> variables = Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5");
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "참여자닉네임", "참여자",
+            "입금자명", "홍길동", "입금금액", "25,000");
 
-    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
 
     assertThat(saved.getLinkPath()).isNull();
   }

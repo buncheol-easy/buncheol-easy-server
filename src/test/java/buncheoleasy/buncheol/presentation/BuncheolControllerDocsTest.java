@@ -14,7 +14,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import buncheoleasy.buncheol.application.BuncheolConfirmResult;
 import buncheoleasy.buncheol.application.BuncheolDetailQueryService;
 import buncheoleasy.buncheol.application.BuncheolListQueryService;
 import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
@@ -863,52 +862,6 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
-  void C2C_성사_확정() throws Exception {
-    given(buncheolService.confirmRecruitment(HOST_ID, 10L))
-        .willReturn(
-            new BuncheolConfirmResult(
-                10L,
-                BuncheolStatus.PAYMENT_COLLECTING,
-                Instant.parse("2026-08-12T06:00:00Z"),
-                5));
-
-    mockMvc
-        .perform(post("/v1/buncheols/{id}/confirm", 10L).with(userAuth()))
-        .andExpect(status().isOk())
-        .andDo(
-            document(
-                "buncheols-confirm",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("Buncheol")
-                        .summary("C2C 개최자 성사 확정")
-                        .description(
-                            """
-                            C2C 분철의 개최자가 성사를 확정한다 (`RECRUITING` → `PAYMENT_COLLECTING`). 신청자 전원이
-                            일괄 입금 기한(24시간)과 함께 입금 대기(`AWAITING_PAYMENT`)로 전이되고, 확정 시점 개최자 계좌가
-                            분철에 스냅샷되며, 성사 확정·입금 안내 알림이 발송된다. 정원 미달이어도 개최자 재량으로 확정할 수
-                            있고(미달 경고는 프론트 담당), 모집 마감 전 조기 확정도 허용된다.
-
-                            **발생 가능한 에러**
-                            | HTTP | 코드 | 의미 |
-                            |------|------|------|
-                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
-                            | 409 | `BCH-085` (`BUNCHEOL_CONFIRM_NOT_ALLOWED`) | 모집중이 아니거나 신청자가 없음 |
-                            | 409 | `USR-030` (`USER_BANK_ACCOUNT_REQUIRED`) | 개최자 계좌 미등록 |
-                            """)
-                        .requestHeaders(userAuthorizationHeader())
-                        .pathParameters(parameterWithName("id").description("분철 ID"))
-                        .responseSchema(Schema.schema("BuncheolConfirmResponse"))
-                        .responseFields(
-                            fieldWithPath("buncheolId").description("분철 ID"),
-                            fieldWithPath("status").description("전이된 분철 상태 (PAYMENT_COLLECTING)"),
-                            fieldWithPath("paymentDueAt").description("일괄 입금 기한 (UTC ISO-8601)"),
-                            fieldWithPath("awaitingCount").description("입금 대기로 전이된 참여 수"))
-                        .build())));
-  }
-
-  @Test
   void C2C_입금_수집_종료() throws Exception {
     mockMvc
         .perform(post("/v1/buncheols/{id}/finalize-collected", 10L).with(userAuth()))
@@ -932,7 +885,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             |------|------|------|
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
-                            | 409 | `BCH-090` (`BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED`) | 미입금 활성 참여 잔여·확정 0건·수집중 아님 |
+                            | 409 | `BCH-090` (`BUNCHEOL_CONFIRM_NOT_ALLOWED`) | 미입금 활성 참여 잔여·확정 0건·수집중 아님 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

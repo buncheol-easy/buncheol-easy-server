@@ -238,30 +238,19 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("statuses") Set<BuncheolStatus> statuses,
       Pageable pageable);
 
-  // 마감 판정 대상 분철 id (자동 마감 폴링용, deadline 오름차순). LEGACY 는 deadline 즉시, C2C 는 확정 유예(48h)까지
-  // 지나야 대상이 된다 (docs/46 §7.1-5) — 유예 중 C2C 분철이 매 주기 배치 슬롯(LIMIT)을 잠식하지 않게 쿼리에서 거른다.
-  //
-  // 🔴 예외 하나: C2C 라도 마감 시각에 <b>최소 인원 미달</b>이면 유예를 기다리지 않는다 (2026-08-31 사용자 결정).
-  // 개최자가 확정을 눌러도 인원이 채워지지 않는 분철을 48시간 붙잡아 둘 이유가 없고, 참여자는 그동안 자기 자리가
-  // 살아 있는 줄 안다. LEGACY 가 마감 시각에 인원 미달로 바로 취소하는 것과 같은 규칙이 된다.
-  // (신청 인원으로 센다 — C2C 는 확정 전이라 입금확인 건이 0 이다.)
+  // 마감 판정 대상 분철 id (자동 마감 폴링용, deadline 오름차순). 운영진 분철과 회원 개최 모두 마감 즉시 대상이다 — 회원 개최는
+  // 마감 때 입금 단계를 시작하거나 최소 인원 미달로 취소한다(BuncheolAutoCloseService).
   @Query(
       "SELECT b.id FROM Buncheol b "
           + "WHERE b.status = :status AND ("
           + "  (b.flowType = :legacyFlow AND b.deadline <= :now) "
-          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :graceCutoff) "
-          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :now "
-          + "      AND (SELECT COUNT(p) FROM Participation p "
-          + "           WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)"
-          + "          < b.minHeadcount)) "
+          + "  OR (b.flowType = :c2cFlow AND b.deadline <= :now)) "
           + "ORDER BY b.deadline ASC")
   List<Long> findIdsByStatusAndDeadlineBefore(
       @Param("status") BuncheolStatus status,
       @Param("legacyFlow") FlowType legacyFlow,
       @Param("c2cFlow") FlowType c2cFlow,
       @Param("now") Instant now,
-      @Param("graceCutoff") Instant graceCutoff,
-      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       Pageable pageable);
 
   // 입금 수집중(PAYMENT_COLLECTING)이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용).
@@ -381,7 +370,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
       @Param("now") Instant now);
 
-  // C2C 자동 마감(미성사·인원 미달 취소) 전용 CAS. finalizeIfStatus 와 달리 마감 시각을 다시 본다 — 신청자 0명이면 개최자가 마감을
+  // 회원 개최 마감 미달 취소 전용 CAS. finalizeIfStatus 와 달리 마감 시각을 다시 본다 — 신청자 0명이면 개최자가 마감을
   // 바꿀 수 있어, 폴링이 옛 마감으로 고른 뒤 연장이 커밋되면 상태만 보는 CAS 는 연장된 분철을 취소한다(되돌릴 수 없다).
   // :now 는 폴링 쿼리와 같은 값이라 마감이 그대로면 폴링이 고른 분철은 여기서도 통과한다. 연장돼 0행이면 다음 폴링이 새 마감으로
   // 다시 판정한다. 개최자 수정은 반대로 deadline > :now 를 요구해(changeTermsIfNoActiveParticipation) 경계에서 한쪽만 이긴다.
@@ -461,8 +450,9 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   // --- C2C 플로우 CAS (docs/46 §4) ---
 
   /**
-   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다 —
-   * 확정 후 개최자가 프로필 계좌를 바꿔도 안내 계좌가 어긋나지 않는다 (docs/46 §4.1·§4.7-B1).
+   * 회원 개최 입금 단계 시작 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 그 시점 개최자 계좌 스냅샷을 함께 기록한다 —
+   * 시작 후 개최자가 프로필 계좌를 바꿔도 안내 계좌가 어긋나지 않는다 (docs/46 §4.7-B1). {@code finalized_at} 은 R1 에서
+   * {@code ended_at} 으로 정리할 때까지 「입금 단계 시작 시각」으로 쓴다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

@@ -4,9 +4,8 @@ import static buncheoleasy.notification.infrastructure.AlimtalkExecutorConfig.AL
 
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
-import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
-import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.PaymentStartedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
 import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
@@ -29,8 +28,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -61,10 +58,6 @@ public class AlimtalkNotificationListener {
   private final NotificationAssembler assembler;
   private final AlimtalkSender sender;
   private final NotificationInboxRecorder inboxRecorder;
-
-  // 정원 충족 알림을 보낸 분철 id. 취소→재신청 루프의 무제한 재발송(알림톡 건당 과금)을 막는 베스트 에포트 가드로,
-  // 재시작·배포 전환 시 초기화돼 그 후 재충족되면 1건 더 갈 수 있다 — 정확한 1회 보장이 아니라 스팸 차단이 목적.
-  private final Set<Long> fullNotifiedBuncheolIds = ConcurrentHashMap.newKeySet();
 
   /**
    * (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. LEGACY 는 다음 관문이 최소 인원 충족이지만 C2C 는 인원이 이미 채워진 뒤라 함께 참여한 사람들의
@@ -173,7 +166,7 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). 문안은 {@link #cancelTemplate} 기준으로 갈린다. C2C 1인 다슬롯에서 같은 알림이
+   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달). 문안은 {@link #cancelTemplate} 기준으로 갈린다. C2C 1인 다슬롯에서 같은 알림이
    * 슬롯 수만큼 가지 않도록 사람 단위로 묶어 1건씩 보낸다 (진행 확정과 같은 합산 규칙).
    */
   @Async(ALIMTALK_EXECUTOR)
@@ -188,43 +181,28 @@ public class AlimtalkNotificationListener {
   private void sendCancelledNotice(
       final List<ParticipationView> group, final BuncheolCancelReason reason) {
     ParticipationView first = group.get(0);
-    AlimtalkTemplate template = cancelTemplate(first, reason);
-    String memberName = mergedMemberName(group);
+    AlimtalkTemplate template = cancelTemplate(first);
     Map<String, String> variables =
-        template == AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED
-            ? Map.of(
-                "닉네임", first.participant().getNickname().value(),
-                "분철명", first.buncheol().getTitle(),
-                "멤버명", memberName)
-            : Map.of(
-                "닉네임", first.participant().getNickname().value(),
-                "분철명", first.buncheol().getTitle(),
-                "멤버명", memberName,
-                "취소사유", reason.getDescription());
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(group),
+            "취소사유", reason.getDescription());
     recordSafely(first.participant().getId(), template, variables);
     sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
-  /**
-   * 취소 문안 선택. 판정 기준은 입금 이력이 아니라 취소 사유다 — C2C 성사 후(PAYMENT_COLLECTING) 개최자 취소도 입금 전 참여자에겐 이력이 없는데,
-   * 이력만 보고 미성사 문안을 보내면 "성사되지 않아 취소" 라는 거짓 안내에 사유까지 누락된다. 미성사({@code NOT_FINALIZED})는 무입금 신청
-   * 단계에서만 나오는 C2C 전용 사유라 환불 안내가 필요 없고(불변식이 다른 패키지에 있어 flowType 도 함께 본다), 나머지는 환불 주체가 갈린다 — LEGACY 는 플랫폼, C2C 는 대금이 개최자 계좌로 직접 간
-   * 직거래라 개최자다.
-   */
-  private AlimtalkTemplate cancelTemplate(
-      final ParticipationView view, final BuncheolCancelReason reason) {
-    if (reason == BuncheolCancelReason.NOT_FINALIZED && view.buncheol().isC2c()) {
-      return AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED;
-    }
+  /** 취소 문안 선택. 환불 주체가 갈린다 — 운영진 분철은 플랫폼, 회원 개최는 대금이 개최자 계좌로 직접 간 직거래라 개최자다. */
+  private AlimtalkTemplate cancelTemplate(final ParticipationView view) {
     return view.buncheol().isC2c()
         ? AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED
         : AlimtalkTemplate.BUNCHEOL_CANCELLED;
   }
 
-  /** (참여자) C2C 분철 성사 확정 — 입금 안내를 유저 단위로 합산해 1건씩 발송한다 (docs/46 §4.7-A3). */
+  /** (참여자) 회원 개최 입금 단계 시작 — 입금 안내를 유저 단위로 합산해 1건씩 발송한다 (docs/46 §4.7-A3). */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onBuncheolCollectingStarted(final BuncheolCollectingStartedEvent event) {
+  public void onPaymentStarted(final PaymentStartedEvent event) {
     // 커밋 시점 전이 대상 스냅샷(event.participationIds)만 발송한다 — 실행 시점 상태 재조회는 그 사이 들어온
     // 추가 모집 참여(onParticipationCreated 로 개별 안내를 받음)가 섞여 중복 발송된다. 커밋~실행 사이에
     // 취소·확정된 건은 입금 안내가 무의미하므로 상태 필터로 거른다.
@@ -256,29 +234,6 @@ public class AlimtalkNotificationListener {
         view.memberName(),
         view.paymentAmount(),
         view.paymentDueAt());
-  }
-
-  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 분철당 1회만 발송한다(인메모리 가드). */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onBuncheolFull(final BuncheolFullEvent event) {
-    if (!fullNotifiedBuncheolIds.add(event.buncheolId())) {
-      return;
-    }
-    BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
-    Map<String, String> variables =
-        Map.of(
-            "닉네임", view.host().getNickname().value(),
-            "분철명", view.buncheol().getTitle(),
-            "신청인원", String.valueOf(event.applicantCount()),
-            // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
-            "분철ID", String.valueOf(view.buncheol().getId()));
-    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
-    String hostPhone = hostPhoneOrNull(view.host(), event.buncheolId());
-    if (hostPhone == null) {
-      return;
-    }
-    sender.send(AlimtalkTemplate.C2C_BUNCHEOL_FULL, hostPhone, variables);
   }
 
   // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).

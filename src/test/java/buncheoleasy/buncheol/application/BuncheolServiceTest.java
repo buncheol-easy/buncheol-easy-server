@@ -1,6 +1,5 @@
 package buncheoleasy.buncheol.application;
 
-import buncheoleasy.buncheol.application.participation.ParticipationService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -48,8 +47,6 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.C2cHostQualification;
-import buncheoleasy.user.domain.BankAccount;
-import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import java.lang.reflect.RecordComponent;
 import java.time.Clock;
@@ -93,6 +90,8 @@ class BuncheolServiceTest {
   @InjectMocks private BuncheolService buncheolService;
 
   @Mock private BuncheolDomainService buncheolDomainService;
+
+  @Mock private PaymentStarter paymentStarter;
 
   @Mock private BuncheolImageDomainService buncheolImageDomainService;
 
@@ -1712,10 +1711,8 @@ class BuncheolServiceTest {
   @DisplayName("진행 확정(finalize-collected) 에러 코드 테스트 (docs/54 4-1)")
   class FinalizeCollectedErrorCodeTest {
 
-    // 성사 확정(BCH-085)과 코드를 공유하면 개최자가 "진행 확정"을 눌렀는데 "성사 확정을 할 수
-    // 없습니다"가 뜬다. 코드가 다시 합쳐지면 이 테스트가 잡는다.
     @Test
-    void 수집_종료_실패는_성사확정과_다른_전용_코드를_던진다() {
+    void 수집_종료_실패는_진행_확정_전용_코드를_던진다() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.isC2c()).willReturn(true);
@@ -1724,7 +1721,7 @@ class BuncheolServiceTest {
       assertThatThrownBy(() -> buncheolService.finalizeCollected(HOST_ID, BUNCHEOL_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
+          .isEqualTo(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
 
     // BCH-084 는 성사 확정·진행 확정·제외·보냈어요 등이 공유하는 범용 가드라, 특정 액션 전용
@@ -1739,58 +1736,6 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
-    }
-  }
-
-  @Nested
-  @DisplayName("C2C 성사 확정 — 묶음 기한 채우기 (P2-b)")
-  class ConfirmRecruitmentBundleDueAtTest {
-
-    // 🔴 신청 구간의 묶음은 기한 없이 열린다. 성사 확정에서 안 채우면 bundles.due_at 이 영구 NULL 이고,
-    // 나중에 붙을 개최자 「제외」 기한 가드가 fail-open 된다 — 기한 안인데도 참여자를 뺄 수 있게 된다.
-    @Test
-    void 성사_확정은_참여와_같은_기한을_묶음에도_채운다() {
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.isC2c()).willReturn(true);
-      User host = mock(User.class);
-      given(host.getBankAccount()).willReturn(BankAccount.of("국민", "98765432", "개최자"));
-      given(userDomainService.getUser(HOST_ID)).willReturn(host);
-      given(buncheolDomainService.startCollecting(eq(BUNCHEOL_ID), any(), any(), eq(NOW)))
-          .willReturn(true);
-      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
-      given(participationDomainService.startPaymentCollecting(eq(BUNCHEOL_ID), any(), eq(NOW)))
-          .willReturn(1);
-
-      buncheolService.confirmRecruitment(HOST_ID, BUNCHEOL_ID);
-
-      Instant expectedDueAt = NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW);
-      then(participationBundleDomainService)
-          .should()
-          .assignDueAtByBuncheolId(BUNCHEOL_ID, expectedDueAt, NOW);
-    }
-
-    // 신청자가 전부 취소돼 전이가 0건이면 확정 자체가 롤백된다 — 묶음 기한도 채우면 안 된다.
-    @Test
-    void 전이된_참여가_없으면_묶음_기한도_채우지_않는다() {
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.isC2c()).willReturn(true);
-      User host = mock(User.class);
-      given(host.getBankAccount()).willReturn(BankAccount.of("국민", "98765432", "개최자"));
-      given(userDomainService.getUser(HOST_ID)).willReturn(host);
-      given(buncheolDomainService.startCollecting(eq(BUNCHEOL_ID), any(), any(), eq(NOW)))
-          .willReturn(true);
-      given(participationDomainService.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
-      given(participationDomainService.startPaymentCollecting(eq(BUNCHEOL_ID), any(), eq(NOW)))
-          .willReturn(0);
-
-      assertThatThrownBy(() -> buncheolService.confirmRecruitment(HOST_ID, BUNCHEOL_ID))
-          .isInstanceOf(BusinessException.class);
-
-      then(participationBundleDomainService)
-          .should(never())
-          .assignDueAtByBuncheolId(anyLong(), any(), any());
     }
   }
 
@@ -2029,6 +1974,35 @@ class BuncheolServiceTest {
       order.verify(buncheolDomainService).lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 1, NOW);
       // 지웠으면 닫지 않는다.
       then(buncheolMemberDomainService).should(never()).closeIfUnoccupied(any(), any());
+    }
+
+    // 빼고 나니 남은 열린 자리가 모두 신청됐으면 이 요청 안에서 입금 단계가 시작된다(신청 경로와 같은 판정). 방금 낮춘 최소
+    // 인원을 봐야 하므로, 앞의 인스턴스가 아니라 최소 인원을 낮춘 뒤 잠금 읽기로 다시 읽은 분철로 판정한다.
+    @Test
+    void 뺀_뒤_다시_잠금_읽기한_분철로_입금_단계_시작을_판정한다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(SLOT_ID, OTHER_SLOT_ID);
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID))
+          .willReturn(true);
+      Buncheol relocked = mock(Buncheol.class);
+      given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(relocked);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      InOrder order = inOrder(buncheolDomainService, paymentStarter);
+      order.verify(buncheolDomainService).lowerMinHeadcountToSlotCount(BUNCHEOL_ID, 1, NOW);
+      order.verify(buncheolDomainService).getLatestBuncheolForUpdate(BUNCHEOL_ID);
+      order.verify(paymentStarter).startIfFull(relocked, NOW);
+    }
+
+    @Test
+    void 이미_닫힌_자리를_다시_빼면_입금_단계_판정도_하지_않는다() {
+      givenLocked(slotEditBuncheol(FlowType.C2C, BuncheolStatus.RECRUITING));
+      givenSlots(List.of(SLOT_ID), SLOT_ID, OTHER_SLOT_ID);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(paymentStarter).shouldHaveNoInteractions();
     }
   }
 

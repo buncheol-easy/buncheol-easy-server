@@ -205,22 +205,6 @@ public enum AlimtalkTemplate {
           AlimtalkButton.channelAdd(),
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
-  /** C2C 미성사 취소(개최자 미확정 마감 등 — 무입금 신청 단계라 환불이 없다). */
-  C2C_BUNCHEOL_NOT_FINALIZED(
-      "분철 취소 안내",
-      """
-      #{닉네임}님, 신청하신 분철이 성사되지 않아 취소되었어요.
-
-      입금 전 단계에서 취소되어 돌려받을 금액은 없어요.
-      같은 분철이 다시 열리면 새로 신청하실 수 있어요.
-
-      ▶ 분철명: #{분철명}
-      ▶ 참여 멤버: #{멤버명}\
-      """,
-      List.of(
-          AlimtalkButton.channelAdd(),
-          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
-
   /**
    * C2C 입금 확인. 기존 PAYMENT_CONFIRMED 는 "진행 인원이 모두 모이면" 이 다음 단계라 C2C 에 오안내 — 인원은 성사 확정 시점에 이미 채워졌고 남은
    * 조건은 함께 참여한 사람들의 입금이다.
@@ -283,22 +267,6 @@ public enum AlimtalkTemplate {
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
   // --- C2C 개최자 대상 ---
-
-  /** (개최자) C2C 모집 정원 충족 — 진행 확정을 눌러달라는 독촉. 분철당 1회만 발송한다(리스너 인메모리 가드). */
-  C2C_BUNCHEOL_FULL(
-      "분철 정원 충족 안내",
-      """
-      #{닉네임}님, 개최하신 분철의 정원이 모두 찼어요!
-
-      분철 관리에서 진행 확정을 눌러주시면
-      참여자들에게 입금 안내가 자동으로 발송돼요.
-
-      ▶ 분철명: #{분철명}
-      ▶ 신청 인원: #{신청인원}명\
-      """,
-      List.of(
-          AlimtalkButton.channelAdd(),
-          AlimtalkButton.webLink("분철 관리 하러가기", BuncheolUrls.BUNCHEOL_MANAGE))),
 
   /**
    * (개최자) C2C 참여자가 '보냈어요' 를 누름 — 통장을 확인하고 입금 확인해 달라는 요청. 묶음(이체 1건)당 1건 발송하며, 대조할 수

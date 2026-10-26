@@ -12,7 +12,6 @@ import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.buncheol.dto.request.OpenChatUrlUpdateRequest;
-import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberAddResponse;
@@ -125,17 +124,6 @@ public class BuncheolController {
     Long buncheolId =
         buncheolService.holdBuncheol(hostId, request, MultipartImageFiles.from(images));
     return ResponseEntity.status(HttpStatus.CREATED).body(HoldBuncheolResponse.of(buncheolId));
-  }
-
-  /**
-   * C2C 개최자 성사 확정 API (docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금 대기로 전이하고, 입금 안내가 발송된다. 정원
-   * 미달 재량 확정·마감 전 조기 확정 허용.
-   */
-  @PostMapping("/{id}/confirm")
-  public ResponseEntity<BuncheolConfirmResponse> confirmRecruitment(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
-    return ResponseEntity.ok(
-        BuncheolConfirmResponse.from(buncheolService.confirmRecruitment(hostId, id)));
   }
 
   /**

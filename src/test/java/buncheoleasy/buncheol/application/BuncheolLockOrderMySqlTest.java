@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
+import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.support.MySqlContainerTestSupport;
@@ -15,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -46,6 +48,7 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   @Autowired private ParticipationService participationService;
   @Autowired private ParticipationBundleService participationBundleService;
   @Autowired private BuncheolService buncheolService;
+  @Autowired private BuncheolAutoCloseService buncheolAutoCloseService;
 
   private MySqlFixture fixture;
   private ExecutorService executor;
@@ -147,6 +150,82 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
 
       assertThat(statusOf("buncheols", buncheolId)).isEqualTo("HOST_CANCELLED");
       assertThat(statusOf("participations", participationId)).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void 마지막_열린_자리_신청은_분철_행을_먼저_기다리고_입금_단계를_시작한다() throws Exception {
+      long buncheolId = fixture.buncheol(hostId, groupId, "C2C", "RECRUITING", DAY, 2, null);
+      long firstSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long lastSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long otherId = fixture.user(false);
+      long otherBundleId =
+          fixture.bundle(buncheolId, otherId, fixture.shippingAddress(otherId), null);
+      long otherParticipationId =
+          fixture.participation(
+              buncheolId, firstSlotId, otherId, otherBundleId, "APPLIED", "C2C", null);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () ->
+              participationService.participate(
+                  buncheolId, participantId, new ParticipateRequest(lastSlotId, shippingAddressId)));
+
+      assertPaymentStarted(buncheolId);
+      assertThat(statusOf("participations", otherParticipationId)).isEqualTo("AWAITING_PAYMENT");
+    }
+
+    @Test
+    void 자리_빼기로_정원이_차면_분철_행을_먼저_기다리고_입금_단계를_시작한다() throws Exception {
+      long buncheolId = fixture.buncheol(hostId, groupId, "C2C", "RECRUITING", DAY, 3, null);
+      long firstSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long secondSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long emptySlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);
+      fixture.participation(buncheolId, firstSlotId, participantId, bundleId, "APPLIED", "C2C", null);
+      fixture.participation(
+          buncheolId, secondSlotId, participantId, bundleId, "APPLIED", "C2C", null);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            buncheolService.removeMember(hostId, buncheolId, emptySlotId);
+            return null;
+          });
+
+      // 최소 인원 3 → 열린 자리 2 로 낮춘 값으로 판정해야 시작한다.
+      assertPaymentStarted(buncheolId);
+    }
+
+    @Test
+    void 마감_판정은_분철_행을_먼저_기다리고_최소_인원_이상이면_입금_단계를_시작한다() throws Exception {
+      long buncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "RECRUITING", Duration.ofHours(-1), 1, null);
+      long slotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);
+      fixture.participation(buncheolId, slotId, participantId, bundleId, "APPLIED", "C2C", null);
+
+      assertLocksBuncheolFirst(
+          buncheolId, () -> buncheolAutoCloseService.finalizeExpired(buncheolId, Instant.now()));
+
+      assertPaymentStarted(buncheolId);
+    }
+
+    @Test
+    void 마감_판정은_최소_인원_미달이면_분철과_신청을_함께_취소한다() throws Exception {
+      long buncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "RECRUITING", Duration.ofHours(-1), 2, null);
+      long slotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);
+      long participationId =
+          fixture.participation(buncheolId, slotId, participantId, bundleId, "APPLIED", "C2C", null);
+
+      assertLocksBuncheolFirst(
+          buncheolId, () -> buncheolAutoCloseService.finalizeExpired(buncheolId, Instant.now()));
+
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CANCELLED");
+      assertThat(statusOf("participations", participationId)).isEqualTo("CANCELLED");
+      assertThat(bundleClosed(bundleId)).isTrue();
     }
   }
 
@@ -299,6 +378,33 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   private String statusOf(final String table, final long id) {
     return jdbcTemplate.queryForObject(
         "SELECT status FROM " + table + " WHERE id = ?", String.class, id);
+  }
+
+  /** 입금 단계 시작 CAS 와 그 뒤 처리 — 분철 칸, 참여 전이, 열린 묶음 기한. */
+  private void assertPaymentStarted(final long buncheolId) {
+    assertThat(statusOf("buncheols", buncheolId)).isEqualTo("PAYMENT_COLLECTING");
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT payment_due_at IS NOT NULL AND finalized_at IS NOT NULL"
+                    + " AND payment_bank IS NOT NULL"
+                    + " AND TIMESTAMPDIFF(HOUR, finalized_at, payment_due_at) = 24"
+                    + " FROM buncheols WHERE id = ?",
+                Boolean.class,
+                buncheolId))
+        .isTrue();
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM participations WHERE buncheol_id = ? AND status <> 'AWAITING_PAYMENT'",
+                Integer.class,
+                buncheolId))
+        .isZero();
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM participation_bundles"
+                    + " WHERE buncheol_id = ? AND closed_at IS NULL AND due_at IS NULL",
+                Integer.class,
+                buncheolId))
+        .isZero();
   }
 
   private boolean bundleClosed(final long bundleId) {

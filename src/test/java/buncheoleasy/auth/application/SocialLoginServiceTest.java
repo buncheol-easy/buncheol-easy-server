@@ -13,6 +13,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 
 import buncheoleasy.auth.TokenPair;
+import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -286,6 +287,32 @@ class SocialLoginServiceTest {
   }
 
   @Nested
+  @DisplayName("signIn 테스트")
+  class SignInTest {
+
+    @Test
+    void 가입_로그인_처리만_하고_토큰은_발급하지_않는다() {
+      // given — 앱 로그인이 쓰는 경로. 여기서 웹 토큰을 발급하면 같은 회원의 웹 칸이 덮인다.
+      User user = User.create("KAKAO", "social_123", "test@example.com");
+      ReflectionTestUtils.setField(user, "id", 1L);
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), anyString(), isNull(), isNull(), isNull(), eq(false)))
+          .willReturn(new SocialLoginUser(user, true));
+
+      // when
+      LoginAccount account =
+          socialLoginService.signIn(
+              SocialLoginCommand.of("KAKAO", "social_123", "test@example.com"));
+
+      // then
+      assertThat(account).isEqualTo(new LoginAccount(1L, true));
+      then(jwtTokenProvider).shouldHaveNoInteractions();
+      then(refreshTokenStore).shouldHaveNoInteractions();
+    }
+  }
+
+  @Nested
   @DisplayName("logout 테스트")
   class LogoutTest {
 
@@ -298,7 +325,7 @@ class SocialLoginServiceTest {
       socialLoginService.logout(userId);
 
       // then
-      then(refreshTokenStore).should().delete(userId);
+      then(refreshTokenStore).should().delete(userId, LoginClient.WEB);
     }
   }
 }

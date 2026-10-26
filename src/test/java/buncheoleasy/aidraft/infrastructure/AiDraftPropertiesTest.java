@@ -8,6 +8,8 @@ import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
@@ -103,6 +105,52 @@ class AiDraftPropertiesTest {
                       true, "http://a", "t", Duration.ZERO, READ, 10, 30, 100, 4))
           .isInstanceOf(IllegalArgumentException.class);
     }
+  }
+
+  @Nested
+  @DisplayName("엔진 주소 검사")
+  class WorkerUrlTest {
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = {
+          "ai-worker:8000",
+          "//ai-worker:8000",
+          "ftp://ai-worker:8000",
+          "http://",
+          "http:///internal",
+          "http://ai worker:8000",
+          "http://ai_worker:8000"
+        })
+    void 스킴_호스트가_틀린_주소는_기동_시점에_막는다(final String url) {
+      // 마지막 줄: 밑줄이 든 이름은 URI 가 호스트로 읽지 않는다 — 연결 시점이 아니라 여기서 걸러야 한다.
+      assertThatThrownBy(() -> create(true, url, "token"))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://ai-worker:8000", "https://ai.example.com", "HTTP://LOCALHOST:8000/"})
+    void http_https_와_호스트가_있으면_받는다(final String url) {
+      assertThat(create(true, url, "token").usable()).isTrue();
+    }
+
+    @Test
+    void 주소가_비어_있으면_검사하지_않고_꺼짐으로_둔다() {
+      assertThat(create(true, "", "token").usable()).isFalse();
+      assertThat(create(true, null, "token").usable()).isFalse();
+    }
+  }
+
+  @Test
+  void 문자열로_찍어도_토큰이_보이지_않는다() {
+    AiDraftProperties properties = create(true, "http://ai-worker:8000", "secret-internal-token");
+
+    assertThat(properties.toString())
+        .doesNotContain("secret-internal-token")
+        .contains("workerInternalToken=(설정됨)")
+        .contains("http://ai-worker:8000");
+    assertThat(create(true, "http://ai-worker:8000", null).toString())
+        .contains("workerInternalToken=(없음)");
   }
 
   @Test

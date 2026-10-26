@@ -1,7 +1,10 @@
 package buncheoleasy.aidraft.infrastructure;
 
 import jakarta.validation.constraints.NotNull;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.Locale;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -57,6 +60,25 @@ public record AiDraftProperties(
     if (workerBaseUrl != null && workerBaseUrl.endsWith("/")) {
       workerBaseUrl = workerBaseUrl.substring(0, workerBaseUrl.length() - 1);
     }
+    if (isSet(workerBaseUrl)) {
+      requireHttpUrlWithHost(workerBaseUrl);
+    }
+  }
+
+  /** 토큰은 값 대신 있는지만 보인다 — 설정 객체가 로그·오류 메시지에 찍혀도 새지 않게. */
+  @Override
+  public String toString() {
+    return "AiDraftProperties[enabled=%s, workerBaseUrl=%s, workerInternalToken=%s, connectTimeout=%s, readTimeout=%s, dailyLimitPerUser=%d, dailyAttemptLimitPerUser=%d, dailyAlertThreshold=%d, maxConcurrent=%d]"
+        .formatted(
+            enabled,
+            workerBaseUrl,
+            isSet(workerInternalToken) ? "(설정됨)" : "(없음)",
+            connectTimeout,
+            readTimeout,
+            dailyLimitPerUser,
+            dailyAttemptLimitPerUser,
+            dailyAlertThreshold,
+            maxConcurrent);
   }
 
   /** 스위치가 켜져 있고 엔진 주소·토큰이 모두 있을 때만 쓸 수 있다. */
@@ -67,6 +89,23 @@ public record AiDraftProperties(
   /** 1인 잠금 수명 — 엔진 대기 전체보다 길어야 같은 사람의 두 번째 요청이 겹치지 않는다. */
   public Duration lockTtl() {
     return connectTimeout.plus(readTimeout).plus(LOCK_MARGIN);
+  }
+
+  /**
+   * 엔진 주소가 틀리면 요청마다 실패한다 — 스킴이 빠지면 요청 시점 예외(500), 이상한 스킴이면 연결 오류로 읽혀 매번 횟수를 쓴다. 기동 시점에 막는다.
+   */
+  private static void requireHttpUrlWithHost(final String url) {
+    final URI uri;
+    try {
+      uri = new URI(url);
+    } catch (URISyntaxException e) {
+      throw new IllegalArgumentException("ai.draft.worker-base-url 형식이 틀렸다: " + url, e);
+    }
+    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+    if (!(scheme.equals("http") || scheme.equals("https")) || uri.getHost() == null) {
+      throw new IllegalArgumentException(
+          "ai.draft.worker-base-url 은 http(s)://호스트 형태여야 한다: " + url);
+    }
   }
 
   private static void requirePositive(final String name, final int value) {

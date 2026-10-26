@@ -8,7 +8,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
- * Delivery Tracker GraphQL 클라이언트 — 최신 추적 이벤트 조회(track)와 추적 웹훅 등록(registerTrackWebhook). 주의: (1)
+ * Delivery Tracker GraphQL 클라이언트 — 최근 추적 이벤트 조회(track)와 추적 웹훅 등록(registerTrackWebhook). 주의: (1)
  * GraphQL 은 업무 실패를 HTTP 200 + {@code errors} 배열로 주므로 본문을 검증해야 한다. (2) 웹훅은 expirationTime(권장 48h) 후
  * 소멸하며 같은 인자 재등록이 곧 연장이다(멱등). (3) 쿼터가 초당 10콜이라 모든 아웃바운드 호출은 최소 간격 스로틀을 지나고, rate limit
  * 응답은 백오프 후 1회 재시도한다 — 갱신 스케줄러·등록 이벤트 등 호출 경로가 늘어도 이 관문 하나로 보호된다.
@@ -29,11 +29,15 @@ import org.springframework.web.client.RestClientException;
 @Component
 public class DeliveryTrackerClient {
 
+  /**
+   * lastEvent 는 쓰지 않는다 — 더 늦은 이벤트가 있어도 DELIVERED 를 우선해 돌려주는 계약이라(TrackInfo.lastEvent 문서) DELIVERED
+   * 뒤에 고객 수령이 오는 캐리어(cupost)를 판정할 수 없다. 도착·수령 이벤트는 기록 끝에 오므로 최근 20건이면 충분하다.
+   */
   private static final String TRACK_QUERY =
       """
       query Track($carrierId: ID!, $trackingNumber: String!) {
         track(carrierId: $carrierId, trackingNumber: $trackingNumber) {
-          lastEvent { time status { code name } }
+          events(last: 20) { edges { node { time status { code name } } } }
         }
       }""";
 
@@ -68,15 +72,14 @@ public class DeliveryTrackerClient {
     return properties.outboundEnabled() && properties.webhookEnabled();
   }
 
-  /** 최신 추적 이벤트 조회. 캐리어 미등록(NOT_FOUND)·이벤트 없음은 empty, 그 외 오류는 예외. */
-  public Optional<TrackLastEvent> findLastEvent(final String carrierId, final String trackingNumber) {
+  /** 최근 추적 이벤트 조회 (오래된 순). 캐리어 미등록(NOT_FOUND)·이벤트 없음은 빈 목록, 그 외 오류는 예외. */
+  public List<TrackEvent> findRecentEvents(final String carrierId, final String trackingNumber) {
     requireEnabled(trackingNumber);
     return withRateLimitRetry(
-        "track", trackingNumber, () -> doFindLastEvent(carrierId, trackingNumber));
+        "track", trackingNumber, () -> doFindRecentEvents(carrierId, trackingNumber));
   }
 
-  private Optional<TrackLastEvent> doFindLastEvent(
-      final String carrierId, final String trackingNumber) {
+  private List<TrackEvent> doFindRecentEvents(final String carrierId, final String trackingNumber) {
     TrackResponse response =
         post(
             TRACK_QUERY,
@@ -86,19 +89,27 @@ public class DeliveryTrackerClient {
             trackingNumber);
     if (hasOnlyNotFoundErrors(response.errors())) {
       log.info("Delivery Tracker 추적 정보 없음 - carrierId={} trackingNumber={}", carrierId, trackingNumber);
-      return Optional.empty();
+      return List.of();
     }
     verifyNoErrors(response.errors(), "track", trackingNumber);
     if (response.data() == null
         || response.data().track() == null
-        || response.data().track().lastEvent() == null) {
-      return Optional.empty();
+        || response.data().track().events() == null
+        || response.data().track().events().edges() == null) {
+      return List.of();
     }
-    LastEvent lastEvent = response.data().track().lastEvent();
-    String statusCode = lastEvent.status() == null ? null : lastEvent.status().code();
-    String statusName = lastEvent.status() == null ? null : lastEvent.status().name();
-    return Optional.of(
-        new TrackLastEvent(statusCode, statusName, parseTime(lastEvent.time(), trackingNumber)));
+    return response.data().track().events().edges().stream()
+        .filter(Objects::nonNull)
+        .map(TrackEventEdge::node)
+        .filter(Objects::nonNull)
+        .map(node -> toTrackEvent(node, trackingNumber))
+        .toList();
+  }
+
+  private TrackEvent toTrackEvent(final TrackEventNode node, final String trackingNumber) {
+    String statusCode = node.status() == null ? null : node.status().code();
+    String statusName = node.status() == null ? null : node.status().name();
+    return new TrackEvent(statusCode, statusName, parseTime(node.time(), trackingNumber));
   }
 
   /** 추적 웹훅 등록·연장 (같은 인자 재호출 = 만료 연장, 멱등). */
@@ -308,10 +319,16 @@ public class DeliveryTrackerClient {
   private record TrackData(TrackInfo track) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
-  private record TrackInfo(LastEvent lastEvent) {}
+  private record TrackInfo(TrackEventConnection events) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
-  private record LastEvent(String time, EventStatus status) {}
+  private record TrackEventConnection(List<TrackEventEdge> edges) {}
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  private record TrackEventEdge(TrackEventNode node) {}
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  private record TrackEventNode(String time, EventStatus status) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   private record EventStatus(String code, String name) {}

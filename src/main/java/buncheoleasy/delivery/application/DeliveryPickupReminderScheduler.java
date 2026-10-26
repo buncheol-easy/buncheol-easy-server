@@ -1,10 +1,14 @@
 package buncheoleasy.delivery.application;
 
 import buncheoleasy.delivery.domain.Delivery;
+import buncheoleasy.delivery.domain.TrackedParcel;
+import buncheoleasy.delivery.infrastructure.DeliveryTrackerCarriers;
 import buncheoleasy.global.scheduler.SchedulerActivationGate;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +31,7 @@ import org.springframework.stereotype.Component;
 public class DeliveryPickupReminderScheduler {
 
   private final DeliveryPickupReminderService deliveryPickupReminderService;
+  private final TrackingSyncService trackingSyncService;
   private final SchedulerActivationGate schedulerActivationGate;
   private final Clock clock;
 
@@ -43,6 +48,7 @@ public class DeliveryPickupReminderScheduler {
     if (targets.isEmpty()) {
       return;
     }
+    syncBeforeRemind(targets);
 
     int remindedCount = 0;
     int failedCount = 0;
@@ -58,5 +64,26 @@ public class DeliveryPickupReminderScheduler {
       }
     }
     log.info("미수령 독촉 처리 완료 - 대상: {}, 발송: {}, 실패: {}", targets.size(), remindedCount, failedCount);
+  }
+
+  /**
+   * 수령 콜백이 늦거나 오지 않아도 이미 찾아간 사람을 독촉하지 않도록, 독촉 직전에 운송장을 한 번 동기화한다 — 수령으로 바뀐 배송은 독촉 마킹
+   * CAS(status=DELIVERED)가 걸러낸다. 동기화 실패는 독촉을 막지 않는다.
+   */
+  private void syncBeforeRemind(final List<Delivery> targets) {
+    Set<TrackedParcel> parcels = new LinkedHashSet<>();
+    for (Delivery target : targets) {
+      if (target.getTrackingNumber() != null) {
+        parcels.add(new TrackedParcel(target.getShippingMethod(), target.getTrackingNumber()));
+      }
+    }
+    for (TrackedParcel parcel : parcels) {
+      try {
+        trackingSyncService.sync(
+            DeliveryTrackerCarriers.carrierId(parcel.shippingMethod()), parcel.trackingNumber());
+      } catch (RuntimeException e) {
+        log.warn("미수령 독촉 전 추적 동기화 실패 - 독촉은 진행 - trackingNumber: {}", parcel.trackingNumber(), e);
+      }
+    }
   }
 }

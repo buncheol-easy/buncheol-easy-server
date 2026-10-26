@@ -25,6 +25,9 @@ public class UserDomainService {
    * 소셜 로그인 회원 조회/생성. name·phoneNumber·ageRange 는 카카오싱크 동의창에서 받은 값(없으면 null). 기존 회원은 카카오 값으로 덮어쓰지
    * 않는다 — 마이페이지에서 수정한 값을 보호한다. 단 연령대는 예외: 마이페이지 수정 대상이 아니고 시간이 지나면 구간이 바뀌므로 재로그인 때마다 카카오 최신값으로
    * 갱신한다.
+   *
+   * <p>이메일은 새 회원을 만들 때만 필요하다(없으면 AUTH-003). 기존 회원은 이메일이 없어도 로그인된다 — 가입 때 저장한 값을 다시 쓰지 않으므로, 카카오 쪽
+   * 이메일 사정으로 쓰던 계정에 못 들어오게 할 이유가 없다.
    */
   @Transactional
   public SocialLoginUser getOrCreateBySocialLogin(
@@ -219,6 +222,9 @@ public class UserDomainService {
       final String name,
       final String phoneNumber,
       final String ageRange) {
+    if (email == null || email.isBlank()) {
+      throw new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
+    }
     User newUser =
         User.create(
             socialInfo.provider().name(),

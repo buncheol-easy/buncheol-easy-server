@@ -8,7 +8,9 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum SocialProvider {
-  KAKAO("kakao");
+  KAKAO("kakao"),
+  // 앱(iOS) 전용 — 웹에는 애플 로그인 입구가 없다. 연령대를 받지 않아 C2C 개최 자격이 생기지 않는다.
+  APPLE("apple");
 
   private final String value;
 

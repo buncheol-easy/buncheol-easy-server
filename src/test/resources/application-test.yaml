@@ -45,6 +45,10 @@ admin:
     password: ""
 
 app:
+  apple:
+    signin:
+      # 로컬 .env 와 무관하게 애플 로그인 허용 앱을 비워 둔다 — 검증기 테스트는 허용 앱을 직접 넘긴다.
+      audiences: ""
   cookie:
     # 운영과 같은 형태(프록시 프리픽스 포함)로 고정해 설정값이 쿠키 Path 로 실제 반영되는지 검증한다.
     refresh-path: /api/backend/v1/auth

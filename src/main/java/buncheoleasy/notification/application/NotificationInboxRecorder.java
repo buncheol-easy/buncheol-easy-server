@@ -7,6 +7,7 @@ import buncheoleasy.notification.domain.AlimtalkTemplate;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>카카오 발송 성공 여부와 무관하게 in-app 알림은 남겨야 하므로 호출 측에서 발송 전에 먼저 기록한다. 비동기 리스너(AFTER_COMMIT)에서 호출되므로 이
  * 저장은 독립 트랜잭션이다.
+ *
+ * <p>저장한 알림은 {@link InboxNotificationRecordedEvent} 로 알려, 이 트랜잭션이 커밋된 뒤 앱 푸시로도 나간다. 저장이 롤백되면 푸시도 나가지 않는다.
  */
 @Slf4j
 @Component
@@ -30,6 +33,7 @@ public class NotificationInboxRecorder {
   private static final String PATH_BUNCHEOL_MANAGE = "/products/#{분철ID}/manage";
 
   private final InboxMessageRepository inboxMessageRepository;
+  private final ApplicationEventPublisher eventPublisher;
 
   @Transactional
   public void record(
@@ -42,6 +46,12 @@ public class NotificationInboxRecorder {
             template.render(variables),
             renderLinkPath(template, variables));
     inboxMessageRepository.save(notification);
+    eventPublisher.publishEvent(
+        new InboxNotificationRecordedEvent(
+            recipientId,
+            notification.getTitle(),
+            notification.getDescription(),
+            notification.getLinkPath()));
   }
 
   // 발송 측 가드(AlimtalkSender)와 같은 판정 기준이되, 발송을 막지 않고 경로만 비운다 — in-app 기록은 남겨야 하므로.

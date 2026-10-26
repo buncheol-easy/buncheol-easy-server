@@ -6,16 +6,14 @@ import buncheoleasy.admin.dto.response.AdminLoginResponse;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.infrastructure.redis.RedisFixedWindowCounter;
 import java.time.Duration;
-import java.util.List;
 import java.util.Locale;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.convert.DurationUnit;
 import java.time.temporal.ChronoUnit;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,25 +41,10 @@ public class AdminAuthService {
 
   private static final String RATE_LIMIT_KEY_PREFIX = "ADMIN_LOGIN:id:";
 
-  /**
-   * INCR 과 만료 설정을 한 번에 처리한다. 둘을 따로 보내면 INCR 직후 만료 설정이 유실됐을 때(커넥션 블립·failover) TTL 없는 키가 남아 해당
-   * 계정이 영구히 차단된다.
-   */
-  private static final RedisScript<Long> INCREMENT_WITH_TTL =
-      RedisScript.of(
-          """
-          local count = redis.call('INCR', KEYS[1])
-          if count == 1 then
-            redis.call('PEXPIRE', KEYS[1], ARGV[1])
-          end
-          return count
-          """,
-          Long.class);
-
   private final AdminRepository adminRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtTokenProvider jwtTokenProvider;
-  private final StringRedisTemplate redisTemplate;
+  private final RedisFixedWindowCounter loginAttemptCounter;
   private final int maxAttempts;
   private final Duration window;
   // 아이디 없음 경로에서도 실제 해시 비교와 같은 시간이 걸리도록 기동 시 만들어 두는 더미 해시.
@@ -71,7 +54,7 @@ public class AdminAuthService {
       final AdminRepository adminRepository,
       final PasswordEncoder passwordEncoder,
       final JwtTokenProvider jwtTokenProvider,
-      final StringRedisTemplate redisTemplate,
+      final RedisFixedWindowCounter loginAttemptCounter,
       @Value("${app.admin.login.rate-limit.max-attempts:5}") final int maxAttempts,
       // 단위를 붙이지 않으면 '분'으로 읽는다 — Spring 기본 단위(밀리초)로 해석되면 제한이 사라진다.
       @DurationUnit(ChronoUnit.MINUTES) @Value("${app.admin.login.rate-limit.window:10m}")
@@ -79,7 +62,7 @@ public class AdminAuthService {
     this.adminRepository = adminRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtTokenProvider = jwtTokenProvider;
-    this.redisTemplate = redisTemplate;
+    this.loginAttemptCounter = loginAttemptCounter;
     this.maxAttempts = maxAttempts;
     this.window = window;
     this.enumerationGuardHash = passwordEncoder.encode("enumeration-timing-guard");
@@ -117,10 +100,7 @@ public class AdminAuthService {
   /** 고정 윈도우 카운터를 1 올리고 한도 이내인지 판정한다. Redis 장애는 통과로 처리한다(fail-open). */
   private boolean tryAcquire(final String key) {
     try {
-      Long count =
-          redisTemplate.execute(
-              INCREMENT_WITH_TTL, List.of(key), String.valueOf(window.toMillis()));
-      return count == null || count <= maxAttempts;
+      return loginAttemptCounter.increment(key, window) <= maxAttempts;
     } catch (DataAccessException exception) {
       log.warn("관리자 로그인 호출 제한 확인 실패 - 제한 없이 통과시킨다", exception);
       return true;
@@ -129,7 +109,7 @@ public class AdminAuthService {
 
   private void reset(final String key) {
     try {
-      redisTemplate.delete(key);
+      loginAttemptCounter.reset(key);
     } catch (DataAccessException exception) {
       // 리셋 실패는 카운터가 윈도우 만료까지 남는 것뿐이라 호출자에게 전파하지 않는다.
       log.warn("관리자 로그인 제한 카운터 초기화 실패", exception);

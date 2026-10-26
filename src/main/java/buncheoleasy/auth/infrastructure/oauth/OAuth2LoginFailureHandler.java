@@ -1,13 +1,11 @@
 package buncheoleasy.auth.infrastructure.oauth;
 
-import buncheoleasy.auth.infrastructure.response.ErrorResponseWriter;
-import buncheoleasy.global.exception.domain.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
@@ -19,7 +17,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
 
-  private final ErrorResponseWriter errorResponseWriter;
+  private static final Pattern ERROR_CODE_SHAPE = Pattern.compile("[a-z_]{1,64}");
+  private static final String MALFORMED_ERROR_CODE = "malformed";
+
+  private final LoginFailureRedirector loginFailureRedirector;
   private final AgeRangeConsentRedirector ageRangeConsentRedirector;
 
   @Override
@@ -30,18 +31,38 @@ public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
       ageRangeConsentRedirector.redirect(response, toAgeRangeConsentResult(exception));
       return;
     }
-    log.warn("OIDC 로그인 실패: 원인={}", exception.getMessage());
-    ProblemDetail problemDetail = ErrorCode.AUTH_OAUTH2_LOGIN_FAILED.toProblemDetail();
-    errorResponseWriter.write(request, response, problemDetail);
+    LoginFailureRedirector.Reason reason =
+        isCancelledByUser(exception)
+            ? LoginFailureRedirector.Reason.CANCELLED
+            : LoginFailureRedirector.Reason.FAILED;
+    log.warn("소셜 로그인 실패: 사유={}, 원인코드={}", reason.getValue(), causeCode(exception));
+    loginFailureRedirector.redirect(response, reason);
   }
 
   private AgeRangeConsentRedirector.Result toAgeRangeConsentResult(
       final AuthenticationException exception) {
-    if (exception instanceof OAuth2AuthenticationException oauth2Exception
-        && OAuth2ErrorCodes.ACCESS_DENIED.equals(oauth2Exception.getError().getErrorCode())) {
+    if (isCancelledByUser(exception)) {
       return AgeRangeConsentRedirector.Result.CANCELLED;
     }
     log.warn("연령대 추가 동의 실패: 원인={}", exception.getMessage());
     return AgeRangeConsentRedirector.Result.FAILED;
+  }
+
+  /** 카카오 동의 화면에서 「취소」를 누르면 카카오는 error=access_denied 로 돌아온다. */
+  private static boolean isCancelledByUser(final AuthenticationException exception) {
+    return exception instanceof OAuth2AuthenticationException oauth2Exception
+        && OAuth2ErrorCodes.ACCESS_DENIED.equals(oauth2Exception.getError().getErrorCode());
+  }
+
+  /**
+   * 로그에는 오류 설명 문구를 빼고 코드만 남긴다. 코드도 저장된 인가 요청이 있으면 콜백 주소의 error 값 그대로라, 코드 모양(소문자·밑줄)일 때만
+   * 남기고 아니면 고정값으로 바꾼다 — 줄바꿈을 넣어 가짜 로그 줄을 끼우지 못하게.
+   */
+  private static String causeCode(final AuthenticationException exception) {
+    if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
+      String errorCode = oauth2Exception.getError().getErrorCode();
+      return ERROR_CODE_SHAPE.matcher(errorCode).matches() ? errorCode : MALFORMED_ERROR_CODE;
+    }
+    return exception.getClass().getSimpleName();
   }
 }

@@ -18,6 +18,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -155,6 +158,44 @@ class UserDomainServiceTest {
       assertThat(result.getPhoneNumber().value()).isEqualTo("01012345678");
       assertThat(result.getAgeRange()).isEqualTo("20~29");
       assertThat(result.isProfileCompleted()).isTrue();
+    }
+
+    @Test
+    void 기존_회원은_카카오가_이메일을_주지_않아도_로그인되고_저장된_이메일은_그대로다() {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "123456");
+      User existingUser = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.of(existingUser));
+
+      // when
+      SocialLoginUser loginUser =
+          userDomainService.getOrCreateBySocialLogin(socialInfo, null, null, null, null, false);
+
+      // then
+      assertThat(loginUser.newAccount()).isFalse();
+      assertThat(loginUser.user()).isEqualTo(existingUser);
+      assertThat(loginUser.user().getEmail().value()).isEqualTo("test@example.com");
+      then(userRepository).should(never()).save(any());
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   "})
+    void 새_회원인데_이메일이_없으면_AUTH_003_이고_회원을_만들지_않는다(final String email) {
+      // given
+      SocialInfo socialInfo = SocialInfo.of("KAKAO", "new_user");
+      given(userRepository.findBySocialInfo(socialInfo)).willReturn(Optional.empty());
+
+      // when & then
+      assertThatThrownBy(
+              () ->
+                  userDomainService.getOrCreateBySocialLogin(
+                      socialInfo, email, "김실명", "01012345678", "20~29", false))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
+      then(userRepository).should(never()).save(any());
+      then(nicknameGenerator).should(never()).generate();
     }
   }
 

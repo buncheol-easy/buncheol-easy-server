@@ -37,6 +37,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
   private final OAuth2AuthorizedClientService authorizedClientService;
   private final KakaoApiClient kakaoApiClient;
   private final AgeRangeConsentRedirector ageRangeConsentRedirector;
+  private final LoginFailureRedirector loginFailureRedirector;
   private final String loginCallbackUrl;
 
   public OAuth2LoginSuccessHandler(
@@ -46,6 +47,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       final OAuth2AuthorizedClientService authorizedClientService,
       final KakaoApiClient kakaoApiClient,
       final AgeRangeConsentRedirector ageRangeConsentRedirector,
+      final LoginFailureRedirector loginFailureRedirector,
       @Value("${app.frontend.login-callback-url}") final String loginCallbackUrl) {
     this.profileExtractors = profileExtractors;
     this.socialLoginService = socialLoginService;
@@ -53,6 +55,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     this.authorizedClientService = authorizedClientService;
     this.kakaoApiClient = kakaoApiClient;
     this.ageRangeConsentRedirector = ageRangeConsentRedirector;
+    this.loginFailureRedirector = loginFailureRedirector;
     this.loginCallbackUrl = loginCallbackUrl;
   }
 
@@ -65,29 +68,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       ageRangeConsentRedirector.redirect(response, refreshAgeRange(oauthToken));
       return;
     }
-    OAuth2UserProfile profile = getUserProfile(oauthToken);
-    validateSocialEmail(profile.email());
-
-    List<ServiceTermAgreement> serviceTerms = List.of();
-    if (profile.provider() == SocialProvider.KAKAO) {
-      String kakaoAccessToken = loadKakaoAccessToken(oauthToken);
-      if (kakaoAccessToken != null) {
-        profile = enrichFromKakaoApi(profile, kakaoAccessToken);
-        serviceTerms = fetchServiceTerms(kakaoAccessToken);
-      }
+    SocialLoginResult loginResult;
+    try {
+      loginResult = login(oauthToken);
+    } catch (RuntimeException exception) {
+      loginFailureRedirector.redirect(response, toLoginFailureReason(exception));
+      return;
     }
-
-    SocialLoginResult loginResult =
-        socialLoginService.login(
-            new SocialLoginCommand(
-                profile.provider().name(),
-                profile.providerId(),
-                profile.email(),
-                profile.name(),
-                profile.phoneNumber(),
-                profile.ageRange(),
-                profile.ageRangeWithdrawn(),
-                serviceTerms));
+    // 여기부터는 실패로 돌려보내지 않는다 — 리프레시 쿠키가 붙은 실패 응답이 생긴다.
     TokenPair token = loginResult.token();
     response.addHeader(
         HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(token.refreshToken()).toString());
@@ -116,6 +104,45 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             .build()
             .toUriString();
     response.sendRedirect(redirectUrl);
+  }
+
+  private SocialLoginResult login(final OAuth2AuthenticationToken oauthToken) {
+    OAuth2UserProfile profile = getUserProfile(oauthToken);
+
+    List<ServiceTermAgreement> serviceTerms = List.of();
+    if (profile.provider() == SocialProvider.KAKAO) {
+      String kakaoAccessToken = loadKakaoAccessToken(oauthToken);
+      if (kakaoAccessToken != null) {
+        profile = enrichFromKakaoApi(profile, kakaoAccessToken);
+        serviceTerms = fetchServiceTerms(kakaoAccessToken);
+      }
+    }
+
+    return socialLoginService.login(
+        new SocialLoginCommand(
+            profile.provider().name(),
+            profile.providerId(),
+            profile.email(),
+            profile.name(),
+            profile.phoneNumber(),
+            profile.ageRange(),
+            profile.ageRangeWithdrawn(),
+            serviceTerms));
+  }
+
+  /**
+   * 새 회원인데 카카오가 이메일을 주지 않은 것은 사용자 쪽 사정이라 WARN 으로 끝낸다. 그 밖은 서버 고장일 수 있어 스택과 함께 ERROR 로 남긴다(알림
+   * 대상). 로그 문구에는 회원 식별자·이메일을 넣지 않는다.
+   */
+  private LoginFailureRedirector.Reason toLoginFailureReason(final RuntimeException exception) {
+    if (exception instanceof BusinessException businessException
+        && businessException.getErrorCode() == ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED) {
+      log.warn("소셜 로그인 거절: 사유={}", LoginFailureRedirector.Reason.EMAIL_REQUIRED.getValue());
+      return LoginFailureRedirector.Reason.EMAIL_REQUIRED;
+    }
+    log.error(
+        "소셜 로그인 처리 실패: 사유={}", LoginFailureRedirector.Reason.FAILED.getValue(), exception);
+    return LoginFailureRedirector.Reason.FAILED;
   }
 
   /**
@@ -231,11 +258,5 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       }
     }
     throw new BusinessException(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
-  }
-
-  private void validateSocialEmail(final String email) {
-    if (email == null || email.isBlank()) {
-      throw new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
-    }
   }
 }

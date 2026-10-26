@@ -177,6 +177,46 @@ class SocialLoginServiceTest {
       // then
       assertThat(result.newAccount()).isTrue();
     }
+
+    @Test
+    void 이메일이_없어도_기존_회원이면_토큰을_발급한다() {
+      // given
+      Long userId = 5L;
+      User user = User.create("KAKAO", "member_1", "member@example.com");
+      ReflectionTestUtils.setField(user, "id", userId);
+      TokenPair expected = new TokenPair("access", "refresh");
+
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), isNull(), isNull(), isNull(), isNull(), eq(false)))
+          .willReturn(new SocialLoginUser(user, false));
+      given(jwtTokenProvider.issueTokens(userId)).willReturn(expected);
+
+      // when
+      SocialLoginResult result =
+          socialLoginService.login(SocialLoginCommand.of("KAKAO", "member_1", null));
+
+      // then
+      assertThat(result.token()).isEqualTo(expected);
+      assertThat(result.newAccount()).isFalse();
+    }
+
+    @Test
+    void 새_회원인데_이메일이_없어_가입이_거절되면_토큰을_발급하지_않는다() {
+      // given
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), isNull(), isNull(), isNull(), isNull(), eq(false)))
+          .willThrow(new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED));
+
+      // when & then
+      assertThatThrownBy(
+              () -> socialLoginService.login(SocialLoginCommand.of("KAKAO", "new_2", null)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
+      then(jwtTokenProvider).shouldHaveNoInteractions();
+    }
   }
 
   @Nested

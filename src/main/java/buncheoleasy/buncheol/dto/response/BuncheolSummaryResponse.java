@@ -30,6 +30,9 @@ import java.util.List;
  * <p>{@code opensAt} 은 예약 오픈 시각(UTC)으로, 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null 이다. 카드의 "M/D HH:mm 오픈"
  * 표시에 쓴다. 지난 시각이어도 그대로 실린다 — 화면이 지금 시각과 비교한다. {@code availableMemberNames} 는 오픈 전에도 빈 자리 이름을
  * 싣는다(오픈 전인지는 {@code opensAt} 으로 구분한다).
+ *
+ * <p>{@code hostId} 는 분철을 연 회원의 id 로, 앱이 「이 개최자 분철 안 보기」(기기 안 차단 목록)로 같은 개최자의 분철을 거르는 데
+ * 쓴다. 운영진(LEGACY) 분철은 운영진 계정의 id 다. 닉네임 같은 다른 개최자 정보는 싣지 않는다. 응답 맨 뒤에 둔다 — 옛 클라이언트는 무시한다.
  */
 public record BuncheolSummaryResponse(
     Long id,
@@ -46,4 +49,5 @@ public record BuncheolSummaryResponse(
     boolean shippingFeePaybackTarget,
     boolean freeShippingEventTarget,
     Instant createdAt,
-    Instant opensAt) {}
+    Instant opensAt,
+    Long hostId) {}

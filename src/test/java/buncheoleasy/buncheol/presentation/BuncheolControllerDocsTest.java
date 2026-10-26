@@ -448,7 +448,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             false,
             true,
             createdAt,
-            null);
+            null,
+            7L);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -571,6 +572,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " null. 지난 시각이어도 그대로 실리므로 화면이 지금 시각과 비교해 \"M/D HH:mm"
                                         + " 오픈\" 을 붙인다. 오픈 전에도 availableMemberNames 는 빈 자리 이름을 싣는다")
                                 .optional(),
+                            fieldWithPath("items[].hostId")
+                                .description(
+                                    "분철을 연 회원 ID. 「이 개최자 분철 안 보기」처럼 같은 개최자의 분철을 묶어 거를 때"
+                                        + " 쓴다. 운영진(`LEGACY`) 분철은 운영진 계정 ID. 닉네임 등 다른 개최자 정보는 싣지 않는다"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -621,7 +626,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
               null,
               false,
               Instant.parse("2026-05-20T10:00:00Z"),
-              Instant.parse("2026-05-20T10:25:00Z"));
+              Instant.parse("2026-05-20T10:25:00Z"),
+              HOST_ID);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -675,6 +681,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               응답은 조회 시점 판정이라, 화면이 열어 둔 채 오픈 시각을 넘기면 다시 불러와야 `AVAILABLE` 로 바뀐다
                             - `serverTime` 은 이 응답을 만든 서버 시각 (UTC ISO-8601). 기기 시계가 틀려도 오픈까지 남은 시간을 맞게 세도록
                               화면이 이 값과 기기 시계의 차이를 보정해 쓴다
+                            - `hostId` 는 분철을 연 회원 ID. 「이 개최자 분철 안 보기」처럼 같은 개최자의 분철을 묶어 거를 때 쓴다.
+                              운영진(`LEGACY`) 분철은 운영진 계정 ID. 닉네임 등 다른 개최자 정보는 싣지 않는다. 목록 `items[].hostId` 와 같은 값
 
                             **응답 예시**
                             ```json
@@ -729,7 +737,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               },
                               "termsEditable": false,
                               "opensAt": "2026-05-20T10:00:00Z",
-                              "serverTime": "2026-05-20T10:25:00Z"
+                              "serverTime": "2026-05-20T10:25:00Z",
+                              "hostId": 1
                             }
                             ```
 
@@ -858,7 +867,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("serverTime")
                                 .description(
                                     "응답을 만든 서버 시각 (UTC ISO-8601). 오픈까지 남은 시간을 기기 시계 대신 이 값에"
-                                        + " 맞춰 센다"))
+                                        + " 맞춰 센다"),
+                            fieldWithPath("hostId")
+                                .description(
+                                    "분철을 연 회원 ID. 「이 개최자 분철 안 보기」처럼 같은 개최자의 분철을 묶어 거를 때"
+                                        + " 쓴다. 운영진(`LEGACY`) 분철은 운영진 계정 ID. 닉네임 등 다른 개최자 정보는 싣지 않는다"))
                         .build())));
   }
 

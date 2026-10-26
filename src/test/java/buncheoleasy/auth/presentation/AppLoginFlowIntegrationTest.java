@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import buncheoleasy.auth.domain.AppLoginCodeStore;
 import buncheoleasy.auth.domain.RefreshTokenStore;
+import buncheoleasy.user.domain.User;
+import buncheoleasy.user.domain.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +21,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Optional;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -52,6 +56,7 @@ class AppLoginFlowIntegrationTest {
   private static final String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
   private static final String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
   private static final String APP_START = "/oauth2/authorization/kakao/app";
+  private static final String PROVIDER_ID = "app-flow-itest";
 
   @Autowired private MockMvc mockMvc;
 
@@ -63,6 +68,14 @@ class AppLoginFlowIntegrationTest {
 
   @Value("${jwt.secret.refresh-key}")
   private String refreshSecret;
+
+  @Autowired private UserRepository userRepository;
+  @Autowired private JdbcTemplate jdbcTemplate;
+
+  @AfterEach
+  void tearDown() {
+    jdbcTemplate.update("DELETE FROM users WHERE provider_id = ?", PROVIDER_ID);
+  }
 
   private static MultiValueMap<String, String> queryOf(final MvcResult result) {
     return UriComponentsBuilder.fromUriString(result.getResponse().getRedirectedUrl())
@@ -208,9 +221,12 @@ class AppLoginFlowIntegrationTest {
 
     @Test
     void 웹_refresh_는_앱_갱신에서_거절된다() throws Exception {
+      // 실제 회원의 서명이 맞는 웹 refresh — 회원이 없어서가 아니라 칸이 달라서 거절되는지 본다(저장소 검증은 대역이라 통과한다).
+      Long userId =
+          userRepository.save(User.create("KAKAO", PROVIDER_ID, "app-flow@example.com")).getId();
       String webRefresh =
           Jwts.builder()
-              .subject("1")
+              .subject(String.valueOf(userId))
               .expiration(Date.from(Instant.now().plusSeconds(600)))
               .signWith(Keys.hmacShaKeyFor(refreshSecret.getBytes(StandardCharsets.UTF_8)))
               .compact();

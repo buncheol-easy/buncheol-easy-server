@@ -21,6 +21,7 @@ import buncheoleasy.user.domain.SocialProvider;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -39,7 +42,7 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 @DisplayName("OAuth2LoginSuccessHandler 단위 테스트")
 class OAuth2LoginSuccessHandlerTest {
 
@@ -72,7 +75,20 @@ class OAuth2LoginSuccessHandlerTest {
         authorizedClientService,
         kakaoApiClient,
         new AgeRangeConsentRedirector(AGE_RANGE_CONSENT_CALLBACK_URL),
+        new LoginFailureRedirector(loginCallbackUrl),
         loginCallbackUrl);
+  }
+
+  /** OutputCaptureExtension 은 앞선 테스트의 출력까지 돌려주므로, 표지 줄을 찍고 그 뒤만 본다. */
+  private static String markLogs() {
+    String mark = "test-mark-" + UUID.randomUUID();
+    System.out.println(mark);
+    return mark;
+  }
+
+  private static String logsAfter(final CapturedOutput output, final String mark) {
+    String all = output.getAll();
+    return all.substring(all.lastIndexOf(mark) + mark.length());
   }
 
   private void givenKakaoAccessToken() {
@@ -320,7 +336,7 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    void 프로필_추출_중_런타임_예외가_발생하면_지원하지_않는_제공자로_처리한다() {
+    void 프로필_추출이_실패하면_오류_화면_대신_실패로_로그인_콜백에_돌려보낸다() throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       OAuth2AuthenticationToken authentication =
@@ -331,18 +347,20 @@ class OAuth2LoginSuccessHandlerTest {
       given(profileExtractor.extract(principal))
           .willThrow(new RuntimeException("broken principal"));
 
-      // when & then
-      assertThatThrownBy(
-              () ->
-                  handler.onAuthenticationSuccess(
-                      new MockHttpServletRequest(), new MockHttpServletResponse(), authentication))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.AUTH_SOCIAL_PROVIDER_UNSUPPORTED);
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_CALLBACK_URL + "?error=failed");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      then(socialLoginService).should(never()).login(any(SocialLoginCommand.class));
     }
 
     @Test
-    void 소셜_이메일이_없으면_예외가_발생하고_리다이렉트도_쿠키도_내려보내지_않는다() {
+    void 새_회원인데_카카오가_이메일을_주지_않으면_이메일_필요로_돌려보내고_쿠키를_내려보내지_않는다(
+        final CapturedOutput output) throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       OAuth2AuthenticationToken authentication =
@@ -352,20 +370,113 @@ class OAuth2LoginSuccessHandlerTest {
 
       given(profileExtractor.supports("kakao")).willReturn(true);
       given(profileExtractor.extract(principal)).willReturn(profile);
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willThrow(new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      String mark = markLogs();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      assertThat(response.getStatus()).isEqualTo(302);
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(FRONTEND_CALLBACK_URL + "?error=email_required");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      String logs = logsAfter(output, mark);
+      assertThat(logs)
+          .contains("WARN")
+          .contains("소셜 로그인 거절: 사유=email_required")
+          .doesNotContain("ERROR")
+          .doesNotContain("provider-id");
+    }
+
+    @Test
+    void 기존_회원이면_카카오가_이메일을_주지_않아도_평소처럼_로그인된다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      OAuth2UserProfile profile = new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", null);
+
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal)).willReturn(profile);
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willReturn(new SocialLoginResult(new TokenPair("access", "refresh"), false));
 
       MockHttpServletResponse response = new MockHttpServletResponse();
 
-      // when & then
-      assertThatThrownBy(
-              () ->
-                  handler.onAuthenticationSuccess(
-                      new MockHttpServletRequest(), response, authentication))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED);
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
 
-      then(socialLoginService).should(never()).login(any(SocialLoginCommand.class));
-      assertThat(response.getRedirectedUrl()).isNull();
+      // then
+      ArgumentCaptor<SocialLoginCommand> captor =
+          ArgumentCaptor.forClass(SocialLoginCommand.class);
+      then(socialLoginService).should().login(captor.capture());
+      assertThat(captor.getValue().email()).isNull();
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(FRONTEND_CALLBACK_URL + "#accessToken=access");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).contains("refreshToken=refresh");
+    }
+
+    @Test
+    void 로그인_처리_중_예상_못_한_예외가_나면_실패로_돌려보내고_스택과_함께_ERROR_로_남긴다(
+        final CapturedOutput output) throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal))
+          .willReturn(
+              new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com"));
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willThrow(new IllegalStateException("DB 오류"));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      String mark = markLogs();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_CALLBACK_URL + "?error=failed");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      String logs = logsAfter(output, mark);
+      assertThat(logs)
+          .contains("ERROR")
+          .contains("소셜 로그인 처리 실패: 사유=failed")
+          .contains("java.lang.IllegalStateException: DB 오류")
+          .contains("\tat ")
+          .doesNotContain("provider-id")
+          .doesNotContain("test@example.com");
+    }
+
+    @Test
+    void 이메일_형식_불합격_같은_다른_업무_예외는_이메일_필요가_아니라_실패로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+
+      given(profileExtractor.supports("kakao")).willReturn(true);
+      given(profileExtractor.extract(principal))
+          .willReturn(new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "o'neil@kakao"));
+      given(socialLoginService.login(any(SocialLoginCommand.class)))
+          .willThrow(new BusinessException(ErrorCode.USER_EMAIL_FORMAT_INVALID));
+
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_CALLBACK_URL + "?error=failed");
       assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
     }
   }

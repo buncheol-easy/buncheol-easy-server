@@ -83,6 +83,9 @@ spring:
             authorization-uri: https://kauth.kakao.com/oauth/authorize
             token-uri: https://kauth.kakao.com/oauth/token
   jpa:
+    # Boot 자동 등록은 끄고 WebConfig 가 같은 인터셉터를 /v1/ai/** 만 빼고 다시 건다 — AI 개최글이 엔진을 기다리는 동안
+    # DB 커넥션을 쥐지 않게. 다른 API 의 OSIV 동작은 그대로다.
+    open-in-view: false
     hibernate:
       ddl-auto: none
     properties:

@@ -31,7 +31,8 @@ import org.springframework.stereotype.Service;
  * <p>순서: 기능 스위치 → 개최 자격 → 입력 → 1인 잠금 → 하루 시도·생성 횟수 → 서버 동시 상한 → 기록(RUNNING) → 엔진 → 그룹 확정 → 기록 마감.
  * 엔진까지 가지 못했거나 엔진이 AI 를 부르기 전에 멈춘 실패는 생성 횟수를 돌려준다. 시도 횟수는 돌려주지 않는다.
  *
- * <p>트랜잭션을 걸지 않는다 — 엔진 대기 동안 DB 커넥션을 쥐지 않도록 기록은 {@link AiDraftRequestRecorder} 의 짧은 트랜잭션으로만 쓴다.
+ * <p>트랜잭션을 걸지 않는다 — 엔진 대기 동안 DB 커넥션을 쥐지 않도록 기록은 {@link AiDraftRequestRecorder} 의 짧은 트랜잭션으로만 쓴다. 이 말이
+ * 사실이려면 요청 단위 EntityManager(OSIV)도 꺼져 있어야 한다 — {@code WebConfig} 가 {@code /v1/ai/**} 에서 뺀다.
  */
 @Slf4j
 @Service

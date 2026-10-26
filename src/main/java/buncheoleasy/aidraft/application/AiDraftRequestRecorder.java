@@ -15,7 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 요청 기록을 엔진 호출 앞뒤의 <b>짧은 트랜잭션 두 개</b>로 나눠 쓴다. 엔진 대기(최대 25초)를 트랜잭션 안에 넣으면 그동안 DB 커넥션을 쥐고 있게
- * 된다 — 그래서 서비스가 아니라 별도 빈에 두어 트랜잭션 경계가 프록시를 지나게 한다.
+ * 된다 — 그래서 서비스가 아니라 별도 빈에 두어 트랜잭션 경계가 프록시를 지나게 한다. 트랜잭션이 끝나면 커넥션을 돌려주는 것은 이 경로에 OSIV 가 없을
+ * 때뿐이다({@code WebConfig}).
  */
 @Slf4j
 @Component

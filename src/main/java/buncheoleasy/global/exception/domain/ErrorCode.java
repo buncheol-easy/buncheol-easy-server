@@ -167,12 +167,7 @@ public enum ErrorCode {
       "BCH-091",
       "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
       HttpStatus.CONFLICT),
-  // 성사 확정을 거친 참여의 자발 취소 차단 (docs/56 H-09). 취소 불가 구간을 공유하는 BCH-086("고객센터로 문의")과
-  // 분리한다 — 여기서 막힌 사람이 연락할 상대는 고객센터가 아니라 돈을 받을 개최자다(직거래).
-  PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM(
-      "BCH-092",
-      "개최자가 성사 확정한 뒤에는 참여를 직접 취소할 수 없어요. 사정이 생겼다면 개최자에게 먼저 알려 주세요.",
-      HttpStatus.CONFLICT),
+  // BCH-092 는 「성사 확정 뒤 자발 취소 차단」으로 배포됐다가 그 구간이 없어져(자발 취소는 신청만) 폐기된 번호라 재사용하지 않는다.
   // 입금 확인된 참여가 있는 분철의 개최자 취소 차단 (docs/56 H-13). 상태 위반(BCH-050)과 분리한다 — 상태는 취소 가능
   // 구간인데 "현재 상태에서는 취소할 수 없습니다" 만 뜨면 개최자가 무엇을 해야 하는지 알 수 없다.
   BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS(
@@ -214,14 +209,7 @@ public enum ErrorCode {
       "BCH-110", "회원 개최(C2C) 분철에는 코드 참여 멤버를 만들 수 없습니다.", HttpStatus.CONFLICT),
 
   // ── 참여 묶음 ──
-  // 「제외」는 미입금자를 정리하는 도구지 사람을 고르는 도구가 아니다 — 기한이 지나야 열린다 (docs/71 §8-1).
-  BUNDLE_RELEASE_RECRUITING(
-      "BCH-111", "모집 중에는 참여를 제외할 수 없어요. 입금 기한이 지난 뒤에 정리할 수 있어요.", HttpStatus.CONFLICT),
-  BUNDLE_RELEASE_BEFORE_DUE(
-      "BCH-112", "아직 입금 기한 전이에요. 기한이 지난 뒤에 제외할 수 있어요.", HttpStatus.CONFLICT),
-  BUNDLE_RELEASE_HAS_CONFIRMED(
-      "BCH-113", "입금이 확인된 참여는 제외할 수 없어요. 환불이 필요하면 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
-  // 「제외」 전용이 아닌 범용 조회 실패다.
+  // BCH-111~113 은 개최자 「제외」 실패로 배포됐다가 그 기능이 없어져 폐기된 번호라 재사용하지 않는다.
   BUNDLE_NOT_FOUND("BCH-114", "참여 묶음을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   // 개최자가 화면에서 본 슬롯 집합과 서버의 실제 집합이 다르다 — 화면을 새로 고쳐야 한다.
   BUNDLE_SLOTS_CHANGED(

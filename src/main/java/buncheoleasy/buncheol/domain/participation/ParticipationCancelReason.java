@@ -16,11 +16,11 @@ public enum ParticipationCancelReason {
   PAYMENT_TIMEOUT("입금 시간 초과"),
   // 분철이 취소(호스트 취소 또는 최소 인원 미달/미성사)되어 함께 취소. 입금확인된 참여는 개최자의 수동 환불처리가 필요하다.
   BUNCHEOL_CANCELLED("분철 취소"),
-  // C2C 참여자 자발 취소 — 신청(APPLIED)과 성사 확정을 거치지 않은 입금 대기(추가 모집)에서만 열린다
-  // (ParticipationCancellability). 돈이 오가기 전 구간이라 환불 없음.
+  // C2C 참여자 자발 취소 — 신청(APPLIED)에서만 열린다(ParticipationCancellability). 돈이 오가기 전 구간이라 환불 없음.
+  // 옛 기록에는 추가 모집(입금 수집 중 신청)의 입금 대기 취소도 있다.
   USER_CANCELLED("자발 취소"),
-  // 개최자가 입금 기한이 지난 묶음을 「제외」 (docs/70 결정 8). C2C 는 자동 만료가 없어 이것이 미입금자를 빼는 유일한
-  // 출구다. 묶음 통째로만 적용되고, 확정 슬롯이 하나라도 있으면 열리지 않는다.
+  // 옛 「제외」 기록, 읽기용. 개최자가 입금 기한이 지난 묶음을 빼던 기능은 없어졌다(P0-2). staging 에 옛 기록이 있어 값을 남긴다
+  // — 지우면 그 행을 읽는 화면이 500 이다.
   HOST_RELEASED("개최자 제외");
 
   private final String description;

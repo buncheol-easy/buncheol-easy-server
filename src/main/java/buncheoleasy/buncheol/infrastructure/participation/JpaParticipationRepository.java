@@ -228,8 +228,8 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("now") Instant now);
 
   /**
-   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다. 「제외」가 확정 슬롯 유무를 판정하기 전에 호출해, 판정과 UPDATE
-   * 사이에 개최자의 입금확인이 끼어들지 못하게 한다.
+   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다. 묶음 입금확인이 확인 대상을 판정하기 전에 호출해, 판정과 UPDATE
+   * 사이에 다른 쓰기가 끼어들지 못하게 한다.
    *
    * <p><b>왜 UPDATE 의 서브쿼리로 못 하는가</b>: MySQL 은 {@code UPDATE} 대상 테이블을 서브쿼리의 FROM 에서
    * 참조하는 것을 금지한다(<b>error 1093</b> — "You can't specify target table for update in FROM clause").
@@ -239,33 +239,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT p FROM Participation p WHERE p.bundleId = :bundleId")
   List<Participation> findAllByBundleIdForUpdate(@Param("bundleId") Long bundleId);
-
-  /**
-   * 개최자 「제외」 CAS — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다.
-   *
-   * <p>🔴 <b>기한 가드는 UPDATE 의 WHERE 안에 있다.</b> 호출부의 사전 판정은 사유를 고르는 용도이고, 최종 차단은
-   * 이 조건이 한다. {@code b.dueAt IS NOT NULL AND b.dueAt <= :now} 라 기한이 없으면(모집 중) <b>거부</b>이므로
-   * fail-closed 다.
-   *
-   * <p>⚠️ <b>확정 슬롯 검사는 여기 없다.</b> 같은 테이블을 서브쿼리로 참조하면 MySQL 이 거부하기 때문이다
-   * (error 1093). 대신 호출부가 {@link #findAllByBundleIdForUpdate} 로 슬롯을 잠근 뒤 판정한다 — 그 락이
-   * 입금확인({@code confirmPaymentIfAwaiting})을 막아 같은 원자성을 준다.
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Participation p "
-          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
-          + "    p.cancelledAt = :now, p.updatedAt = :now "
-          + "WHERE p.bundleId = :bundleId AND p.status IN :releasableStatuses "
-          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
-          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL "
-          + "    AND b.dueAt IS NOT NULL AND b.dueAt <= :now)")
-  int releaseBundleIfDue(
-      @Param("bundleId") Long bundleId,
-      @Param("releasableStatuses") Collection<ParticipationStatus> releasableStatuses,
-      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
-      @Param("reason") ParticipationCancelReason reason,
-      @Param("now") Instant now);
 
   /** 분철의 특정 상태 참여를 모두 지정 사유로 CANCELLED 로 일괄 전이 (분철 취소 cascade). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)

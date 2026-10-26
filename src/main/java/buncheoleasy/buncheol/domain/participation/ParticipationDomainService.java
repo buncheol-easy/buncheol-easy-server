@@ -25,11 +25,6 @@ public class ParticipationDomainService {
     return participationRepository.saveIfRecruitingAndOpen(participation);
   }
 
-  /** C2C 추가 모집 INSERT — 분철이 입금 수집중(PAYMENT_COLLECTING)인지 원자 확인 (docs/46 §4.7-E1). */
-  public boolean createParticipationIfCollecting(final Participation participation) {
-    return participationRepository.saveIfCollecting(participation);
-  }
-
   /**
    * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 호출 측 {@code @Transactional} 필수.
    *
@@ -51,8 +46,7 @@ public class ParticipationDomainService {
    *   <li><b>C2C 여야 한다.</b> LEGACY 는 1인 1활성슬롯이라 묶음이 곧 참여다 — 묶을 것이 애초에 없어 항상 새로
    *       열고({@code attach(.., null, ..)}), 애초에 추가 신청 자체가 {@code
    *       PARTICIPATION_ALREADY_JOINED_BUNCHEOL} 로 막힌다.
-   *   <li><b>모집중이어야 한다.</b> 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라 배송지를 새로 고르고 배송비를
-   *       다시 부과한다 (docs/80 결정 11 · §3-6).
+   *   <li><b>모집중이어야 한다.</b> 신청은 모집중에만 받는다 — 입금 단계 뒤에는 재참여 자체가 없다.
    * </ol>
    *
    * <p>🔴 <b>게이트를 하나라도 호출부에 남기지 마라.</b> 쓰기 경로는 {@code participateSingle} 이 먼저

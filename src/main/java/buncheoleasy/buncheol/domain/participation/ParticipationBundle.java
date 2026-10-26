@@ -24,7 +24,8 @@ import lombok.NoArgsConstructor;
  * 9,000원이 사라진다 (docs/70 §12). <b>값이 행에 살면 그 행이 죽을 때 값도 죽는다</b> 는 것이 이 테이블의 존재 이유다.
  *
  * <p><b>경계</b> — 묶음은 {@code (분철, 사람, 결제 사이클)} 단위다. 추가 모집분은 <b>새 묶음</b>이라 기존 묶음에 섞이지 않는다 (docs/70
- * 결정 2). 그래서 한 묶음 안의 슬롯은 상태가 갈리지 않고, 「보냈어요」·입금확인·「제외」가 전부 묶음 단위로 성립한다 (docs/71 §1).
+ * 결정 2). 그래서 한 묶음 안의 슬롯은 상태가 갈리지 않고, 「보냈어요」·입금확인이 전부 묶음 단위로 성립한다 (docs/71 §1). 추가 모집은
+ * 회원 개최 단순화(P0-2)로 없어졌고 이 경계는 그 전에 생긴 묶음을 읽기 위해 남는다.
  *
  * <p>⚠️ <b>"사이클" 이 추가 모집끼리를 묶는다는 뜻은 아니다 — 추가 모집은 슬롯마다 새 묶음이다.</b> 같은 입금 수집중 창에서 같은 사람이
  * 두 번 신청하면 묶음이 2개 생기고, 배송비 재부과가 붙으면 배송비도 2회다. 각 추가 모집 슬롯이 <b>개별 24h 기한</b>으로 따로 진입하고
@@ -63,7 +64,6 @@ public class ParticipationBundle extends TimestampedEntity {
   private Long shippingAddressId;
 
   // 배송비는 묶음이 소유한다. 슬롯을 몇 개 담든 1회, 슬롯 하나가 취소돼도 불변 — M-01 이 구조적으로 닫히는 지점이다.
-  // 추가 모집으로 새 묶음이 생기면 새 택배이므로 그 묶음에 다시 1회 부과된다.
   @Column(name = "shipping_fee", nullable = false, updatable = false)
   private long shippingFee;
 
@@ -88,7 +88,7 @@ public class ParticipationBundle extends TimestampedEntity {
    * 새 묶음을 연다. 배송지·배송비·환불계좌는 <b>참여 시점 스냅샷</b>이라 생성 후 바뀌지 않는다({@code
    * updatable = false}).
    *
-   * <p>{@code dueAt} 은 <b>즉시 입금 경로(LEGACY·C2C 추가 모집)에서만</b> 값이 있다. C2C 신청(APPLIED)은 성사 확정
+   * <p>{@code dueAt} 은 <b>즉시 입금 경로(LEGACY)에서만</b> 값이 있다. C2C 신청(APPLIED)은 입금 단계 시작
    * 시점에 기한이 정해지므로 {@code null} 로 열고, 나중에 {@code
  * ParticipationBundleRepository#assignDueAtByBuncheolId} 가 분철 범위로 채운다 — 신청 구간에는 입금 기한이라는
    * 개념이 없다.

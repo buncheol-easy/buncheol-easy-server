@@ -8,13 +8,10 @@ import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.PaymentStartedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
-import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
-import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
-import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
@@ -90,8 +87,7 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없어 기한 뒤 취소 안내는 {@link
-   * #onBundleReleased} 가 보낸다.
+   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -111,28 +107,6 @@ public class AlimtalkNotificationListener {
             "멤버명", view.memberName());
     recordSafely(view.participant().getId(), template, variables);
     sender.send(template, view.participant().getPhoneNumber().value(), variables);
-  }
-
-  /**
-   * (참여자) 개최자가 묶음을 「제외」함 — 입금 기한이 지나 참여가 취소됐다. 묶음 1통으로 보낸다 — 슬롯마다 보내면 같은 사람이 같은 내용을 여러 번
-   * 받는다.
-   */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onBundleReleased(final BundleReleasedEvent event) {
-    List<ParticipationView> views = loadViewsSafely(event.releasedParticipationIds());
-    if (views.isEmpty()) {
-      return;
-    }
-    ParticipationView first = views.get(0);
-    AlimtalkTemplate template = AlimtalkTemplate.C2C_PAYMENT_EXPIRED;
-    Map<String, String> variables =
-        Map.of(
-            "닉네임", first.participant().getNickname().value(),
-            "분철명", first.buncheol().getTitle(),
-            "멤버명", mergedMemberName(views));
-    recordSafely(first.participant().getId(), template, variables);
-    sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
   /**
@@ -203,9 +177,8 @@ public class AlimtalkNotificationListener {
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentStarted(final PaymentStartedEvent event) {
-    // 커밋 시점 전이 대상 스냅샷(event.participationIds)만 발송한다 — 실행 시점 상태 재조회는 그 사이 들어온
-    // 추가 모집 참여(onParticipationCreated 로 개별 안내를 받음)가 섞여 중복 발송된다. 커밋~실행 사이에
-    // 취소·확정된 건은 입금 안내가 무의미하므로 상태 필터로 거른다.
+    // 커밋 시점 전이 대상 스냅샷(event.participationIds)만 발송한다. 커밋~실행 사이에 취소·확정된 건은 입금 안내가
+    // 무의미하므로 상태 필터로 거른다.
     List<ParticipationView> views =
         loadViewsSafely(event.participationIds()).stream()
             .filter(
@@ -214,26 +187,6 @@ public class AlimtalkNotificationListener {
                         || view.participation().getStatus() == ParticipationStatus.PAYMENT_SENT)
             .toList();
     sendEachSafely(groupByParticipant(views), this::sendFinalizedNotice);
-  }
-
-  /** (참여자) C2C 추가 모집 즉시입금 진입 — 이미 성사된 분철의 빈 슬롯 참여라 입금 안내를 바로 보낸다 (docs/46 §4.7-E1). */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onParticipationCreated(final ParticipationCreatedEvent event) {
-    // LEGACY 신규 참여는 알림톡 없음(현행 유지 — 계좌는 응답으로 안내, 운영 관제는 슬랙). C2C 무입금 신청(APPLIED)도 발송 없음.
-    if (event.flowType() != FlowType.C2C) {
-      return;
-    }
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    if (view.participation().getStatus() != ParticipationStatus.AWAITING_PAYMENT) {
-      return;
-    }
-    sendC2cPaymentGuide(
-        view,
-        AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
-        view.memberName(),
-        view.paymentAmount(),
-        view.paymentDueAt());
   }
 
   // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).
@@ -335,7 +288,7 @@ public class AlimtalkNotificationListener {
         AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
         mergedMemberName(group),
         totalAmount,
-        // 묶음 값을 쓴다 — 「제외」 게이트가 보는 기한이 묶음이다. 다슬롯이라 first 를 고르지만
+        // 묶음 값을 쓴다 — 입금 기한의 정본이 묶음이다. 다슬롯이라 first 를 고르지만
         // assignDueAtByBuncheolId 가 그 분철의 활성 묶음 「전부」에 같은 값을 심으므로 어느 것을 골라도 같다.
         first.paymentDueAt());
   }
@@ -421,7 +374,7 @@ public class AlimtalkNotificationListener {
     return listed + " 외 " + (names.size() - listedCount);
   }
 
-  // C2C 입금 안내 계열(성사 확정·추가 모집) 공용 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
+  // C2C 입금 안내 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
   private void sendC2cPaymentGuide(
       final ParticipationView view,
       final AlimtalkTemplate template,

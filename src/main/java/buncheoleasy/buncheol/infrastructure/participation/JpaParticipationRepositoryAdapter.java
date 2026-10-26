@@ -91,8 +91,8 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   /**
    * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
    *
-   * <p>⚠️ "APPLIED 신청은 RECRUITING 분철에만 생긴다"(성사 확정 일괄 전이에서 누락되는 orphan APPLIED 방지)는 정합성은, MySQL
-   * REPEATABLE READ 에서 INSERT ... SELECT 의 소스 행(buncheols)에 공유 락이 걸려 성사 확정 UPDATE 와 직렬화되는 동작에
+   * <p>⚠️ "APPLIED 신청은 RECRUITING 분철에만 생긴다"(입금 단계 시작 일괄 전이에서 누락되는 orphan APPLIED 방지)는 정합성은, MySQL
+   * REPEATABLE READ 에서 INSERT ... SELECT 의 소스 행(buncheols)에 공유 락이 걸려 입금 단계 시작 UPDATE 와 직렬화되는 동작에
    * 의존한다. READ COMMITTED 로 낮추면 소스 읽기가 비잠금 consistent read 가 되어 이 보장이 깨진다 — 격리수준을 바꾸려면 이 SQL 에
    * FOR SHARE 를 명시할 것 (docs/46 §4.7-C1).
    */
@@ -112,13 +112,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           + " AND NOT EXISTS (SELECT 1 FROM staff_buncheol_settings s"
           + " WHERE s.buncheol_id = buncheols.id AND s.opens_at > UTC_TIMESTAMP())";
 
-  /**
-   * C2C 추가 모집: 분철이 입금 수집중일 때만 삽입하는 conditional INSERT (docs/46 §4.7-E1). 입금 수집은 deadline 이후
-   * 구간이므로 마감 조건 없이 상태만 확인한다 — 진행확정(CONFIRMED) 전이 후에는 삽입되지 않는다.
-   */
-  private static final String INSERT_IF_COLLECTING_SQL =
-      INSERT_COLUMNS_SQL + "FROM buncheols WHERE id = ? AND status = 'PAYMENT_COLLECTING'";
-
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_SQL);
@@ -127,11 +120,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public boolean saveIfRecruitingAndOpen(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_AND_OPEN_SQL);
-  }
-
-  @Override
-  public boolean saveIfCollecting(final Participation participation) {
-    return saveIfBuncheolCondition(participation, INSERT_IF_COLLECTING_SQL);
   }
 
   private boolean saveIfBuncheolCondition(final Participation participation, final String sql) {
@@ -282,16 +270,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public List<Participation> findAllByBundleIdForUpdate(final Long bundleId) {
     return jpaParticipationRepository.findAllByBundleIdForUpdate(bundleId);
-  }
-
-  @Override
-  public int releaseBundleIfDue(final Long bundleId, final Instant now) {
-    return jpaParticipationRepository.releaseBundleIfDue(
-        bundleId,
-        ParticipationStatus.releasableStatuses(),
-        ParticipationStatus.CANCELLED,
-        ParticipationCancelReason.HOST_RELEASED,
-        now);
   }
 
   @Override

@@ -1795,7 +1795,7 @@ class BuncheolServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"CONFIRMED", "CANCELLED", "HOST_CANCELLED"})
+        names = {"PAYMENT_COLLECTING", "CONFIRMED", "CANCELLED", "HOST_CANCELLED"})
     void 신청을_받지_않는_상태면_거부한다(final BuncheolStatus status) {
       givenLocked(slotEditBuncheol(FlowType.C2C, status));
 
@@ -1883,7 +1883,7 @@ class BuncheolServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+        names = {"RECRUITING"})
     void 기록만_남아_지우지_못한_자리는_닫고_열린_자리_수로_최소_인원을_맞춘다(final BuncheolStatus status) {
       givenLocked(slotEditBuncheol(FlowType.C2C, status));
       givenSlots(SLOT_ID, OTHER_SLOT_ID, 9L);
@@ -1943,7 +1943,7 @@ class BuncheolServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+        names = {"RECRUITING"})
     void 빈_자리는_지우고_남은_자리_수로_최소_인원_맞추기를_요청한다(final BuncheolStatus status) {
       givenLocked(slotEditBuncheol(FlowType.C2C, status));
       givenSlots(SLOT_ID, OTHER_SLOT_ID, 9L);
@@ -2089,7 +2089,7 @@ class BuncheolServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+        names = {"RECRUITING"})
     void 같은_멤버의_닫힌_자리가_있으면_같은_id_로_다시_연다(final BuncheolStatus status) {
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
           .willReturn(slotEditBuncheol(FlowType.C2C, status));
@@ -2126,7 +2126,7 @@ class BuncheolServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+        names = {"RECRUITING"})
     void 신청을_받는_동안에는_선착순_자리를_만들고_최소_인원은_올리지_않는다(final BuncheolStatus status) {
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID))
           .willReturn(slotEditBuncheol(FlowType.C2C, status));
@@ -2184,7 +2184,7 @@ class BuncheolServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"CONFIRMED", "CANCELLED", "HOST_CANCELLED"})
+        names = {"PAYMENT_COLLECTING", "CONFIRMED", "CANCELLED", "HOST_CANCELLED"})
     void 신청을_받지_않는_상태면_거부한다(final BuncheolStatus status) {
       givenLocked(slotEditBuncheol(FlowType.C2C, status));
 

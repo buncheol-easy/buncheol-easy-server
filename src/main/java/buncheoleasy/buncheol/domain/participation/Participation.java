@@ -122,7 +122,7 @@ public class Participation extends TimestampedEntity {
    * <p>⚠️ 쓰기는 raw INSERT 가 전담하므로 <b>JPA 가 이 칸을 건드리면 안 된다</b>. 그래서 {@code insertable=false,
    * updatable=false} 다.
    *
-   * <p>🔴 <b>조회로 읽은 엔티티에서만 유효하다.</b> {@code saveIfRecruiting}/{@code saveIfCollecting} 직후의
+   * <p>🔴 <b>조회로 읽은 엔티티에서만 유효하다.</b> {@code saveIfRecruiting} 류 조건부 INSERT 직후의
    * 인스턴스는 어댑터가 리플렉션으로 {@code id} 만 채운 <b>비관리 객체</b>라 이 게터가 {@code null} 이다(DB 행은
    * 정상). 옆에 {@code Buncheol#getFlowType()} 이라는 동명 게터가 있어 더 헷갈리니, 플로우 판정이 필요하면
    * <b>분철에서 읽어라</b>. 이 칸의 존재 이유는 만료 폴링이 조인 없이 걸러내기 위한 것 하나뿐이다.
@@ -133,7 +133,7 @@ public class Participation extends TimestampedEntity {
 
   // 입금 기한.
   // LEGACY = min(점유 시각 + 10분, 분철 deadline) — 생성 시 확정돼 이후 불변. 지나면 만료 스케줄러가 자동 취소한다.
-  // C2C = 성사 확정 시 일괄 24h(APPLIED 단계는 NULL)·추가 모집은 참여 시각 + 24h. 자동 취소하지 않으며 정본은
+  // C2C = 입금 단계 시작 때 일괄 24h(APPLIED 단계는 NULL). 자동 취소하지 않으며 정본은
   // 묶음(participation_bundles.due_at)이다 — 이 칸은 사본이다.
   @Column(name = "due_at")
   private Instant dueAt;
@@ -310,7 +310,7 @@ public class Participation extends TimestampedEntity {
     }
   }
 
-  // 즉시 입금 경로(LEGACY·C2C 추가 모집)는 입금 기한이 필수다. APPLIED 신청만 기한 없이 생성된다.
+  // 즉시 입금 경로(LEGACY)는 입금 기한이 필수다. C2C 신청(APPLIED)만 기한 없이 생성된다.
   private static Instant requireDueAt(final Instant dueAt) {
     if (dueAt == null) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);

@@ -113,8 +113,7 @@ public class BuncheolDetailQueryService {
             ? staffBuncheolSettingRepository.findByBuncheolId(buncheolId)
             : Optional.empty();
     boolean beforeOpen = staffSetting.map(setting -> setting.isBeforeOpen(now)).orElse(false);
-    // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 그 값이 「제외」 게이트가 보는 값이고,
-    // 카드 계약이 "이 시각이 지나면 슬롯이 공석으로 풀린다" 이기 때문이다. 배치 1회로 붙인다.
+    // 멤버 카드의 기한도 C2C 는 묶음이 정본이다 — 참여자에게 안내한 입금 기한이 그 값이다. 배치 1회로 붙인다.
     // LEGACY 는 dueAtOf 가 조기 반환이라 이 맵을 한 번도 읽지 않는다. 공개 엔드포인트라 헛쿼리를 안 낸다.
     Map<Long, ParticipationBundle> bundleById =
         buncheol.isC2c()
@@ -162,7 +161,7 @@ public class BuncheolDetailQueryService {
     // 취소가 되므로, 공석이 있는 분철이라면 신청 → 링크 취득 → 취소 로 여전히 모을 수 있다. 다만 참여 기록이
     // 남아 추적되고 슬롯을 점유하며 모집이 닫힌 분철에는 아예 못 들어간다. 신청 스팸 자체의 레이트 리밋은 별건.
     //
-    // 신청 단계부터 여는 것은 사용자 결정이다 — 성사 확정 전에도 개최자에게 물어볼 일이 생긴다.
+    // 신청 단계부터 여는 것은 사용자 결정이다 — 입금 단계 전에도 개최자에게 물어볼 일이 생긴다.
     //
     // ⚠️ myParticipation 의 null 여부로 판정하면 안 된다 — toMyParticipation 은 참여가 없어도 count=0 인
     // 객체를 돌려주므로, 로그인만 하면 링크가 보이게 된다.
@@ -242,8 +241,7 @@ public class BuncheolDetailQueryService {
     return switch (active.getStatus()) {
       case APPLIED -> BuncheolMemberSaleStatus.APPLIED;
       case AWAITING_PAYMENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
-      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정. AWAITING_PAYMENT 로 접히므로 기한도 함께 뜨는데,
-      // 「제외」 게이트가 CONFIRMED 만 막고 PAYMENT_SENT 는 뺄 수 있어 "이 시각이 지나면 풀린다" 가 맞다.
+      // "보냈어요" 마킹도 외부 관점에선 점유+입금 미확정이라 AWAITING_PAYMENT 로 접힌다(진행 확정 때 함께 빠질 수 있다).
       case PAYMENT_SENT -> BuncheolMemberSaleStatus.AWAITING_PAYMENT;
       case CONFIRMED -> BuncheolMemberSaleStatus.SOLD;
       // 취소된 참여는 슬롯을 점유하지 않는다 (활성 참여만 조회하므로 실제로는 위 상태들만 온다).

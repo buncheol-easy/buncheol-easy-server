@@ -666,12 +666,9 @@ class MyParticipationQueryServiceTest {
 
     private static final Instant FINALIZED_AT = Instant.parse("2026-05-14T10:00:00Z");
 
-    /**
-     * docs/46 §4.7-E1 — 입금 수집중 분철의 추가 모집 참여는 APPLIED 를 거치지 않고 곧바로 AWAITING_PAYMENT 로 생성된다.
-     * 상태만 보고 판정하면 이 참여자는 신청 즉시 24시간 잠기고 화면의 취소 버튼도 사라진다. 반드시 CANCELLABLE 이어야 한다.
-     */
+    // 입금 단계가 시작되면 스스로 빠질 수 없다 — 옛 추가 모집분(입금 수집 중 생성)도 같다.
     @Test
-    void 추가_모집으로_입금_대기가_된_참여는_취소_가능으로_내려간다() {
+    void 입금_대기_참여는_상태_사유와_함께_취소_불가로_내려간다() {
       List<MyParticipationResponse> result =
           응답(
               ParticipationStatus.AWAITING_PAYMENT,
@@ -679,19 +676,7 @@ class MyParticipationQueryServiceTest {
               FINALIZED_AT);
 
       assertThat(result.get(0).cancellability())
-          .isEqualTo(ParticipationCancellability.CANCELLABLE);
-    }
-
-    @Test
-    void 성사_확정을_거친_입금_대기_참여는_확정_사유와_함께_취소_불가로_내려간다() {
-      List<MyParticipationResponse> result =
-          응답(
-              ParticipationStatus.AWAITING_PAYMENT,
-              FINALIZED_AT.minus(1, ChronoUnit.HOURS),
-              FINALIZED_AT);
-
-      assertThat(result.get(0).cancellability())
-          .isEqualTo(ParticipationCancellability.BLOCKED_BY_HOST_CONFIRM);
+          .isEqualTo(ParticipationCancellability.BLOCKED_BY_STATUS);
     }
 
     @Test

@@ -22,6 +22,7 @@ public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
 
   private final LoginFailureRedirector loginFailureRedirector;
   private final AgeRangeConsentRedirector ageRangeConsentRedirector;
+  private final AppLoginRedirector appLoginRedirector;
 
   @Override
   public void onAuthenticationFailure(
@@ -36,6 +37,11 @@ public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
             ? LoginFailureRedirector.Reason.CANCELLED
             : LoginFailureRedirector.Reason.FAILED;
     log.warn("소셜 로그인 실패: 사유={}, 원인코드={}", reason.getValue(), causeCode(exception));
+    // 앱 인증 창에서 시작한 로그인은 웹 화면이 아니라 앱 주소로 돌려보내야 인증 창이 닫힌다.
+    if (KakaoAuthorizationRequestResolver.isAppLoginCallback(request)) {
+      appLoginRedirector.redirectWithError(response, reason);
+      return;
+    }
     loginFailureRedirector.redirect(response, reason);
   }
 

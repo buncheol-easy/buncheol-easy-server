@@ -437,6 +437,8 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
   // RECRUITING → CONFIRMED. count 를 UPDATE WHERE 서브쿼리로 current-read 로 세므로, 마지막 슬롯들을 동시에 입금확인하는
   // 경합에서도 non-locking COUNT 를 미리 읽고 판정하는 read-then-act 갭 없이 즉시 확정한다(이 CAS 가 확정하면 이후 deadline 스케줄러는
   // status 불일치로 이중 확정하지 않는다).
+  // ⚠️ READ COMMITTED 호출자에선 서브쿼리가 잠금 없는 읽기라, 이 보장은 호출자가 분철 행을 먼저 잠가야 성립한다
+  //    (ParticipationService#lockBuncheolBeforeConfirm).
   // totalSlots=0 이면 minHeadcount(≥1) <= 0 이 거짓이라 전이하지 않는다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

@@ -472,9 +472,9 @@ public class ParticipationService {
    *
    * <p>락 순서 규약: 이 경로는 분철 행(X) → 자리 행(S) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
    * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
-   * 방향이다. 반면 입금확인은 <b>역순</b>(참여 행 → 분철 행)이다 — LEGACY 는 슬롯 확인 뒤
-   * {@code confirmIfAllSlotsConfirmed} 로, C2C 는 {@code ParticipationBundleService#confirmPayment} 가 묶음
-   * 확정 뒤 {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
+   * 방향이다. LEGACY 슬롯 입금확인도 분철 행을 먼저 잠근다({@link #lockBuncheolBeforeConfirm}). 반면 C2C 입금확인은
+   * <b>역순</b>(참여 행 → 분철 행)이다 — {@code ParticipationBundleService#confirmPayment} 가 묶음 확정 뒤
+   * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
    * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
    *
    * <p><b>P2-b 가 세 번째 방향을 더했다 — 참여 행 → 묶음 행 → 참여 행.</b> 묶음 종료 CAS 가 활성 슬롯 존재를 UPDATE 의
@@ -496,8 +496,8 @@ public class ParticipationService {
    *       묶음 포함 참여 행(S)</b>. {@code confirmIfAllCollected} 의 서브쿼리가 그 분철의 참여 전체에
    *       공유 락을 건다. <b>같은 분철의 두 묶음을 개최자가 연속 확인</b>하면(목록을 위에서 아래로 클릭하는
    *       평범한 조작) Tx A 가 묶음1 슬롯 X → 분철 X 를 쥔 채 묶음2 슬롯 S 를 기다리고, Tx B 는 묶음2 슬롯
-   *       X 를 쥔 채 분철 X 를 기다려 <b>데드락</b>이 난다. 슬롯 단위 경로에도 있던 성질이라 새 리스크
-   *       클래스는 아니지만, 이 경로는 ① 잡는 행이 슬롯 1개가 아니라 <b>묶음 전건</b>이고 ② 분철 락 <b>전에</b>
+   *       X 를 쥔 채 분철 X 를 기다려 <b>데드락</b>이 난다. 슬롯 단위 입금확인은 분철 행을 먼저 잠그게 바뀌어 이 역순은
+   *       C2C 묶음 확정에만 남았다. 이 경로는 ① 잡는 행이 슬롯 1개가 아니라 <b>묶음 전건</b>이고 ② 분철 락 <b>전에</b>
    *       배송 스냅샷 N건(조회 2 + INSERT 1 × 슬롯 수)을 처리해 <b>락 보유 시간이 길어 창이 넓다</b>.
    *       창을 줄이려면 {@code confirmIfAllCollected} 를 스냅샷 루프보다 앞으로 당기는 선택지가 있으나,
    *       {@code applyPaymentConfirmed} 의 기존 순서와 달라지므로 별도 판단이 필요하다.
@@ -574,7 +574,7 @@ public class ParticipationService {
    * <p>🔴 <b>LEGACY 전용이다.</b> C2C 는 {@link ParticipationBundleService#confirmPayment} 만 쓴다 —
    * 이유는 {@link #requireLegacy} 참고.
    */
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public void confirmPayment(final Long hostId, final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
@@ -591,7 +591,7 @@ public class ParticipationService {
    * (AdminPaymentCommandService), 중간 한 건이 실패해도 앞 건은 이미 커밋된다. C2C 를 허용하면 운영자가
    * 대시보드에서 한 번 잘못 고르는 것만으로 되살릴 수 없는 묶음이 생긴다.
    */
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public void confirmPaymentByAdmin(final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
@@ -613,13 +613,15 @@ public class ParticipationService {
   public SystemPaymentConfirmResult confirmPaymentBySystem(final Long participationId) {
     Participation participation = participationDomainService.getParticipation(participationId);
     Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
-    final Instant now = Instant.now(clock);
 
     // C2C 는 페이액션 주문을 등록하지 않아 정상 경로에선 웹훅이 오지 않지만, 방어적으로 자동확정을 차단한다 (docs/46 §3-2).
     // NOT_CONFIRMABLE 로 돌려 운영자 슬랙 알림 경로를 태운다 — 도달했다면 조사할 이상 신호다.
     if (buncheol.isC2c()) {
       return SystemPaymentConfirmResult.NOT_CONFIRMABLE;
     }
+
+    lockBuncheolBeforeConfirm(participation.getBuncheolId());
+    final Instant now = Instant.now(clock);
 
     if (!participationDomainService.confirmPaymentIfAwaiting(participationId, now)) {
       return participationDomainService.getParticipation(participationId).getStatus()
@@ -637,9 +639,27 @@ public class ParticipationService {
    * C2C 의 "보냈어요 상태도 확인 대상 · 기한 경과 무시" 규칙(docs/46 §3-6)은 묶음 경로가 그대로 이어받았다.
    */
   private void doConfirmPayment(final Participation participation, final Buncheol buncheol) {
+    lockBuncheolBeforeConfirm(participation.getBuncheolId());
     final Instant now = Instant.now(clock);
     participationDomainService.confirmPayment(participation.getId(), now);
     applyPaymentConfirmed(participation, buncheol, now);
+  }
+
+  /**
+   * 슬롯 단위 입금확인은 분철 행부터 잠근다. 확정 CAS(참여 행 X) 뒤의 조기 확정 UPDATE 가 분철 행 X 를 잡고 그 분철의 참여를
+   * 전부 세므로, 잠금 없이 들어오면 같은 분철의 동시 확정끼리 REPEATABLE READ(개최자·어드민)에선 데드락이 나고 READ COMMITTED(웹훅)에선
+   * 서로의 미커밋 확정을 못 봐 조기 확정이 빠진다. 분철 행에서 줄을 세우면 둘 다 사라진다 — 참여 생성·0원 확정·마감 판정과 같은
+   * 분철 → 참여 순서다.
+   *
+   * <p>그래서 세 진입점 모두 READ COMMITTED 다. REPEATABLE READ 면 잠금 전 첫 조회의 스냅샷이 끝까지 남아, 잠금을 기다리는 사이
+   * 커밋된 확정을 진행확정 알림 대상 조회({@code BuncheolConfirmedFinalizer})가 못 보고 빠뜨린다. LEGACY 에서 확정 수를 바꾸는 쓰기는
+   * 모두 분철 행을 먼저 잡으므로 READ COMMITTED 에서도 조기 확정 서브쿼리의 개수가 맞다.
+   *
+   * <p>기한 판정 시각({@code now})은 잠금을 얻은 뒤에 잡는다. 마감 판정 뒤로 줄 선 확인은 now 가 deadline(≥ dueAt)을 넘어 확정 CAS
+   * 에 실패해야 끝난 분철에 확정이 새지 않는다.
+   */
+  private void lockBuncheolBeforeConfirm(final Long buncheolId) {
+    buncheolDomainService.getBuncheolForUpdate(buncheolId);
   }
 
   /**

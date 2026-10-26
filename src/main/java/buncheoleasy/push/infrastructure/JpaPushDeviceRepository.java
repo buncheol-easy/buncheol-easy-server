@@ -12,7 +12,7 @@ interface JpaPushDeviceRepository extends JpaRepository<PushDevice, Long> {
   List<PushDevice> findAllByUserId(Long userId);
 
   // 조회 후 저장(2단계)이면 앱이 같은 토큰을 연달아 등록할 때 늦은 쪽이 유니크 충돌(500)로 죽는다. 한 문장이면 MySQL 이 행 잠금으로 줄 세운다.
-  // created_at·updated_at 은 다른 표와 같이 DB 시각으로 채운다(updated_at 은 값이 같아도 갱신되도록 명시).
+  // 이 표는 upsert 라 created_at·updated_at 에 DB 시각을 쓴다(다른 표의 JPA 저장은 앱 시각). updated_at 은 값이 같아도 갱신되도록 명시한다.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       value =

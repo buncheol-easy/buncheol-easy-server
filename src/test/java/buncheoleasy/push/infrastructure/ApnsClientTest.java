@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.spec.ECGenParameterSpec;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -113,6 +115,21 @@ class ApnsClientTest {
               transport,
               objectMapper,
               clock);
+
+      assertThat(client.isEnabled()).isFalse();
+      assertThat(client.send(device(PushEnvironment.PRODUCTION), MESSAGE))
+          .isEqualTo(ApnsSendResult.DISABLED);
+      assertThat(transport.requests).isEmpty();
+    }
+
+    @Test
+    void P_256_이_아닌_키는_서명할_수_없어_꺼진다() throws Exception {
+      KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+      generator.initialize(new ECGenParameterSpec("secp384r1"));
+      String p384 = ApnsTestKeys.pem(generator.generateKeyPair().getPrivate());
+
+      ApnsClient client =
+          new ApnsClient(properties(TEAM_ID, KEY_ID, p384, TOPIC), transport, objectMapper, clock);
 
       assertThat(client.isEnabled()).isFalse();
       assertThat(client.send(device(PushEnvironment.PRODUCTION), MESSAGE))

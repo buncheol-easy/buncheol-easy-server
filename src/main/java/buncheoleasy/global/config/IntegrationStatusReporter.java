@@ -60,14 +60,14 @@ public class IntegrationStatusReporter {
     return "OFF(outbound=%s, webhook=%s)".formatted(onOff(outbound), onOff(webhook));
   }
 
-  /** 앱 푸시가 꺼졌을 때 비어 있는 키 이름(값 아님)을 보여 준다. 키가 다 있는데 꺼졌으면 키 본문을 읽지 못한 것이다. */
+  /** 앱 푸시가 꺼졌을 때 비어 있는 키 이름(값 아님)을 보여 준다. 키가 다 있는데 꺼졌으면 키 본문으로 서명할 수 없는 것이다. */
   private String apnsStatus() {
     if (apnsClient.isEnabled()) {
       return "ON";
     }
     List<String> missing = apnsProperties.missingEnvKeys();
     return missing.isEmpty()
-        ? "OFF(APNS_PRIVATE_KEY 를 읽지 못함)"
+        ? "OFF(APNS_PRIVATE_KEY 를 쓸 수 없음)"
         : "OFF(빈 키: " + String.join(", ", missing) + ")";
   }
 

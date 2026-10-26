@@ -88,13 +88,19 @@ public class ApnsClient {
       return ApnsSendResult.SENT;
     }
     String reason = reasonOf(response.body());
-    // 410 은 앱 삭제·알림 해제 등으로 더 이상 쓰지 않는 토큰, BadDeviceToken 은 환경이 틀렸거나 망가진 토큰이다.
-    if (status == 410 || status == 400 && BAD_DEVICE_TOKEN.equals(reason)) {
+    // 410 은 앱 삭제·알림 해제 등으로 더 이상 쓰지 않는 토큰이다 — 평소 일이라 INFO.
+    if (status == 410) {
       log.info(
-          "애플이 기기 토큰을 무효로 답함, 행 삭제 - deviceId={}, status={}, reason={}",
+          "애플이 기기 토큰을 무효로 답함, 행 삭제 - deviceId={}, reason={}", device.getId(), reason);
+      return ApnsSendResult.TOKEN_INVALID;
+    }
+    // BadDeviceToken 은 대개 앱이 보낸 환경(SANDBOX/PRODUCTION)이 틀린 것이다. 그러면 등록 → 첫 발송 → 삭제가 조용히 되풀이되므로 WARN 으로 드러낸다.
+    // DeviceTokenNotForTopic 은 지우지 않는다 — 서버의 APNS_TOPIC 이 틀린 경우에도 나와서, 지우면 모든 기기가 한 번에 사라진다.
+    if (status == 400 && BAD_DEVICE_TOKEN.equals(reason)) {
+      log.warn(
+          "애플이 기기 토큰을 BadDeviceToken 으로 거절, 행 삭제 — 앱이 보낸 환경이 맞는지 확인 - deviceId={}, environment={}",
           device.getId(),
-          status,
-          reason);
+          device.getEnvironment());
       return ApnsSendResult.TOKEN_INVALID;
     }
     if (status == 403 && EXPIRED_PROVIDER_TOKEN.equals(reason)) {
@@ -161,11 +167,15 @@ public class ApnsClient {
     }
     try {
       PrivateKey key = ApnsProviderToken.parsePrivateKey(properties.privateKey());
-      return new ApnsProviderToken(properties.teamId(), properties.keyId(), key, clock);
-    } catch (GeneralSecurityException e) {
+      ApnsProviderToken providerToken =
+          new ApnsProviderToken(properties.teamId(), properties.keyId(), key, clock);
+      // 읽히는 EC 키라도 곡선이 P-256 이 아니면 ES256 서명이 안 된다 — 발송 때마다 실패하지 않게 기동 때 한 번 서명해 본다.
+      providerToken.current();
+      return providerToken;
+    } catch (GeneralSecurityException | RuntimeException e) {
       // 키 내용이 섞일 수 있는 메시지·스택은 남기지 않는다.
       log.warn(
-          "APNS_PRIVATE_KEY 를 읽지 못해 앱 푸시를 끈다 — .p8 파일 본문(PEM)인지 확인 - error={}",
+          "APNS_PRIVATE_KEY 로 서명할 수 없어 앱 푸시를 끈다 — APNs .p8 파일 본문(PEM, P-256)인지 확인 - error={}",
           e.getClass().getSimpleName());
       return null;
     }

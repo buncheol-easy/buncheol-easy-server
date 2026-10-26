@@ -39,7 +39,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AppleIdentityTokenVerifier implements AppleIdentityVerifier {
 
-  static final String APPLE_ISSUER = "https://appleid.apple.com";
+  private static final String APPLE_ISSUER = "https://appleid.apple.com";
   private static final String APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
   private static final String NONCE_CLAIM = "nonce";
   private static final String EMAIL_CLAIM = "email";

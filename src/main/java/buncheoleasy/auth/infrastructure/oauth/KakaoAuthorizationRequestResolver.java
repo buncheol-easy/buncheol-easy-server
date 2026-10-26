@@ -41,9 +41,9 @@ import org.springframework.stereotype.Component;
 public class KakaoAuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
 
   static final String AGE_RANGE_CONSENT_STATE_PREFIX = "age_range.";
-  static final String APP_LOGIN_STATE_PREFIX = "app.";
+  private static final String APP_LOGIN_STATE_PREFIX = "app.";
   public static final String APP_LOGIN_PATH = DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/kakao/app";
-  public static final String APP_LOGIN_CHALLENGE_PARAM = "challenge";
+  private static final String APP_LOGIN_CHALLENGE_PARAM = "challenge";
   private static final char STATE_SEPARATOR = '.';
 
   private static final String AGE_RANGE_CONSENT_PATH =

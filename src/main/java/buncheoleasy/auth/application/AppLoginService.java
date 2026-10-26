@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AppLoginService {
 
-  static final Duration CODE_TIME_TO_LIVE = Duration.ofSeconds(120);
+  private static final Duration CODE_TIME_TO_LIVE = Duration.ofSeconds(120);
   private static final int CODE_BYTES = 32;
   private static final int NAME_MAX_LENGTH = 30;
   private static final Base64.Encoder BASE64_URL = Base64.getUrlEncoder().withoutPadding();

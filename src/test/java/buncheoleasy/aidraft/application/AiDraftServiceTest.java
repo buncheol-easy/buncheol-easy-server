@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -562,6 +563,72 @@ class AiDraftServiceTest {
       AiDraftResponse response = service.createDraft(USER_ID, URL_REQUEST);
 
       assertThat(response.title()).isEqualTo("가".repeat(63));
+    }
+  }
+
+  @Nested
+  @DisplayName("엔진 성공 뒤의 실패")
+  class AfterEngineFailureTest {
+
+    @Test
+    void 그룹_찾기가_실패해도_그룹_없이_검색어와_함께_초안을_돌려준다() {
+      givenHappyPath();
+      given(groupMatcher.match(any(), any())).willThrow(new IllegalStateException("db down"));
+
+      AiDraftResponse response = service.createDraft(USER_ID, URL_REQUEST);
+
+      assertThat(response.title()).isEqualTo("제목");
+      assertThat(response.group()).isNull();
+      assertThat(response.groupKeywords())
+          .containsExactly("투모로우바이투게더 (TXT)", "TOMORROW X TOGETHER", "TXT");
+      then(recorder).should().succeed(eq(REQUEST_ID), eq(COST), eq(null), any(Duration.class));
+      then(usage).should(never()).refundGeneration(anyLong(), any());
+      then(usage).should().addDailyTotal(TODAY);
+    }
+
+    @Test
+    void 기록_마감이_실패해도_초안을_돌려주고_횟수를_돌려주지_않는다() {
+      // AI 비용은 이미 났다 — 기록 때문에 돈 낸 초안을 잃지 않는다.
+      givenHappyPath();
+      willThrow(new IllegalStateException("commit failed"))
+          .given(recorder)
+          .succeed(any(), any(), any(), any());
+
+      AiDraftResponse response = service.createDraft(USER_ID, URL_REQUEST);
+
+      assertThat(response.title()).isEqualTo("제목");
+      assertThat(response.group()).isEqualTo(new AiDraftResponse.Group(12L, "투모로우바이투게더"));
+      then(usage).should(never()).refundGeneration(anyLong(), any());
+      then(usage).should().unlock(USER_ID, LOCK_TOKEN);
+    }
+
+    @Test
+    void 생성_실패_기록이_실패해도_원래_AI_004_로_응답한다() {
+      givenHappyPath();
+      given(workerClient.createDraft(any()))
+          .willThrow(new BusinessException(ErrorCode.AI_DRAFT_GENERATION_FAILED));
+      willThrow(new IllegalStateException("db down"))
+          .given(recorder)
+          .fail(any(), any(), any());
+
+      assertFailsWith(URL_REQUEST, ErrorCode.AI_DRAFT_GENERATION_FAILED);
+
+      then(usage).should(never()).refundGeneration(anyLong(), any());
+      then(usage).should().addDailyTotal(TODAY);
+    }
+
+    @Test
+    void 읽기_실패_기록이_실패해도_원래_AI_002_로_응답하고_횟수를_돌려준다() {
+      givenHappyPath();
+      given(workerClient.createDraft(any()))
+          .willThrow(new BusinessException(ErrorCode.AI_DRAFT_FETCH_FAILED));
+      willThrow(new IllegalStateException("db down"))
+          .given(recorder)
+          .fail(any(), any(), any());
+
+      assertFailsWith(URL_REQUEST, ErrorCode.AI_DRAFT_FETCH_FAILED);
+
+      then(usage).should().refundGeneration(USER_ID, TODAY);
     }
   }
 

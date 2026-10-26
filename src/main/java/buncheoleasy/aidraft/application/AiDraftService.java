@@ -159,18 +159,59 @@ public class AiDraftService {
       draft = workerClient.createDraft(source);
     } catch (BusinessException e) {
       settleFailedGeneration(userId, day, e.getErrorCode());
-      recorder.fail(requestId, e.getErrorCode(), elapsedSince(startedAt));
+      recordFailure(requestId, e.getErrorCode(), elapsedSince(startedAt));
       throw e;
     }
     countDailyTotal(day);
 
-    GroupMatch match = groupMatcher.match(draft.groupName(), draft.groupMatchKeywords());
-    recorder.succeed(
-        requestId,
-        draft.cost(),
-        match.group() == null ? null : match.group().id(),
-        elapsedSince(startedAt));
+    // 여기부터는 AI 비용이 이미 났다 — 뒤에서 무엇이 실패해도 초안은 돌려준다.
+    GroupMatch match = matchGroup(draft);
+    recordSuccess(requestId, draft, match, elapsedSince(startedAt));
     return toResponse(draft, match, used);
+  }
+
+  /** 그룹을 못 찾아도 초안은 돌려준다 — 그룹 칸은 검색어로 채우고 개최자가 고르면 된다. */
+  private GroupMatch matchGroup(final AiWorkerDraft draft) {
+    try {
+      return groupMatcher.match(draft.groupName(), draft.groupMatchKeywords());
+    } catch (RuntimeException e) {
+      log.warn("AI 개최글 그룹 찾기 실패 - 그룹 없이 돌려준다", e);
+      return new GroupMatch(
+          null, AiDraftGroupMatcher.candidates(draft.groupName(), draft.groupMatchKeywords()));
+    }
+  }
+
+  /** 기록 마감이 실패해도 응답은 바꾸지 않는다. 비용 장부가 비는 것은 이 로그로 메운다. */
+  private void recordSuccess(
+      final Long requestId,
+      final AiWorkerDraft draft,
+      final GroupMatch match,
+      final Duration elapsed) {
+    try {
+      recorder.succeed(
+          requestId, draft.cost(), match.group() == null ? null : match.group().id(), elapsed);
+    } catch (RuntimeException e) {
+      log.error(
+          "AI 개최글 기록 마감 실패 - 초안은 돌려준다 - requestId={} costUsd={} aiCalls={}",
+          requestId,
+          draft.cost().costUsd(),
+          draft.cost().aiCallCount(),
+          e);
+    }
+  }
+
+  /** 실패 기록이 실패해도 원래 오류(AI-00x)로 응답한다 — 기록 실패가 사용자 안내를 500 으로 덮지 않게. */
+  private void recordFailure(
+      final Long requestId, final ErrorCode errorCode, final Duration elapsed) {
+    try {
+      recorder.fail(requestId, errorCode, elapsed);
+    } catch (RuntimeException e) {
+      log.error(
+          "AI 개최글 실패 기록 실패 - 원래 오류로 응답한다 - requestId={} errorCode={}",
+          requestId,
+          errorCode.getCode(),
+          e);
+    }
   }
 
   /** AI-004 만 엔진이 AI 를 이미 불렀을 수 있다 — 그 경우는 쓴 것으로 치고 나머지는 돌려준다. */

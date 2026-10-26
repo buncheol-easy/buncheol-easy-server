@@ -317,6 +317,25 @@ public enum ErrorCode {
   // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.
   FEEDBACK_RATE_LIMITED("FDB-001", "의견을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
 
+  /** AI - AI 개최글 도우미 관련 에러. 메시지는 화면이 그대로 보여 준다. */
+  // 위험 주소(내부망 등)로 막힌 경우도 같은 메시지다 — 무엇이 막혔는지 알려 주지 않는다.
+  AI_DRAFT_INVALID_INPUT(
+      "AI-001", "판매 페이지 주소나 상품 설명을 다시 확인해 주세요.", HttpStatus.BAD_REQUEST),
+  AI_DRAFT_FETCH_FAILED(
+      "AI-002",
+      "판매 페이지를 읽지 못했어요. 상품 설명을 복사해서 붙여 넣어 주세요.",
+      HttpStatus.UNPROCESSABLE_CONTENT),
+  AI_DRAFT_DAILY_LIMIT_EXCEEDED(
+      "AI-003", "오늘은 AI 작성을 모두 썼어요. 내일 다시 이용해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+  // AI 를 이미 불렀을 수 있어 하루 횟수를 돌려주지 않는다.
+  AI_DRAFT_GENERATION_FAILED(
+      "AI-004", "AI가 글을 쓰지 못했어요. 잠시 후 다시 시도해 주세요.", HttpStatus.BAD_GATEWAY),
+  AI_DRAFT_UNAVAILABLE(
+      "AI-005", "지금은 AI 작성을 쓸 수 없어요. 잠시 후 다시 시도해 주세요.", HttpStatus.SERVICE_UNAVAILABLE),
+  AI_DRAFT_IN_PROGRESS(
+      "AI-006", "AI가 이미 글을 쓰고 있어요. 끝난 뒤에 다시 시도해 주세요.", HttpStatus.CONFLICT),
+  AI_DRAFT_DISABLED("AI-007", "AI 작성 기능이 꺼져 있어요.", HttpStatus.CONFLICT),
+
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
 

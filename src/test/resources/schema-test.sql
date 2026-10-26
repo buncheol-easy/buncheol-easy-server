@@ -1,5 +1,6 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
+DROP TABLE IF EXISTS ai_draft_requests;
 DROP TABLE IF EXISTS cvs_stores;
 DROP TABLE IF EXISTS inbox_messages;
 DROP TABLE IF EXISTS admins;
@@ -510,3 +511,30 @@ CREATE TABLE cvs_stores
 CREATE UNIQUE INDEX uk_cvs_stores_brand_code ON cvs_stores (brand, store_code);
 CREATE INDEX idx_cvs_stores_pickup_brand ON cvs_stores (pickup_yn, brand, id);
 CREATE INDEX idx_cvs_stores_coord ON cvs_stores (latitude, longitude);
+
+CREATE TABLE ai_draft_requests
+(
+    id               BIGINT         NOT NULL AUTO_INCREMENT,
+    user_id          BIGINT         NOT NULL,
+    source_type      VARCHAR(10)    NOT NULL,
+    source_host      VARCHAR(255)   NULL,
+    source_url       VARCHAR(2000)  NULL,
+    raw_text_length  INT            NULL,
+    status           VARCHAR(20)    NOT NULL,
+    error_code       VARCHAR(20)    NULL,
+    cost_usd         DECIMAL(12, 6) NULL,
+    input_tokens     INT            NULL,
+    output_tokens    INT            NULL,
+    ai_call_count    INT            NULL,
+    duration_ms      BIGINT         NULL,
+    matched_group_id BIGINT         NULL,
+    finished_at      TIMESTAMP      NULL,
+    created_at       TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_ai_draft_requests_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ai_draft_requests_user_created ON ai_draft_requests (user_id, created_at);
+CREATE INDEX idx_ai_draft_requests_created ON ai_draft_requests (created_at);

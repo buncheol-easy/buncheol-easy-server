@@ -34,6 +34,21 @@ public class RedisFixedWindowCounter {
           """,
           Long.class);
 
+  /**
+   * 키가 살아 있고 0 보다 클 때만 1 내린다. 만료된 키에 그냥 DECR 하면 TTL 없는 -1 키가 생겨, 그 뒤 INCR 이 0 에서 시작해 첫 증가로 보지
+   * 못하고 만료도 걸지 않는다 — 영구 키가 된다.
+   */
+  private static final RedisScript<Long> DECREMENT_IF_PRESENT =
+      RedisScript.of(
+          """
+          local current = redis.call('GET', KEYS[1])
+          if current and tonumber(current) > 0 then
+            return redis.call('DECR', KEYS[1])
+          end
+          return -1
+          """,
+          Long.class);
+
   private final StringRedisTemplate redisTemplate;
 
   /**
@@ -49,6 +64,25 @@ public class RedisFixedWindowCounter {
       throw new DataRetrievalFailureException("Redis 카운터 증가 결과를 받지 못했다");
     }
     return count;
+  }
+
+  /**
+   * 카운터를 1 내린다(쓴 횟수 돌려주기). 키가 없거나(만료) 이미 0 이면 아무것도 하지 않는다. DECR 은 남은 만료 시간을 그대로 둔다.
+   *
+   * @throws DataAccessException Redis 에 닿지 못했을 때
+   */
+  public void decrement(final String key) {
+    redisTemplate.execute(DECREMENT_IF_PRESENT, List.of(key));
+  }
+
+  /**
+   * 지금 값을 읽는다. 키가 없으면(윈도우가 아직 안 열렸거나 만료) 0 이다.
+   *
+   * @throws DataAccessException Redis 에 닿지 못했을 때
+   */
+  public long count(final String key) {
+    String value = redisTemplate.opsForValue().get(key);
+    return value == null ? 0L : Long.parseLong(value);
   }
 
   /**

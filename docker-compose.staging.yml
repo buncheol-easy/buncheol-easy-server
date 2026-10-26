@@ -45,6 +45,13 @@ x-backend-base: &backend-base
     # REDIS_PORT 는 .env 값을 그대로 쓰되 미설정 시 6379 기본값(env_file 과 의도적 중복 — 기본값 보장용).
     REDIS_PORT: ${REDIS_PORT:-6379}
     # DB_URL 의도적으로 미설정 → .env 의 RDS endpoint 가 사용된다.
+  networks:
+    # 목록을 적는 순간 기본 네트워크 자동 연결이 사라진다 — default 를 빼면 redis 를 못 찾는다.
+    - default
+    # AI 엔진 전용 네트워크(엔진 배포 워크플로가 만든다). 엔진은 http://ai-worker:8000 으로 부른다.
+    # redis 는 여기에 붙이지 않는다 — 엔진이 Redis 에 닿지 않게 한 격리(루트 docs/121 §5.7)를 지킨다.
+    # 엔진에서 backend 8080 은 닿게 되지만 backend 는 원래 공개 API 라 새로 드러나는 것은 없다.
+    - bce-ai
   # cgroup 상한이 없으면 UseContainerSupport 가 호스트 RAM(4GiB)으로 폴백해
   # MaxRAMPercentage 가 색당 최대 힙 수 GiB 로 계산된다 — 전환 창에 두 JVM 이 겹치는
   # 블루-그린에서는 박스 전체를 위협하는 값이다(7/29 스왑 스래싱과 같은 실패 모드).
@@ -111,3 +118,11 @@ services:
 
 volumes:
   redis-data:
+
+networks:
+  # 엔진 배포 워크플로가 만든 네트워크를 빌려 쓴다(이 파일이 만들거나 지우지 않는다).
+  # ⚠️ 박스에 이 네트워크가 없으면 backend 기동이 실패한다 — prod 는 이 변경이 실린 첫 서버 릴리스 전에
+  #    `docker network create bce-ai` 가 먼저 있어야 한다(엔진을 아직 안 띄웠어도 빈 네트워크면 된다).
+  bce-ai:
+    external: true
+    name: bce-ai

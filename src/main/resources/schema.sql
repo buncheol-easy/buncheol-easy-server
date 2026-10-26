@@ -723,3 +723,40 @@ CREATE TABLE IF NOT EXISTS cvs_stores
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- AI 개최글 도우미 요청 한 건에 한 행이다. 비용 장부이자, 나중에 비동기로 바꿀 때 작업 표로 쓴다.
+-- 붙여 넣은 글은 저장하지 않는다(길이만). 동기 처리라 서버가 엔진 대기 중에 죽으면 RUNNING 이 남는다 — 기록용이라 정리하지 않는다.
+CREATE TABLE IF NOT EXISTS ai_draft_requests
+(
+    id               BIGINT         NOT NULL AUTO_INCREMENT,
+    user_id          BIGINT         NOT NULL,
+    source_type      VARCHAR(10)    NOT NULL COMMENT 'URL | TEXT',
+    source_host      VARCHAR(255)   NULL COMMENT '판매 페이지 호스트 (URL 일 때)',
+    source_url       VARCHAR(2000)  NULL COMMENT '판매 페이지 주소 (URL 일 때)',
+    raw_text_length  INT            NULL COMMENT '붙여 넣은 글 길이 (TEXT 일 때, 글은 저장하지 않는다)',
+    status           VARCHAR(20)    NOT NULL COMMENT 'RUNNING | SUCCEEDED | FAILED',
+    error_code       VARCHAR(20)    NULL COMMENT '실패 응답 코드 (AI-00x)',
+    cost_usd         DECIMAL(12, 6) NULL COMMENT 'AI 호출 비용 합계 (USD). 엔진이 단가를 모르면 NULL',
+    input_tokens     INT            NULL COMMENT '입력 토큰 합계',
+    output_tokens    INT            NULL COMMENT '출력 토큰 합계',
+    ai_call_count    INT            NULL COMMENT 'AI 호출 횟수',
+    duration_ms      BIGINT         NULL COMMENT '엔진 호출부터 마감까지 걸린 시간',
+    -- 그룹은 SQL 로 시드·정리하는 표라 FK 를 걸지 않는다 — 장부 행이 그룹 정리를 막지 않게.
+    matched_group_id BIGINT         NULL COMMENT '확정한 그룹 (first_exact). 확정 못 했으면 NULL',
+    finished_at      DATETIME       NULL COMMENT '마감 시각 (UTC)',
+    created_at       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    -- 한 사람의 기록 조회(문의 대응)용
+    INDEX idx_ai_draft_requests_user_created (user_id, created_at),
+    -- 기간별 비용·건수 집계용
+    INDEX idx_ai_draft_requests_created (created_at),
+
+    CONSTRAINT fk_ai_draft_requests_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
+import buncheoleasy.aidraft.application.AiDraftDailyTotalReachedEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -22,6 +23,7 @@ import buncheoleasy.notification.infrastructure.SlackWebhookClient;
 import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.User;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -236,5 +238,32 @@ class SlackNotificationListenerTest {
     listener.onParticipationCreated(new ParticipationCreatedEvent(1L, FlowType.LEGACY));
 
     then(slackWebhookClient).should().send(eq(SlackChannel.NEW_PARTICIPATION), any(), any());
+  }
+
+  @Nested
+  @DisplayName("AI 개최글 하루 합계 알림")
+  class AiDraftDailyTotalReached {
+
+    @Test
+    void 날짜와_합계를_AI_사용량_채널로_보낸다() {
+      given(slackWebhookClient.isEnabled(SlackChannel.AI_USAGE)).willReturn(true);
+
+      listener.onAiDraftDailyTotalReached(
+          new AiDraftDailyTotalReachedEvent(LocalDate.of(2026, 10, 22), 100L));
+
+      ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
+      then(slackWebhookClient).should().send(eq(SlackChannel.AI_USAGE), text.capture());
+      assertThat(text.getValue()).contains("2026-10-22").contains("100건").contains("막지 않음");
+    }
+
+    @Test
+    void 웹훅_미설정이면_건너뛴다() {
+      given(slackWebhookClient.isEnabled(SlackChannel.AI_USAGE)).willReturn(false);
+
+      listener.onAiDraftDailyTotalReached(
+          new AiDraftDailyTotalReachedEvent(LocalDate.of(2026, 10, 22), 100L));
+
+      then(slackWebhookClient).should(never()).send(any(), anyString());
+    }
   }
 }

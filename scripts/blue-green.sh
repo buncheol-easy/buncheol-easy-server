@@ -22,6 +22,7 @@ COMPOSE_FILE="docker-compose.staging.yml"
 UPSTREAM_CONF="/etc/nginx/conf.d/bce-backend-upstream.conf"
 SNIPPET="/etc/nginx/snippets/proxy-backend.conf"
 LEGACY_CONTAINER="buncheoleasy-backend"   # 블루-그린 도입 전 단일 컨테이너 — 첫 배포 때만 만난다
+AI_NETWORK="bce-ai"                       # AI 엔진 전용 네트워크 — compose 가 external 로 요구한다
 DRAIN_SECONDS="${DRAIN_SECONDS:-30}"      # Nginx reload 후 구 색이 진행 중 요청을 마무리할 유예
 HEALTH_DEADLINE_SECONDS="${HEALTH_DEADLINE_SECONDS:-180}"
 # ⚠️ 위 예산을 늘리면 application.yaml 의 app.scheduler.activation-grace(기동 유예 게이트,
@@ -258,11 +259,24 @@ warmup() {
 
 # ── 색 기동/정지 ──────────────────────────────────────────────────────────────
 
+# compose 는 백엔드를 외부 네트워크 bce-ai 에 붙인다(external: true — compose 가 만들지 않는다).
+# 엔진을 아직 안 띄운 박스(prod 등)에는 이 네트워크가 없어서, 없으면 새 색 기동이 실패하고
+# 같은 스크립트를 다시 도는 롤백도 같이 막힌다. 사람이 미리 만드는 단계 대신 여기서 멱등하게 만든다.
+# 빈 네트워크라 엔진이 없어도 무해하다. 엔진 배포 워크플로도 같은 방식으로 만든다.
+ensure_ai_network() {
+  if ! docker network inspect "$AI_NETWORK" > /dev/null 2>&1; then
+    docker network create "$AI_NETWORK" > /dev/null
+    log "도커 네트워크 ${AI_NETWORK} 생성 (없어서 만들었다 — 엔진이 없어도 무해)"
+  fi
+}
+
 start_color() {
   # pull·재생성 없이 기존 컨테이너를 그대로 재기동한다 — 정지된 컨테이너가 물고 있는
   # 이미지가 곧 롤백 좌표라서, 여기서 up(재생성)을 쓰면 롤백이 롤백이 아니게 된다.
   local color="$1" ctr
   ctr=$(container_of "$color")
+  # 정지된 컨테이너는 만들 때 붙은 네트워크가 있어야 다시 켜진다.
+  ensure_ai_network
   if container_exists "$ctr"; then
     docker start "$ctr" > /dev/null
     log "${ctr} 기동"
@@ -402,6 +416,8 @@ cmd_deploy() {
       timeout -k 30s 5m docker compose -f "$COMPOSE_FILE" pull "backend-${target}"
       ;;
   esac
+  # compose 가 아래 up 들에서 외부 네트워크를 찾는다 — 먼저 있게 한다.
+  ensure_ai_network
   # redis 는 색과 독립으로 상주시킨다 — "healthy" 면 절대 건드리지 않는다. 무조건
   # `up -d redis` 를 부르면 정의가 바뀐 배포에서 compose 가 redis 를 재생성해, --no-deps 로
   # 막으려던 "활성 색의 커넥션 단절"을 그 줄이 그대로 실행하게 된다 (5차 리뷰).

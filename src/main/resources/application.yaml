@@ -228,6 +228,17 @@ app:
       global-max-submissions: ${FEEDBACK_RATE_LIMIT_GLOBAL_MAX:60}
       # 단위를 붙이지 않으면 '분'으로 읽는다(@DurationUnit) — 10m 처럼 명시하는 것을 권장
       window: ${FEEDBACK_RATE_LIMIT_WINDOW:10m}
+  apns: # iOS 앱 푸시(APNs 직접 발송). 네 값이 모두 있어야 켜진다 — 하나라도 비면 보내지 않고 기동 로그(외부 연동 상태)에 OFF 로 남는다.
+    # 빈 기본값 필수 — env 에 키가 아예 없어도 "미설정 = 꺼짐" 으로 떠야 한다.
+    team-id: ${APNS_TEAM_ID:}
+    key-id: ${APNS_KEY_ID:}
+    # .p8 파일 본문(PEM). 한 줄 env 로 넣을 땐 줄바꿈을 \n 글자로 써도 된다.
+    private-key: ${APNS_PRIVATE_KEY:}
+    # 앱 번들 ID (apns-topic)
+    topic: ${APNS_TOPIC:}
+    # 기본 실행기(applicationTaskExecutor)에서 기기마다 차례로 부른다. 종료 대기(3s)를 넘는 발송은 배포 전환 때 끊길 수 있다.
+    connect-timeout: 3s
+    request-timeout: 5s
 
 delivery:
   tracker:

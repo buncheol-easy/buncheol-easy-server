@@ -60,8 +60,10 @@ class AppAuthControllerDocsTest extends DocsTestSupport {
                         .description(
                             """
                             앱이 인증 창으로 `GET /oauth2/authorization/kakao/app?challenge=<S256 challenge>`
-                            를 열면, 로그인 뒤 서버가 `buncheoleasy://auth?code=<code>`(새 가입이면 `&signup=1`,
-                            실패면 `?error=email_required|cancelled|failed|invalid_request`)로 돌려보낸다.
+                            를 열면, 로그인 뒤 서버가 앱 주소(`APP_LOGIN_CALLBACK_URL`, 예 `buncheoleasy://auth`)에
+                            `?code=<code>`(새 가입이면 `&signup=1`, 실패면
+                            `?error=email_required|cancelled|failed|invalid_request`)를 붙여 돌려보낸다.
+                            앱 주소가 비어 있는 서버는 시작 요청을 `400 AUTH-013` 으로 거절한다(앱 로그인 꺼짐).
                             그 코드와 처음 만든 verifier 를 이 API 로 보내면 두 토큰을 본문으로 준다.
 
                             코드는 **120초 · 1회용**이다. 없음·만료·이미 사용은 `401 AUTH-007`,
@@ -81,7 +83,9 @@ class AppAuthControllerDocsTest extends DocsTestSupport {
 
   @Test
   void 애플_로그인() throws Exception {
-    given(appLoginService.loginWithApple("apple-identity-token", "raw-nonce", "홍길동"))
+    given(
+            appLoginService.loginWithApple(
+                "apple-identity-token", "raw-nonce", "홍길동", "127.0.0.1"))
         .willReturn(new AppLoginResult(new TokenPair("access-token", "app-refresh-token"), true));
 
     mockMvc
@@ -112,7 +116,7 @@ class AppAuthControllerDocsTest extends DocsTestSupport {
                             애플 가입자는 전화번호·연령대가 없어 가입 정보 입력 화면을 거치고, C2C 개최 자격은
                             생기지 않는다. 실패: 토큰 검증 실패 `401 AUTH-009`, 서버에 허용 앱이 설정되지 않음
                             `400 AUTH-010`, 애플 공개키 조회 실패 `503 AUTH-011`, 새 가입인데 이메일 없음
-                            `401 AUTH-003`.""")
+                            `401 AUTH-003`, 같은 IP 의 검증 실패가 한도(기본 10분에 10회)에 닿음 `429 AUTH-012`.""")
                         .requestSchema(Schema.schema("AppleLoginRequest"))
                         .requestFields(
                             fieldWithPath("identityToken").description("애플 신원 토큰(JWT)"),
@@ -121,7 +125,8 @@ class AppAuthControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("fullName")
                                 .optional()
                                 .description(
-                                    "애플이 첫 로그인 때만 주는 이름(선택). 새 가입에만 쓰고 30자를 넘으면 버린다"))
+                                    "애플이 첫 로그인 때만 주는 이름(선택). 새 가입에만 쓰고, 프로필 실명 규칙"
+                                        + "(한글·영문 1~30자, 공백 없음)에 맞지 않으면 버린다"))
                         .responseSchema(Schema.schema("AppLoginResponse"))
                         .responseFields(loginResponseFields())
                         .build())));

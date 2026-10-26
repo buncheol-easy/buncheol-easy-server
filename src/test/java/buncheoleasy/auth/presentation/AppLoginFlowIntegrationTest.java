@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import buncheoleasy.auth.domain.AppLoginCodeStore;
+import buncheoleasy.auth.domain.AppleLoginAttemptLimiter;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
@@ -62,6 +63,7 @@ class AppLoginFlowIntegrationTest {
 
   @MockitoBean private AppLoginCodeStore appLoginCodeStore;
   @MockitoBean private RefreshTokenStore refreshTokenStore;
+  @MockitoBean private AppleLoginAttemptLimiter appleLoginAttemptLimiter;
 
   @Value("${app.mobile.login-callback-url}")
   private String appCallbackUrl;

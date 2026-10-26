@@ -130,7 +130,8 @@ class AppAuthControllerTest {
 
     @Test
     void 애플_로그인은_두_토큰과_가입_여부를_준다() throws Exception {
-      given(appLoginService.loginWithApple("identity", "nonce", "홍길동")).willReturn(RESULT);
+      given(appLoginService.loginWithApple("identity", "nonce", "홍길동", "127.0.0.1"))
+          .willReturn(RESULT);
 
       mockMvc
           .perform(
@@ -146,7 +147,8 @@ class AppAuthControllerTest {
 
     @Test
     void 이름은_없어도_된다() throws Exception {
-      given(appLoginService.loginWithApple("identity", "nonce", null)).willReturn(RESULT);
+      given(appLoginService.loginWithApple("identity", "nonce", null, "127.0.0.1"))
+          .willReturn(RESULT);
 
       mockMvc
           .perform(
@@ -154,6 +156,35 @@ class AppAuthControllerTest {
                   .contentType(MediaType.APPLICATION_JSON)
                   .content("{\"identityToken\":\"identity\",\"rawNonce\":\"nonce\"}"))
           .andExpect(status().isOk());
+    }
+
+    @Test
+    void 실패_제한_키는_Nginx_가_덮어쓴_X_Real_IP_로_한다() throws Exception {
+      given(appLoginService.loginWithApple("identity", "nonce", null, "203.0.113.9"))
+          .willReturn(RESULT);
+
+      mockMvc
+          .perform(
+              post("/v1/auth/app/apple")
+                  .header("X-Real-IP", "203.0.113.9")
+                  .header("X-Forwarded-For", "1.1.1.1")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"identityToken\":\"identity\",\"rawNonce\":\"nonce\"}"))
+          .andExpect(status().isOk());
+    }
+
+    @Test
+    void IP_실패_한도에_닿으면_429_AUTH_012() throws Exception {
+      given(appLoginService.loginWithApple("identity", "nonce", null, "127.0.0.1"))
+          .willThrow(new BusinessException(ErrorCode.AUTH_APPLE_LOGIN_RATE_LIMITED));
+
+      mockMvc
+          .perform(
+              post("/v1/auth/app/apple")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"identityToken\":\"identity\",\"rawNonce\":\"nonce\"}"))
+          .andExpect(status().isTooManyRequests())
+          .andExpect(content().string(containsString("AUTH-012")));
     }
 
     @Test
@@ -165,12 +196,12 @@ class AppAuthControllerTest {
                   .content("{\"identityToken\":\"identity\"}"))
           .andExpect(status().isBadRequest());
 
-      then(appLoginService).should(never()).loginWithApple(any(), any(), any());
+      then(appLoginService).should(never()).loginWithApple(any(), any(), any(), any());
     }
 
     @Test
     void 허용_앱이_설정되지_않은_서버면_400_AUTH_010() throws Exception {
-      given(appLoginService.loginWithApple("identity", "nonce", null))
+      given(appLoginService.loginWithApple("identity", "nonce", null, "127.0.0.1"))
           .willThrow(new BusinessException(ErrorCode.AUTH_APPLE_SIGNIN_DISABLED));
 
       mockMvc

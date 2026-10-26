@@ -6,6 +6,8 @@ import buncheoleasy.auth.dto.request.AppTokenRequest;
 import buncheoleasy.auth.dto.request.AppleLoginRequest;
 import buncheoleasy.auth.dto.response.AppLoginResponse;
 import buncheoleasy.auth.dto.response.AppTokenResponse;
+import buncheoleasy.global.presentation.ClientIpResolver;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -35,11 +37,14 @@ public class AppAuthController {
 
   @PostMapping("/apple")
   public ResponseEntity<AppLoginResponse> loginWithApple(
-      @Valid @RequestBody final AppleLoginRequest request) {
+      @Valid @RequestBody final AppleLoginRequest request, final HttpServletRequest httpRequest) {
     return ResponseEntity.ok(
         AppLoginResponse.from(
             appLoginService.loginWithApple(
-                request.identityToken(), request.rawNonce(), request.fullName())));
+                request.identityToken(),
+                request.rawNonce(),
+                request.fullName(),
+                ClientIpResolver.resolve(httpRequest))));
   }
 
   @PostMapping("/reissue")

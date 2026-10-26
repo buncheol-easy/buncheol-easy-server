@@ -7,14 +7,15 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 
 import buncheoleasy.auth.TokenPair;
 import buncheoleasy.auth.domain.AppLoginCodeStore;
 import buncheoleasy.auth.domain.AppLoginGrant;
 import buncheoleasy.auth.domain.AppleIdentity;
 import buncheoleasy.auth.domain.AppleIdentityVerifier;
+import buncheoleasy.auth.domain.AppleLoginAttemptLimiter;
 import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
@@ -29,6 +30,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -49,6 +53,7 @@ class AppLoginServiceTest {
   @Mock private RefreshTokenStore refreshTokenStore;
   @Mock private AppLoginCodeStore appLoginCodeStore;
   @Mock private AppleIdentityVerifier appleIdentityVerifier;
+  @Mock private AppleLoginAttemptLimiter appleLoginAttemptLimiter;
 
   private AppLoginService appLoginService;
 
@@ -61,7 +66,8 @@ class AppLoginServiceTest {
             userDomainService,
             refreshTokenStore,
             appLoginCodeStore,
-            appleIdentityVerifier);
+            appleIdentityVerifier,
+            appleLoginAttemptLimiter);
   }
 
   private static SocialLoginCommand kakaoCommand() {
@@ -220,6 +226,7 @@ class AppLoginServiceTest {
   class AppleLoginTest {
 
     private static final String SUBJECT = "001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0123";
+    private static final String IP = "203.0.113.9";
 
     @Test
     void 검증한_sub_와_email_로_APPLE_가입_처리하고_앱_칸_토큰을_준다() {
@@ -231,7 +238,7 @@ class AppLoginServiceTest {
 
       // when
       AppLoginResult result =
-          appLoginService.loginWithApple("identity-token", "raw-nonce", " 홍길동 ");
+          appLoginService.loginWithApple("identity-token", "raw-nonce", " 홍길동 ", IP);
 
       // then
       assertThat(result.token()).isEqualTo(APP_TOKENS);
@@ -250,8 +257,21 @@ class AppLoginServiceTest {
       assertThat(command.serviceTerms()).isEqualTo(List.of());
     }
 
-    @Test
-    void 이름이_비었거나_30자를_넘으면_이름_없이_가입한다() {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(
+        strings = {
+          "   ",
+          "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+          "홍 길동",
+          "John Smith",
+          "<!channel>",
+          "<https://evil.example|눌러주세요>",
+          "*굵게*",
+          "홍길동1"
+        })
+    void 이름이_프로필_실명_규칙에_맞지_않으면_이름_없이_가입한다(final String fullName) {
+      // 슬랙 「새로운 참여」 알림에 이름이 그대로 실려 멘션·가짜 링크 문법이 들어가면 안 된다.
       // given
       given(appleIdentityVerifier.verify(anyString(), anyString()))
           .willReturn(new AppleIdentity(SUBJECT, "relay@privaterelay.appleid.com"));
@@ -259,15 +279,92 @@ class AppLoginServiceTest {
       given(jwtTokenProvider.issueTokens(USER_ID, LoginClient.APP)).willReturn(APP_TOKENS);
 
       // when
-      appLoginService.loginWithApple("t", "n", "   ");
-      appLoginService.loginWithApple("t", "n", "가".repeat(31));
-      appLoginService.loginWithApple("t", "n", null);
+      appLoginService.loginWithApple("t", "n", fullName, IP);
 
       // then
       ArgumentCaptor<SocialLoginCommand> captor =
           ArgumentCaptor.forClass(SocialLoginCommand.class);
-      then(socialLoginService).should(times(3)).signIn(captor.capture());
-      assertThat(captor.getAllValues()).allSatisfy(command -> assertThat(command.name()).isNull());
+      then(socialLoginService).should().signIn(captor.capture());
+      assertThat(captor.getValue().name()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"홍길동", "Hong", "가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나"})
+    void 한글_영문_1_30자_이름은_그대로_쓴다(final String fullName) {
+      // given
+      given(appleIdentityVerifier.verify(anyString(), anyString()))
+          .willReturn(new AppleIdentity(SUBJECT, "relay@privaterelay.appleid.com"));
+      given(socialLoginService.signIn(any())).willReturn(new LoginAccount(USER_ID, false));
+      given(jwtTokenProvider.issueTokens(USER_ID, LoginClient.APP)).willReturn(APP_TOKENS);
+
+      // when
+      appLoginService.loginWithApple("t", "n", fullName, IP);
+
+      // then
+      ArgumentCaptor<SocialLoginCommand> captor =
+          ArgumentCaptor.forClass(SocialLoginCommand.class);
+      then(socialLoginService).should().signIn(captor.capture());
+      assertThat(captor.getValue().name()).isEqualTo(fullName);
+    }
+
+    @Test
+    void 토큰_검증에_실패하면_그_IP_의_실패를_센다() {
+      // given
+      given(appleIdentityVerifier.verify("forged", "raw-nonce"))
+          .willThrow(new BusinessException(ErrorCode.AUTH_APPLE_TOKEN_INVALID));
+
+      // when & then
+      assertThatThrownBy(() -> appLoginService.loginWithApple("forged", "raw-nonce", null, IP))
+          .isInstanceOf(BusinessException.class);
+      then(appleLoginAttemptLimiter).should().checkAllowed(IP);
+      then(appleLoginAttemptLimiter).should().recordFailure(IP);
+    }
+
+    @Test
+    void 설정_누락이나_애플_장애는_실패로_세지_않는다() {
+      // given
+      given(appleIdentityVerifier.verify("t", "n"))
+          .willThrow(new BusinessException(ErrorCode.AUTH_APPLE_SIGNIN_DISABLED))
+          .willThrow(new BusinessException(ErrorCode.AUTH_APPLE_KEYS_UNAVAILABLE));
+
+      // when & then
+      assertThatThrownBy(() -> appLoginService.loginWithApple("t", "n", null, IP))
+          .isInstanceOf(BusinessException.class);
+      assertThatThrownBy(() -> appLoginService.loginWithApple("t", "n", null, IP))
+          .isInstanceOf(BusinessException.class);
+      then(appleLoginAttemptLimiter).should(never()).recordFailure(anyString());
+    }
+
+    @Test
+    void 성공은_세지_않는다() {
+      // given
+      given(appleIdentityVerifier.verify("t", "n"))
+          .willReturn(new AppleIdentity(SUBJECT, "relay@privaterelay.appleid.com"));
+      given(socialLoginService.signIn(any())).willReturn(new LoginAccount(USER_ID, false));
+      given(jwtTokenProvider.issueTokens(USER_ID, LoginClient.APP)).willReturn(APP_TOKENS);
+
+      // when
+      appLoginService.loginWithApple("t", "n", null, IP);
+
+      // then
+      then(appleLoginAttemptLimiter).should().checkAllowed(IP);
+      then(appleLoginAttemptLimiter).should(never()).recordFailure(anyString());
+    }
+
+    @Test
+    void 실패가_한도에_닿은_IP_는_토큰을_검증하지_않고_거절한다() {
+      // given
+      willThrow(new BusinessException(ErrorCode.AUTH_APPLE_LOGIN_RATE_LIMITED))
+          .given(appleLoginAttemptLimiter)
+          .checkAllowed(IP);
+
+      // when & then
+      assertThatThrownBy(() -> appLoginService.loginWithApple("t", "n", null, IP))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.AUTH_APPLE_LOGIN_RATE_LIMITED);
+      then(appleIdentityVerifier).shouldHaveNoInteractions();
+      then(socialLoginService).shouldHaveNoInteractions();
     }
 
     @Test
@@ -277,7 +374,7 @@ class AppLoginServiceTest {
           .willThrow(new BusinessException(ErrorCode.AUTH_APPLE_TOKEN_INVALID));
 
       // when & then
-      assertThatThrownBy(() -> appLoginService.loginWithApple("forged", "raw-nonce", null))
+      assertThatThrownBy(() -> appLoginService.loginWithApple("forged", "raw-nonce", null, IP))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.AUTH_APPLE_TOKEN_INVALID);

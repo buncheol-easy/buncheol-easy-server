@@ -5,6 +5,7 @@ import buncheoleasy.auth.domain.AppLoginCodeStore;
 import buncheoleasy.auth.domain.AppLoginGrant;
 import buncheoleasy.auth.domain.AppleIdentity;
 import buncheoleasy.auth.domain.AppleIdentityVerifier;
+import buncheoleasy.auth.domain.AppleLoginAttemptLimiter;
 import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.auth.domain.Pkce;
 import buncheoleasy.auth.domain.RefreshTokenStore;
@@ -17,6 +18,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -33,7 +35,8 @@ public class AppLoginService {
 
   private static final Duration CODE_TIME_TO_LIVE = Duration.ofSeconds(120);
   private static final int CODE_BYTES = 32;
-  private static final int NAME_MAX_LENGTH = 30;
+  // 프로필 실명과 같은 규칙(UpdateUserProfileRequest). 이름은 슬랙 「새로운 참여」 알림에 그대로 실리므로 기호·링크 문법을 받지 않는다.
+  private static final Pattern NAME_PATTERN = Pattern.compile("^[가-힣a-zA-Z]{1,30}$");
   private static final Base64.Encoder BASE64_URL = Base64.getUrlEncoder().withoutPadding();
 
   private final SocialLoginService socialLoginService;
@@ -42,6 +45,7 @@ public class AppLoginService {
   private final RefreshTokenStore refreshTokenStore;
   private final AppLoginCodeStore appLoginCodeStore;
   private final AppleIdentityVerifier appleIdentityVerifier;
+  private final AppleLoginAttemptLimiter appleLoginAttemptLimiter;
   private final SecureRandom random = new SecureRandom();
 
   /** 카카오 앱 로그인 콜백 — 가입/로그인 처리 후 challenge 에 묶인 일회용 코드를 만든다. */
@@ -81,10 +85,24 @@ public class AppLoginService {
   /**
    * 애플 로그인. 이름은 애플이 첫 로그인 때만 앱에 주므로 앱이 보낸 값을 새 가입에만 쓴다(기존 회원 값은 덮지 않는다 — {@code
    * getOrCreateBySocialLogin}). 전화번호·연령대는 받지 않아 가입 정보 입력 화면으로 가고, C2C 개최 자격은 생기지 않는다.
+   *
+   * <p>같은 IP 에서 토큰 검증 실패가 쌓이면 검증 전에 거절한다.
    */
   public AppLoginResult loginWithApple(
-      final String identityToken, final String rawNonce, final String fullName) {
-    AppleIdentity identity = appleIdentityVerifier.verify(identityToken, rawNonce);
+      final String identityToken,
+      final String rawNonce,
+      final String fullName,
+      final String clientIp) {
+    appleLoginAttemptLimiter.checkAllowed(clientIp);
+    AppleIdentity identity;
+    try {
+      identity = appleIdentityVerifier.verify(identityToken, rawNonce);
+    } catch (BusinessException exception) {
+      if (exception.getErrorCode() == ErrorCode.AUTH_APPLE_TOKEN_INVALID) {
+        appleLoginAttemptLimiter.recordFailure(clientIp);
+      }
+      throw exception;
+    }
     LoginAccount account =
         socialLoginService.signIn(
             new SocialLoginCommand(
@@ -120,15 +138,12 @@ public class AppLoginService {
     return BASE64_URL.encodeToString(bytes);
   }
 
-  // 실명 칸(VARCHAR(30))을 넘는 값은 버린다 — 이름 때문에 로그인이 실패하면 안 된다. 가입 정보 화면에서 다시 받는다.
+  // 규칙에 맞지 않으면 버린다 — 이름 때문에 로그인이 실패하면 안 된다. 가입 정보 화면에서 다시 받는다.
   private static String normalizeName(final String fullName) {
     if (fullName == null) {
       return null;
     }
     String trimmed = fullName.strip();
-    if (trimmed.isEmpty() || trimmed.length() > NAME_MAX_LENGTH) {
-      return null;
-    }
-    return trimmed;
+    return NAME_PATTERN.matcher(trimmed).matches() ? trimmed : null;
   }
 }

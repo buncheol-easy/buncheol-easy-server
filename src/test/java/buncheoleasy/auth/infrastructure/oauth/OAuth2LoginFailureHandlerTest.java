@@ -129,6 +129,24 @@ class OAuth2LoginFailureHandlerTest {
     }
 
     @Test
+    void 코드_모양이_아닌_오류_코드는_로그에_그대로_남기지_않는다(final CapturedOutput output)
+        throws Exception {
+      // given: 저장된 인가 요청이 있으면 콜백의 error 쿼리 값이 그대로 오류 코드가 된다
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      AuthenticationException exception =
+          oauth2Failure("x\nFAKE-INJECTED-LINE ERROR something");
+
+      // when
+      handler.onAuthenticationFailure(loginCallback(), response, exception);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(LOGIN_CALLBACK_URL + "?error=failed");
+      assertThat(output.getAll())
+          .contains("소셜 로그인 실패: 사유=failed, 원인코드=malformed")
+          .doesNotContain("FAKE-INJECTED-LINE");
+    }
+
+    @Test
     void 콜백_URL에_쿼리가_있어도_사유는_뒤에_이어_붙는다() throws Exception {
       // given
       OAuth2LoginFailureHandler queryHandler =

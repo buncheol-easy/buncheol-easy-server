@@ -3,6 +3,7 @@ package buncheoleasy.auth.infrastructure.oauth;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.AuthenticationException;
@@ -15,6 +16,9 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @RequiredArgsConstructor
 public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
+
+  private static final Pattern ERROR_CODE_SHAPE = Pattern.compile("[a-z_]{1,64}");
+  private static final String MALFORMED_ERROR_CODE = "malformed";
 
   private final LoginFailureRedirector loginFailureRedirector;
   private final AgeRangeConsentRedirector ageRangeConsentRedirector;
@@ -50,10 +54,14 @@ public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
         && OAuth2ErrorCodes.ACCESS_DENIED.equals(oauth2Exception.getError().getErrorCode());
   }
 
-  /** 오류 설명 문구는 카카오 응답·콜백 주소에서 온 바깥 문자열이라 로그에는 코드만 남긴다. */
+  /**
+   * 로그에는 오류 설명 문구를 빼고 코드만 남긴다. 코드도 저장된 인가 요청이 있으면 콜백 주소의 error 값 그대로라, 코드 모양(소문자·밑줄)일 때만
+   * 남기고 아니면 고정값으로 바꾼다 — 줄바꿈을 넣어 가짜 로그 줄을 끼우지 못하게.
+   */
   private static String causeCode(final AuthenticationException exception) {
     if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
-      return oauth2Exception.getError().getErrorCode();
+      String errorCode = oauth2Exception.getError().getErrorCode();
+      return ERROR_CODE_SHAPE.matcher(errorCode).matches() ? errorCode : MALFORMED_ERROR_CODE;
     }
     return exception.getClass().getSimpleName();
   }

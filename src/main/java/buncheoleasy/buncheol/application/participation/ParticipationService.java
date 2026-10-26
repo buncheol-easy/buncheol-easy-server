@@ -582,28 +582,16 @@ public class ParticipationService {
    * 통째로여야 하고, 그 경로가 {@link ParticipationBundleService#confirmPayment} 다 — 잠금 조회로 대상을 고정한 뒤
    * 전부 아니면 전무로 CAS 한다.
    *
-   * <p>이 가드가 없으면 슬롯 하나만 CONFIRMED 인 <b>혼합 묶음</b>을 만들 수 있고, 그 묶음은 되살릴 방법이 없다.
-   * 출구가 동시에 전부 닫히기 때문이다:
-   *
-   * <ol>
-   *   <li>「제외」 — {@code BundleReleasability.of} 가 슬롯 하나라도 CONFIRMED 면 {@code HAS_CONFIRMED} 를 내
-   *       {@code requireReleasable} 가 막는다. <b>기한이 아무리 지나도 열리지 않는다.</b>
-   *   <li>자동 만료 — C2C 는 만료 폴링 대상에서 아예 빠진다(LEGACY 등가조건).
-   *   <li>「입금 수집 종료」 — {@code confirmIfAllCollected} 가 "미확정 활성 참여 없음"을 요구하므로, 남은 미확정
-   *       슬롯이 분철을 「입금 수집중」에 붙잡아 둔다.
-   *   <li>묶음 입금확인 — {@code payableStatuses} 집합이 이미 확정된 슬롯을 빼므로 {@code expectedSlotIds} 대조가
-   *       어긋나 409 다.
-   * </ol>
-   *
-   * <p>⚠️ <b>「제외」 게이트를 푸는 방향으로 고치지 마라.</b> 확정분을 개최자가 임의로 뺄 수 없게 한 것은 의도된
-   * 결정이다(docs/70 결정 8). 막을 곳은 출구가 아니라 <b>혼합 상태가 생기는 입구</b>다.
+   * <p>이 가드가 없으면 슬롯 하나만 CONFIRMED 인 <b>혼합 묶음</b>을 만들 수 있다. 이체 1회를 슬롯마다 따로 확인한 기록이 되어
+   * 통장 대조가 어긋나고, 묶음 입금확인도 {@code payableStatuses} 집합이 이미 확정된 슬롯을 빼므로 {@code expectedSlotIds} 대조가
+   * 어긋나 409 다. 막을 곳은 출구가 아니라 <b>혼합 상태가 생기는 입구</b>다.
    *
    * <p>⚠️ <b>엔드포인트 자체를 지우지도 마라.</b> LEGACY(운영진 개최) 개최 관리 화면이 아직 이 API 를 쓴다.
    * "C2C 만 409" 가 정확한 처방이다.
    *
    * <p>🔴 <b>미연결 행(bundle_id = NULL)을 예외로 빼지 않았다 — 의도된 선택이다.</b> 그런 C2C 행은 이 가드
-   * 뒤에 <b>모든 출구가 닫힌다</b> — 묶음 확인·「제외」는 {@code bundleId} 를 인자로 받아 호출 자체가 불가고,
-   * 자동 만료는 C2C 를 안 보며, 자발 취소도 그 상태에선 막힌다. 그럼에도 빼지 않은 근거는 둘이다:
+   * 뒤에 묶음 입금확인을 탈 수 없다 — 묶음 확인은 {@code bundleId} 를 인자로 받아 호출 자체가 불가다. 그럼에도 빼지 않은 근거는
+   * 둘이다:
    *
    * <ol>
    *   <li><b>없다</b> — {@code flow_type='C2C' AND bundle_id IS NULL} 인 행이 prod·staging 모두 <b>0건</b>

@@ -1,7 +1,5 @@
 package buncheoleasy.buncheol.application.participation;
 
-import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
-import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -29,8 +27,6 @@ public class ParticipationBundleService {
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final ParticipationRepository participationRepository;
   private final BuncheolDomainService buncheolDomainService;
-  private final DeliverySnapshotCreator deliverySnapshotCreator;
-  private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -168,18 +164,8 @@ public class ParticipationBundleService {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
 
-    // 배송 스냅샷은 <b>아직 슬롯당 1행</b>이다(묶음 단위 전환은 별도 트랙). 확정 시점 배송지·연락처를
-    // 박제하는 목적은 그대로라, 여기서 슬롯마다 만들어야 기존 경로와 결과가 같다.
-    // ⚠️ CAS 가 영속성 컨텍스트를 비웠으므로 갱신값을 다시 읽어 넘긴다.
-    participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
-        .filter(p -> payableIds.contains(p.getId()))
-        .forEach(deliverySnapshotCreator::create);
-
-    // 분철 진행확정 판정은 <b>묶음 확정 후 1회만</b> — 슬롯마다 부르면 같은 판정을 N 번 돌린다.
-    if (buncheolDomainService.confirmIfAllCollected(buncheol.getId(), now)) {
-      buncheolConfirmedFinalizer.finalizeConfirmed(buncheol.getId());
-    }
-
+    // 배송은 여기서 만들지 않고 분철도 진행 확정하지 않는다 — 모두 입금 확인돼도 개최자의 진행 확정(BuncheolService#confirmBuncheol)
+    // 때 확인된 묶음마다 배송이 생긴다.
     eventPublisher.publishEvent(new BundlePaymentConfirmedEvent(bundleId, payableIds));
     return payableIds;
   }

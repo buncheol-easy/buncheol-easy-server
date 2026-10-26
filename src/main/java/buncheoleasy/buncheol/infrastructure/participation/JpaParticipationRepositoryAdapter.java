@@ -356,6 +356,16 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public int cancelUnconfirmedByBuncheolId(final Long buncheolId, final Instant now) {
+    return jpaParticipationRepository.cancelByBuncheolIdAndStatusIn(
+        buncheolId,
+        ParticipationStatus.payableStatuses(),
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.PAYMENT_NOT_CONFIRMED,
+        now);
+  }
+
+  @Override
   public int confirmBundleIfPayable(final Long bundleId, final Instant now) {
     return jpaParticipationRepository.confirmBundleIfPayable(
         bundleId, ParticipationStatus.payableStatuses(), ParticipationStatus.CONFIRMED, now);

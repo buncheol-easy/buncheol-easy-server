@@ -42,7 +42,7 @@ public interface ParticipationBundleRepository {
    * <p>🔴 <b>"세어 보고 0이면 닫는다" 로 짜면 안 된다.</b> 같은 묶음의 두 슬롯이 동시에 취소되면 두 트랜잭션 모두 REPEATABLE
    * READ 스냅샷에서 <b>상대의 취소를 보지 못해</b> 각자 "아직 하나 남았다" 로 판단하고 <b>둘 다 닫지 않는다</b>. 죽었는데
    * 활성인 묶음이 남고, 그 사람이 재참여하면 <b>시체 묶음을 재사용해 택배가 옛 주소로 나간다</b>. 존재 판정을 UPDATE 의
-   * WHERE 서브쿼리(current read)로 묶어야 한다 — {@code Buncheol#confirmIfAllCollected} 가 같은 기법을 쓴다.
+   * WHERE 서브쿼리(current read)로 묶어야 한다 — {@code BuncheolRepository#finalizeExpiredByConfirmedHeadcount} 가 같은 기법을 쓴다.
    */
   boolean closeIfNoActiveSlots(Long bundleId, Instant now);
 

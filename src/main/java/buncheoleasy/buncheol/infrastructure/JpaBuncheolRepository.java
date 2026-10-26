@@ -253,62 +253,11 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("now") Instant now,
       Pageable pageable);
 
-  // 입금 수집중(PAYMENT_COLLECTING)이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용).
-  //
-  // 🟡 알려진 한계: C2C 자동 만료를 끈 뒤로는 활성 슬롯이 남은 분철이 영영 안 비므로(개최자가 「제외」를
-  // 눌러야 빈다 — 안 눌러도 되는 것이 docs/70 §1 의 수용된 트레이드오프) 이 폴링에 계속 걸리고, 오래된
-  // 순이라 앞자리를 점유한다. 그런 분철이 배치 한도(100)만큼 쌓이면 뒤에 온 분철의 정리가 굶는다.
-  // prod C2C 는 아직 「입금 수집중」이 0 건이라 당장 발현하지 않아 <b>지금은 손대지 않는다</b>
-  // (docs/82 §6 — 「알려진 한계로 기록만」).
-  // 고칠 때 넣을 조건은 cancelIfCollectingAndEmpty 의 NOT EXISTS 와 같다(activeStatuses 를 다시 받는다):
-  //   AND NOT EXISTS (SELECT p FROM Participation p
-  //                   WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)
-  // idx_participations_buncheol_status 를 타는 semi-join 이고, 형제 쿼리
-  // findIdsByStatusAndDeadlineBefore 가 같은 이유로 이미 갖고 있다.
-  @Query(
-      "SELECT b.id FROM Buncheol b "
-          + "WHERE b.status = :status AND b.paymentDueAt <= :now "
-          + "ORDER BY b.paymentDueAt ASC")
-  List<Long> findIdsByStatusAndPaymentDueBefore(
-      @Param("status") BuncheolStatus status, @Param("now") Instant now, Pageable pageable);
-
-  /**
-   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면 미성사 취소한다. 확정 참여가 있으면
-   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6). {@code finalizedAt} 은 성사 확정
-   * 시각을 보존한다.
-   *
-   * <p>⚠️ <b>C2C 자동 만료를 끈 뒤(docs/70 결정 9) 이 조건이 성립하는 경로가 크게 줄었다.</b> 예전에는 만료
-   * 스케줄러가 미입금 슬롯을 치워 줘서 활성이 저절로 0 이 됐다. 이제는 개최자가 「제외」를 눌러야 비고,
-   * <b>개최자가 아무것도 안 하면 분철이 끝나지 않는다</b> — 이는 「제외」가 정문을 만들면서 <b>수용하기로 한
-   * 트레이드오프</b>다(docs/70 §1, 사용자 결정). 자동으로 접지 않는다.
-   *
-   * <p>🟡 <b>그래서 안 죽는 분철이 폴링 배치를 잠식한다</b> — {@code paymentDueAt ASC} 앞자리를 영구 점유해
-   * 뒤에 온 분철의 정리가 굶는다. 걸러 내지 <b>않는다</b>({@link #findIdsByStatusAndPaymentDueBefore} 의
-   * 「알려진 한계」 참조). prod C2C 「입금 수집중」이 0 건이라 당장 발현하지 않아 수용한 상태다
-   * (docs/82 §6).
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Buncheol b "
-          + "SET b.status = :cancelledStatus, b.updatedAt = :now "
-          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
-          + "AND NOT EXISTS (SELECT p FROM Participation p "
-          + "  WHERE p.buncheolId = b.id AND p.status IN :activeStatuses)")
-  int cancelIfCollectingAndEmpty(
-      @Param("buncheolId") Long buncheolId,
-      @Param("collectingStatus") BuncheolStatus collectingStatus,
-      @Param("activeStatuses") Collection<ParticipationStatus> activeStatuses,
-      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
-      @Param("now") Instant now);
-
   /**
    * C2C 입금 수집중 분철의 개최자 취소 CAS: 입금확인(CONFIRMED)된 참여가 하나도 없을 때만 HOST_CANCELLED 로 전이한다 (docs/56
    * H-13). 확정 참여가 이미 있으면 그 돈은 개최자 계좌에 있고 플랫폼이 환불을 강제할 수 없으므로 취소 자체를 막는다 — 문의 경유 환불 후 처리한다.
    * 존재 판정을 UPDATE WHERE 서브쿼리(current read)로 묶어, 개최자가 입금확인과 분철취소를 동시에 실행해도 취소가 새어 나가지 않는다.
    *
-   * <p>⚠️ 락 순서는 분철 행 → 참여 행이다. C2C 입금확인(참여 행 → {@link #confirmIfAllCollected} 의 분철 행)과 역순이라,
-   * 위 동시 실행이 실제로 겹치면 정합성은 지켜지지만 실패 모드가 409 가 아니라 InnoDB 데드락 롤백이 될 수 있다(레포에 재시도 핸들러 없음).
-   * 같은 형태가 {@link #cancelIfCollectingAndEmpty} 에 이미 있어 새로 생긴 리스크 클래스는 아니다.
    */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
@@ -472,25 +421,16 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("holder") String holder,
       @Param("now") Instant now);
 
-  /**
-   * C2C 전원 입금확인 CAS: 미확정 활성 참여(APPLIED·AWAITING_PAYMENT·PAYMENT_SENT)가 없고 확정 참여가 1건 이상이면
-   * PAYMENT_COLLECTING → CONFIRMED 로 전이한다. 서브쿼리 current-read 의존은 {@code confirmIfAllSlotsConfirmed}
-   * 주석 참조.
-   */
+  /** 회원 개최 진행 확정 CAS (PAYMENT_COLLECTING → CONFIRMED) — 포트 javadoc 참고. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Buncheol b "
           + "SET b.status = :confirmedStatus, b.updatedAt = :now "
-          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
-          + "AND NOT EXISTS (SELECT p FROM Participation p "
-          + "  WHERE p.buncheolId = b.id AND p.status IN :pendingStatuses) "
-          + "AND EXISTS (SELECT p2 FROM Participation p2 "
-          + "  WHERE p2.buncheolId = b.id AND p2.status = :confirmedParticipationStatus)")
-  int confirmIfAllCollected(
+          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus AND b.flowType = :c2cFlow")
+  int confirmIfCollecting(
       @Param("buncheolId") Long buncheolId,
       @Param("collectingStatus") BuncheolStatus collectingStatus,
-      @Param("pendingStatuses") Collection<ParticipationStatus> pendingStatuses,
-      @Param("confirmedParticipationStatus") ParticipationStatus confirmedParticipationStatus,
+      @Param("c2cFlow") FlowType c2cFlow,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
       @Param("now") Instant now);
 }

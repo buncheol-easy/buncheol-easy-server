@@ -20,12 +20,13 @@ class ParticipationCancelReasonTest {
     assertThat(ParticipationCancelReason.USER_CANCELLED.isCancelledByHostOrSystem()).isFalse();
   }
 
-  // 개최자가 한 것은 HOST_RELEASED 하나뿐이고, 나머지 둘은 시스템(만료 스케줄러·자동 취소)이다.
-  // 셋 다 "참여자가 스스로 뺀 것이 아니다" 라는 점에서 같은 편이다.
+  // 개최자가 고른 것은 진행 확정 때 빠짐(PAYMENT_NOT_CONFIRMED)과 옛 「제외」(HOST_RELEASED)이고, 나머지 둘은
+  // 시스템(만료 스케줄러·자동 취소)이다. 모두 "참여자가 스스로 뺀 것이 아니다" 라는 점에서 같은 편이다.
   @Test
-  void 나머지_셋은_개최자_또는_시스템이_한_취소다() {
+  void 나머지는_개최자_또는_시스템이_한_취소다() {
     for (ParticipationCancelReason reason :
         new ParticipationCancelReason[] {
+          ParticipationCancelReason.PAYMENT_NOT_CONFIRMED,
           ParticipationCancelReason.HOST_RELEASED,
           ParticipationCancelReason.PAYMENT_TIMEOUT,
           ParticipationCancelReason.BUNCHEOL_CANCELLED
@@ -38,10 +39,10 @@ class ParticipationCancelReasonTest {
   // 🔴 사유가 늘면 이 테스트가 먼저 깨져야 한다. 분류를 빠뜨린 채 배포되면
   // 새 사유가 조용히 「개최자·시스템」으로 잡혀 환불 목록에 계좌가 뜬다.
   @Test
-  void 사유는_네_개이고_두_축이_전건을_덮는다() {
+  void 사유는_다섯_개이고_두_축이_전건을_덮는다() {
     ParticipationCancelReason[] all = ParticipationCancelReason.values();
 
-    assertThat(all).hasSize(4);
+    assertThat(all).hasSize(5);
     for (ParticipationCancelReason reason : all) {
       assertThat(reason.isCancelledByParticipant() ^ reason.isCancelledByHostOrSystem())
           .as("%s 는 두 축 중 정확히 하나여야 한다", reason.name())

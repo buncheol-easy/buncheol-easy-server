@@ -193,22 +193,6 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public List<Long> findCollectingIdsPastPaymentDue(final Instant now, final int limit) {
-    return jpaBuncheolRepository.findIdsByStatusAndPaymentDueBefore(
-        BuncheolStatus.PAYMENT_COLLECTING, now, PageRequest.of(0, limit));
-  }
-
-  @Override
-  public int cancelIfCollectingAndEmpty(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.cancelIfCollectingAndEmpty(
-        buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
-        ParticipationStatus.active(),
-        BuncheolStatus.CANCELLED,
-        now);
-  }
-
-  @Override
   public int hostCancelIfCollectingAndNoConfirmed(final Long buncheolId, final Instant now) {
     return jpaBuncheolRepository.hostCancelIfCollectingAndNoConfirmed(
         buncheolId,
@@ -313,16 +297,8 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int confirmIfAllCollected(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.confirmIfAllCollected(
-        buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
-        Set.of(
-            ParticipationStatus.APPLIED,
-            ParticipationStatus.AWAITING_PAYMENT,
-            ParticipationStatus.PAYMENT_SENT),
-        ParticipationStatus.CONFIRMED,
-        BuncheolStatus.CONFIRMED,
-        now);
+  public int confirmIfCollecting(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.confirmIfCollecting(
+        buncheolId, BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C, BuncheolStatus.CONFIRMED, now);
   }
 }

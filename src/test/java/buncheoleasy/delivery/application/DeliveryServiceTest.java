@@ -16,7 +16,6 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
-import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -116,41 +115,15 @@ class DeliveryServiceTest {
       then(deliveryDomainService).should(never()).registerTracking(anyLong(), anyString(), any());
     }
 
-    // 🔴 C2C 의 게이트는 「그 자리의 입금확인」 하나다 (2026-09-05 사용자 결정 — 다른 자리·분철
-    // 상태와 무관). 분철 확정에 묶어 두면 다른 자리가 입금 전이라는 이유로 이미 돈을 낸 사람의
-    // 배송이 잠기고, 추가 모집 1건에 다시 잠긴다.
+    // 회원 개최도 분철 진행확정(CONFIRMED) 뒤에만 운송장을 받는다 — 배송은 진행 확정 때 생기고, 그 전에는 입금 단계 분철이
+    // 운영진 파기로 취소될 수 있다. 입금 수집 중이면 그 자리가 입금확인됐어도 막는다.
     @Test
-    void C2C_는_분철_상태와_무관하게_입금확인된_자리의_운송장을_등록한다() {
+    void 회원_개최도_분철이_진행확정_전이면_입금확인된_자리라도_운송장을_등록할_수_없다() {
       Delivery delivery = createSnapshotDelivery();
       Participation participation = mock(Participation.class);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
-      given(participation.getStatus()).willReturn(ParticipationStatus.CONFIRMED);
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.isC2c()).willReturn(true);
-
-      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      willDoNothing().given(buncheol).validateOwner(HOST_ID);
-
-      deliveryService.registerTracking(HOST_ID, DELIVERY_ID, "TRACK123");
-
-      then(deliveryDomainService).should().registerTracking(DELIVERY_ID, "TRACK123", NOW);
-      // 분철 상태를 아예 읽지 않는다 — 읽는 순간 다시 결합된다.
-      then(buncheol).should(never()).getStatus();
-    }
-
-    // 「배송이 존재한다 = 입금확인됐다」를 암묵 전제로 두지 않는다 — P4·백필로 생성 경로가 바뀌면
-    // 조용히 fail-open 되므로, 미확인 자리는 여기서 직접 막는다.
-    @Test
-    void C2C_라도_입금확인되지_않은_자리는_운송장을_등록할_수_없다() {
-      Delivery delivery = createSnapshotDelivery();
-      Participation participation = mock(Participation.class);
-      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
-      given(participation.getStatus()).willReturn(ParticipationStatus.PAYMENT_SENT);
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.isC2c()).willReturn(true);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
 
       given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
@@ -161,7 +134,7 @@ class DeliveryServiceTest {
       assertThatThrownBy(() -> deliveryService.registerTracking(HOST_ID, DELIVERY_ID, "TRACK123"))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+          .isEqualTo(ErrorCode.DELIVERY_BUNCHEOL_NOT_CONFIRMED);
 
       then(deliveryDomainService).should(never()).registerTracking(anyLong(), anyString(), any());
     }
@@ -238,27 +211,6 @@ class DeliveryServiceTest {
       // then
       then(deliveryDomainService).should().registerTracking(DELIVERY_ID, "TRACK123", NOW);
       then(eventPublisher).should().publishEvent(any(TrackingRegisteredEvent.class));
-    }
-
-    // 어드민 경로도 같은 게이트를 탄다 — C2C 는 분철 상태와 무관하게 입금확인만 본다.
-    @Test
-    void 관리자_경로도_C2C_는_분철_상태와_무관하게_등록한다() {
-      Delivery delivery = createSnapshotDelivery();
-      Participation participation = mock(Participation.class);
-      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
-      given(participation.getStatus()).willReturn(ParticipationStatus.CONFIRMED);
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheol.isC2c()).willReturn(true);
-
-      given(deliveryDomainService.getDelivery(DELIVERY_ID)).willReturn(delivery);
-      given(participationDomainService.getParticipation(PARTICIPATION_ID))
-          .willReturn(participation);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-
-      deliveryService.registerTrackingByAdmin(DELIVERY_ID, "TRACK123");
-
-      then(deliveryDomainService).should().registerTracking(DELIVERY_ID, "TRACK123", NOW);
-      then(buncheol).should(never()).getStatus();
     }
 
     @Test

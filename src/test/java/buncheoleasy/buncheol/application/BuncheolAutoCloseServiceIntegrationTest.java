@@ -154,22 +154,6 @@ class BuncheolAutoCloseServiceIntegrationTest {
     assertThat(participationStatus(applied)).isEqualTo("AWAITING_PAYMENT");
   }
 
-  // 개최자가 아무것도 안 하면 분철이 끝나지 않는다 — 「제외」가 정문을 만들면서 수용한 트레이드오프다
-  // (docs/70 §1, 사용자 결정). 자동으로 접지 <b>않는 것</b>이 의도된 동작이라 테스트로 못 박는다.
-  @Test
-  void 미입금_슬롯이_남아_있으면_입금수집중_분철을_자동으로_접지_않는다() {
-    Long buncheolId = insertBuncheol(pastDeadline(), "PAYMENT_COLLECTING", 2);
-    Long slot = insertBuncheolMember(buncheolId, "미입금멤버");
-    Long awaiting = insertParticipation(buncheolId, slot, "fan_none", "AWAITING_PAYMENT");
-
-    boolean cancelled = buncheolAutoCloseService.cancelDeadCollecting(buncheolId, Instant.now());
-    em.flush();
-
-    assertThat(cancelled).isFalse();
-    assertThat(buncheolStatus(buncheolId)).isEqualTo("PAYMENT_COLLECTING");
-    assertThat(participationStatus(awaiting)).isEqualTo("AWAITING_PAYMENT");
-  }
-
   @Test
   void 이미_마감된_분철에_다시_시도하면_false를_반환한다() {
     Long buncheolId = insertBuncheol(pastDeadline(), "CONFIRMED", 1);

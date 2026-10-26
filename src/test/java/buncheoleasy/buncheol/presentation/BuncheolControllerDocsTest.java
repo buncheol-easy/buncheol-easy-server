@@ -812,7 +812,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "지금 자리를 더 신청하면 첫 신청의 묶음을 재사용하는가. true 면 배송지를 고를"
                                         + " 수 없어 화면이 선택 UI 를 감춘다. false 면 평소대로 고른다"
-                                        + " (회사 개최 · 성사 확정 뒤 추가 모집 · 활성 참여 없음)")
+                                        + " (회사 개최 · 모집중이 아님 · 활성 참여 없음)")
                                 .optional(),
                             fieldWithPath("myParticipation.inheritedShippingAddress")
                                 .description(
@@ -831,7 +831,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")
-                                .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
+                                .description("C2C 일괄 입금 기한(입금 단계 시작 + 24시간). 입금 단계 전이거나 LEGACY 면 null")
                                 .optional(),
                             fieldWithPath("openChatUrl")
                                 .description(
@@ -862,33 +862,65 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
-  void C2C_입금_수집_종료() throws Exception {
+  void 회원_개최_진행_확정() throws Exception {
     mockMvc
-        .perform(post("/v1/buncheols/{id}/finalize-collected", 10L).with(userAuth()))
+        .perform(
+            post("/v1/buncheols/{id}/confirm", 10L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"cancelParticipations": [
+                      {"participationId": 101, "status": "PAYMENT_SENT"},
+                      {"participationId": 102, "status": "AWAITING_PAYMENT"}
+                    ]}
+                    """)
+                .with(userAuth()))
         .andExpect(status().isNoContent())
         .andDo(
             document(
-                "buncheols-finalize-collected",
+                "buncheols-confirm",
                 resource(
                     ResourceSnippetParameters.builder()
                         .tag("Buncheol")
-                        .summary("C2C 입금 수집 종료 (부분 확정)")
+                        .summary("회원 개최 진행 확정")
                         .description(
                             """
-                            입금 기한 경과로 미입금 슬롯이 정리된 뒤, 입금확인된 참여만으로 진행을 확정한다
-                            (`PAYMENT_COLLECTING` → `CONFIRMED`). 미입금 활성 참여(입금 대기·보냈어요)가 남아 있거나
-                            확정 참여가 없으면 실패한다 — 보냈어요 잔여는 입금확인하거나 기한 뒤 「제외」로 먼저 정리해야 한다.
-                            전원 입금확인 시에는 자동으로 진행확정되므로 이 API 는 부분 확정에만 필요하다.
+                            회원 개최 입금 수집 중 분철의 진행을 확정한다 (`PAYMENT_COLLECTING` → `CONFIRMED`).
+                            모든 참여가 입금 확인됐으면(관리 응답 `confirmCheck = ALL_PAID`) 바로, 미확인 참여가 있으면 입금
+                            기한이 지난 뒤(`DUE_PASSED`)에만 된다. 입금이 확인되지 않은 참여(입금 대기·「보냈어요」)는 같은
+                            트랜잭션에서 취소되고(사유 `PAYMENT_NOT_CONFIRMED`) 「참여 취소 안내」가 간다. 입금 확인된 묶음마다
+                            배송이 생기고 이때부터 운송장을 넣을 수 있다. 확인된 참여에게 「진행 확정 안내」가 간다.
+
+                            `cancelParticipations` 는 확인 창에서 보여 준 **빠질 참여 목록**이다 — 관리 응답 `participants[]`
+                            가운데 `AWAITING_PAYMENT`·`PAYMENT_SENT` 인 참여를 그대로 담는다(모두 확인됐으면 `[]`). 서버는
+                            이 목록을 대조에만 쓰고, 잠금 아래에서 본 미확인 (id, 상태) 집합과 다르면 409 `BCH-127` 이다
+                            (그 사이 「보냈어요」·입금 확인이 있었다 — 관리 화면을 다시 불러 확인 창을 다시 그린다). 순서는 보지 않는다.
+
+                            본문이 없거나 `cancelParticipations` 가 없으면 400 이다(옛 클라이언트의 「성사 확정」 요청).
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | 본문·`cancelParticipations`·항목의 `participationId`·`status` 누락 |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
-                            | 409 | `BCH-090` (`BUNCHEOL_CONFIRM_NOT_ALLOWED`) | 미입금 활성 참여 잔여·확정 0건·수집중 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 분철 |
+                            | 409 | `BCH-090` (`BUNCHEOL_CONFIRM_NOT_ALLOWED`) | 입금 수집 중이 아님·기한 전에 미확인 참여가 있음·확인된 참여 0 |
+                            | 409 | `BCH-127` (`BUNCHEOL_CONFIRM_LIST_CHANGED`) | 빠질 참여 목록이 서버가 본 것과 다름 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestSchema(Schema.schema("BuncheolConfirmRequest"))
+                        .requestFields(
+                            fieldWithPath("cancelParticipations")
+                                .type(JsonFieldType.ARRAY)
+                                .description("확인 창에서 보여 준 빠질 참여 목록. 모두 입금 확인됐으면 빈 배열"),
+                            fieldWithPath("cancelParticipations[].participationId")
+                                .type(JsonFieldType.NUMBER)
+                                .description("참여 ID (관리 응답 participants[].participationId)"),
+                            fieldWithPath("cancelParticipations[].status")
+                                .type(JsonFieldType.STRING)
+                                .description("화면이 본 그 참여의 상태 (AWAITING_PAYMENT | PAYMENT_SENT)"))
                         .build())));
   }
 
@@ -946,7 +978,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 자리 빼기")
                         .description(
                             """
-                            C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 빈 자리 하나를 분철에서 뺀다.
+                            C2C 개최자가 **신청을 받는 동안**(모집중·마감 전) 빈 자리 하나를 분철에서 뺀다. 입금 단계가 시작되면 `409 BCH-060`.
                             다른 곳(X·포카마켓 등)에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
 
                             자리 상태에 따라 결과가 갈린다(응답은 모두 `204`):
@@ -963,8 +995,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **남은 자리 = 열린 자리**(닫히지 않은 자리)다. 마지막 열린 자리는 뺄 수 없다.
 
                             **최소 인원**: 모집중에 빼서 열린 자리 수가 `minHeadcount` 보다 작아지면 `minHeadcount` 를
-                            열린 자리 수로 낮춘다(그대로 두면 마감 정각에 인원 미달로 즉시 취소된다). 입금 수집중에는
-                            바꾸지 않고, 다시 넣어도 올리지 않는다.
+                            열린 자리 수로 낮춘다(그대로 두면 마감 정각에 인원 미달로 즉시 취소된다). 다시 넣어도 올리지 않는다.
+
+                            **입금 단계 시작**: 빼고 나니 남은 열린 자리가 모두 신청됐고 최소 인원 이상이면 이 요청 안에서 입금 단계가
+                            시작된다(`PAYMENT_COLLECTING`, 참여자에게 계좌·기한 안내). 응답은 그대로 `204` 이고, 화면은 빼기 확인 창에서
+                            미리 경고하고 끝나면 관리 화면을 다시 불러온다.
 
                             **권한**: 해당 분철의 **개최자 본인만**. 회원 개최(C2C) 분철만 지원한다.
 
@@ -1008,10 +1043,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             """
                             C2C 개최자가 **모집중(`RECRUITING`)·마감 전**에 빈 자리 하나의 가격을 바꾼다. 자리 id 는 그대로다.
 
-                            **입금 수집중(성사 확정 뒤 추가 모집)에는 바꿀 수 없다(`409 BCH-060`).** 추가 모집 신청은 바로 입금 대기라,
-                            옛 가격을 띄워 둔 화면이 그 값으로 입금액을 안내할 수 있기 때문이다. 추가 모집 중 가격을 바꾸려면
-                            빼고(`DELETE …/members/{buncheolMemberId}`) 다시 넣는다(`POST …/members`, 새 가격).
-                            ⚠️ 신청·취소 기록이 남은 자리는 빼면 닫히고(`CLOSED`) 다시 넣으면 **같은 id** 로 다시 열린다.
+                            **입금 단계가 시작되면 바꿀 수 없다(`409 BCH-060`)** — 빼기·넣기도 같다.
 
                             **그 자리에 활성 신청자(신청·입금 확인 중·보냈어요·확정)가 있으면 바꾸지 않는다** — 그 사람이 보고 신청한
                             가격이다. 다른 자리에 신청자가 있는 것은 상관없다. 판정과 쓰기는 한 조건부 UPDATE 라, 저장 직전에 그 자리에
@@ -1033,7 +1065,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중·마감 전이 아님 — 입금 수집중(추가 모집)·마감 지난 모집중·진행확정·취소 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중·마감 전이 아님 — 입금 수집중·마감 지난 모집중·진행확정·취소 |
                             | 409 | `BCH-125` (`BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED`) | 그 자리에 신청자가 있거나 닫힌 자리 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
@@ -1070,7 +1102,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 자리 다시 넣기")
                         .description(
                             """
-                            C2C 개최자가 **신청을 받는 동안**(모집중 마감 전·입금 수집중) 분철 그룹의 멤버를 자리로 넣는다.
+                            C2C 개최자가 **신청을 받는 동안**(모집중·마감 전) 분철 그룹의 멤버를 자리로 넣는다. 입금 단계가 시작되면 `409 BCH-060`.
                             주로 잘못 뺀 자리를 되살릴 때 쓴다. 개최와 같은 규칙으로 검사하며 선착순(`OPEN`) 자리로 만든다.
                             만든 즉시 신청을 받는다. `minHeadcount` 는 바꾸지 않는다.
 
@@ -1368,7 +1400,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("participants[].participantId")
                                 .description(
-                                    "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(추가 모집)을"
+                                    "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(옛 추가 모집분)을"
                                         + " 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("participants[].participantNickname")
                                 .description("참여자 닉네임. 탈퇴 회원은 「탈퇴한 사용자」 고정 문구")
@@ -1386,7 +1418,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description("참여 금액 (멤버 가격 + 배송비, 원)"),
                             fieldWithPath("participants[].shippingFee")
                                 .description(
-                                    "amount 에 포함된 배송비(원). 배송비는 묶음당 1회다 — 같은 묶음의 두 번째 슬롯은 0 이지만, 성사 확정 후 추가 모집은 새 묶음이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다"),
+                                    "amount 에 포함된 배송비(원). 배송비는 묶음당 1회다 — 같은 묶음의 두 번째 슬롯은 0 이지만, 옛 추가 모집분은 새 묶음이라 같은 사람의 슬롯 두 개가 모두 >0 일 수 있다"),
                             fieldWithPath("participants[].status")
                                 .description("참여 상태 (AWAITING_PAYMENT / CONFIRMED)"),
                             fieldWithPath("participants[].dueAt")
@@ -1452,7 +1484,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .optional(),
                             fieldWithPath("cancelledParticipants[].participantId")
                                 .description(
-                                    "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(추가 모집)을"
+                                    "참여자의 **유저 ID** (참여 ID 아님). 같은 사람의 여러 묶음(옛 추가 모집분)을"
                                         + " 한 사람 아래로 모을 때 쓴다"),
                             fieldWithPath("cancelledParticipants[].participantNickname")
                                 .description("참여자 닉네임. 탈퇴 회원은 「탈퇴한 사용자」 고정 문구")
@@ -1507,7 +1539,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")
-                                .description("C2C 일괄 입금 기한. 성사 확정 전이거나 LEGACY 면 null")
+                                .description("C2C 일괄 입금 기한(입금 단계 시작 + 24시간). 입금 단계 전이거나 LEGACY 면 null")
                                 .optional(),
                             fieldWithPath("openChatUrl")
                                 .description(

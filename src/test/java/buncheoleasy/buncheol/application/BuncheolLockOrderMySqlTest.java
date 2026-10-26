@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest.CancelParticipation;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -209,6 +212,82 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
           buncheolId, () -> buncheolAutoCloseService.finalizeExpired(buncheolId, Instant.now()));
 
       assertPaymentStarted(buncheolId);
+    }
+
+    @Test
+    void 진행_확정은_분철_행을_먼저_기다리고_확인된_묶음마다_배송을_하나_만든다() throws Exception {
+      // 입금 기한이 지났고, 참여자 A 의 묶음(자리 2)은 입금 확인, B 의 묶음은 「보냈어요」만 눌렀다.
+      long buncheolId =
+          fixture.buncheol(
+              hostId, groupId, "C2C", "PAYMENT_COLLECTING", Duration.ofHours(-2), 2, Duration.ofHours(-1));
+      long confirmedBundle =
+          fixture.bundle(buncheolId, participantId, shippingAddressId, Duration.ofHours(-1));
+      long firstConfirmed =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              confirmedBundle,
+              "CONFIRMED",
+              "C2C",
+              Duration.ofHours(-1));
+      long secondConfirmed =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              confirmedBundle,
+              "CONFIRMED",
+              "C2C",
+              Duration.ofHours(-1));
+      long otherId = fixture.user(false);
+      long sentBundle =
+          fixture.bundle(buncheolId, otherId, fixture.shippingAddress(otherId), Duration.ofHours(-1));
+      long sent =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              otherId,
+              sentBundle,
+              "PAYMENT_SENT",
+              "C2C",
+              Duration.ofHours(-1));
+      Object finalizedBefore =
+          jdbcTemplate.queryForObject(
+              "SELECT finalized_at FROM buncheols WHERE id = ?", Object.class, buncheolId);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            buncheolService.confirmBuncheol(
+                hostId,
+                buncheolId,
+                new BuncheolConfirmRequest(
+                    List.of(new CancelParticipation(sent, ParticipationStatus.PAYMENT_SENT))));
+            return null;
+          });
+
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CONFIRMED");
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT finalized_at FROM buncheols WHERE id = ?", Object.class, buncheolId))
+          .isEqualTo(finalizedBefore);
+      assertThat(statusOf("participations", firstConfirmed)).isEqualTo("CONFIRMED");
+      assertThat(statusOf("participations", secondConfirmed)).isEqualTo("CONFIRMED");
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT cancel_reason FROM participations WHERE id = ?", String.class, sent))
+          .isEqualTo("PAYMENT_NOT_CONFIRMED");
+      assertThat(bundleClosed(sentBundle)).isTrue();
+      assertThat(bundleClosed(confirmedBundle)).isFalse();
+      // 묶음당 배송 1개 — 확인된 묶음에만.
+      assertThat(
+              jdbcTemplate.queryForList(
+                  "SELECT bundle_id FROM deliveries WHERE bundle_id IN (?, ?)",
+                  Long.class,
+                  confirmedBundle,
+                  sentBundle))
+          .containsExactly(confirmedBundle);
     }
 
     @Test

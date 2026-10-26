@@ -36,32 +36,6 @@ public class BuncheolAutoCloseService {
     return buncheolRepository.findRecruitingIdsPastDeadline(now, BATCH_SIZE);
   }
 
-  /** {@code now} 기준 일괄 입금 기한이 지난 PAYMENT_COLLECTING 분철 id 를 최대 {@link #BATCH_SIZE} 개 조회한다. */
-  public List<Long> findOverdueCollectingIds(final Instant now) {
-    return buncheolRepository.findCollectingIdsPastPaymentDue(now, BATCH_SIZE);
-  }
-
-  /**
-   * C2C 입금 수집 데드엔드 정리 (docs/46 §7.1-6 보완). 기한이 지났고 활성 참여가 하나도 남지 않았으면 미성사
-   * 취소한다 — 개최자가 선택할 것(부분 확정/취소)이 없는 유일한 케이스라 자동화해도 §7.1-6 과 충돌하지 않는다.
-   *
-   * <p>⚠️ <b>C2C 자동 만료를 끈 뒤로는 이 조건이 잘 성립하지 않는다.</b> 예전에는 만료 스케줄러가 미입금 슬롯을
-   * 치워 줘서 활성이 저절로 0 이 됐지만, 이제는 개최자가 「제외」를 눌러야 빈다. <b>개최자가 아무것도 안 하면
-   * 분철이 끝나지 않는데, 이는 「제외」가 정문을 만들면서 수용하기로 한 트레이드오프다</b>(docs/70 §1, 사용자
-   * 결정). 자동으로 접지 않는다.
-   *
-   * <p>🟡 <b>그래서 그런 분철이 폴링 배치를 잠식한다</b> — 안 죽는 분철이 앞자리를 영구 점유해 뒤에 온 분철의
-   * 정리가 굶는다. 조회에서 걸러 내지 <b>않는다</b>(prod C2C 「입금 수집중」 0 건이라 당장 발현하지 않아
-   * 수용한 한계 — docs/82 §6 · {@code JpaBuncheolRepository#findIdsByStatusAndPaymentDueBefore}).
-   *
-   * <p>참여자 알림은 없다 — 전원이 이미 개별 취소 안내를 받은 뒤다.
-   */
-  @Transactional
-  public boolean cancelDeadCollecting(final Long buncheolId, final Instant now) {
-    return buncheolDomainService.cancelCollectingIfEmpty(buncheolId, now);
-  }
-
-
   /**
    * deadline 이 지난 단일 분철의 마감 판정. 입금확인된(CONFIRMED) 참여자가 최소 인원 이상이면 진행확정, 미만이면 취소한다. {@code RECRUITING
    * → CONFIRMED/CANCELLED} CAS 로 선점에 성공한 인스턴스만 후속 처리를 수행해 다중 인스턴스 중복 마감을 막는다. 판정·후속 처리를 한 트랜잭션으로

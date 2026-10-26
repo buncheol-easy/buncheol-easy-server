@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.support.MySqlContainerTestSupport;
 import buncheoleasy.support.MySqlFixture;
 import java.time.Duration;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** 분철 저장소 쿼리를 실제 MySQL 문법·서브쿼리 규칙(error 1093)에서 돌린다. */
 @DisplayName("분철 저장소 쿼리 (MySQL)")
@@ -20,6 +22,8 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
   private static final Duration HOUR = Duration.ofHours(1);
 
   @Autowired private BuncheolRepository buncheolRepository;
+  @Autowired private ParticipationRepository participationRepository;
+  @Autowired private TransactionTemplate transactionTemplate;
 
   private MySqlFixture fixture;
   private long hostId;
@@ -79,5 +83,107 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
       assertThat(buncheolRepository.findRecruitingIdsPastDeadline(Instant.now(), 2))
           .containsExactly(first, second);
     }
+  }
+
+  @Nested
+  @DisplayName("진행 확정 CAS confirmIfCollecting")
+  class ConfirmIfCollecting {
+
+    @Test
+    void 회원_개최_입금_수집_중이면_진행_확정으로_넘기고_입금_단계_시작_시각은_남긴다() {
+      long buncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "PAYMENT_COLLECTING", HOUR.negated(), 1, HOUR.negated());
+      Object finalizedBefore = finalizedAt(buncheolId);
+
+      int updated =
+          transactionTemplate.execute(
+              status -> buncheolRepository.confirmIfCollecting(buncheolId, Instant.now()));
+
+      assertThat(updated).isEqualTo(1);
+      assertThat(status(buncheolId)).isEqualTo("CONFIRMED");
+      assertThat(finalizedAt(buncheolId)).isEqualTo(finalizedBefore);
+    }
+
+    @Test
+    void 입금_수집_중이_아니거나_운영진_분철이면_넘기지_않는다() {
+      long recruiting = buncheol("C2C", "RECRUITING", HOUR);
+      long staff = fixture.buncheol(hostId, groupId, "LEGACY", "PAYMENT_COLLECTING", HOUR, 1, HOUR);
+
+      for (long buncheolId : new long[] {recruiting, staff}) {
+        Integer updated =
+            transactionTemplate.execute(
+                status -> buncheolRepository.confirmIfCollecting(buncheolId, Instant.now()));
+        assertThat(updated).isZero();
+      }
+      assertThat(status(recruiting)).isEqualTo("RECRUITING");
+      assertThat(status(staff)).isEqualTo("PAYMENT_COLLECTING");
+    }
+  }
+
+  @Nested
+  @DisplayName("입금 미확인 참여 취소 cancelUnconfirmedByBuncheolId")
+  class CancelUnconfirmed {
+
+    @Test
+    void 그_분철의_입금_대기와_보냈어요만_입금_미확인_사유로_취소한다() {
+      long buncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "PAYMENT_COLLECTING", HOUR.negated(), 1, HOUR.negated());
+      long otherBuncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "PAYMENT_COLLECTING", HOUR.negated(), 1, HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long bundleId = fixture.bundle(buncheolId, participantId, addressId, HOUR.negated());
+      long awaiting = slotParticipation(buncheolId, participantId, bundleId, "AWAITING_PAYMENT");
+      long sent = slotParticipation(buncheolId, participantId, bundleId, "PAYMENT_SENT");
+      long confirmed = slotParticipation(buncheolId, participantId, bundleId, "CONFIRMED");
+      long otherBundleId = fixture.bundle(otherBuncheolId, participantId, addressId, HOUR.negated());
+      long otherAwaiting =
+          slotParticipation(otherBuncheolId, participantId, otherBundleId, "AWAITING_PAYMENT");
+
+      int cancelled =
+          transactionTemplate.execute(
+              status ->
+                  participationRepository.cancelUnconfirmedByBuncheolId(buncheolId, Instant.now()));
+
+      assertThat(cancelled).isEqualTo(2);
+      for (long id : new long[] {awaiting, sent}) {
+        assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT CONCAT(status, '/', cancel_reason, '/', cancelled_at IS NOT NULL)"
+                        + " FROM participations WHERE id = ?",
+                    String.class,
+                    id))
+            .isEqualTo("CANCELLED/PAYMENT_NOT_CONFIRMED/1");
+      }
+      assertThat(participationStatus(confirmed)).isEqualTo("CONFIRMED");
+      assertThat(participationStatus(otherAwaiting)).isEqualTo("AWAITING_PAYMENT");
+    }
+
+    private long slotParticipation(
+        final long buncheolId, final long participantId, final long bundleId, final String status) {
+      return fixture.participation(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          participantId,
+          bundleId,
+          status,
+          "C2C",
+          HOUR.negated());
+    }
+  }
+
+  private String status(final long buncheolId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT status FROM buncheols WHERE id = ?", String.class, buncheolId);
+  }
+
+  private Object finalizedAt(final long buncheolId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT finalized_at FROM buncheols WHERE id = ?", Object.class, buncheolId);
+  }
+
+  private String participationStatus(final long participationId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT status FROM participations WHERE id = ?", String.class, participationId);
   }
 }

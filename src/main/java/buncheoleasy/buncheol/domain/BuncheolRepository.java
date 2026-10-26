@@ -132,26 +132,13 @@ public interface BuncheolRepository {
       Long buncheolId, Instant paymentDueAt, String bank, String account, String holder, Instant now);
 
   /**
-   * C2C 전원 입금확인 CAS: 미확정 활성 참여가 없고 확정 참여가 1건 이상일 때만 PAYMENT_COLLECTING → CONFIRMED 로 전이한다.
+   * 회원 개최 진행 확정 CAS (PAYMENT_COLLECTING → CONFIRMED). 회원 개최 분철에만 적용된다. 확인 수·기한 판정은 호출자가 분철 행
+   * 잠금 아래에서 한다. {@code finalized_at} 은 건드리지 않는다(입금 단계 시작 시각을 남긴다 — R1 의 {@code ended_at} 백필 규칙).
    * {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
    *
-   * @return 갱신된 행 수 (0 이면 아직 미확정 참여가 남았거나 입금 수집중이 아님)
+   * @return 갱신된 행 수 (0 이면 입금 수집중이 아니거나 회원 개최가 아님)
    */
-  int confirmIfAllCollected(Long buncheolId, Instant now);
-
-  /** 입금 수집중이고 일괄 입금 기한이 지난 C2C 분철 id (데드엔드 정리 폴링용, 기한 오름차순). */
-  List<Long> findCollectingIdsPastPaymentDue(Instant now, int limit);
-
-  /**
-   * C2C 데드엔드 정리 CAS: 입금 수집중인데 활성 참여가 하나도 남지 않았으면 미성사 취소한다. 확정 참여가 있으면
-   * 전이하지 않는다 — 부분 확정/취소는 개최자 선택으로 남긴다 (docs/46 §7.1-6).
-   *
-   * <p>⚠️ C2C 자동 만료를 끈 뒤로는 <b>개최자가 「제외」를 눌러야</b> 활성이 빈다. 개최자가 아무것도 안 하면
-   * 분철이 끝나지 않는데, 이는 「제외」가 정문을 만들면서 <b>수용하기로 한 트레이드오프</b>다(docs/70 §1).
-   *
-   * @return 갱신된 행 수 (0 이면 활성 참여가 남았거나 입금 수집중이 아님)
-   */
-  int cancelIfCollectingAndEmpty(Long buncheolId, Instant now);
+  int confirmIfCollecting(Long buncheolId, Instant now);
 
   /**
    * C2C 입금 수집중 분철의 개최자 취소 CAS (PAYMENT_COLLECTING → HOST_CANCELLED). 입금이 확인된(CONFIRMED) 참여가 한 건도

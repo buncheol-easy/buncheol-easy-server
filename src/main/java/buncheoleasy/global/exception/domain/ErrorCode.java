@@ -251,6 +251,11 @@ public enum ErrorCode {
   BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED(
       "BCH-125", "신청자가 있거나 마감한 자리는 가격을 바꿀 수 없어요.", HttpStatus.CONFLICT),
 
+  // ── 회원 개최 진행 확정·접기 ──
+  // 확인 창에 보여 준 빠질 참여 목록과 서버가 본 미확인 참여가 다르다 — 그 사이 「보냈어요」·입금 확인이 있었다.
+  BUNCHEOL_CONFIRM_LIST_CHANGED(
+      "BCH-127", "그 사이 입금 상태가 바뀌었어요. 새로고침 후 다시 확인해 주세요.", HttpStatus.CONFLICT),
+
   // ── 운영진 분철 예약 오픈 ──
   // 코드 참여는 오픈 전에도 받는다(코드 전용 자리). 이 거절은 코드 없는 참여에만 나간다.
   BUNCHEOL_NOT_OPEN_YET("BCH-128", "아직 열리지 않은 분철이에요.", HttpStatus.CONFLICT),

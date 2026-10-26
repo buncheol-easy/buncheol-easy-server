@@ -198,6 +198,11 @@ public class ParticipationDomainService {
     return participationRepository.cancelActiveByBuncheolId(buncheolId, now);
   }
 
+  /** 진행 확정 때 입금 미확인 참여를 분철 범위로 취소한다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public int cancelUnconfirmedByBuncheolId(final Long buncheolId, final Instant now) {
+    return participationRepository.cancelUnconfirmedByBuncheolId(buncheolId, now);
+  }
+
   /** 분철 취소 cascade 로 실제 전이된 참여 조회 (취소 알림 대상). cancelActiveByBuncheolId 직후 같은 트랜잭션에서 호출. */
   public List<Participation> findCascadeCancelledByBuncheolId(final Long buncheolId) {
     return participationRepository.findCascadeCancelledByBuncheolId(buncheolId);

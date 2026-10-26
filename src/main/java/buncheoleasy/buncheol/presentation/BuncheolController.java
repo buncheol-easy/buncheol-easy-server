@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberPriceRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
@@ -127,13 +128,15 @@ public class BuncheolController {
   }
 
   /**
-   * C2C 입금 수집 종료(부분 확정) API (docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행을 확정한다.
-   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 입금확인하거나 기한 뒤 「제외」로 먼저 정리).
+   * 회원 개최 진행 확정 API. 모든 참여가 입금 확인됐거나 입금 기한이 지났고 확인된 참여가 있을 때 진행을 확정하고, 입금이 확인되지 않은
+   * 참여를 뺀다. 본문의 빠질 참여 목록이 서버가 본 것과 다르면 409(BCH-127). 본문 없는 요청(옛 「성사 확정」)은 400.
    */
-  @PostMapping("/{id}/finalize-collected")
-  public ResponseEntity<Void> finalizeCollected(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
-    buncheolService.finalizeCollected(hostId, id);
+  @PostMapping("/{id}/confirm")
+  public ResponseEntity<Void> confirmBuncheol(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @Valid @RequestBody final BuncheolConfirmRequest request) {
+    buncheolService.confirmBuncheol(hostId, id, request);
     return ResponseEntity.noContent().build();
   }
 

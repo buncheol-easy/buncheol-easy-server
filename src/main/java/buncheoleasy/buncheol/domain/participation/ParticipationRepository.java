@@ -185,6 +185,15 @@ public interface ParticipationRepository {
   int cancelActiveByBuncheolId(Long buncheolId, Instant now);
 
   /**
+   * 회원 개최 진행 확정 때 입금이 확인되지 않은 참여(입금 대기·「보냈어요」)를 분철 범위로 CANCELLED({@link
+   * ParticipationCancelReason#PAYMENT_NOT_CONFIRMED}) 로 일괄 전이한다. 대상은 요청 목록이 아니라 분철 범위로 고른다.
+   * {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
+   *
+   * @return 취소된 참여 행 수
+   */
+  int cancelUnconfirmedByBuncheolId(Long buncheolId, Instant now);
+
+  /**
    * 분철 취소 cascade({@link ParticipationCancelReason#BUNCHEOL_CANCELLED})로 전이된 참여를 조회한다. {@link
    * #cancelActiveByBuncheolId} 직후 같은 트랜잭션에서 호출해, 그 사이 자발취소·만료된 참여(다른 cancelReason)를 제외한 "실제로 이번에
    * 취소된" 참여에만 알림을 발행하는 데 쓴다.

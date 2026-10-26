@@ -147,20 +147,9 @@ public class BuncheolDomainService {
         > 0;
   }
 
-  /**
-   * C2C 전원 입금확인 시 진행확정 CAS (PAYMENT_COLLECTING → CONFIRMED). 미확정 활성 참여가 남아 있으면 전이하지 않는다.
-   * 호출 측 {@code @Transactional} 필수.
-   */
-  public boolean confirmIfAllCollected(final Long buncheolId, final Instant now) {
-    return buncheolRepository.confirmIfAllCollected(buncheolId, now) > 0;
-  }
-
-  /**
-   * C2C 데드엔드 정리 CAS — 입금 수집중인데 활성 참여가 하나도 남지 않았으면(확정 0건) 미성사 취소한다 (docs/46 §7.1-6 보완).
-   * 확정 참여가 있으면 전이하지 않고 개최자 선택(부분 확정/취소)을 기다린다. 호출 측 {@code @Transactional} 필수.
-   */
-  public boolean cancelCollectingIfEmpty(final Long buncheolId, final Instant now) {
-    return buncheolRepository.cancelIfCollectingAndEmpty(buncheolId, now) > 0;
+  /** 회원 개최 진행 확정 CAS (PAYMENT_COLLECTING → CONFIRMED) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public boolean confirmIfCollecting(final Long buncheolId, final Instant now) {
+    return buncheolRepository.confirmIfCollecting(buncheolId, now) > 0;
   }
 
   /**

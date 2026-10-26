@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
 import buncheoleasy.buncheol.application.image.ImageFile;
+import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
@@ -9,6 +10,7 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.BuncheolTerms;
 import buncheoleasy.buncheol.domain.BuncheolTermsChange;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -17,7 +19,10 @@ import buncheoleasy.buncheol.domain.member.BuncheolMemberParams;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest.CancelParticipation;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
@@ -34,9 +39,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -45,6 +53,7 @@ public class BuncheolService {
 
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final PaymentStarter paymentStarter;
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
@@ -347,8 +356,8 @@ public class BuncheolService {
    * Buncheol#validateOpenChatUrlEditable} 이 CANCELLED·HOST_CANCELLED 를 막는다). <b>다른 필드를 이 패턴으로 얹지
    * 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
    *
-   * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(성사 확정·진행
-   * 확정)만 {@code isC2c()} 로 막는다.
+   * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(진행 확정
+   * 등)만 플로우로 막는다.
    *
    * <p><b>참여자 알림은 보내지 않는다</b>(이번 범위 밖). 링크가 바뀌어도 참여자는 상세·내 참여를 다시 열어야 새 링크를 본다 — 이미 링크를
    * 복사해 간 사람에게는 안내가 닿지 않는다. 수신함 기록은 별도로 다룬다.
@@ -364,23 +373,76 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 입금 수집 종료(부분 확정 — docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행하겠다는 개최자
-   * 선택이다. 미입금 활성 참여(입금 대기·보냈어요)가 남아 있거나 확정 참여가 없으면 CAS 조건에 막혀 실패한다 — 보냈어요 잔여는 입금확인하거나
-   * 기한 뒤 「제외」로 먼저 정리해야 한다(§4.7-E1).
+   * 회원 개최 진행 확정 (PAYMENT_COLLECTING → CONFIRMED). 모든 참여가 입금 확인됐거나, 입금 기한이 지났고 확인된 참여가 있을 때만
+   * 된다({@link ConfirmCheck}). 입금이 확인되지 않은 참여(입금 대기·「보냈어요」)는 같은 트랜잭션에서 빠지고({@code
+   * PAYMENT_NOT_CONFIRMED}), 확인된 묶음마다 배송이 생긴다 — 운송장은 이 뒤에만 넣을 수 있다.
+   *
+   * <p>{@code request} 의 빠질 참여 목록은 개최자가 확인 창에서 본 것이다. 서버가 잠금 아래에서 본 미확인 (id, 상태) 집합과 다르면
+   * 409(BCH-127)로 막는다 — 그 사이 누가 「보냈어요」를 누르거나 다른 탭에서 입금 확인했으면 개최자가 강조 없이 본 사람을 빼게 된다. 목록은
+   * 대조에만 쓰고 취소 대상은 분철 범위로 고른다(남의 참여 id 를 넣어도 대조 실패로 끝난다).
+   *
+   * <p>🔴 READ COMMITTED 다. 진행확정 알림 대상 조회({@link BuncheolConfirmedFinalizer})가 잠금 뒤 일반 조회로 확정 참여를 읽는데,
+   * REPEATABLE READ 면 잠금 전 첫 읽기의 스냅샷이 남아 기다리는 사이 커밋된 입금 확인을 빠뜨린다(#245 와 같은 이유). 회원 개최에서 확정 수를
+   * 바꾸는 쓰기(묶음 입금 확인)는 모두 분철 행을 먼저 잡으므로 READ COMMITTED 에서도 판정이 흔들리지 않고, 참여 잠금에 간격 잠금이 빠져도 새
+   * 참여 INSERT 는 분철 행에서 막힌다.
    */
-  @Transactional
-  public void finalizeCollected(final Long hostId, final Long buncheolId) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+  @Transactional(isolation = Isolation.READ_COMMITTED)
+  public void confirmBuncheol(
+      final Long hostId, final Long buncheolId, final BuncheolConfirmRequest request) {
+    // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate).
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
     buncheol.validateOwner(hostId);
-    if (!buncheol.isC2c()) {
+    if (buncheol.isStaff()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
+    final Instant now = Instant.now(clock);
 
-    if (!buncheolDomainService.confirmIfAllCollected(buncheolId, Instant.now(clock))) {
-      // 성사 확정(confirmRecruitment)과 다른 단계라 전용 코드를 쓴다 (docs/53 Q-12).
+    // 바로 아래에서 바꿀 행이라 배타 잠금으로 읽는다.
+    List<Participation> active = participationDomainService.findActiveByBuncheolIdForUpdate(buncheolId);
+    List<Participation> confirmed =
+        active.stream().filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED).toList();
+    Set<CancelParticipation> unconfirmed =
+        active.stream()
+            .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
+            .map(p -> new CancelParticipation(p.getId(), p.getStatus()))
+            .collect(Collectors.toSet());
+
+    ConfirmCheck check =
+        ConfirmCheck.of(
+            buncheol.getStatus(),
+            confirmed.size(),
+            unconfirmed.size(),
+            buncheol.getPaymentDueAt(),
+            now);
+    if (check == null || !check.isConfirmable()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
+    // 순서와 무관하게 집합으로 대조한다 — 화면이 정렬을 보장하지 않는다.
+    if (!unconfirmed.equals(Set.copyOf(request.cancelParticipations()))) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_LIST_CHANGED);
+    }
+
+    if (!buncheolDomainService.confirmIfCollecting(buncheolId, now)) {
+      // 분철 행을 잠근 채 상태를 봤으므로 여기 오면 안 된다 — 롤백한다.
+      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
+    }
+    if (participationDomainService.cancelUnconfirmedByBuncheolId(buncheolId, now)
+        != unconfirmed.size()) {
+      // 참여 행을 잠근 채 셌으므로 내부 불변식 위반이다 — 롤백해 일부만 빠진 진행 확정을 남기지 않는다.
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    // 빠진 참여만 있던 묶음을 닫는다. 확인된 묶음은 그대로 열려 배송으로 이어진다.
+    participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
+    // 확인된 묶음마다 배송 1개 — 묶음에 배송이 이미 있으면(옛 서버가 입금 확인 때 만든 것) 건너뛴다.
+    confirmed.forEach(deliverySnapshotCreator::create);
+
     buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
+    if (!unconfirmed.isEmpty()) {
+      eventPublisher.publishEvent(
+          new PaymentNotConfirmedEvent(
+              buncheolId,
+              unconfirmed.stream().map(CancelParticipation::participationId).sorted().toList()));
+    }
   }
 
   /**

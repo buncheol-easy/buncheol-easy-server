@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEve
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -87,7 +88,8 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없다.
+   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없고, 기한 뒤 빠지는 안내는 {@link
+   * #onPaymentNotConfirmed} 가 보낸다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -110,7 +112,30 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 입금확인(전원 또는 미입금 제외 후 개최자 확정)이
+   * (참여자) 개최자의 진행 확정 때 입금이 확인되지 않아 참여가 빠짐. 다슬롯 참여자에게 같은 안내가 슬롯 수만큼 가지 않도록 사람 단위로 묶어 1건씩
+   * 보낸다(멤버명 나열). 등록 문안 "입금 기한이 지나 개최자가 참여를 취소했어요" 가 이 동작과 맞다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onPaymentNotConfirmed(final PaymentNotConfirmedEvent event) {
+    sendEachSafely(
+        groupByParticipant(loadViewsSafely(event.participationIds())), this::sendNotConfirmedNotice);
+  }
+
+  private void sendNotConfirmedNotice(final List<ParticipationView> group) {
+    ParticipationView first = group.get(0);
+    AlimtalkTemplate template = AlimtalkTemplate.C2C_PAYMENT_EXPIRED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(group));
+    recordSafely(first.participant().getId(), template, variables);
+    sender.send(template, first.participant().getPhoneNumber().value(), variables);
+  }
+
+  /**
+   * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 개최자의 진행 확정(전원 입금 확인 또는 기한 뒤 확인된 참여로)이
    * 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (성사 안내와 같은 합산
    * 규칙).
    */

@@ -18,6 +18,7 @@ import buncheoleasy.buncheol.application.PaymentStartedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
@@ -65,6 +66,61 @@ class AlimtalkNotificationListenerTest {
   private static final String PARTICIPANT_PHONE = "01011112222";
   private static final String OTHER_PARTICIPANT_PHONE = "01022223333";
   private static final String HOST_PHONE = "01033334444";
+
+  @Nested
+  @DisplayName("진행 확정 때 빠짐(onPaymentNotConfirmed)")
+  class PaymentNotConfirmed {
+
+    private ParticipationView view(final Buncheol buncheol, final String memberName, final User participant) {
+      return new ParticipationView(
+          mock(Participation.class), null, buncheol, memberName, participant, mock(User.class), 25_000L);
+    }
+
+    @Test
+    @DisplayName("빠진 참여자에게 C2C_PAYMENT_EXPIRED 를 사람당 1통, 멤버명을 나열해 보내고 수신함에 남긴다")
+    void sendsOncePerParticipantWithMergedMembers() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID))
+          .willReturn(view(buncheol, "호시", participant));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(view(buncheol, "우지", participant));
+
+      listener.onPaymentNotConfirmed(
+          new PaymentNotConfirmedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.C2C_PAYMENT_EXPIRED, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "참여자닉")
+          .containsEntry("분철명", "세븐틴 미니 12집 분철")
+          .containsEntry("멤버명", "호시, 우지");
+      verify(sender, times(1)).send(any(), any(), any());
+      verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.C2C_PAYMENT_EXPIRED), any());
+    }
+
+    @Test
+    @DisplayName("빠진 사람이 여럿이면 사람마다 1통씩 보낸다")
+    void sendsToEachParticipant() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      User first = mockUser("첫째", PARTICIPANT_PHONE);
+      given(first.getId()).willReturn(11L);
+      User second = mockUser("둘째", OTHER_PARTICIPANT_PHONE);
+      given(second.getId()).willReturn(12L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view(buncheol, "호시", first));
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID))
+          .willReturn(view(buncheol, "우지", second));
+
+      listener.onPaymentNotConfirmed(
+          new PaymentNotConfirmedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
+
+      verify(sender).send(eq(AlimtalkTemplate.C2C_PAYMENT_EXPIRED), eq(PARTICIPANT_PHONE), any());
+      verify(sender).send(eq(AlimtalkTemplate.C2C_PAYMENT_EXPIRED), eq(OTHER_PARTICIPANT_PHONE), any());
+    }
+  }
 
   @Nested
   @DisplayName("입금 확인(onPaymentConfirmed)")

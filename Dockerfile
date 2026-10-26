@@ -25,6 +25,9 @@ COPY src ./src
 # 전체 테스트는 test.yml(PR·dev push)이 돌린다. 이 빌드는 GitHub 호스팅 러너에서 실행된다
 # — 실측 피크 RSS ~2GB 가 배포 박스를 굳혔던 사고(docs 35 §11) 이후 빌드를 박스 밖으로
 # 이전했다(docs 35 §8-A). 박스는 완성된 이미지를 ECR 에서 pull 만 한다.
+#
+# DocsTest 가 늘어도 384m 로 버티는 건 build.gradle 의 테스트 컨텍스트 캐시 상한(기본 8) 덕이다.
+# 상한 없이 DocsTest 25개에서 OOM 이 났다(2026-10-22). 힙을 올리기 전에 그 상한부터 볼 것.
 RUN ./gradlew clean test --tests "*DocsTest" bootJar --no-daemon \
       -PtestMaxHeap=384m -PtestMaxMetaspace=256m
 

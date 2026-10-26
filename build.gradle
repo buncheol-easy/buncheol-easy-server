@@ -79,23 +79,25 @@ dependencies {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
 
-    // 테스트는 Gradle 과 별도 JVM 으로 포크된다. 배포 빌드가 도는 t3.small(2GB) 은 앱·프론트·모니터링
-    // 컨테이너가 떠 있는 상태라 여유가 ~580MB 뿐이므로, 배포 박스 기준으로 상한을 낮게 잡는다.
-    // 여유 있는 로컬·CI 에서는 -PtestMaxHeap=1g 로 올릴 수 있다.
+    // 테스트는 Gradle 과 별도 JVM 으로 포크된다. 이 상한은 원래 배포 박스(t3.small 2GB)에서 이미지를 빌드하던
+    // 시절에 낮게 잡은 값이다(#84). 지금 이미지 빌드는 GitHub 호스팅 러너에서 돈다(#89) — Dockerfile 은 DocsTest 만
+    // -PtestMaxHeap=384m 로, CI(test.yml)는 -PtestMaxHeap=1g 로 넘기고, 아무것도 안 넘기는 로컬 실행이 이 기본값을 쓴다.
     maxHeapSize = (findProperty('testMaxHeap') ?: '512m').toString()
 
-    // 위 힙 상한과 곱해져 전체 요구량이 되므로, 배포 박스 여유를 넘기지 않도록 1 을 유지한다.
+    // 포크 수만큼 위 힙 상한이 곱해진다. 1 을 유지한다.
     maxParallelForks = 1
 
     // 힙만으로는 실사용량(RSS)이 잡히지 않는다. Spring 컨텍스트를 여러 개 띄우면 메타스페이스가 힙과
     // 별개로 수백 MB 까지 오르므로 함께 제한한다.
     jvmArgs "-XX:MaxMetaspaceSize=${findProperty('testMaxMetaspace') ?: '384m'}"
 
-    // Spring TestContext 캐시 기본 크기는 32 라 DocsTest 19개의 컨텍스트가 모두 상주한다.
-    // 메모리가 빠듯한 환경에서는 -PtestContextCacheSize 로 줄여 시간과 맞바꾼다.
-    if (findProperty('testContextCacheSize')) {
-        systemProperty 'spring.test.context.cache.maxSize', findProperty('testContextCacheSize')
-    }
+    // Spring TestContext 는 컨텍스트를 기본 32개까지 캐시에 쌓아 둔다. DocsTest 는 클래스마다 목 빈 조합이 달라
+    // 거의 매번 새 컨텍스트를 만들므로, 캐시 상한이 없으면 테스트 클래스가 늘수록 힙 사용량이 계속 는다
+    // (2026-10-22 실측: DocsTest 25개가 384m 에서 OOM, 로컬 전체가 512m 에서 OOM 으로 Gradle 이 멈춤).
+    // 기본 8 로 묶어 테스트 수와 무관하게 상한을 고정한다. 밀려난 컨텍스트는 다시 필요하면 새로 만들지만,
+    // 실측상 GC 가 헤매는 시간이 사라져 오히려 빨라졌다(384m DocsTest 4분35초 실패 → 28초 통과, 로컬 전체 512m 38초).
+    // 다른 값이 필요하면 -PtestContextCacheSize=<n>.
+    systemProperty 'spring.test.context.cache.maxSize', (findProperty('testContextCacheSize') ?: '8').toString()
 
     doFirst {
         def agent = configurations.testRuntimeClasspath.find {

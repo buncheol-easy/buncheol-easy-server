@@ -79,6 +79,13 @@ public interface ParticipationRepository {
   List<Participation> findActiveByBuncheolId(Long buncheolId);
 
   /**
+   * 단일 분철에서 한 참여자의 활성 참여 <b>잠금 읽기</b>(공유 잠금, 최신 커밋 기준). 분철 행을 잠근 쓰기 경로가 고르는 값이라
+   * 잠금 전 스냅샷이 아니라 최신 값을 봐야 한다. 호출 측 {@code @Transactional} 필수.
+   */
+  List<Participation> findActiveByBuncheolIdAndParticipantIdForShare(
+      Long buncheolId, Long participantId);
+
+  /**
    * 여러 묶음에 속한 참여 전체 (취소분 포함). 페이지네이션된 목록에서 배송비 귀속을 정할 때, 그 페이지에 걸린 묶음들의 형제
    * 슬롯을 한 번에 읽는다 — 페이지 조각만으로 판정하면 배송비가 두 번 걷힌다 ({@code ShippingFeeAttribution}).
    */

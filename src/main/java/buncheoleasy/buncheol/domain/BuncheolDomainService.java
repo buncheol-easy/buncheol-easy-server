@@ -189,7 +189,17 @@ public class BuncheolDomainService {
     return buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, slotCount, now) > 0;
   }
 
-  /** C2C 참여 생성 직렬화용 잠금 조회 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  /**
+   * 분철 행 잠금 조회. 호출 측 {@code @Transactional} 필수.
+   *
+   * <p><b>분철 단위 쓰기는 이 잠금을 첫 잠금으로 잡는다.</b> 대상은 회원 개최 분철의 상태·자리·참여·묶음을 바꾸는 쓰기 전부와
+   * 운영진 슬롯 입금 확인({@code ParticipationService#lockBuncheolBeforeConfirm})이다. 참여·묶음·자리 잠금이 모두 분철 행
+   * 앞에서 한 줄로 선 뒤에 잡히므로 경로끼리 잠금 순서가 엇갈리지 않는다. 상태 보장은 CAS 가 하고 이 잠금은 순서만 맡는다.
+   *
+   * <p>트랜잭션의 첫 분철 조회여야 한다 — 앞에서 {@link #getBuncheol} 로 읽었으면 영속성 컨텍스트가 그 낡은 인스턴스를
+   * 돌려준다(그때는 {@link #getLatestBuncheolForUpdate}). 묶음·참여에서 분철 id 를 읽는 조회는 먼저 해도 된다. 잠금 뒤의
+   * 판단은 CAS 나 잠금 읽기로만 한다 — 잠금 전 일반 조회가 만든 스냅샷에는 기다리는 사이 커밋된 변화가 보이지 않는다.
+   */
   public Buncheol getBuncheolForUpdate(final Long id) {
     return buncheolRepository
         .findByIdForUpdate(id)

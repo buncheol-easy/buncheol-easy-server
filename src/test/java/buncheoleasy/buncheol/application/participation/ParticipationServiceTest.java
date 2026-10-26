@@ -21,6 +21,7 @@ import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -1466,6 +1467,7 @@ class ParticipationServiceTest {
     void LEGACY_입금대기_참여는_취소_전용_코드로_막힌다() {
       Participation participation = participationWith(ParticipationStatus.AWAITING_PAYMENT);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participation.getFlowType()).willReturn(FlowType.LEGACY);
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.isC2c()).willReturn(false);
@@ -1475,6 +1477,8 @@ class ParticipationServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+      // 거절할 운영진 참여 요청으로 분철 행 잠금 줄을 세우지 않는다(정각 오픈 때 신청이 그 줄에 선다).
+      then(buncheolDomainService).should(never()).getBuncheolForUpdate(anyLong());
     }
 
     // 확정된 참여는 만료 CAS(AWAITING_PAYMENT 한정)가 걸리지 않아 "기한이 지나면 자동 취소돼요"가
@@ -1503,11 +1507,13 @@ class ParticipationServiceTest {
       Participation participation = mock(Participation.class);
       given(participation.getStatus()).willReturn(status);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participation.getFlowType()).willReturn(FlowType.C2C);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
+      // 회원 개최 참여 취소는 분철 행을 첫 잠금으로 잡는다.
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.isC2c()).willReturn(true);
       if (status == ParticipationStatus.AWAITING_PAYMENT) {
         given(participation.getCreatedAt()).willReturn(CREATED_AT);

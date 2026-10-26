@@ -446,7 +446,9 @@ public class BuncheolService {
    */
   @Transactional
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate). 운영진 분철도 지나지만 원래 첫 잠금이 같은 행의
+    // 취소 CAS 라 잠그는 시점만 앞으로 온다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
     buncheol.validateOwner(hostId);
     final Instant now = Instant.now(clock);
 

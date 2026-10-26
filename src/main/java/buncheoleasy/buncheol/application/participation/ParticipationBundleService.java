@@ -131,7 +131,8 @@ public class ParticipationBundleService {
     if (!participantId.equals(bundle.getParticipantId())) {
       throw new BusinessException(ErrorCode.PARTICIPATION_NO_PERMISSION);
     }
-    Buncheol buncheol = buncheolDomainService.getBuncheol(bundle.getBuncheolId());
+    // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate). 묶음 조회는 분철 조회가 아니라 먼저 해도 된다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(bundle.getBuncheolId());
     if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
@@ -202,7 +203,8 @@ public class ParticipationBundleService {
         participationBundleDomainService
             .findById(bundleId)
             .orElseThrow(() -> new BusinessException(ErrorCode.BUNDLE_NOT_FOUND));
-    Buncheol buncheol = buncheolDomainService.getBuncheol(bundle.getBuncheolId());
+    // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate). 아래 참여 잠금은 그 뒤에 잡는다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(bundle.getBuncheolId());
     buncheol.validateOwner(hostId);
     // LEGACY 는 1인 1활성슬롯이라 묶음 = 참여다. 열어 두면 페이액션·배송 경로까지 묶음 계약을 검증해야 한다.
     if (!buncheol.isC2c()) {

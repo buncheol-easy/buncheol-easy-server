@@ -698,7 +698,12 @@ public class ParticipationService {
     final Instant now = Instant.now(clock);
     Participation participation = participationDomainService.getParticipation(participationId);
     participation.validateOwnedBy(participantId);
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    // 회원 개최 참여만 분철 행을 첫 잠금으로 잡는다(getBuncheolForUpdate javadoc). 운영진 참여는 아래 판정이 BCH-091 로
+    // 거절하므로 잠그지 않는다 — 정각 오픈 때 분철 행 잠금 줄에 거절될 요청을 세우지 않는다. 플로우는 조회한 참여 행의 사본으로 고른다.
+    Buncheol buncheol =
+        participation.getFlowType() == FlowType.C2C
+            ? buncheolDomainService.getBuncheolForUpdate(participation.getBuncheolId())
+            : buncheolDomainService.getBuncheol(participation.getBuncheolId());
     requireCancellable(ParticipationCancellability.of(participation, buncheol));
 
     if (!participationDomainService.cancelByUser(participationId, now)) {

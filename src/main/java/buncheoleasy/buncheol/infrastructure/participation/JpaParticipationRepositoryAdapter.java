@@ -273,6 +273,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<Participation> findActiveByBuncheolIdAndParticipantIdForShare(
+      final Long buncheolId, final Long participantId) {
+    return jpaParticipationRepository.findByBuncheolIdAndParticipantIdAndStatusInForShare(
+        buncheolId, participantId, ParticipationStatus.active());
+  }
+
+  @Override
   public List<Participation> findAllByBundleIdForUpdate(final Long bundleId) {
     return jpaParticipationRepository.findAllByBundleIdForUpdate(bundleId);
   }

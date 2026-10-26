@@ -31,13 +31,16 @@ public class ParticipationDomainService {
   }
 
   /**
-   * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 활성 참여 수는 슬롯 수 이하라 분철 단위 조회 후
-   * 필터링으로 충분하다.
+   * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 호출 측 {@code @Transactional} 필수.
+   *
+   * <p>🔴 <b>잠금 읽기</b>다. 신청은 분철 행을 잠근 뒤 이 값을 고르는데, 일반 조회는 잠금 전 스냅샷을 봐서 기다리는 사이 같은 사람의
+   * 자발 취소로 닫힌 묶음을 재사용하려다 연결 CAS 에서 409 가 난다. 잠금 읽기는 최신 커밋을 본다.
    */
   public Optional<Participation> findFirstActiveInBuncheol(
       final Long buncheolId, final Long participantId) {
-    return participationRepository.findActiveByBuncheolId(buncheolId).stream()
-        .filter(participation -> participation.getParticipantId().equals(participantId))
+    return participationRepository
+        .findActiveByBuncheolIdAndParticipantIdForShare(buncheolId, participantId)
+        .stream()
         .findFirst();
   }
 

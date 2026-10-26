@@ -1503,7 +1503,7 @@ class BuncheolServiceTest {
     void 모집중_분철_취소에_성공하고_활성_참여도_일괄_CANCELLED_되며_알림_이벤트가_발행된다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
           .willReturn(BuncheolStatus.RECRUITING);
       Participation participation = mock(Participation.class);
@@ -1530,7 +1530,7 @@ class BuncheolServiceTest {
     void 취소된_참여가_여러_건이어도_취소_이벤트는_분철_단위로_한_번_발행된다() {
       // given — cascade 재조회에는 ORDER BY 가 없다. 순서를 뒤섞어 발행 쪽 정렬을 확인한다.
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
           .willReturn(BuncheolStatus.RECRUITING);
       Participation later = mock(Participation.class);
@@ -1557,7 +1557,7 @@ class BuncheolServiceTest {
     void cascade_로_취소된_참여가_없으면_취소_이벤트를_발행하지_않는다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
           .willReturn(BuncheolStatus.RECRUITING);
       given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
@@ -1576,7 +1576,7 @@ class BuncheolServiceTest {
     void 인원미달_자동취소_분철_취소시_참여_케스케이드와_알림이_생략된다() {
       // given — 자동취소 시 마감 스케줄러가 참여 취소·배송 정리·알림을 이미 끝냈으므로 재실행하면 취소 알림이 중복 발송된다.
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
           .willReturn(BuncheolStatus.CANCELLED);
 
@@ -1596,7 +1596,7 @@ class BuncheolServiceTest {
     void 소유자가_아니면_취소에_실패한다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_NO_PERMISSION))
           .given(buncheol)
           .validateOwner(HOST_ID);
@@ -1615,7 +1615,7 @@ class BuncheolServiceTest {
     void 분철이_없으면_취소에_실패한다() {
       // given
       Long buncheolId = 999L;
-      given(buncheolDomainService.getBuncheol(buncheolId))
+      given(buncheolDomainService.getBuncheolForUpdate(buncheolId))
           .willThrow(new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
 
       // when & then
@@ -1632,7 +1632,7 @@ class BuncheolServiceTest {
     void 분철_상태가_취소_불가면_참여_cascade가_호출되지_않는다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       willThrow(new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED))
           .given(buncheolDomainService)
           .cancelBuncheol(BUNCHEOL_ID, NOW);
@@ -1653,7 +1653,7 @@ class BuncheolServiceTest {
     void 입금_수집중_분철에_입금확인된_참여가_있으면_취소를_막고_전용_코드로_안내한다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
       given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(1);
 
@@ -1671,7 +1671,7 @@ class BuncheolServiceTest {
     void 입금_수집중이어도_입금확인된_참여가_없으면_취소된다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
       given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(0);
       given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
@@ -1692,7 +1692,7 @@ class BuncheolServiceTest {
     void 모집중_분철은_입금확인된_참여가_있어도_취소된다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.getStatus()).willReturn(BuncheolStatus.RECRUITING);
       given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
           .willReturn(BuncheolStatus.RECRUITING);

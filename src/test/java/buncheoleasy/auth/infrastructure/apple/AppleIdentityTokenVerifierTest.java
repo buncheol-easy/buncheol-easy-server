@@ -2,6 +2,9 @@ package buncheoleasy.auth.infrastructure.apple;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import buncheoleasy.auth.domain.AppleIdentity;
 import buncheoleasy.auth.domain.Sha256;
@@ -12,6 +15,8 @@ import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
@@ -31,14 +36,21 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.ExpectedCount;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestTemplate;
 
-/** 애플 공개키 대신 테스트에서 만든 RSA 키로 서명·검증한다 — 네트워크를 쓰지 않는다. */
+/**
+ * 운영과 같은 디코더({@code createDecoder} — 공개키 주소·RS256 고정)를 쓰되, 공개키 응답만 테스트에서 만든 RSA 키의 JWKS 로 바꾼다. 네트워크를
+ * 쓰지 않는다.
+ */
 @DisplayName("AppleIdentityTokenVerifier 단위 테스트")
 class AppleIdentityTokenVerifierTest {
 
   private static final String BUNDLE_ID = "com.buncheoleasy.app";
   private static final String RAW_NONCE = "raw-nonce-0123456789";
+  private static final String KEY_ID = "test-kid";
   private static final String SUBJECT = "001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0123";
   private static final Instant NOW = Instant.parse("2026-10-27T00:00:00Z");
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -54,10 +66,20 @@ class AppleIdentityTokenVerifierTest {
     otherKey = generator.generateKeyPair();
   }
 
+  private static final String APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
+
+  /** 애플 공개키 주소에 로컬 키의 JWKS 를 돌려주는 운영과 같은 디코더. */
   private static AppleIdentityTokenVerifier verifier(final Set<String> audiences) {
-    NimbusJwtDecoder decoder =
-        NimbusJwtDecoder.withPublicKey((RSAPublicKey) appleKey.getPublic()).build();
-    return new AppleIdentityTokenVerifier(decoder, audiences, CLOCK);
+    RestTemplate restTemplate = new RestTemplate();
+    MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+    String jwks =
+        new JWKSet(new RSAKey.Builder((RSAPublicKey) appleKey.getPublic()).keyID(KEY_ID).build())
+            .toString();
+    server
+        .expect(ExpectedCount.manyTimes(), requestTo(APPLE_KEYS_URL))
+        .andRespond(withSuccess(jwks, MediaType.APPLICATION_JSON));
+    return new AppleIdentityTokenVerifier(
+        AppleIdentityTokenVerifier.createDecoder(restTemplate), audiences, CLOCK);
   }
 
   private static String hashedNonce(final String rawNonce) {
@@ -81,7 +103,7 @@ class AppleIdentityTokenVerifierTest {
 
   private static String sign(final JWTClaimsSet claims, final KeyPair key) throws JOSEException {
     SignedJWT jwt =
-        new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("test-kid").build(), claims);
+        new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(KEY_ID).build(), claims);
     jwt.sign(new RSASSASigner(key.getPrivate()));
     return jwt.serialize();
   }
@@ -154,7 +176,10 @@ class AppleIdentityTokenVerifierTest {
 
     @Test
     void 대칭키_HS256_으로_서명한_토큰() throws Exception {
-      SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims(builder -> {}));
+      SignedJWT jwt =
+          new SignedJWT(
+              new JWSHeader.Builder(JWSAlgorithm.HS256).keyID(KEY_ID).build(),
+              claims(builder -> {}));
       jwt.sign(new MACSigner("0123456789abcdef0123456789abcdef0123456789abcdef"));
       String token = jwt.serialize();
 
@@ -270,11 +295,14 @@ class AppleIdentityTokenVerifierTest {
 
     @Test
     void 공개키를_받아_오지_못하면_잠시_뒤_다시_하라고_알린다() throws Exception {
-      // 닫힌 로컬 포트 — 외부 네트워크를 쓰지 않고 공개키 조회 실패를 만든다.
-      NimbusJwtDecoder unreachable =
-          NimbusJwtDecoder.withJwkSetUri("http://127.0.0.1:9/auth/keys").build();
+      RestTemplate restTemplate = new RestTemplate();
+      MockRestServiceServer.bindTo(restTemplate)
+          .build()
+          .expect(ExpectedCount.manyTimes(), requestTo(APPLE_KEYS_URL))
+          .andRespond(withServerError());
       AppleIdentityTokenVerifier verifier =
-          new AppleIdentityTokenVerifier(unreachable, Set.of(BUNDLE_ID), CLOCK);
+          new AppleIdentityTokenVerifier(
+              AppleIdentityTokenVerifier.createDecoder(restTemplate), Set.of(BUNDLE_ID), CLOCK);
       String token = sign(claims(builder -> {}), appleKey);
 
       assertRejected(

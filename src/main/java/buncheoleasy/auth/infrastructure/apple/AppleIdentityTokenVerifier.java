@@ -8,6 +8,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
@@ -26,8 +28,11 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestOperations;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * 애플 신원 토큰을 애플 공개키(JWKS)로 검증한다. 공개키는 디코더가 처음 쓸 때 받아 캐시하고(기본 5분), 모르는 키 ID 가 오면 다시 받는다.
@@ -41,6 +46,9 @@ public class AppleIdentityTokenVerifier implements AppleIdentityVerifier {
 
   private static final String APPLE_ISSUER = "https://appleid.apple.com";
   private static final String APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
+  // 로그인 요청 스레드가 공개키 응답을 기다린다. 첫 조회·키 교체 때만 나가고 평소엔 캐시(기본 5분)를 쓴다.
+  private static final Duration KEYS_CONNECT_TIMEOUT = Duration.ofSeconds(2);
+  private static final Duration KEYS_READ_TIMEOUT = Duration.ofSeconds(3);
   private static final String NONCE_CLAIM = "nonce";
   private static final String EMAIL_CLAIM = "email";
 
@@ -50,10 +58,10 @@ public class AppleIdentityTokenVerifier implements AppleIdentityVerifier {
   @Autowired
   public AppleIdentityTokenVerifier(
       @Value("${app.apple.signin.audiences:}") final String audiences, final Clock clock) {
-    this(NimbusJwtDecoder.withJwkSetUri(APPLE_KEYS_URL).build(), parseAudiences(audiences), clock);
+    this(createDecoder(appleKeysClient()), parseAudiences(audiences), clock);
   }
 
-  /** 테스트가 로컬 키로 서명한 토큰을 쓰도록 디코더를 바꿔 끼운다. 검증 규칙(발급자·대상 앱·만료)은 여기서 똑같이 건다. */
+  /** 검증 규칙(발급자·대상 앱·만료)은 여기서 건다. 테스트는 {@link #createDecoder} 로 운영과 같은 디코더를 만들어 넘긴다. */
   AppleIdentityTokenVerifier(
       final NimbusJwtDecoder decoder, final Set<String> audiences, final Clock clock) {
     this.audiences = Set.copyOf(audiences);
@@ -65,6 +73,29 @@ public class AppleIdentityTokenVerifier implements AppleIdentityVerifier {
         new DelegatingOAuth2TokenValidator<>(
             timestampValidator, new JwtIssuerValidator(APPLE_ISSUER), audienceValidator()));
     this.decoder = decoder;
+  }
+
+  /**
+   * 애플 공개키 주소에서 키를 받아 RS256 서명만 받는 디코더. 서명 방식을 못박아 none·HS256(공개키를 비밀키로 쓰는 혼동 공격) 토큰은 키 선택 단계에서
+   * 거절된다. 테스트는 {@code restOperations} 만 로컬 공개키 응답으로 바꿔 같은 빌더를 거친다.
+   */
+  static NimbusJwtDecoder createDecoder(final RestOperations restOperations) {
+    return NimbusJwtDecoder.withJwkSetUri(APPLE_KEYS_URL)
+        .jwsAlgorithm(SignatureAlgorithm.RS256)
+        .restOperations(restOperations)
+        .build();
+  }
+
+  private static RestOperations appleKeysClient() {
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout(KEYS_CONNECT_TIMEOUT);
+    requestFactory.setReadTimeout(KEYS_READ_TIMEOUT);
+    return new RestTemplate(requestFactory);
+  }
+
+  @Override
+  public boolean isEnabled() {
+    return !audiences.isEmpty();
   }
 
   @Override

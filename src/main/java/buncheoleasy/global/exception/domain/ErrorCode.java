@@ -93,6 +93,11 @@ public enum ErrorCode {
       "AUTH-011",
       "지금은 애플 로그인을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
       HttpStatus.SERVICE_UNAVAILABLE),
+  // 같은 IP 에서 애플 토큰 검증 실패가 몰릴 때. 남은 횟수·해제 시각은 알리지 않는다.
+  AUTH_APPLE_LOGIN_RATE_LIMITED(
+      "AUTH-012", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+  // 서버에 앱 주소(APP_LOGIN_CALLBACK_URL)가 설정되지 않은 환경 — 카카오 앱 로그인을 시작하지 않는다.
+  AUTH_APP_LOGIN_DISABLED("AUTH-013", "앱 로그인을 사용할 수 없습니다.", HttpStatus.BAD_REQUEST),
 
   /** FILE - MultiPart File 관련 에러 */
   FILE_NAME_INVALID("FILE-001", "유효하지 않은 파일 이름입니다.", HttpStatus.BAD_REQUEST),

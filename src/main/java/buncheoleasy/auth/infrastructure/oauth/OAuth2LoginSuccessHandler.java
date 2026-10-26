@@ -77,6 +77,12 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       return;
     }
     if (KakaoAuthorizationRequestResolver.isAppLoginCallback(request)) {
+      if (!appLoginRedirector.isEnabled()) {
+        // 시작 요청은 꺼진 상태에서 카카오로 가지 않는다 — 켜진 사이 시작해 꺼진 뒤 돌아온 경우만 여기 온다. 코드를 만들지 않는다.
+        log.warn("앱 로그인이 꺼진 상태에서 앱 로그인 콜백이 왔다 — 가입·코드 발급 없이 거절");
+        loginFailureRedirector.redirect(response, LoginFailureRedirector.Reason.FAILED);
+        return;
+      }
       completeAppLogin(request, response, oauthToken);
       return;
     }

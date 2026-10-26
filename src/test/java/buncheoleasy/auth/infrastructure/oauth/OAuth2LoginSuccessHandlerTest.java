@@ -75,6 +75,11 @@ class OAuth2LoginSuccessHandlerTest {
   }
 
   private OAuth2LoginSuccessHandler createHandler(final String loginCallbackUrl) {
+    return createHandler(loginCallbackUrl, APP_CALLBACK_URL);
+  }
+
+  private OAuth2LoginSuccessHandler createHandler(
+      final String loginCallbackUrl, final String appCallbackUrl) {
     return new OAuth2LoginSuccessHandler(
         List.of(profileExtractor),
         socialLoginService,
@@ -84,7 +89,7 @@ class OAuth2LoginSuccessHandlerTest {
         new AgeRangeConsentRedirector(AGE_RANGE_CONSENT_CALLBACK_URL),
         new LoginFailureRedirector(loginCallbackUrl),
         appLoginService,
-        new AppLoginRedirector(APP_CALLBACK_URL),
+        new AppLoginRedirector(appCallbackUrl),
         loginCallbackUrl);
   }
 
@@ -201,6 +206,26 @@ class OAuth2LoginSuccessHandlerTest {
       // then
       assertThat(response.getRedirectedUrl()).isEqualTo(APP_CALLBACK_URL + "?error=failed");
       assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+    }
+
+    @Test
+    void 앱_로그인이_꺼져_있으면_가입도_코드도_없이_웹_실패_화면으로_보낸다() throws Exception {
+      // given — 켜진 사이 시작했다가 꺼진 뒤 돌아온 콜백
+      OAuth2LoginSuccessHandler handler = createHandler(FRONTEND_CALLBACK_URL, "");
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_CALLBACK_URL + "?error=failed");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      then(appLoginService).shouldHaveNoInteractions();
+      then(socialLoginService).shouldHaveNoInteractions();
     }
 
     @Test

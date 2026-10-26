@@ -34,8 +34,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>앱 로그인({@code /oauth2/authorization/kakao/app?challenge=})은 일반 로그인과 같은 인가 요청에 state 만 {@code
  * app.<challenge>.<무작위>} 로 바꾼다. 성공 콜백의 state 는 Spring 이 세션에 저장한 인가 요청과 대조를 마친 값이라, 콜백에서 꺼낸
- * challenge 는 앱이 시작할 때 보낸 그 값이다. challenge 가 형식에 맞지 않으면 null 을 돌려 카카오로 보내지 않는다 — 그 요청은 {@code
- * AppLoginStartController} 가 받아 앱 주소로 오류를 돌려준다.
+ * challenge 는 앱이 시작할 때 보낸 그 값이다. 앱 주소가 설정되지 않았거나({@link AppLoginRedirector#isEnabled()}) challenge 가
+ * 형식에 맞지 않으면 null 을 돌려 카카오로 보내지 않는다 — 그 요청은 {@code AppLoginStartController} 가 받아 거절한다.
  */
 @Component
 public class KakaoAuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
@@ -60,9 +60,12 @@ public class KakaoAuthorizationRequestResolver implements OAuth2AuthorizationReq
       PathPatternRequestMatcher.withDefaults().matcher(APP_LOGIN_PATH);
   private final DefaultOAuth2AuthorizationRequestResolver loginResolver;
   private final DefaultOAuth2AuthorizationRequestResolver ageRangeConsentResolver;
+  private final AppLoginRedirector appLoginRedirector;
 
   public KakaoAuthorizationRequestResolver(
-      final ClientRegistrationRepository clientRegistrationRepository) {
+      final ClientRegistrationRepository clientRegistrationRepository,
+      final AppLoginRedirector appLoginRedirector) {
+    this.appLoginRedirector = appLoginRedirector;
     this.loginResolver =
         new DefaultOAuth2AuthorizationRequestResolver(
             clientRegistrationRepository, DEFAULT_AUTHORIZATION_REQUEST_BASE_URI);
@@ -93,7 +96,7 @@ public class KakaoAuthorizationRequestResolver implements OAuth2AuthorizationReq
   // 일반 로그인 요청을 만든 뒤 state 만 바꾼다. from() 은 scope 를 지우던 customizer 를 옮기지 않아 다시 지운다.
   private OAuth2AuthorizationRequest resolveAppLogin(final HttpServletRequest request) {
     String challenge = request.getParameter(APP_LOGIN_CHALLENGE_PARAM);
-    if (!Pkce.isValidChallenge(challenge)) {
+    if (!appLoginRedirector.isEnabled() || !Pkce.isValidChallenge(challenge)) {
       return null;
     }
     OAuth2AuthorizationRequest login = loginResolver.resolve(request, KAKAO_REGISTRATION_ID);

@@ -78,6 +78,25 @@ class OAuth2LoginFailureHandlerTest {
     }
 
     @Test
+    void 앱_로그인이_꺼져_있으면_웹_로그인_콜백으로_돌려보낸다() throws Exception {
+      // given
+      OAuth2LoginFailureHandler appLoginOff =
+          new OAuth2LoginFailureHandler(
+              new LoginFailureRedirector(LOGIN_CALLBACK_URL),
+              new AgeRangeConsentRedirector(AGE_RANGE_CONSENT_CALLBACK_URL),
+              new AppLoginRedirector(""));
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      appLoginOff.onAuthenticationFailure(
+          appLoginCallback(), response, oauth2Failure(OAuth2ErrorCodes.ACCESS_DENIED));
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(LOGIN_CALLBACK_URL + "?error=cancelled");
+      assertRedirectOnly(response);
+    }
+
+    @Test
     void 그_밖의_실패는_앱_주소로_failed() throws Exception {
       // given
       MockHttpServletResponse response = new MockHttpServletResponse();

@@ -6,7 +6,7 @@ server:
   # 이 graceful 유예(아래 30s) + @Async executor 대기 + 여유라는 계약 위에 서 있다 (docs/39).
   # executor 대기는 빈마다 순차로 붙어 합산된다. 현재 3개:
   #   trackingExecutor 5s (코드) + alimtalkExecutor 3s (코드) + applicationTaskExecutor 3s (아래)
-  #   → 30 + 11 = 41s < 45s (여유 4s).
+  #   → 30 + 11 = 41s < 45s (여유 4s). pushExecutor 는 기다리지 않고 끊어서(PushExecutorConfig) 합에 들지 않는다.
   # ⚠️ executor 를 하나 더 만들거나 대기 시간을 올리면 이 합이 45s 를 넘어 SIGKILL 로 끝난다.
   #    여유가 얇으니 executor 를 늘릴 일이 생기면 stop_grace_period 를 60s 로 올리는 쪽을 먼저 검토할 것.
   shutdown: graceful
@@ -236,7 +236,8 @@ app:
     private-key: ${APNS_PRIVATE_KEY:}
     # 앱 번들 ID (apns-topic)
     topic: ${APNS_TOPIC:}
-    # 기본 실행기(applicationTaskExecutor)에서 기기마다 차례로 부른다. 종료 대기(3s)를 넘는 발송은 배포 전환 때 끊길 수 있다.
+    # 푸시 전용 풀(pushExecutor, 2스레드)에서 기기마다 차례로 부른다. 배포 종료 때는 기다리지 않고 끊는다 —
+    # 그때 보내던·대기하던 푸시는 버려진다(수신함·알림톡은 영향 없음).
     connect-timeout: 3s
     request-timeout: 5s
 

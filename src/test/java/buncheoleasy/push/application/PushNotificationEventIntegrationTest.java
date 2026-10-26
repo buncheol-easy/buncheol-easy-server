@@ -17,7 +17,11 @@ import buncheoleasy.push.domain.PushPlatform;
 import buncheoleasy.push.dto.request.RegisterPushDeviceRequest;
 import buncheoleasy.push.infrastructure.ApnsClient;
 import buncheoleasy.push.infrastructure.ApnsSendResult;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -91,6 +95,34 @@ class PushNotificationEventIntegrationTest {
         .isEqualTo(
             new PushMessage(
                 AlimtalkTemplate.PAYMENT_CONFIRMED.subject(), savedDescription, "/profile/bids"));
+  }
+
+  @Test
+  void 애플이_멈춰도_수신함_기록은_기다리지_않고_푸시는_전용_풀에서_보낸다() throws Exception {
+    // 운영에서 record() 를 부르는 것은 알림톡 단일 스레드다 — 여기서 애플을 기다리면 알림톡 줄이 막힌다.
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicReference<String> sendThread = new AtomicReference<>();
+    given(apnsClient.send(any(), any()))
+        .willAnswer(
+            invocation -> {
+              sendThread.set(Thread.currentThread().getName());
+              entered.countDown();
+              release.await(10, TimeUnit.SECONDS);
+              return ApnsSendResult.SENT;
+            });
+    try {
+      long started = System.nanoTime();
+      recorder.record(userId, AlimtalkTemplate.PAYMENT_CONFIRMED, VARIABLES);
+      Duration recordTook = Duration.ofNanos(System.nanoTime() - started);
+
+      assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+      // 발송은 최대 10초 멈춰 있다 — 같은 스레드에서 돌았다면 record() 도 그만큼 걸린다.
+      assertThat(recordTook).isLessThan(Duration.ofSeconds(5));
+      assertThat(sendThread.get()).startsWith("push-");
+    } finally {
+      release.countDown();
+    }
   }
 
   @Test

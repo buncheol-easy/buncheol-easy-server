@@ -577,6 +577,7 @@ class ParticipationServiceTest {
 
       // 소유자 검증은 가드보다 먼저다 — 남의 분철이면 그쪽 사유로 막혀야 하고, 플로우를 알려 주면 안 된다.
       then(buncheol).should().validateOwner(HOST_ID);
+      then(buncheolDomainService).should(never()).getBuncheolForUpdate(anyLong());
       then(participationDomainService).should(never()).confirmPayment(anyLong(), any());
       then(deliverySnapshotCreator).should(never()).create(any());
       then(eventPublisher).shouldHaveNoInteractions();
@@ -598,6 +599,7 @@ class ParticipationServiceTest {
           .isInstanceOf(BusinessException.class)
           .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BUNDLE_CONFIRM_REQUIRED);
 
+      then(buncheolDomainService).should(never()).getBuncheolForUpdate(anyLong());
       then(participationDomainService).should(never()).confirmPayment(anyLong(), any());
       then(deliverySnapshotCreator).should(never()).create(any());
       then(eventPublisher).shouldHaveNoInteractions();
@@ -712,6 +714,50 @@ class ParticipationServiceTest {
       then(buncheolConfirmedFinalizer).should().finalizeConfirmed(BUNCHEOL_ID);
     }
 
+    // 확정 CAS 보다 분철 행 잠금이 늦으면 같은 분철의 동시 확정끼리 참여 행 X ↔ 분철 행 X 로 교차해 데드락이 난다.
+    @Test
+    void 호스트_입금확인은_확정_CAS_전에_분철_행을_잠근다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+
+      participationService.confirmPayment(HOST_ID, PARTICIPATION_ID);
+
+      InOrder inOrder = Mockito.inOrder(buncheolDomainService, clock, participationDomainService);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(clock).instant();
+      inOrder.verify(participationDomainService).confirmPayment(PARTICIPATION_ID, NOW);
+      inOrder.verify(buncheolDomainService).confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW);
+    }
+
+    @Test
+    void 관리자_입금확인도_확정_CAS_전에_분철_행을_잠근다() {
+      Participation participation = mock(Participation.class);
+      given(participation.getId()).willReturn(PARTICIPATION_ID);
+      given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.getParticipation(PARTICIPATION_ID))
+          .willReturn(participation);
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+
+      participationService.confirmPaymentByAdmin(PARTICIPATION_ID);
+
+      InOrder inOrder = Mockito.inOrder(buncheolDomainService, clock, participationDomainService);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(clock).instant();
+      inOrder.verify(participationDomainService).confirmPayment(PARTICIPATION_ID, NOW);
+    }
+
     @Test
     void 조기확정_CAS_가_전이하지_않으면_진행확정_후속처리를_하지_않는다() {
       // 아직 매진 아님 / 최소인원 미달 등의 판정은 CAS(어댑터 테스트)가 담당한다. 서비스는 CAS 결과(false)만 본다.
@@ -765,6 +811,26 @@ class ParticipationServiceTest {
       assertThat(result).isEqualTo(SystemPaymentConfirmResult.CONFIRMED);
       then(deliverySnapshotCreator).should().create(participation);
       then(eventPublisher).should().publishEvent(any(PaymentConfirmedEvent.class));
+    }
+
+    // 웹훅은 READ COMMITTED 라 조기 확정 서브쿼리가 잠금 없이 센다 — 분철 행에서 줄을 서지 않으면 동시 웹훅끼리
+    // 서로의 미커밋 확정을 못 봐 전 슬롯이 확정돼도 분철이 모집중에 남는다.
+    @Test
+    void 자동_입금확인은_확정_CAS_전에_분철_행을_잠근다() {
+      stubParticipation();
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(participationDomainService.confirmPaymentIfAwaiting(PARTICIPATION_ID, NOW))
+          .willReturn(true);
+      given(buncheolMemberDomainService.findAllByBuncheolId(BUNCHEOL_ID))
+          .willReturn(Collections.nCopies(5, buncheolMember()));
+
+      participationService.confirmPaymentBySystem(PARTICIPATION_ID);
+
+      InOrder inOrder = Mockito.inOrder(buncheolDomainService, clock, participationDomainService);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(clock).instant();
+      inOrder.verify(participationDomainService).confirmPaymentIfAwaiting(PARTICIPATION_ID, NOW);
+      inOrder.verify(buncheolDomainService).confirmIfAllSlotsConfirmed(BUNCHEOL_ID, 5, NOW);
     }
 
     @Test

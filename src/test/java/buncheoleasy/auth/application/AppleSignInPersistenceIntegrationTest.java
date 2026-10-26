@@ -8,8 +8,15 @@ import buncheoleasy.user.domain.SocialProvider;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.domain.UserRepository;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -80,6 +87,42 @@ class AppleSignInPersistenceIntegrationTest {
     User user = userRepository.findBySocialInfo(SocialInfo.of("APPLE", SUBJECT)).orElseThrow();
     assertThat(user.getName()).isEqualTo("홍길동");
     assertThat(user.getSocialInfo().provider()).isEqualTo(SocialProvider.APPLE);
+  }
+
+  @Test
+  void 첫_로그인이_동시에_여러_번_와도_500_없이_한_회원으로_모인다() throws Exception {
+    // 앱 재시도·두 번 누름. 진 요청은 유니크 인덱스 충돌 뒤 다시 조회해 먼저 만든 회원으로 로그인한다.
+    int threads = 6;
+    ExecutorService executor = Executors.newFixedThreadPool(threads);
+    CountDownLatch start = new CountDownLatch(1);
+    List<Future<LoginAccount>> results = new ArrayList<>();
+    try {
+      for (int i = 0; i < threads; i++) {
+        results.add(
+            executor.submit(
+                () -> {
+                  start.await();
+                  return socialLoginService.signIn(appleCommand(null));
+                }));
+      }
+      start.countDown();
+
+      Set<Long> userIds = new HashSet<>();
+      int newAccounts = 0;
+      for (Future<LoginAccount> result : results) {
+        LoginAccount account = result.get();
+        userIds.add(account.userId());
+        newAccounts += account.newAccount() ? 1 : 0;
+      }
+      assertThat(userIds).hasSize(1);
+      assertThat(newAccounts).isEqualTo(1);
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT COUNT(*) FROM users WHERE provider_id = ?", Integer.class, SUBJECT))
+          .isEqualTo(1);
+    } finally {
+      executor.shutdownNow();
+    }
   }
 
   @Test

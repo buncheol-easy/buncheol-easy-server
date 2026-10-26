@@ -5,6 +5,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.push.domain.PushDeviceRepository;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.Nickname;
 import buncheoleasy.user.domain.User;
@@ -28,6 +29,7 @@ public class UserService {
   private final BuncheolDomainService buncheolDomainService;
   private final ParticipationDomainService participationDomainService;
   private final RefreshTokenStore refreshTokenStore;
+  private final PushDeviceRepository pushDeviceRepository;
 
   /**
    * 아직 끝나지 않은 분철(개최)·참여가 남아 있으면 탈퇴를 거부한다. 취소·만료로 끝났거나, 배송(운송사 배송완료 이후)·환급 검수까지 끝난 건은 탈퇴를 막지
@@ -43,6 +45,8 @@ public class UserService {
     }
 
     userDomainService.withdraw(userId);
+    // soft delete 라 push_devices 의 FK CASCADE 가 타지 않는다 — 탈퇴한 계정으로 앱 푸시가 가지 않게 같은 트랜잭션에서 지운다.
+    pushDeviceRepository.deleteAllByUserId(userId);
     try {
       refreshTokenStore.delete(userId);
     } catch (Exception e) {

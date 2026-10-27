@@ -201,6 +201,50 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
       assertPaymentStarted(buncheolId);
     }
 
+    // 취소 기록이 남은 자리는 지우지 못해 닫는다. 닫힌 자리를 열린 자리로 세면 정원이 차지 않는다 — 앞서 잠금 조회로 올린 자리
+    // 엔티티가 아니라 닫기 뒤에 다시 읽은 자리로 세야 한다(최소 인원 UPDATE 가 영속성 컨텍스트를 비운다는 전제).
+    @Test
+    void 취소_기록이_남은_빈_자리를_빼면_자리가_닫히고_입금_단계를_시작한다() throws Exception {
+      long buncheolId = fixture.buncheol(hostId, groupId, "C2C", "RECRUITING", DAY, 3, null);
+      long firstSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long secondSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long leftSlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+      long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);
+      fixture.participation(
+          buncheolId, firstSlotId, participantId, bundleId, "APPLIED", "C2C", null);
+      fixture.participation(
+          buncheolId, secondSlotId, participantId, bundleId, "APPLIED", "C2C", null);
+      long leftId = fixture.user(false);
+      long leftBundleId = fixture.bundle(buncheolId, leftId, fixture.shippingAddress(leftId), null);
+      long leftParticipationId =
+          fixture.participation(
+              buncheolId, leftSlotId, leftId, leftBundleId, "CANCELLED", "C2C", null);
+      jdbcTemplate.update(
+          "UPDATE participations"
+              + " SET cancel_reason = 'USER_CANCELLED', cancelled_at = UTC_TIMESTAMP()"
+              + " WHERE id = ?",
+          leftParticipationId);
+      jdbcTemplate.update(
+          "UPDATE participation_bundles SET closed_at = UTC_TIMESTAMP() WHERE id = ?",
+          leftBundleId);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            buncheolService.removeMember(hostId, buncheolId, leftSlotId);
+            return null;
+          });
+
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT access_type FROM buncheol_members WHERE id = ?",
+                  String.class,
+                  leftSlotId))
+          .isEqualTo("CLOSED");
+      assertPaymentStarted(buncheolId);
+      assertThat(statusOf("participations", leftParticipationId)).isEqualTo("CANCELLED");
+    }
+
     @Test
     void 마감_판정은_분철_행을_먼저_기다리고_최소_인원_이상이면_입금_단계를_시작한다() throws Exception {
       long buncheolId =
@@ -542,7 +586,7 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
         "SELECT status FROM " + table + " WHERE id = ?", String.class, id);
   }
 
-  /** 입금 단계 시작 CAS 와 그 뒤 처리 — 분철 칸, 참여 전이, 열린 묶음 기한. */
+  /** 입금 단계 시작 CAS 와 그 뒤 처리 — 분철 칸, 살아 있는 참여 전이, 열린 묶음 기한. */
   private void assertPaymentStarted(final long buncheolId) {
     assertThat(statusOf("buncheols", buncheolId)).isEqualTo("PAYMENT_COLLECTING");
     assertThat(
@@ -556,7 +600,8 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
         .isTrue();
     assertThat(
             jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM participations WHERE buncheol_id = ? AND status <> 'AWAITING_PAYMENT'",
+                "SELECT COUNT(*) FROM participations"
+                    + " WHERE buncheol_id = ? AND status NOT IN ('AWAITING_PAYMENT', 'CANCELLED')",
                 Integer.class,
                 buncheolId))
         .isZero();

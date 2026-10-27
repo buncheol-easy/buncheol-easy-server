@@ -10,6 +10,8 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -21,7 +23,9 @@ import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,8 +49,10 @@ class MyHostedBuncheolQueryServiceTest {
   @Mock private ParticipationRepository participationRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private BuncheolImageRepository buncheolImageRepository;
+  @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
   private static final Long HOST_ID = 1L;
+  private static final Instant NOW = Instant.parse("2026-11-06T03:00:00Z");
 
   @Nested
   @DisplayName("내 개최 분철 목록 조회 테스트")
@@ -314,6 +321,59 @@ class MyHostedBuncheolQueryServiceTest {
 
     private Buncheol 분철(final Long id, final BuncheolStatus status) {
       return buncheol(id, 100L, "분철 " + id, status, DEADLINE, CREATED_AT);
+    }
+  }
+
+  @Nested
+  @DisplayName("진행 확정 판정 노출 테스트")
+  class ConfirmCheckTest {
+
+    // 관리 화면·진행 확정 게이트와 같은 판정이다. 확인 수는 입금 수집중 분철만 골라 한 번에 센다.
+    private List<MyHostedBuncheolResponse> 응답(
+        final BuncheolStatus status, final Instant paymentDueAt, final long active, final long confirmed) {
+      Buncheol buncheol =
+          buncheol(10L, 100L, "분철", status, NOW.plusSeconds(3600), NOW.minusSeconds(86_400));
+      setField(buncheol, "paymentDueAt", paymentDueAt);
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(participationRepository.countActiveByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(new BuncheolActiveParticipationCount(10L, active)));
+      List<Long> collectingIds =
+          status == BuncheolStatus.PAYMENT_COLLECTING ? List.of(10L) : List.of();
+      given(participationRepository.countConfirmedByBuncheolIds(collectingIds))
+          .willReturn(
+              collectingIds.isEmpty() || confirmed == 0
+                  ? List.of()
+                  : List.of(new BuncheolConfirmedParticipationCount(10L, confirmed)));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      return myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+    }
+
+    @Test
+    void 모두_입금_확인됐으면_ALL_PAID() {
+      assertThat(응답(BuncheolStatus.PAYMENT_COLLECTING, NOW.plusSeconds(3600), 2, 2).get(0).confirmCheck())
+          .isEqualTo(ConfirmCheck.ALL_PAID);
+    }
+
+    @Test
+    void 기한이_지났고_확인된_참여가_있으면_DUE_PASSED() {
+      assertThat(응답(BuncheolStatus.PAYMENT_COLLECTING, NOW.minusSeconds(1), 3, 1).get(0).confirmCheck())
+          .isEqualTo(ConfirmCheck.DUE_PASSED);
+    }
+
+    // 확인된 자리가 없으면 진행 확정 버튼이 꺼져 있어 「진행 확정해 주세요」 배지를 띄우지 않는다.
+    @Test
+    void 확인된_참여가_없으면_기한이_지나도_NO_CONFIRMED() {
+      assertThat(응답(BuncheolStatus.PAYMENT_COLLECTING, NOW.minusSeconds(1), 2, 0).get(0).confirmCheck())
+          .isEqualTo(ConfirmCheck.NO_CONFIRMED);
+    }
+
+    @Test
+    void 입금_수집중이_아니면_null_이고_확인_수를_세지_않는다() {
+      assertThat(응답(BuncheolStatus.RECRUITING, null, 1, 0).get(0).confirmCheck()).isNull();
     }
   }
 

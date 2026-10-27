@@ -1129,7 +1129,7 @@ class BuncheolControllerTest {
               "https://cdn.example.com/buncheol-10-thumb.jpg",
               FlowType.LEGACY,
               BuncheolHostCancellability.CANCELLABLE,
-              false);
+              false, null);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -1446,7 +1446,7 @@ class BuncheolControllerTest {
               4,
               4,
               1,
-              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null, false);
+              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null, false, null);
       given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
       mockMvc

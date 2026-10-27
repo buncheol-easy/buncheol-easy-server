@@ -27,7 +27,11 @@ import java.util.List;
  *
  * <p>{@code cancellability} 는 자발 취소 가능 여부와 그 사유다. 취소 API 게이트와 <b>같은 판정</b>({@link
  * ParticipationCancellability#of})을 그대로 내려, 화면이 상태로 재판정하다 서버와 어긋나는 것을 막는다 (docs/56 S-1). 불리언 대신 사유까지
- * 실은 이유는 차단 구간마다 안내가 다르기 때문이다 — 보냈어요 이후(BCH-086)는 고객센터, 성사 확정 후(BCH-092)는 개최자 연락으로 보내야 한다.
+ * 실은 이유는 운영진 분철(BCH-091, 기한이 지나면 자동 취소)과 회원 개최 입금 단계(BCH-086)의 안내가 다르기 때문이다.
+ *
+ * <p>{@code confirmedSlotCount}·{@code activeSlotCount} 는 그 분철의 입금 확인된 자리 수와 살아 있는 자리 수다 — 참여자 화면의
+ * "N자리 중 M자리 입금 확인" 입금 현황용이고 누가 입금했는지는 싣지 않는다. 입금 수집중 분철만 값이 있고 그 밖에는 {@code null} 이다.
+ * {@code buncheolMemberCount}(열린 자리 수)와 다른 값이다.
  */
 public record MyParticipationResponse(
     Long participationId,
@@ -57,4 +61,6 @@ public record MyParticipationResponse(
     FlowType flowType,
     Instant paymentSentAt,
     String openChatUrl,
-    ParticipationCancellability cancellability) {}
+    ParticipationCancellability cancellability,
+    Integer confirmedSlotCount,
+    Integer activeSlotCount) {}

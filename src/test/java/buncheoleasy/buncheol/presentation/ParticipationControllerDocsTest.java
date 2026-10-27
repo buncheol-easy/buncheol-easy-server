@@ -248,7 +248,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.BLOCKED_BY_STATUS);
+            ParticipationCancellability.BLOCKED_BY_STATUS, null, null);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -280,7 +280,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -429,7 +429,17 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                     CANCELLABLE: 취소 가능(회원 개최 신청 단계) |
                                     BLOCKED_BY_STATUS: 입금 단계 시작 이후(입금 대기·보냈어요·입금확인) — BCH-086. \
                                     이미 취소된 참여(CANCELLED)도 이 값이며 안내 대상이 아니다 |
-                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""))
+                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""),
+                            fieldWithPath("[].confirmedSlotCount")
+                                .type(JsonFieldType.NUMBER)
+                                .description(
+                                    "그 분철의 입금 확인된 자리 수(\"N자리 중 M자리 입금 확인\" 의 M, 이름 없음). 입금 수집중 분철만, 그 밖은 null")
+                                .optional(),
+                            fieldWithPath("[].activeSlotCount")
+                                .type(JsonFieldType.NUMBER)
+                                .description(
+                                    "그 분철의 살아 있는 자리 수(같은 문구의 N). 입금 수집중 분철만, 그 밖은 null. buncheolMemberCount(열린 자리 수)와 다르다")
+                                .optional())
                         .build())));
   }
 

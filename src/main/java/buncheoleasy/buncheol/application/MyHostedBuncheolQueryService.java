@@ -4,15 +4,19 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
 import buncheoleasy.group.domain.GroupRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,6 +34,7 @@ public class MyHostedBuncheolQueryService {
   private final ParticipationRepository participationRepository;
   private final GroupRepository groupRepository;
   private final BuncheolImageRepository buncheolImageRepository;
+  private final Clock clock;
 
   @Transactional(readOnly = true)
   public List<MyHostedBuncheolResponse> getMyHostedBuncheols(final Long hostId) {
@@ -55,6 +60,20 @@ public class MyHostedBuncheolQueryService {
                     BuncheolActiveParticipationCount::buncheolId,
                     BuncheolActiveParticipationCount::count));
 
+    // 진행 확정 판정용 입금확인 건수. 카드마다 조회하지 않고 입금 수집중 분철만 골라 한 번에 센다 — 없으면 어댑터가 쿼리를 건너뛴다.
+    List<Long> collectingIds =
+        buncheols.stream()
+            .filter(b -> b.getStatus() == BuncheolStatus.PAYMENT_COLLECTING)
+            .map(Buncheol::getId)
+            .toList();
+    Map<Long, Long> confirmedCountByBuncheolId =
+        participationRepository.countConfirmedByBuncheolIds(collectingIds).stream()
+            .collect(
+                Collectors.toMap(
+                    BuncheolConfirmedParticipationCount::buncheolId,
+                    BuncheolConfirmedParticipationCount::count));
+    final Instant now = Instant.now(clock);
+
     // 「종료」 판정도 같은 방식으로 한 번에 묻는다. 끝날 수 있는 건 진행확정뿐이라 그 id 만 넘기고, 없으면 어댑터가
     // 쿼리를 건너뛴다. 판정식은 회원탈퇴 가드와 공유한다 (BuncheolRepository#findEndedIds).
     List<Long> endedCheckTargetIds =
@@ -79,6 +98,8 @@ public class MyHostedBuncheolQueryService {
                     b,
                     slotCountByBuncheolId,
                     activeCountByBuncheolId,
+                    confirmedCountByBuncheolId,
+                    now,
                     endedIds,
                     groupNameById,
                     thumbnailByBuncheolId))
@@ -89,11 +110,14 @@ public class MyHostedBuncheolQueryService {
       final Buncheol buncheol,
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, Long> activeCountByBuncheolId,
+      final Map<Long, Long> confirmedCountByBuncheolId,
+      final Instant now,
       final Set<Long> endedIds,
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId) {
     int slotCount = slotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue();
     long activeCount = activeCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
+    long confirmedCount = confirmedCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
     return new MyHostedBuncheolResponse(
         buncheol.getId(),
         buncheol.getTitle(),
@@ -107,6 +131,13 @@ public class MyHostedBuncheolQueryService {
         buncheol.getFlowType(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 카드가 상태로 재판정하면 서버와 갈린다 (docs/56 S-2).
         BuncheolHostCancellability.of(buncheol.getStatus()),
-        endedIds.contains(buncheol.getId()));
+        endedIds.contains(buncheol.getId()),
+        // 관리 화면·진행 확정 게이트와 같은 판정. 입금 수집중엔 신청(APPLIED)이 없어 살아 있는 참여 − 확인 = 미확인이다.
+        ConfirmCheck.of(
+            buncheol.getStatus(),
+            confirmedCount,
+            activeCount - confirmedCount,
+            buncheol.getPaymentDueAt(),
+            now));
   }
 }

@@ -21,6 +21,8 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
@@ -715,6 +717,52 @@ class MyParticipationQueryServiceTest {
           myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
       assertThat(result).hasSize(1);
       return result;
+    }
+  }
+
+  @Nested
+  @DisplayName("입금 현황 노출 테스트")
+  class SlotCountTest {
+
+    private List<MyParticipationResponse> 응답(final BuncheolStatus status) {
+      Buncheol buncheol = buncheol(10L, "분철", Instant.now().plus(7, ChronoUnit.DAYS), status);
+      setField(buncheol, "flowType", FlowType.C2C);
+      Participation participation =
+          participation(
+              500L, 10L, 101L, 50_000L, ParticipationStatus.AWAITING_PAYMENT, DUE_AT, null, null);
+      given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+          .willReturn(List.of(participation));
+      given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+      given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+      given(groupMemberRepository.findAllByIds(List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "민지")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      return myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+    }
+
+    // "N자리 중 M자리 입금 확인" — 이름 없이 분철 전체의 수만 내린다.
+    @Test
+    void 입금_수집중_분철은_확인_자리와_살아_있는_자리_수를_내린다() {
+      given(participationRepository.countActiveByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(new BuncheolActiveParticipationCount(10L, 3L)));
+      given(participationRepository.countConfirmedByBuncheolIds(List.of(10L)))
+          .willReturn(List.of(new BuncheolConfirmedParticipationCount(10L, 1L)));
+
+      MyParticipationResponse response = 응답(BuncheolStatus.PAYMENT_COLLECTING).get(0);
+
+      assertThat(response.confirmedSlotCount()).isEqualTo(1);
+      assertThat(response.activeSlotCount()).isEqualTo(3);
+    }
+
+    @Test
+    void 입금_수집중이_아니면_null_이고_세지_않는다() {
+      MyParticipationResponse response = 응답(BuncheolStatus.RECRUITING).get(0);
+
+      assertThat(response.confirmedSlotCount()).isNull();
+      assertThat(response.activeSlotCount()).isNull();
+      then(participationRepository).should().countActiveByBuncheolIds(List.of());
     }
   }
 

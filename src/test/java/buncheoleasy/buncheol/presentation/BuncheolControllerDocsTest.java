@@ -65,6 +65,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
       "이 참여가 속한 묶음 ID. 이체 1회·배송비 1회·택배 1개의 단위이며 묶음 단위 API 의 주소다. 미연결 참여는 null — null 끼리 묶으면 서로 다른 사람의 슬롯이 한 행이 되므로 그룹핑 키로 쓰지 말 것";
 
   // 개최 목록과 관리 화면이 같은 판정을 내리므로 문서도 한 문장을 공유한다.
+  private static final String CONFIRM_CHECK_DESCRIPTION =
+      "회원 개최 진행 확정 판정. 진행 확정 API 게이트와 같은 판정이다. ALL_PAID(모두 입금 확인) | DUE_PASSED(입금 기한 지남, 확인된"
+          + " 참여 있음) | BEFORE_DUE(미확인 참여가 있고 기한 전) | NO_CONFIRMED(확인된 참여 없음). 앞의 둘이면 진행 확정"
+          + " 버튼을 켜고 「개최한 분철」 카드에 「진행 확정해 주세요」 배지를 띄운다. 입금 수집중이 아니면 null";
+
   private static final String ENDED_DESCRIPTION =
       "분철이 완전히 끝났는지. true = 진행확정(CONFIRMED)이고, 신청·입금 확인 중·보냈어요 상태의 참여가 없고, 확정 참여 전원의 택배가 편의점에 도착(DELIVERED·RECEIVED)했다. 확정 참여가 0명인 진행확정도 true. 진행확정이 아니면 항상 false — 취소(CANCELLED)도 false 이므로 「종료」 묶음에 취소를 함께 담으려면 status 와 함께 판정할 것. 판정 기준은 회원탈퇴 가드와 같다";
 
@@ -332,7 +337,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             FlowType.LEGACY,
             BuncheolHostCancellability.CANCELLABLE,
-            false);
+            false, null);
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -372,7 +377,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     CANCELLABLE: 취소 가능 |
                                     BLOCKED_BY_STATUS: 진행확정 이후·이미 취소됨 (BCH-050) |
                                     NEEDS_STAFF: 입금 수집중 — 삭제 대신 「운영진에게 알려 주세요」 안내 (BCH-126)"""),
-                            fieldWithPath("[].ended").description(ENDED_DESCRIPTION))
+                            fieldWithPath("[].ended").description(ENDED_DESCRIPTION),
+                            fieldWithPath("[].confirmCheck")
+                                .type(JsonFieldType.STRING)
+                                .description(CONFIRM_CHECK_DESCRIPTION)
+                                .optional())
                         .build())));
   }
 
@@ -1273,7 +1282,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             FlowType.LEGACY,
             null,
             "https://open.kakao.com/o/gAbCdEf",
-            false);
+            false, null);
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -1546,7 +1555,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     "참여자 소통용 오픈채팅 링크. 등록하지 않았으면 null "
                                         + "(개최자가 이 화면에서 PATCH /v1/buncheols/{id}/open-chat-url 로 수정한다)")
                                 .optional(),
-                            fieldWithPath("ended").description(ENDED_DESCRIPTION))
+                            fieldWithPath("ended").description(ENDED_DESCRIPTION),
+                            fieldWithPath("confirmCheck")
+                                .type(JsonFieldType.STRING)
+                                .description(CONFIRM_CHECK_DESCRIPTION)
+                                .optional())
                         .build())));
   }
 }

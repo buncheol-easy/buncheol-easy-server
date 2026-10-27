@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.Participation;
@@ -28,6 +29,7 @@ import buncheoleasy.group.domain.member.GroupMemberRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -178,7 +180,16 @@ public class BuncheolManagementQueryService {
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
         buncheol.getOpenChatUrl(),
-        ended);
+        ended,
+        // 진행 확정 게이트와 같은 판정 — 확인·미확인(입금 대기·보냈어요) 수와 입금 기한.
+        ConfirmCheck.of(
+            buncheol.getStatus(),
+            confirmed.size(),
+            participations.stream()
+                .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
+                .count(),
+            buncheol.getPaymentDueAt(),
+            Instant.now(clock)));
   }
 
   // 멤버 슬롯 id → 그룹 멤버명. 멤버 슬롯 → 그룹 멤버 2단계로 해석한다. (group_members 누락 시 null 허용을 위해 HashMap 사용)

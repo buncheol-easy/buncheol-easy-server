@@ -6,7 +6,7 @@ server:
   # 이 graceful 유예(아래 30s) + @Async executor 대기 + 여유라는 계약 위에 서 있다 (docs/39).
   # executor 대기는 빈마다 순차로 붙어 합산된다. 현재 3개:
   #   trackingExecutor 5s (코드) + alimtalkExecutor 3s (코드) + applicationTaskExecutor 3s (아래)
-  #   → 30 + 11 = 41s < 45s (여유 4s).
+  #   → 30 + 11 = 41s < 45s (여유 4s). pushExecutor 는 기다리지 않고 끊어서(PushExecutorConfig) 합에 들지 않는다.
   # ⚠️ executor 를 하나 더 만들거나 대기 시간을 올리면 이 합이 45s 를 넘어 SIGKILL 로 끝난다.
   #    여유가 얇으니 executor 를 늘릴 일이 생기면 stop_grace_period 를 60s 로 올리는 쪽을 먼저 검토할 것.
   shutdown: graceful
@@ -228,6 +228,18 @@ app:
       global-max-submissions: ${FEEDBACK_RATE_LIMIT_GLOBAL_MAX:60}
       # 단위를 붙이지 않으면 '분'으로 읽는다(@DurationUnit) — 10m 처럼 명시하는 것을 권장
       window: ${FEEDBACK_RATE_LIMIT_WINDOW:10m}
+  apns: # iOS 앱 푸시(APNs 직접 발송). 네 값이 모두 있어야 켜진다 — 하나라도 비면 보내지 않고 기동 로그(외부 연동 상태)에 OFF 로 남는다.
+    # 빈 기본값 필수 — env 에 키가 아예 없어도 "미설정 = 꺼짐" 으로 떠야 한다.
+    team-id: ${APNS_TEAM_ID:}
+    key-id: ${APNS_KEY_ID:}
+    # .p8 파일 본문(PEM). 한 줄 env 로 넣을 땐 줄바꿈을 \n 글자로 써도 된다.
+    private-key: ${APNS_PRIVATE_KEY:}
+    # 앱 번들 ID (apns-topic)
+    topic: ${APNS_TOPIC:}
+    # 푸시 전용 풀(pushExecutor, 2스레드)에서 기기마다 차례로 부른다. 배포 종료 때는 기다리지 않고 끊는다 —
+    # 그때 보내던·대기하던 푸시는 버려진다(수신함·알림톡은 영향 없음).
+    connect-timeout: 3s
+    request-timeout: 5s
 
 delivery:
   tracker:

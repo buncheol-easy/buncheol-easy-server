@@ -167,22 +167,16 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       return switch (result) {
         case PRESENT -> AgeRangeConsentRedirector.Result.AGREED;
         case ABSENT -> {
-          log.warn(
-              "연령대 추가 동의 후에도 연령대가 없음: providerId={}, needsAgreement={}",
-              profile.providerId(),
-              userInfo.ageRangeNeedsAgreement());
+          log.warn("연령대 추가 동의 후에도 연령대가 없음: needsAgreement={}", userInfo.ageRangeNeedsAgreement());
           yield AgeRangeConsentRedirector.Result.FAILED;
         }
         case NO_MEMBER -> {
-          log.warn("연령대 추가 동의 계정으로 가입한 회원이 없음: providerId={}", profile.providerId());
+          log.warn("연령대 추가 동의 계정으로 가입한 회원이 없음");
           yield AgeRangeConsentRedirector.Result.FAILED;
         }
       };
     } catch (RuntimeException exception) {
-      log.warn(
-          "연령대 추가 동의 반영 실패: principalName={}, reason={}",
-          oauthToken.getName(),
-          exception.getMessage());
+      log.warn("연령대 추가 동의 반영 실패: reason={}", exception.getMessage());
       return AgeRangeConsentRedirector.Result.FAILED;
     }
   }

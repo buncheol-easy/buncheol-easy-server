@@ -530,7 +530,7 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    void 반영_뒤에도_연령대가_없으면_실패로_돌려보낸다() throws Exception {
+    void 반영_뒤에도_연령대가_없으면_실패로_돌려보낸다(final CapturedOutput output) throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       givenKakaoProfile();
@@ -541,6 +541,7 @@ class OAuth2LoginSuccessHandlerTest {
           .willReturn(AgeRangeRefreshResult.ABSENT);
 
       MockHttpServletResponse response = new MockHttpServletResponse();
+      String mark = markLogs();
 
       // when
       handler.onAuthenticationSuccess(consentCallback(), response, authentication());
@@ -548,6 +549,9 @@ class OAuth2LoginSuccessHandlerTest {
       // then
       assertThat(response.getRedirectedUrl())
           .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+      assertThat(logsAfter(output, mark))
+          .contains("연령대 추가 동의 후에도 연령대가 없음: needsAgreement=false")
+          .doesNotContain("provider-id");
     }
 
     @Test
@@ -573,7 +577,7 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    void 연령대_반영_중_예외가_나도_오류_페이지_대신_실패로_돌려보낸다() throws Exception {
+    void 연령대_반영_중_예외가_나도_오류_페이지_대신_실패로_돌려보낸다(final CapturedOutput output) throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       givenKakaoProfile();
@@ -584,6 +588,7 @@ class OAuth2LoginSuccessHandlerTest {
           .willThrow(new IllegalStateException("DB 오류"));
 
       MockHttpServletResponse response = new MockHttpServletResponse();
+      String mark = markLogs();
 
       // when
       handler.onAuthenticationSuccess(consentCallback(), response, authentication());
@@ -591,10 +596,13 @@ class OAuth2LoginSuccessHandlerTest {
       // then
       assertThat(response.getRedirectedUrl())
           .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
+      assertThat(logsAfter(output, mark))
+          .contains("연령대 추가 동의 반영 실패: reason=DB 오류")
+          .doesNotContain("provider-id");
     }
 
     @Test
-    void 가입한_회원이_없는_카카오_계정이면_실패로_돌려보낸다() throws Exception {
+    void 가입한_회원이_없는_카카오_계정이면_실패로_돌려보낸다(final CapturedOutput output) throws Exception {
       // given
       OAuth2LoginSuccessHandler handler = createHandler();
       givenKakaoProfile();
@@ -605,6 +613,7 @@ class OAuth2LoginSuccessHandlerTest {
           .willReturn(AgeRangeRefreshResult.NO_MEMBER);
 
       MockHttpServletResponse response = new MockHttpServletResponse();
+      String mark = markLogs();
 
       // when
       handler.onAuthenticationSuccess(consentCallback(), response, authentication());
@@ -613,6 +622,9 @@ class OAuth2LoginSuccessHandlerTest {
       assertThat(response.getRedirectedUrl())
           .isEqualTo(AGE_RANGE_CONSENT_CALLBACK_URL + "?ageRangeConsent=failed");
       then(socialLoginService).should(never()).login(any(SocialLoginCommand.class));
+      assertThat(logsAfter(output, mark))
+          .contains("연령대 추가 동의 계정으로 가입한 회원이 없음")
+          .doesNotContain("provider-id");
     }
 
     @Test

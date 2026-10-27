@@ -398,7 +398,8 @@ public class BuncheolService {
     final Instant now = Instant.now(clock);
 
     // 바로 아래에서 바꿀 행이라 배타 잠금으로 읽는다.
-    List<Participation> active = participationDomainService.findActiveByBuncheolIdForUpdate(buncheolId);
+    List<Participation> active =
+        participationDomainService.findActiveByBuncheolIdForUpdate(buncheolId);
     List<Participation> confirmed =
         active.stream().filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED).toList();
     Set<CancelParticipation> unconfirmed =

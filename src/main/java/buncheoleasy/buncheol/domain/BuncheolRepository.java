@@ -149,7 +149,6 @@ public interface BuncheolRepository {
    */
   int staffCancelIfCollecting(Long buncheolId, Instant now);
 
-
   /**
    * 모집중({@link BuncheolStatus#RECRUITING}) 분철의 최소 인원이 {@code slotCount} 보다 크면 {@code slotCount} 로
    * 낮춘다. 개최자가 자리를 뺀 직후 「최소 인원 ≤ 자리 수」를 다시 맞추는 용도다. {@code @Modifying} bulk UPDATE 이므로 호출 측

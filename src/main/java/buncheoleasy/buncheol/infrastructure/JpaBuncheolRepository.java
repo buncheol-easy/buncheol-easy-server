@@ -253,7 +253,6 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("now") Instant now,
       Pageable pageable);
 
-
   // 개최자 자리 빼기 뒤 「최소 인원 ≤ 자리 수」 복원. 모집중에만 낮춘다 — C2C 는 마감 정각에 신청 인원이 최소 인원
   // 미만이면 취소되므로(findIdsByStatusAndDeadlineBefore), 뺀 자리만큼 영영 못 채울 최소 인원이 남으면 신청자까지
   // 전원 취소된다. 입금 단계가 시작된 뒤에는 최소 인원이 판정에 쓰이지 않는다.

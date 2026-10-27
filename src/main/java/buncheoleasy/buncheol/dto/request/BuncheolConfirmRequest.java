@@ -19,5 +19,6 @@ public record BuncheolConfirmRequest(
     @NotNull @Valid List<@NotNull @Valid CancelParticipation> cancelParticipations) {
 
   /** 빠질 참여 하나. {@code status} 는 {@code AWAITING_PAYMENT} 또는 {@code PAYMENT_SENT}. */
-  public record CancelParticipation(@NotNull Long participationId, @NotNull ParticipationStatus status) {}
+  public record CancelParticipation(
+      @NotNull Long participationId, @NotNull ParticipationStatus status) {}
 }

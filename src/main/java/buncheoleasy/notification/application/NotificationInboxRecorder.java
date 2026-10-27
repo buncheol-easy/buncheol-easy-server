@@ -26,7 +26,7 @@ public class NotificationInboxRecorder {
 
   private static final String VARIABLE_BUNCHEOL_NAME = "분철명";
 
-  private static final String PATH_MY_PARTICIPATIONS = "/profile/bids";
+  private static final String PATH_MY_PARTICIPATIONS = "/profile/participations";
   private static final String PATH_BUNCHEOL_MANAGE = "/products/#{분철ID}/manage";
 
   private final InboxMessageRepository inboxMessageRepository;
@@ -67,13 +67,13 @@ public class NotificationInboxRecorder {
               TRACKING_GS25,
               PAYBACK_COMPLETED,
               PAYBACK_REJECTED,
-              C2C_BUNCHEOL_FINALIZED,
+              PAYMENT_STARTED,
               C2C_PAYMENT_EXPIRED,
               C2C_PAYMENT_CONFIRMED,
               C2C_BUNCHEOL_CONFIRMED,
               C2C_BUNCHEOL_CANCELLED ->
           PATH_MY_PARTICIPATIONS;
-      case C2C_PAYMENT_SENT -> PATH_BUNCHEOL_MANAGE;
+      case HOST_PAYMENT_STARTED, C2C_PAYMENT_SENT -> PATH_BUNCHEOL_MANAGE;
       case PICKUP_REMINDER_CU, PICKUP_REMINDER_GS25 -> null;
     };
   }

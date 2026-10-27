@@ -480,7 +480,7 @@ class AlimtalkNotificationListenerTest {
 
   @Nested
   @DisplayName("회원 개최 입금 단계 시작 입금 안내(onPaymentStarted)")
-  class BuncheolCollectingStarted {
+  class PaymentStarted {
 
     @Test
     @DisplayName("다슬롯 참여자에게는 멤버명을 모두 나열하고 금액은 합산해 1건만 발송")
@@ -498,15 +498,15 @@ class AlimtalkNotificationListenerTest {
               BUNCHEOL_ID, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
 
       Map<String, String> variables =
-          captureSend(AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED, PARTICIPANT_PHONE);
+          captureSend(AlimtalkTemplate.PAYMENT_STARTED, PARTICIPANT_PHONE);
       assertThat(variables)
           .containsEntry("멤버명", "호시, 우지")
           .containsEntry("입금금액", "55,000")
           .containsEntry("은행명", "국민은행")
-          // 기한의 정본은 묶음이다 — 분철 칸(8/2)을 읽으면 「제외」 게이트와 갈린다.
+          // 기한의 정본은 묶음이다 — 분철 칸(8/2)이 아니라 묶음 값을 읽는다.
           .containsEntry("입금기한", "8월 9일(일) 09:00");
       verify(inboxRecorder)
-          .record(eq(11L), eq(AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED), any());
+          .record(eq(11L), eq(AlimtalkTemplate.PAYMENT_STARTED), any());
     }
 
     @Test
@@ -531,6 +531,49 @@ class AlimtalkNotificationListenerTest {
       verify(sender, never()).send(any(), any(), any());
       // 발송뿐 아니라 수신함에도 남으면 안 된다 — 기록이 발송보다 먼저라 필터를 우회하면 이쪽만 새어 나간다.
       verify(inboxRecorder, never()).record(any(), any(), any());
+    }
+
+    // 마감·정원 충족·자리 빼기 어느 경우든 개최자에게도 같은 순간 1통 — 기한은 참여자 안내와 같은 분철 기한이다.
+    @Test
+    @DisplayName("개최자에게 HOST_PAYMENT_STARTED 를 1통 보내고 분철 관리 경로용 분철ID 를 싣는다")
+    void sendsHostNotice() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.getPaymentDueAt()).willReturn(BUNDLE_DUE_AT);
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      given(assembler.loadBuncheolHost(BUNCHEOL_ID)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onPaymentStarted(new PaymentStartedEvent(BUNCHEOL_ID, List.of()));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.HOST_PAYMENT_STARTED, HOST_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "개최자닉")
+          .containsEntry("분철명", "세븐틴 미니 12집 분철")
+          .containsEntry("입금기한", "8월 9일(일) 09:00")
+          .containsEntry("분철ID", String.valueOf(BUNCHEOL_ID));
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.HOST_PAYMENT_STARTED), any());
+    }
+
+    @Test
+    @DisplayName("개최자 전화번호가 없으면 수신함에만 남기고 발송은 건너뛴다")
+    void recordsOnlyWhenHostPhoneMissing() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.getPaymentDueAt()).willReturn(BUNDLE_DUE_AT);
+      User host = mock(User.class);
+      given(host.getNickname()).willReturn(Nickname.of("개최자닉"));
+      given(host.getId()).willReturn(3L);
+      given(host.getPhoneNumber()).willReturn(null);
+      given(assembler.loadBuncheolHost(BUNCHEOL_ID)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onPaymentStarted(new PaymentStartedEvent(BUNCHEOL_ID, List.of()));
+
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.HOST_PAYMENT_STARTED), any());
+      verify(sender, never()).send(any(), any(), any());
     }
 
     private Buncheol c2cCollectingBuncheol() {

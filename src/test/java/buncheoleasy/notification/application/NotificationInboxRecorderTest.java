@@ -49,7 +49,7 @@ class NotificationInboxRecorderTest {
     assertThat(saved.getTitle()).isEqualTo(AlimtalkTemplate.PAYMENT_CONFIRMED.subject());
     assertThat(saved.getReference()).isEqualTo("아이브 앨범");
     assertThat(saved.getDescription()).contains("입금이 확인").doesNotContain("#{");
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
     assertThat(saved.isPinned()).isFalse();
   }
 
@@ -60,7 +60,7 @@ class NotificationInboxRecorderTest {
 
     InboxMessage saved = record(7L, AlimtalkTemplate.BUNCHEOL_CONFIRMED, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
   }
 
   @Test
@@ -70,7 +70,7 @@ class NotificationInboxRecorderTest {
 
     InboxMessage saved = record(9L, AlimtalkTemplate.BUNCHEOL_CANCELLED, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
   }
 
   @Test
@@ -81,7 +81,7 @@ class NotificationInboxRecorderTest {
 
     InboxMessage saved = record(4L, AlimtalkTemplate.TRACKING_CU, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
   }
 
   @Test

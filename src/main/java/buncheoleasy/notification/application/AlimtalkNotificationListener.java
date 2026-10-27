@@ -198,7 +198,10 @@ public class AlimtalkNotificationListener {
         : AlimtalkTemplate.BUNCHEOL_CANCELLED;
   }
 
-  /** (참여자) 회원 개최 입금 단계 시작 — 입금 안내를 유저 단위로 합산해 1건씩 발송한다 (docs/46 §4.7-A3). */
+  /**
+   * 회원 개최 입금 단계 시작 — (참여자) 입금 안내를 유저 단위로 합산해 1건씩(docs/46 §4.7-A3), (개최자) 입금 단계 시작 안내를 1건
+   * 보낸다. 마감·마지막 열린 자리 신청·자리 빼기 어느 경우든 이 하나다. 상태 전이가 한 번뿐이라 중복 발송 가드가 필요 없다.
+   */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onPaymentStarted(final PaymentStartedEvent event) {
@@ -211,7 +214,37 @@ public class AlimtalkNotificationListener {
                     view.participation().getStatus() == ParticipationStatus.AWAITING_PAYMENT
                         || view.participation().getStatus() == ParticipationStatus.PAYMENT_SENT)
             .toList();
-    sendEachSafely(groupByParticipant(views), this::sendFinalizedNotice);
+    sendEachSafely(groupByParticipant(views), this::sendPaymentStartedNotice);
+    // 참여자 발송이 실패해도 개최자 안내는 따로 보낸다 — 두 수신자는 독립이다.
+    try {
+      sendHostPaymentStartedNotice(event.buncheolId());
+    } catch (final RuntimeException e) {
+      log.error("개최자 입금 단계 시작 안내 실패 - buncheolId={}", event.buncheolId(), e);
+    }
+  }
+
+  // 기한은 참여자 안내와 같은 값(분철의 입금 단계 시작 + 24시간)이어야 한다.
+  private void sendHostPaymentStartedNotice(final Long buncheolId) {
+    BuncheolHostView view = assembler.loadBuncheolHost(buncheolId);
+    Instant paymentDueAt = view.buncheol().getPaymentDueAt();
+    if (paymentDueAt == null) {
+      log.error("입금 기한이 없어 개최자 입금 단계 시작 안내를 건너뜀 - buncheolId={}", buncheolId);
+      return;
+    }
+    AlimtalkTemplate template = AlimtalkTemplate.HOST_PAYMENT_STARTED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "입금기한", AlimtalkFormats.dueAt(paymentDueAt),
+            // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
+            "분철ID", String.valueOf(view.buncheol().getId()));
+    recordSafely(view.host().getId(), template, variables);
+    String hostPhone = hostPhoneOrNull(view.host(), buncheolId);
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(template, hostPhone, variables);
   }
 
   // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).
@@ -266,7 +299,7 @@ public class AlimtalkNotificationListener {
    * (개최자) 참여자가 <b>묶음</b>을 「보냈어요」로 표시함 — <b>묶음 1통</b>으로 알린다.
    *
    * <p>묶음은 이체 1회의 단위라, 슬롯마다 보내면 개최자가 <b>같은 입금을 여러 건으로 착각</b>해 통장 대조가
-   * 어긋난다. 멤버명은 나열하고 금액은 합산한다 — 성사 확정 안내(sendFinalizedNotice)와 같은 형태다.
+   * 어긋난다. 멤버명은 나열하고 금액은 합산한다 — 입금 안내(sendPaymentStartedNotice)와 같은 형태다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -305,12 +338,12 @@ public class AlimtalkNotificationListener {
   }
 
   // 다슬롯 참여자에게는 멤버명 나열·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).
-  private void sendFinalizedNotice(final List<ParticipationView> group) {
+  private void sendPaymentStartedNotice(final List<ParticipationView> group) {
     ParticipationView first = group.get(0);
     long totalAmount = group.stream().mapToLong(ParticipationView::paymentAmount).sum();
     sendC2cPaymentGuide(
         first,
-        AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
+        AlimtalkTemplate.PAYMENT_STARTED,
         mergedMemberName(group),
         totalAmount,
         // 묶음 값을 쓴다 — 입금 기한의 정본이 묶음이다. 다슬롯이라 first 를 고르지만

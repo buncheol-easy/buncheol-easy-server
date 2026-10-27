@@ -60,7 +60,7 @@ public class InboxMessage extends TimestampedEntity implements Cursorable {
   @Column(nullable = false)
   private boolean pinned;
 
-  // 연관 화면으로 이동하는 in-app 경로(예: /profile/bids). 연관 화면이 없으면 null.
+  // 연관 화면으로 이동하는 in-app 경로(예: /profile/participations). 연관 화면이 없으면 null.
   @Column(name = "link_path", length = 500)
   private String linkPath;
 

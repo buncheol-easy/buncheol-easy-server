@@ -144,37 +144,78 @@ class AlimtalkTemplateTest {
     }
   }
 
+  // 🔴 본문은 알리고 등록·승인본(UM_5283·UM_5286·UM_5287)과 개행까지 같아야 카카오가 받는다 — 글자 하나만 달라도 발송이 거부된다.
   @Nested
-  @DisplayName("C2C 성사 확정(C2C_BUNCHEOL_FINALIZED)")
-  class C2cBuncheolFinalized {
+  @DisplayName("회원 개최 입금 안내(PAYMENT_STARTED)")
+  class PaymentStarted {
 
-    // C2C 는 입금 기한이 지나도 자동 취소되지 않고, 개최자가 「제외」해야 참여가 빠진다(docs/70 결정 9).
     @Test
-    @DisplayName("미입금 시 자동 취소가 아닌 개최자 취소를 안내하고 미치환 토큰을 남기지 않는다")
+    @DisplayName("승인본과 글자 그대로 같고 참여 내역 새 경로로 안내한다")
     void render() {
       Map<String, String> variables =
           Map.of(
               "닉네임", "참여자닉",
               "분철명", "세븐틴 미니 12집 분철",
-              "멤버명", "호시",
-              "입금금액", "25,000",
+              "멤버명", "호시, 우지",
+              "입금금액", "50,000",
               "은행명", "국민은행",
               "계좌번호", "12345678",
               "예금주", "홍길동",
-              "입금기한", "8월 9일(일) 09:00");
+              "입금기한", "11월 6일(금) 12:00");
 
-      String rendered = AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED.render(variables);
+      assertThat(AlimtalkTemplate.PAYMENT_STARTED.subject()).isEqualTo("입금 안내");
+      assertThat(AlimtalkTemplate.PAYMENT_STARTED.render(variables))
+          .isEqualTo(
+              "참여자닉님, 신청하신 분철의 모집이 끝나 입금 단계가 시작되었어요!\n"
+              + "\n"
+              + "아래 계좌로 24시간 안에 입금해 주세요.\n"
+              + "입금한 뒤에는 참여 내역에서 「보냈어요」 버튼을 꼭 눌러 주세요.\n"
+              + "\n"
+              + "▶ 분철명: 세븐틴 미니 12집 분철\n"
+              + "▶ 참여 멤버: 호시, 우지\n"
+              + "▶ 입금 금액: 50,000원\n"
+              + "▶ 입금 계좌: 국민은행 12345678 (예금주: 홍길동)\n"
+              + "▶ 입금 기한: 11월 6일(금) 12:00\n"
+              + "\n"
+              + "입금 기한이 지나면 개최자가 입금이 확인된 참여자들로만 분철을 진행할 수 있으며, 이 경우 입금이 확인되지 않은 참여자는 참여가 취소돼요.\n"
+              + "분철이지는 통신판매중개자이며, 대금은 개최자 계좌로 직접 입금됩니다.");
+      assertThat(AlimtalkTemplate.PAYMENT_STARTED.buttons().get(1).mobileUrl())
+          .isEqualTo("#{baseUrl}/profile/participations");
+    }
+  }
 
-      assertThat(rendered)
-          .startsWith("참여자닉님, 신청하신 분철이 성사되었어요!")
-          .contains("▶ 입금 계좌: 국민은행 12345678 (예금주: 홍길동)")
-          .endsWith(
-              "▶ 입금 기한: 8월 9일(일) 09:00\n"
-                  + "\n"
-                  + "기한이 지나도록 입금이 확인되지 않으면 개최자가 참여를 취소할 수 있어요.\n"
-                  + "분철이지는 통신판매중개자이며, 대금은 개최자 계좌로 직접 입금됩니다.")
-          .doesNotContain("자동 취소")
-          .doesNotContain("#{");
+  @Nested
+  @DisplayName("개최자 입금 단계 시작(HOST_PAYMENT_STARTED)")
+  class HostPaymentStarted {
+
+    @Test
+    @DisplayName("승인본과 글자 그대로 같고 분철 관리 화면으로 안내한다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "개최자닉",
+              "분철명", "세븐틴 미니 12집 분철",
+              "입금기한", "11월 6일(금) 12:00",
+              "분철ID", "77");
+
+      assertThat(AlimtalkTemplate.HOST_PAYMENT_STARTED.subject()).isEqualTo("입금 단계 시작 안내");
+      assertThat(AlimtalkTemplate.HOST_PAYMENT_STARTED.render(variables))
+          .isEqualTo(
+              "개최자닉님, 개최하신 분철의 모집이 끝나 참여자들의 입금 단계가 시작되었어요.\n"
+              + "\n"
+              + "참여자들에게 등록하신 계좌와 입금 기한을 안내했어요.\n"
+              + "통장에서 입금을 확인하면 분철 관리에서 입금 확인 버튼을 눌러 주세요.\n"
+              + "\n"
+              + "모든 참여자의 입금이 확인되면 바로 분철 진행을 확정시킬 수 있어요.\n"
+              + "입금 기한이 지나면 입금이 확인된 참여자들로만 분철 진행을 확정시킬 수 있어요.\n"
+              + "진행이 어려우면 운영진에게 알려 주세요.\n"
+              + "\n"
+              + "▶ 분철명: 세븐틴 미니 12집 분철\n"
+              + "▶ 입금 기한: 11월 6일(금) 12:00");
+      assertThat(AlimtalkTemplate.HOST_PAYMENT_STARTED.buttons().get(1).name())
+          .isEqualTo("분철 관리 하러가기");
+      assertThat(AlimtalkTemplate.HOST_PAYMENT_STARTED.buttons().get(1).mobileUrl())
+          .isEqualTo("#{baseUrl}/products/#{분철ID}/manage");
     }
   }
 
@@ -182,8 +223,9 @@ class AlimtalkTemplateTest {
   @DisplayName("C2C 입금 확인(C2C_PAYMENT_CONFIRMED)")
   class C2cPaymentConfirmed {
 
+    // 기한 뒤 일부 인원으로 진행할 수 있어 "함께 참여한 분들의 입금이 모두 확인되면" 은 지킬 수 없는 약속이다.
     @Test
-    @DisplayName("다음 관문을 인원이 아닌 전원 입금으로 안내하고 미치환 토큰을 남기지 않는다")
+    @DisplayName("승인본과 글자 그대로 같다")
     void render() {
       Map<String, String> variables =
           Map.of(
@@ -192,23 +234,22 @@ class AlimtalkTemplateTest {
               "멤버명", "호시",
               "입금금액", "25,000");
 
-      String rendered = AlimtalkTemplate.C2C_PAYMENT_CONFIRMED.render(variables);
-
-      assertThat(rendered)
-          .startsWith("참여자닉님, 참여하신 분철의 입금이 확인되었어요!")
-          .contains("함께 참여한 분들의 입금이 모두 확인되면")
-          .doesNotContain("진행 인원이 모두 모이면")
-          .contains("▶ 참여 멤버: 호시")
-          .contains("▶ 입금 금액: 25,000원")
-          .doesNotContain("#{");
+      assertThat(AlimtalkTemplate.C2C_PAYMENT_CONFIRMED.render(variables))
+          .isEqualTo(
+              "참여자닉님, 참여하신 분철의 입금을 개최자가 확인했어요!\n"
+              + "개최자가 분철 진행을 확정하면 다시 알려 드릴게요.\n"
+              + "\n"
+              + "▶ 분철명: 세븐틴 미니 12집 분철\n"
+              + "▶ 참여 멤버: 호시\n"
+              + "▶ 입금 금액: 25,000원");
     }
   }
 
   @Nested
-  @DisplayName("C2C 입금 기한 뒤 제외(C2C_PAYMENT_EXPIRED)")
+  @DisplayName("회원 개최 진행 확정 때 빠짐(C2C_PAYMENT_EXPIRED)")
   class C2cPaymentExpired {
 
-    // C2C 는 입금 자동 만료가 없어 이 알림은 개최자 「제외」 때만 나간다(docs/70 결정 9). '보냈어요'를 누른 묶음도 제외될 수 있다.
+    // 회원 개최는 입금 자동 만료가 없어 이 알림은 진행 확정 때 빠진 참여에만 나간다. '보냈어요'를 누른 참여도 빠질 수 있다.
     @Test
     @DisplayName("자동 취소가 아닌 개최자 취소를 안내하고 미치환 토큰을 남기지 않는다")
     void render() {

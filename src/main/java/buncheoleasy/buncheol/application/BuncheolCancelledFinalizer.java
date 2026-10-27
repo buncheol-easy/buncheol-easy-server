@@ -21,7 +21,8 @@ public record BuncheolCancelledFinalizer(
     DeliveryDomainService deliveryDomainService,
     ApplicationEventPublisher eventPublisher) {
 
-  public void finalizeCancelled(
+  /** @return 이번에 실제로 취소된 참여 수 */
+  public int finalizeCancelled(
       final Long buncheolId, final Instant now, final BuncheolCancelReason reason) {
     participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
     // cascade 는 참여를 한 번의 UPDATE 로 전이시켜 어느 묶음이 비었는지 개별로 알 수 없다 — 같은 CAS 조건을
@@ -39,5 +40,6 @@ public record BuncheolCancelledFinalizer(
     if (!cancelledIds.isEmpty()) {
       eventPublisher.publishEvent(new BuncheolCancelledEvent(buncheolId, cancelledIds, reason));
     }
+    return cancelledIds.size();
   }
 }

@@ -11,6 +11,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 여기서 접는다. 입금 확인 건수와 무관하게 분철을 숨기고(HOST_CANCELLED) 입금 확인된 참여까지 전원 취소하며 참여자에게 「분철 취소 안내」를
  * 보낸다. 환불은 개최자가 하고 운영자가 확인한다(기능 없음).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminBuncheolCommandService {
@@ -40,11 +42,14 @@ public class AdminBuncheolCommandService {
       buncheolDomainService.getBuncheol(buncheolId);
       throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
     }
-    new BuncheolCancelledFinalizer(
-            participationDomainService,
-            participationBundleDomainService,
-            deliveryDomainService,
-            eventPublisher)
-        .finalizeCancelled(buncheolId, now, BuncheolCancelReason.HOST_CANCELLED);
+    int cancelledCount =
+        new BuncheolCancelledFinalizer(
+                participationDomainService,
+                participationBundleDomainService,
+                deliveryDomainService,
+                eventPublisher)
+            .finalizeCancelled(buncheolId, now, BuncheolCancelReason.HOST_CANCELLED);
+    // 되돌릴 수 없는 명령이라 참여자 문의 때 첫 근거로 남긴다.
+    log.info("운영진 파기 - buncheolId={}, 취소 참여 {}건", buncheolId, cancelledCount);
   }
 }

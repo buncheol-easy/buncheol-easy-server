@@ -60,7 +60,7 @@ class AppAuthControllerDocsTest extends DocsTestSupport {
                         .description(
                             """
                             앱이 인증 창으로 `GET /oauth2/authorization/kakao/app?challenge=<S256 challenge>`
-                            를 열면, 로그인 뒤 서버가 앱 주소(`APP_LOGIN_CALLBACK_URL`, 예 `buncheoleasy://auth`)에
+                            를 열면, 로그인 뒤 서버가 앱 주소(`APP_LOGIN_CALLBACK_URL`, https 주소만 — 예 `https://buncheoleasy.com/login/app`)에
                             `?code=<code>`(새 가입이면 `&signup=1`, 실패면
                             `?error=email_required|cancelled|failed|invalid_request`)를 붙여 돌려보낸다.
                             앱 주소가 비어 있는 서버는 시작 요청을 `400 AUTH-013` 으로 거절한다(앱 로그인 꺼짐).

@@ -25,7 +25,7 @@ class OAuth2LoginFailureHandlerTest {
 
   private static final String LOGIN_CALLBACK_URL = "http://localhost:3000/login/callback";
   private static final String AGE_RANGE_CONSENT_CALLBACK_URL = "http://localhost:3000/upload";
-  private static final String APP_CALLBACK_URL = "buncheoleasy://auth";
+  private static final String APP_CALLBACK_URL = "https://buncheoleasy.com/login/app";
 
   private OAuth2LoginFailureHandler handler;
 

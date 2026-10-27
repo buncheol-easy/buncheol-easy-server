@@ -29,18 +29,38 @@ class AppLoginRedirectorTest {
 
     @ParameterizedTest
     @ValueSource(
-        strings = {"buncheoleasy://auth", "https://app.buncheoleasy.com/auth", " buncheoleasy://auth "})
-    void 스킴_있는_절대_주소면_켜진다(final String value) {
+        strings = {
+          "https://buncheoleasy.com/login/app",
+          " https://staging.buncheoleasy.com/login/app ",
+          "HTTPS://buncheoleasy.com/login/app"
+        })
+    void https_절대_주소면_켜진다(final String value) {
       assertThat(new AppLoginRedirector(value).isEnabled()).isTrue();
     }
 
     @ParameterizedTest
     @ValueSource(
-        strings = {"/login/app", "auth", "buncheoleasy:auth", "buncheoleasy://auth#frag", "bad url://x"})
-    void 스킴_없는_주소_불투명_주소_조각이_붙은_주소는_기동에서_막는다(final String value) {
+        strings = {
+          "/login/app",
+          "auth",
+          "https:login/app",
+          "https:///login/app",
+          "https://buncheoleasy.com/login/app#frag",
+          "bad url://x"
+        })
+    void 스킴_없는_주소_호스트_없는_주소_조각이_붙은_주소는_기동에서_막는다(final String value) {
       assertThatThrownBy(() -> new AppLoginRedirector(value))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("APP_LOGIN_CALLBACK_URL");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"buncheoleasy://auth", "http://buncheoleasy.com/login/app"})
+    void 커스텀_스킴과_http_는_가로챌_수_있어_기동에서_막는다(final String value) {
+      // 커스텀 스킴은 같은 스킴을 등록한 다른 앱이 시작 요청을 열면 코드가 그 앱으로 간다(RFC 8252 §8.6).
+      assertThatThrownBy(() -> new AppLoginRedirector(value))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("https");
     }
   }
 
@@ -52,9 +72,11 @@ class AppLoginRedirectorTest {
     void 코드는_앱_주소의_쿼리로_싣는다() throws Exception {
       MockHttpServletResponse response = new MockHttpServletResponse();
 
-      new AppLoginRedirector("buncheoleasy://auth").redirectWithCode(response, "abc", true);
+      new AppLoginRedirector("https://buncheoleasy.com/login/app")
+          .redirectWithCode(response, "abc", true);
 
-      assertThat(response.getRedirectedUrl()).isEqualTo("buncheoleasy://auth?code=abc&signup=1");
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo("https://buncheoleasy.com/login/app?code=abc&signup=1");
     }
 
     @Test

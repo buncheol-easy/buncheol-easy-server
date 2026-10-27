@@ -43,7 +43,7 @@ class KakaoAuthorizationRequestResolverTest {
   private final KakaoAuthorizationRequestResolver resolver =
       new KakaoAuthorizationRequestResolver(
           new InMemoryClientRegistrationRepository(KAKAO),
-          new AppLoginRedirector("buncheoleasy://auth"));
+          new AppLoginRedirector("https://buncheoleasy.com/login/app"));
 
   private final KakaoAuthorizationRequestResolver appLoginOffResolver =
       new KakaoAuthorizationRequestResolver(

@@ -160,9 +160,9 @@ app:
     # 연령대 추가 동의(개최 자격) 결과를 돌려보낼 개최 화면. ?ageRangeConsent=agreed|cancelled|failed 가 붙는다.
     age-range-consent-callback-url: ${app.frontend.base-url}/upload
   mobile:
-    # 네이티브 앱 카카오 로그인 결과를 돌려보낼 앱 주소(예: buncheoleasy://auth). ?code=…[&signup=1] 또는 ?error=… 가 붙는다.
-    # 비어 있으면 앱 카카오 로그인이 꺼진다(시작 요청 400 AUTH-013). 커스텀 스킴은 다른 앱이 가로챌 수 있어(RFC 8252 §8.6) 기본값을 두지 않는다.
-    # 값이 있으면 기동 때 스킴 있는 절대 주소인지 확인한다(아니면 기동 실패).
+    # 네이티브 앱 카카오 로그인 결과를 돌려보낼 https 주소(예: https://buncheoleasy.com/login/app). ?code=…[&signup=1] 또는 ?error=… 가 붙는다.
+    # 비어 있으면 앱 카카오 로그인이 꺼진다(시작 요청 400 AUTH-013). 웹의 애플 연결 파일에 적힌 앱만 이 주소를 받는다(iOS 17.4+).
+    # 커스텀 스킴(buncheoleasy://)은 다른 앱이 가로챌 수 있어(RFC 8252 §8.6) https 가 아니면 기동 실패.
     login-callback-url: ${APP_LOGIN_CALLBACK_URL:}
   apple:
     signin:

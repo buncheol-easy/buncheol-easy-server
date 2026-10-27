@@ -14,9 +14,10 @@ import org.springframework.web.util.UriComponentsBuilder;
  * 앱 로그인 결과를 앱 주소({@code app.mobile.login-callback-url})로 돌려보낸다. 성공이면 일회용 코드만, 실패면 정해진 사유만 싣는다 —
  * 토큰·쿠키는 내려주지 않는다(토큰은 앱이 코드를 바꿀 때 본문으로 받는다).
  *
- * <p>주소가 비어 있으면 앱 카카오 로그인 전체가 꺼진다. 커스텀 스킴은 iOS 가 주인을 확인하지 않아, 같은 스킴을 등록한 다른 앱이 시작 요청을 직접 열면
- * 코드가 그 앱으로 간다(RFC 8252 §8.6 클라이언트 사칭) — 켜는 것은 그 위험을 받아들이는 운영 결정이라 기본값을 두지 않는다. 값이 있으면 기동 때
- * 스킴 있는 절대 주소인지 확인한다(빈 값·상대 주소로 {@code ?code=…} 가 이 서버 경로로 새지 않게).
+ * <p>주소가 비어 있으면 앱 카카오 로그인 전체가 꺼진다. 값은 https 주소만 받는다 — 커스텀 스킴(buncheoleasy://)은 iOS 가 주인을 확인하지 않아,
+ * 같은 스킴을 등록한 다른 앱이 시작 요청을 직접 열면 코드가 그 앱으로 간다(RFC 8252 §8.6 클라이언트 사칭). https 주소는 그 도메인의 애플 연결 파일
+ * ({@code /.well-known/apple-app-site-association})에 적힌 앱만 인증 창에서 받을 수 있다(iOS 17.4+). 형식이 틀리면 기동을 막는다
+ * (빈 값·상대 주소로 {@code ?code=…} 가 이 서버 경로로 새지 않게).
  */
 @Component
 public class AppLoginRedirector {
@@ -81,16 +82,18 @@ public class AppLoginRedirector {
     } catch (URISyntaxException exception) {
       throw new IllegalArgumentException(invalidMessage(trimmed), exception);
     }
-    // 스킴·호스트 자리(//)가 있어야 하고, # 뒤에 붙으면 앱이 코드를 쿼리로 읽지 못한다.
-    if (uri.getScheme() == null || uri.isOpaque() || uri.getRawFragment() != null) {
+    // # 뒤에 붙으면 앱이 코드를 쿼리로 읽지 못한다.
+    if (!"https".equalsIgnoreCase(uri.getScheme())
+        || uri.getHost() == null
+        || uri.getRawFragment() != null) {
       throw new IllegalArgumentException(invalidMessage(trimmed));
     }
     return trimmed;
   }
 
   private static String invalidMessage(final String value) {
-    return "APP_LOGIN_CALLBACK_URL(app.mobile.login-callback-url) 은 스킴 있는 절대 주소여야 한다"
-        + "(예: buncheoleasy://auth): "
+    return "APP_LOGIN_CALLBACK_URL(app.mobile.login-callback-url) 은 https 절대 주소여야 한다"
+        + "(예: https://buncheoleasy.com/login/app — 커스텀 스킴은 다른 앱이 가로챌 수 있어 받지 않는다): "
         + value;
   }
 }

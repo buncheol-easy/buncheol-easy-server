@@ -47,7 +47,7 @@ admin:
 app:
   mobile:
     # 앱 로그인 흐름 테스트용으로 켠다. 꺼진 동작은 AppLoginDisabledIntegrationTest 가 따로 본다.
-    login-callback-url: buncheoleasy://auth
+    login-callback-url: https://buncheoleasy.com/login/app
   apple:
     signin:
       # 로컬 .env 와 무관하게 애플 로그인 허용 앱을 비워 둔다 — 검증기 테스트는 허용 앱을 직접 넘긴다.

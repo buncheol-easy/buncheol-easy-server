@@ -52,7 +52,7 @@ class OAuth2LoginSuccessHandlerTest {
   private static final String FRONTEND_CALLBACK_URL = "http://localhost:3000/login/callback";
   private static final String REFRESH_COOKIE_PATH = "/api/backend/v1/auth";
   private static final String AGE_RANGE_CONSENT_CALLBACK_URL = "http://localhost:3000/upload";
-  private static final String APP_CALLBACK_URL = "buncheoleasy://auth";
+  private static final String APP_CALLBACK_URL = "https://buncheoleasy.com/login/app";
   private static final String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
   @Mock private OAuth2UserProfileExtractor profileExtractor;

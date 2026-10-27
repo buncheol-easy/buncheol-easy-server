@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
@@ -1115,6 +1116,48 @@ class JpaParticipationRepositoryAdapterTest {
           null);
 
       assertThat(participationRepository.countConfirmedByBuncheolIds(List.of(buncheolId))).isEmpty();
+    }
+  }
+
+  @Nested
+  @DisplayName("countUnconfirmedByBuncheolIds — 입금 대기·보냈어요만 센다")
+  class CountUnconfirmedByBuncheolIdsTest {
+
+    // 진행 확정 가드의 미확인 집합(payableStatuses)과 같아야 한다 — 신청·입금확인·취소는 세지 않는다.
+    @Test
+    void 입금_대기와_보냈어요만_분철_단위로_집계한다() {
+      Long buncheolId = createBuncheol();
+      List<ParticipationStatus> statuses =
+          List.of(
+              ParticipationStatus.AWAITING_PAYMENT,
+              ParticipationStatus.PAYMENT_SENT,
+              ParticipationStatus.APPLIED,
+              ParticipationStatus.CONFIRMED,
+              ParticipationStatus.CANCELLED);
+      for (int i = 0; i < statuses.size(); i++) {
+        ParticipationStatus status = statuses.get(i);
+        Long userId = TestUserFixture.insertUser(jdbcTemplate, "unconfirmed_" + i);
+        Long memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "미확인멤버" + i);
+        insertParticipation(
+            buncheolId,
+            createBuncheolMember(buncheolId, memberId),
+            userId,
+            insertShippingAddress(userId, "미확인매장" + i),
+            30_000L,
+            Instant.now().plus(30, ChronoUnit.MINUTES),
+            status,
+            status == ParticipationStatus.CANCELLED
+                ? ParticipationCancelReason.BUNCHEOL_CANCELLED
+                : null);
+      }
+
+      assertThat(participationRepository.countUnconfirmedByBuncheolIds(List.of(buncheolId)))
+          .containsExactly(new BuncheolUnconfirmedParticipationCount(buncheolId, 2L));
+    }
+
+    @Test
+    void 빈_입력에는_쿼리_없이_빈_리스트를_반환한다() {
+      assertThat(participationRepository.countUnconfirmedByBuncheolIds(List.of())).isEmpty();
     }
   }
 

@@ -20,7 +20,8 @@ public enum ConfirmCheck {
 
   /**
    * @param confirmedCount 입금 확인된 참여 수
-   * @param unconfirmedCount 입금 대기·「보냈어요」 참여 수
+   * @param unconfirmedCount 입금 대기·「보냈어요」 참여 수({@code ParticipationStatus.payableStatuses()}). 「살아 있는 참여 − 확인」으로
+   *     세면 신청(APPLIED)이 섞일 때 진행 확정 가드와 답이 갈린다
    * @return 입금 수집 중이 아니면 {@code null}
    */
   public static ConfirmCheck of(

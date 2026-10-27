@@ -112,6 +112,12 @@ public interface ParticipationRepository {
    */
   List<BuncheolConfirmedParticipationCount> countConfirmedByBuncheolIds(List<Long> buncheolIds);
 
+  /**
+   * 여러 분철의 미확인 참여 수 집계 — 입금 대기·「보냈어요」({@link ParticipationStatus#payableStatuses()}). 진행 확정 판정의
+   * 미확인 수로, 진행 확정 가드가 세는 집합과 같다. 0 건인 분철은 결과에서 빠지므로 호출 측이 기본값 0 으로 채운다.
+   */
+  List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(List<Long> buncheolIds);
+
   /** 입금 만료가 임박/도과한 참여 폴링 (입금 만료 스케줄러용). status=AWAITING_PAYMENT, due_at <= now. */
   List<Participation> findOverduePaymentTargets(Instant now, int limit);
 

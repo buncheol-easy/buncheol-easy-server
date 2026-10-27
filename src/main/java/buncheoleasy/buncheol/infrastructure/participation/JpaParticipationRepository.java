@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
@@ -144,6 +145,16 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
           + "GROUP BY p.buncheolId")
   List<BuncheolConfirmedParticipationCount> countConfirmedByBuncheolIds(
       @Param("buncheolIds") List<Long> buncheolIds, @Param("status") ParticipationStatus status);
+
+  @Query(
+      "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount("
+          + "p.buncheolId, COUNT(p)) "
+          + "FROM Participation p "
+          + "WHERE p.buncheolId IN :buncheolIds AND p.status IN :statuses "
+          + "GROUP BY p.buncheolId")
+  List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(
+      @Param("buncheolIds") List<Long> buncheolIds,
+      @Param("statuses") Collection<ParticipationStatus> statuses);
 
   @Query(
       "SELECT p FROM Participation p "

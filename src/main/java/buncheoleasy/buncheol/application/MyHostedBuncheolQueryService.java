@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -60,7 +61,7 @@ public class MyHostedBuncheolQueryService {
                     BuncheolActiveParticipationCount::buncheolId,
                     BuncheolActiveParticipationCount::count));
 
-    // 진행 확정 판정용 입금확인 건수. 카드마다 조회하지 않고 입금 수집중 분철만 골라 한 번에 센다 — 없으면 어댑터가 쿼리를 건너뛴다.
+    // 진행 확정 판정용 확인·미확인 건수. 카드마다 조회하지 않고 입금 수집중 분철만 골라 한 번에 센다 — 없으면 어댑터가 쿼리를 건너뛴다.
     List<Long> collectingIds =
         buncheols.stream()
             .filter(b -> b.getStatus() == BuncheolStatus.PAYMENT_COLLECTING)
@@ -72,6 +73,12 @@ public class MyHostedBuncheolQueryService {
                 Collectors.toMap(
                     BuncheolConfirmedParticipationCount::buncheolId,
                     BuncheolConfirmedParticipationCount::count));
+    Map<Long, Long> unconfirmedCountByBuncheolId =
+        participationRepository.countUnconfirmedByBuncheolIds(collectingIds).stream()
+            .collect(
+                Collectors.toMap(
+                    BuncheolUnconfirmedParticipationCount::buncheolId,
+                    BuncheolUnconfirmedParticipationCount::count));
     final Instant now = Instant.now(clock);
 
     // 「종료」 판정도 같은 방식으로 한 번에 묻는다. 끝날 수 있는 건 진행확정뿐이라 그 id 만 넘기고, 없으면 어댑터가
@@ -99,6 +106,7 @@ public class MyHostedBuncheolQueryService {
                     slotCountByBuncheolId,
                     activeCountByBuncheolId,
                     confirmedCountByBuncheolId,
+                    unconfirmedCountByBuncheolId,
                     now,
                     endedIds,
                     groupNameById,
@@ -111,6 +119,7 @@ public class MyHostedBuncheolQueryService {
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, Long> activeCountByBuncheolId,
       final Map<Long, Long> confirmedCountByBuncheolId,
+      final Map<Long, Long> unconfirmedCountByBuncheolId,
       final Instant now,
       final Set<Long> endedIds,
       final Map<Long, String> groupNameById,
@@ -118,6 +127,7 @@ public class MyHostedBuncheolQueryService {
     int slotCount = slotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue();
     long activeCount = activeCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
     long confirmedCount = confirmedCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
+    long unconfirmedCount = unconfirmedCountByBuncheolId.getOrDefault(buncheol.getId(), 0L);
     return new MyHostedBuncheolResponse(
         buncheol.getId(),
         buncheol.getTitle(),
@@ -132,11 +142,11 @@ public class MyHostedBuncheolQueryService {
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 카드가 상태로 재판정하면 서버와 갈린다 (docs/56 S-2).
         BuncheolHostCancellability.of(buncheol.getStatus()),
         endedIds.contains(buncheol.getId()),
-        // 관리 화면·진행 확정 게이트와 같은 판정. 입금 수집중엔 신청(APPLIED)이 없어 살아 있는 참여 − 확인 = 미확인이다.
+        // 관리 화면·진행 확정 게이트와 같은 판정. 미확인 수도 게이트와 같은 집합(입금 대기·보냈어요)으로 센다.
         ConfirmCheck.of(
             buncheol.getStatus(),
             confirmedCount,
-            activeCount - confirmedCount,
+            unconfirmedCount,
             buncheol.getPaymentDueAt(),
             now));
   }

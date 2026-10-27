@@ -381,10 +381,10 @@ public class BuncheolService {
    * 409(BCH-127)로 막는다 — 그 사이 누가 「보냈어요」를 누르거나 다른 탭에서 입금 확인했으면 개최자가 강조 없이 본 사람을 빼게 된다. 목록은
    * 대조에만 쓰고 취소 대상은 분철 범위로 고른다(남의 참여 id 를 넣어도 대조 실패로 끝난다).
    *
-   * <p>🔴 READ COMMITTED 다. 진행확정 알림 대상 조회({@link BuncheolConfirmedFinalizer})가 잠금 뒤 일반 조회로 확정 참여를 읽는데,
-   * REPEATABLE READ 면 잠금 전 첫 읽기의 스냅샷이 남아 기다리는 사이 커밋된 입금 확인을 빠뜨린다(#245 와 같은 이유). 회원 개최에서 확정 수를
-   * 바꾸는 쓰기(묶음 입금 확인)는 모두 분철 행을 먼저 잡으므로 READ COMMITTED 에서도 판정이 흔들리지 않고, 참여 잠금에 간격 잠금이 빠져도 새
-   * 참여 INSERT 는 분철 행에서 막힌다.
+   * <p>🔴 READ COMMITTED 다. 진행확정 알림 대상({@link BuncheolConfirmedFinalizer})을 잠금 뒤 일반 조회로 읽는다. 지금은 잠금 앞에
+   * 일반 조회가 없어 REPEATABLE READ 여도 같지만, 앞에 조회가 하나라도 끼면 그 스냅샷이 기다리는 사이 커밋된 입금 확인을 빠뜨리므로
+   * #245 와 같이 고정해 둔다. 회원 개최에서 확정 수를 바꾸는 쓰기(묶음 입금 확인)는 모두 분철 행을 먼저 잡으므로 READ COMMITTED
+   * 에서도 판정이 흔들리지 않고, 참여 잠금에 간격 잠금이 빠져도 새 참여 INSERT 는 분철 행에서 막힌다.
    */
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public void confirmBuncheol(

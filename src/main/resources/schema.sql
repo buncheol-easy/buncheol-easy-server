@@ -303,8 +303,8 @@ CREATE TABLE IF NOT EXISTS buncheol_images
 -- 배송비·배송지·환불계좌·기한이 슬롯 행에 흩어져 있었고, 그 행이 취소되면 값도 같이 죽었다
 -- (docs/62 M-01 — prod 에서 실제로 확인됨). 이 테이블이 그것들의 정본이 된다.
 --
--- ⛔ 활성 묶음 유니크는 만들지 않는다 (docs/71 §8-3). 추가 모집·재신청이 "새 묶음" 이어야 하므로
---    한 사람이 한 분철에 활성 묶음을 2개 가질 수 있어야 한다. 중복 방지는 앱 가드가 하고,
+-- ⛔ 활성 묶음 유니크는 만들지 않는다 (docs/71 §8-3). 추가 모집분이 "새 묶음" 이라
+--    한 사람이 한 분철에 활성 묶음을 2개 가진 기록이 있을 수 있다. 중복 방지는 앱 가드가 하고,
 --    LEGACY 1인 1슬롯 보호는 participations.uq_participations_legacy_active_participant 가 그대로 계속한다.
 --    (그래서 active_participant_id 같은 생성 컬럼도 필요 없다.)
 CREATE TABLE IF NOT EXISTS participation_bundles
@@ -427,7 +427,7 @@ CREATE TABLE IF NOT EXISTS participations
     INDEX idx_participations_status_flow_due (status, flow_type, due_at),
     -- 내 참여 목록(참여자별 최신순)용
     INDEX idx_participations_participant_created (participant_id, created_at DESC),
-    -- 묶음의 활성 슬롯 조회·집계용 (묶음 확인·제외·종료 판정)
+    -- 묶음의 활성 슬롯 조회·집계용 (묶음 확인·종료 판정)
     INDEX idx_participations_bundle_status (bundle_id, status),
     -- 관리자 결제 목록(전체 참여 최신순) 커서 페이지네이션용. 기존 배포 DB 에는 수동 ALTER 필요.
     INDEX idx_participations_created (created_at DESC, id DESC),

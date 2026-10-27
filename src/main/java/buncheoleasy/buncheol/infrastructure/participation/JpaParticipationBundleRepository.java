@@ -62,7 +62,7 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
           + "WHERE b.id = :bundleId AND b.closedAt IS NULL")
   int markPaymentSent(@Param("bundleId") Long bundleId, @Param("now") Instant now);
 
-  /** 성사 확정 시 기한 없이 열려 있던 활성 묶음에 입금 기한을 채운다. 이미 채워진 묶음은 건드리지 않는다. */
+  /** 입금 단계 시작 때 기한 없이 열려 있던 활성 묶음에 입금 기한을 채운다. 이미 채워진 묶음은 건드리지 않는다. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE ParticipationBundle b SET b.dueAt = :dueAt, b.updatedAt = :now "

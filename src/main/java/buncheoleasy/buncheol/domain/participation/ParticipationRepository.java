@@ -150,10 +150,10 @@ public interface ParticipationRepository {
   int confirmBundleIfPayable(Long bundleId, Instant now);
 
   /**
-   * C2C 참여자 자발 취소 CAS — APPLIED·AWAITING_PAYMENT 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은
+   * C2C 참여자 자발 취소 CAS — APPLIED 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은
    * {@link ParticipationCancellability#cancellableStatuses()} 를 공유한다.
    *
-   * <p>⚠️ <b>판정하는 것은 상태뿐</b>이다. 성사 확정 선후(H-09)와 플로우(C2C 여부)는 이 CAS 조건에 없고 애플리케이션 게이트가 단독으로
+   * <p>⚠️ <b>판정하는 것은 상태뿐</b>이다. 플로우(C2C 여부)는 이 CAS 조건에 없고 애플리케이션 게이트가 단독으로
    * 막는다 — 남는 경합 창은 {@link ParticipationCancellability} javadoc 참고.
    */
   boolean cancelByUserIfCancellable(Long participationId, Instant now);

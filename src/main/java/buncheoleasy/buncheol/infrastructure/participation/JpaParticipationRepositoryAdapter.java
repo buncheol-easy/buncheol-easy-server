@@ -135,7 +135,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(2, participation.getBuncheolMemberId());
                 ps.setLong(3, participation.getParticipantId());
                 ps.setLong(4, participation.getAmount());
-                // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
+                // C2C 신청(APPLIED)은 입금 기한이 없다 — 입금 단계 시작 때 일괄 산정된다.
                 ps.setTimestamp(
                     5,
                     participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
@@ -315,8 +315,8 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
 
   @Override
   public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
-    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9) — 기한은 "개최자가 「제외」로 정리에
-    // 나설 수 있는 시각"이지 취소 시각이 아니다. 걸러내는 위치가 <b>쿼리</b>인 것이 중요하다: 루프 안에서
+    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9) — 기한은 개최자가 입금이 확인된
+    // 참여로만 진행 확정할 수 있게 되는 시각이지 취소 시각이 아니다. 걸러내는 위치가 <b>쿼리</b>인 것이 중요하다: 루프 안에서
     // skip 하면 안 죽는 C2C 행이 due_at ASC 앞자리를 영구 점유해 LEGACY 10분 칼컷이 기아 상태가 된다.
     return jpaParticipationRepository.findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
         ParticipationStatus.AWAITING_PAYMENT, FlowType.LEGACY, now, Limit.of(limit));

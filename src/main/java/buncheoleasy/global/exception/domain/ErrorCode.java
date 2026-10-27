@@ -160,7 +160,7 @@ public enum ErrorCode {
   BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
       "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
   BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-090", "현재 상태에서는 진행 확정을 할 수 없어요.", HttpStatus.CONFLICT),
-  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·제외·보냈어요·자리 빼기와 넣기 등
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 진행 확정·보냈어요·자리 빼기와 넣기 등
   // C2C 전용 액션 여러 곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
   // 엉뚱한 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
   PARTICIPATION_CANCEL_NOT_SUPPORTED(

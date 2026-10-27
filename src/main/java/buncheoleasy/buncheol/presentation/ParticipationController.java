@@ -51,8 +51,8 @@ public class ParticipationController {
    *
    * <p>🔴 <b>C2C 는 409(BUNDLE_CONFIRM_REQUIRED) 다.</b> C2C 의 돈 단위는 참여 한 건이 아니라 묶음이라
    * (이체 1회·배송비 1회·택배 1개) 확정도 묶음 통째로여야 한다 — {@code POST
-   * /v1/participation-bundles/{bundleId}/confirm} 을 쓴다. 슬롯 하나만 확정된 혼합 묶음은 「제외」·
-   * 「입금 수집 종료」·묶음 확정이 동시에 닫혀 되살릴 수 없다.
+   * /v1/participation-bundles/{bundleId}/confirm} 을 쓴다. 슬롯 하나만 확정된 혼합 묶음은 묶음 입금확인이
+   * 409 로 막힌다.
    */
   @PostMapping("/{participationId}/confirm")
   public ResponseEntity<Void> confirmPayment(
@@ -62,9 +62,8 @@ public class ParticipationController {
   }
 
   /**
-   * C2C 참여자 자발 취소 API (docs/46 §5 + docs/56 H-09). 신청(APPLIED)과 <b>성사 확정을 거치지 않은</b> 입금
-   * 대기에서만 가능하다. 보냈어요·입금확인 이후는 문의 경유로 안내되고(BCH-086), 성사 확정을 거친 입금 대기는 개최자 연락으로
-   * 안내된다(BCH-092). 추가 모집(docs/46 §4.7-E1)으로 바로 입금 대기가 된 참여는 확정을 거치지 않았으므로 계속 취소할 수 있다.
+   * C2C 참여자 자발 취소 API (docs/46 §5). 신청(APPLIED)에서만 가능하다. 입금 단계가 시작된 뒤(입금 대기·보냈어요·입금확인)는
+   * 문의 경유로 안내된다(BCH-086).
    */
   @DeleteMapping("/{participationId}")
   public ResponseEntity<Void> cancelParticipation(

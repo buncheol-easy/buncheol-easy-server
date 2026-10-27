@@ -27,7 +27,7 @@ public interface ParticipationBundleRepository {
   /**
    * 이 사람이 이 분철에서 지금 열고 있는 묶음 ({@code closed_at IS NULL}).
    *
-   * <p><b>활성 묶음이 2개일 수 있다</b> — 추가 모집분이 새 묶음이기 때문이다(docs/71 §8-3). 그래서 반환이 단건이 아니라 목록이다.
+   * <p><b>활성 묶음이 2개일 수 있다</b> — 옛 추가 모집분이 새 묶음이기 때문이다(docs/71 §8-3). 그래서 반환이 단건이 아니라 목록이다.
    * DB 유니크로 1개를 강제하지 않기로 한 결정의 직접적 귀결이므로, 호출부는 "하나뿐" 을 전제하면 안 된다.
    */
   List<ParticipationBundle> findActiveByBuncheolIdAndParticipantId(
@@ -54,7 +54,7 @@ public interface ParticipationBundleRepository {
    */
   int closeEmptyByBuncheolId(Long buncheolId, Instant now);
 
-  /** 성사 확정 시 분철의 활성 묶음에 입금 기한을 일괄로 채운다 (기한 없이 열린 C2C 신청 묶음 대상). 반환은 채워진 묶음 수. */
+  /** 입금 단계 시작 때 분철의 활성 묶음에 입금 기한을 일괄로 채운다 (기한 없이 열린 C2C 신청 묶음 대상). 반환은 채워진 묶음 수. */
   int assignDueAtByBuncheolId(Long buncheolId, Instant dueAt, Instant now);
 
   /** 「보냈어요」 시각을 묶음에 기록한다 — 정본. 자리 칸은 사본이고 나중에 제거한다. 반환은 영향 행 수. */

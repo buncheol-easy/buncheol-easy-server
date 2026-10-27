@@ -136,14 +136,14 @@ public class AlimtalkNotificationListener {
 
   /**
    * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 개최자의 진행 확정(전원 입금 확인 또는 기한 뒤 확인된 참여로)이
-   * 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (성사 안내와 같은 합산
+   * 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (입금 안내와 같은 합산
    * 규칙).
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolConfirmed(final BuncheolConfirmedEvent event) {
     // 전이분 스냅샷을 상태 재확인 없이 그대로 쓴다 — 분철 CONFIRMED 는 종착 상태라(어느 CAS 도 CONFIRMED 에서 출발하지
-    // 않는다) 커밋~실행 사이에 확정 참여가 이탈할 전이가 없다. PAYMENT_COLLECTING 이 열려 있는 성사 안내 쪽과 다른 이유다.
+    // 않는다) 커밋~실행 사이에 확정 참여가 이탈할 전이가 없다. PAYMENT_COLLECTING 이 열려 있는 입금 안내 쪽과 다른 이유다.
     sendEachSafely(
         groupByParticipant(loadViewsSafely(event.participationIds())), this::sendConfirmedNotice);
   }

@@ -203,7 +203,7 @@ public class Participation extends TimestampedEntity {
   }
 
   /**
-   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 개최자 성사 확정 시 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다.
+   * C2C 신청(무입금 슬롯 선점, docs/46 §1.1). 입금 기한은 입금 단계 시작 때 일괄 산정되므로 dueAt 없이 APPLIED 로 생성한다.
    *
    * <p>환불 계좌(입금자명)는 <b>묶음</b>이 갖는다 (P2-c) — 개최자 통장 대조 키 + 입금 후 취소 시 환불 계좌.
    */

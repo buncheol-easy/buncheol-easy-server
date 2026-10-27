@@ -384,7 +384,7 @@ public class ParticipationService {
       final Long reusableBundleId,
       final Instant now,
       final boolean checkFull) {
-    // deadline 경과(확정 유예 대기) 구간의 신규 신청 차단 — docs/46 §4.7-E3. INSERT 의 원자 조건과 이중 방어.
+    // deadline 경과(마감 판정 대기) 구간의 신규 신청 차단. INSERT 의 원자 조건과 이중 방어.
     buncheol.validateRecruiting(now);
 
     Participation participation =
@@ -516,9 +516,8 @@ public class ParticipationService {
    * <p><b>여기 오는 것은 LEGACY 뿐이다.</b> 진입점은 <b>네 곳</b>이고 걸러 내는 장치가 서로 다르다 —
    * 개최자·어드민 확인은 {@link #requireLegacy}, 웹훅 자동확인은 {@code NOT_CONFIRMABLE} 조기 반환,
    * 0원 참여 즉시확정({@code confirmFreeParticipation})은 {@code participateSingle} 의 플로우 분기다.
-   * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는 묶음을 다
-   * 확정한 <b>뒤 1회만</b> 돌아야 해서 {@link ParticipationBundleService#confirmPayment} 안에 있다 — 슬롯마다
-   * 부르면 같은 판정을 N 번 돌린다.
+   * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는
+   * 개최자의 진행 확정({@code BuncheolService#confirmBuncheol})만 한다.
    */
   private void applyPaymentConfirmed(
       final Participation participation, final Buncheol buncheol, final Instant now) {

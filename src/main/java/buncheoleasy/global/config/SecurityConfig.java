@@ -79,6 +79,15 @@ public class SecurityConfig {
   /** 의견 보내기(POST 한정 공개). 로그인 실패·가입 이탈처럼 <b>로그인할 수 없는 상태의 의견</b>이 가장 받고 싶은 종류라 비로그인도 허용한다. */
   private static final String FEEDBACK_PATH = "/v1/feedbacks";
 
+  /**
+   * 네이티브 앱 로그인(POST 한정 공개). 로그인 전에 부르는 것이라 토큰이 없다 — 일회용 코드+PKCE verifier, 애플 서명 토큰, 앱 refresh 토큰을
+   * 서비스가 검증한다. 앱 로그아웃({@code /v1/auth/app/logout})은 여기 없다(유저 토큰 필요). 카카오 앱 로그인 시작({@code
+   * /oauth2/authorization/kakao/app})은 OAUTH_PATHS 가 연다.
+   */
+  private static final String[] APP_AUTH_PUBLIC_POST_PATHS = {
+    "/v1/auth/app/token", "/v1/auth/app/apple", "/v1/auth/app/reissue"
+  };
+
   private final KakaoAuthorizationRequestResolver kakaoAuthorizationRequestResolver;
   private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
   private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
@@ -109,6 +118,8 @@ public class SecurityConfig {
                     .hasRole("ADMIN") // 공지 작성 — 관리자 전용
                     .requestMatchers(HttpMethod.POST, FEEDBACK_PATH)
                     .permitAll() // 의견 보내기 — 로그인이 안 돼서 남기는 의견도 받는다(도배는 서버 rate limit 으로 방어)
+                    .requestMatchers(HttpMethod.POST, APP_AUTH_PUBLIC_POST_PATHS)
+                    .permitAll() // 앱 로그인 코드 교환·애플 로그인·앱 토큰 갱신
                     .requestMatchers(HttpMethod.GET, AUTH_REQUIRED_GET_PATHS)
                     .hasRole("USER") // PUBLIC_GET_PATHS 단일 세그먼트 매처보다 우선 적용
                     .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS)

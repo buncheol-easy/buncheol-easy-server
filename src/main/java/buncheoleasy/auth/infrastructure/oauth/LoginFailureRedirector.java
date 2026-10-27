@@ -33,13 +33,15 @@ public class LoginFailureRedirector {
             .toUriString());
   }
 
-  /** 값은 클라 로그인 콜백 화면과 짝이다. */
+  /** 값은 클라 로그인 콜백 화면(웹·앱)과 짝이다. */
   @Getter
   @RequiredArgsConstructor
   public enum Reason {
     EMAIL_REQUIRED("email_required"),
     CANCELLED("cancelled"),
-    FAILED("failed");
+    FAILED("failed"),
+    // 앱 로그인 시작 요청의 challenge 가 형식에 맞지 않을 때 — 앱 주소로만 보낸다.
+    INVALID_REQUEST("invalid_request");
 
     private final String value;
   }

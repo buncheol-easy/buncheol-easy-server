@@ -1,6 +1,8 @@
 package buncheoleasy.auth.infrastructure.oauth;
 
 import buncheoleasy.auth.TokenPair;
+import buncheoleasy.auth.application.AppLoginCode;
+import buncheoleasy.auth.application.AppLoginService;
 import buncheoleasy.auth.application.SocialLoginCommand;
 import buncheoleasy.auth.application.SocialLoginResult;
 import buncheoleasy.auth.application.SocialLoginService;
@@ -38,6 +40,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
   private final KakaoApiClient kakaoApiClient;
   private final AgeRangeConsentRedirector ageRangeConsentRedirector;
   private final LoginFailureRedirector loginFailureRedirector;
+  private final AppLoginService appLoginService;
+  private final AppLoginRedirector appLoginRedirector;
   private final String loginCallbackUrl;
 
   public OAuth2LoginSuccessHandler(
@@ -48,6 +52,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       final KakaoApiClient kakaoApiClient,
       final AgeRangeConsentRedirector ageRangeConsentRedirector,
       final LoginFailureRedirector loginFailureRedirector,
+      final AppLoginService appLoginService,
+      final AppLoginRedirector appLoginRedirector,
       @Value("${app.frontend.login-callback-url}") final String loginCallbackUrl) {
     this.profileExtractors = profileExtractors;
     this.socialLoginService = socialLoginService;
@@ -56,6 +62,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     this.kakaoApiClient = kakaoApiClient;
     this.ageRangeConsentRedirector = ageRangeConsentRedirector;
     this.loginFailureRedirector = loginFailureRedirector;
+    this.appLoginService = appLoginService;
+    this.appLoginRedirector = appLoginRedirector;
     this.loginCallbackUrl = loginCallbackUrl;
   }
 
@@ -68,9 +76,19 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       ageRangeConsentRedirector.redirect(response, refreshAgeRange(oauthToken));
       return;
     }
+    if (KakaoAuthorizationRequestResolver.isAppLoginCallback(request)) {
+      if (!appLoginRedirector.isEnabled()) {
+        // 시작 요청은 꺼진 상태에서 카카오로 가지 않는다 — 켜진 사이 시작해 꺼진 뒤 돌아온 경우만 여기 온다. 코드를 만들지 않는다.
+        log.warn("앱 로그인이 꺼진 상태에서 앱 로그인 콜백이 왔다 — 가입·코드 발급 없이 거절");
+        loginFailureRedirector.redirect(response, LoginFailureRedirector.Reason.FAILED);
+        return;
+      }
+      completeAppLogin(request, response, oauthToken);
+      return;
+    }
     SocialLoginResult loginResult;
     try {
-      loginResult = login(oauthToken);
+      loginResult = socialLoginService.login(toLoginCommand(oauthToken));
     } catch (RuntimeException exception) {
       loginFailureRedirector.redirect(response, toLoginFailureReason(exception));
       return;
@@ -106,7 +124,29 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     response.sendRedirect(redirectUrl);
   }
 
-  private SocialLoginResult login(final OAuth2AuthenticationToken oauthToken) {
+  /**
+   * 앱 로그인 — 가입/로그인 처리(약관·연령대 보강 포함)는 웹과 같고, 쿠키·토큰 대신 일회용 코드를 앱 주소로 돌려준다. 실패도 웹 화면이 아니라 앱
+   * 주소로 보낸다.
+   */
+  private void completeAppLogin(
+      final HttpServletRequest request,
+      final HttpServletResponse response,
+      final OAuth2AuthenticationToken oauthToken)
+      throws IOException {
+    AppLoginCode loginCode;
+    try {
+      String challenge =
+          KakaoAuthorizationRequestResolver.appLoginChallenge(request)
+              .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_APP_LOGIN_CODE_INVALID));
+      loginCode = appLoginService.issueLoginCode(toLoginCommand(oauthToken), challenge);
+    } catch (RuntimeException exception) {
+      appLoginRedirector.redirectWithError(response, toLoginFailureReason(exception));
+      return;
+    }
+    appLoginRedirector.redirectWithCode(response, loginCode.code(), loginCode.newAccount());
+  }
+
+  private SocialLoginCommand toLoginCommand(final OAuth2AuthenticationToken oauthToken) {
     OAuth2UserProfile profile = getUserProfile(oauthToken);
 
     List<ServiceTermAgreement> serviceTerms = List.of();
@@ -118,16 +158,15 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
       }
     }
 
-    return socialLoginService.login(
-        new SocialLoginCommand(
-            profile.provider().name(),
-            profile.providerId(),
-            profile.email(),
-            profile.name(),
-            profile.phoneNumber(),
-            profile.ageRange(),
-            profile.ageRangeWithdrawn(),
-            serviceTerms));
+    return new SocialLoginCommand(
+        profile.provider().name(),
+        profile.providerId(),
+        profile.email(),
+        profile.name(),
+        profile.phoneNumber(),
+        profile.ageRange(),
+        profile.ageRangeWithdrawn(),
+        serviceTerms);
   }
 
   /**

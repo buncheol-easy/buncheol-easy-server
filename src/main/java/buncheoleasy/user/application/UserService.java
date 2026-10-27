@@ -43,8 +43,10 @@ public class UserService {
     }
 
     userDomainService.withdraw(userId);
+    // TODO 애플 로그인 회원은 애플 토큰 철회(REST revoke)를 권장받는다 — 애플 리프레시 토큰 보관이 필요해 1판 범위 밖(docs/126 §8).
     try {
-      refreshTokenStore.delete(userId);
+      // 웹·앱 칸 모두 — 탈퇴한 계정이 어느 기기에서도 갱신으로 이어지면 안 된다.
+      refreshTokenStore.deleteAll(userId);
     } catch (Exception e) {
       log.warn("회원 탈퇴 후 리프레시 토큰 삭제 실패. userId: {}", userId, e);
     }

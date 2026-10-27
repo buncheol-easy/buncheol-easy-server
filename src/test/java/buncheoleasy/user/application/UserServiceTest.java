@@ -45,7 +45,7 @@ class UserServiceTest {
   class WithdrawTest {
 
     @Test
-    void 정상적으로_탈퇴하고_리프레시_토큰을_삭제한다() {
+    void 정상적으로_탈퇴하고_웹과_앱_리프레시_토큰을_모두_삭제한다() {
       // given
       Long userId = 1L;
 
@@ -54,14 +54,14 @@ class UserServiceTest {
 
       // then
       then(userDomainService).should().withdraw(userId);
-      then(refreshTokenStore).should().delete(userId);
+      then(refreshTokenStore).should().deleteAll(userId);
     }
 
     @Test
     void 리프레시_토큰_삭제_실패해도_탈퇴는_정상_처리된다() {
       // given
       Long userId = 1L;
-      doThrow(new RuntimeException("Redis 연결 실패")).when(refreshTokenStore).delete(userId);
+      doThrow(new RuntimeException("Redis 연결 실패")).when(refreshTokenStore).deleteAll(userId);
 
       // when & then: 예외가 전파되지 않아야 함
       userService.withdraw(userId);

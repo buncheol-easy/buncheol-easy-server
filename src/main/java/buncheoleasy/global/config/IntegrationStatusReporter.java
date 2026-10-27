@@ -1,5 +1,7 @@
 package buncheoleasy.global.config;
 
+import buncheoleasy.auth.domain.AppleIdentityVerifier;
+import buncheoleasy.auth.infrastructure.oauth.AppLoginRedirector;
 import buncheoleasy.delivery.infrastructure.DeliveryTrackerProperties;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
 import buncheoleasy.notification.domain.SlackChannel;
@@ -29,6 +31,8 @@ public class IntegrationStatusReporter {
   private final PayActionClient payActionClient;
   private final DeliveryTrackerProperties deliveryTrackerProperties;
   private final SlackWebhookClient slackWebhookClient;
+  private final AppLoginRedirector appLoginRedirector;
+  private final AppleIdentityVerifier appleIdentityVerifier;
 
   @EventListener(ApplicationReadyEvent.class)
   public void reportOnReady() {
@@ -39,6 +43,11 @@ public class IntegrationStatusReporter {
         Arrays.stream(SlackChannel.values())
             .map(channel -> channel + "=" + onOff(slackWebhookClient.isEnabled(channel)))
             .collect(Collectors.joining(", ")));
+    // 앱 출시 전에는 둘 다 OFF 가 정상이다(앱 주소 APP_LOGIN_CALLBACK_URL·허용 앱 APPLE_SIGNIN_AUDIENCES 가 비면 꺼짐).
+    log.info(
+        "앱 로그인 상태: kakao-app={}, apple={}",
+        onOff(appLoginRedirector.isEnabled()),
+        onOff(appleIdentityVerifier.isEnabled()));
   }
 
   /**

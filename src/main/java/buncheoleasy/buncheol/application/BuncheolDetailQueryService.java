@@ -192,7 +192,8 @@ public class BuncheolDetailQueryService {
         visibleOpenChatUrl,
         termsEditable,
         staffSetting.map(StaffBuncheolSetting::getOpensAt).orElse(null),
-        now);
+        now,
+        buncheol.getHostId());
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(

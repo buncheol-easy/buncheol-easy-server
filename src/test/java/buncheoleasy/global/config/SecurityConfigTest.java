@@ -76,7 +76,7 @@ class SecurityConfigTest {
                   List.of(),
                   List.of(),
                   false,
-                  null, FlowType.LEGACY, null, null, false, null, Instant.now()));
+                  null, FlowType.LEGACY, null, null, false, null, Instant.now(), 7L));
 
       mockMvc.perform(get("/v1/buncheols/{id}", 10L)).andExpect(status().isOk());
     }

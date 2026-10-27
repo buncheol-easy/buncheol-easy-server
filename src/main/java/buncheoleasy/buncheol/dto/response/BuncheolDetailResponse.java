@@ -24,6 +24,8 @@ import java.util.List;
  * @param opensAt 예약 오픈 시각(UTC). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null 이다. 이 시각 전에는 선착순 빈 자리가
  *     {@code NOT_OPEN} 이고 코드 없는 참여는 409(BCH-128)다. 정각이면 열린다
  * @param serverTime 이 응답을 만든 서버 시각(UTC). 화면이 기기 시계 대신 이 값에 맞춰 오픈까지 남은 시간을 센다
+ * @param hostId 분철을 연 회원의 id. 앱이 「이 개최자 분철 안 보기」(기기 안 차단 목록)에 넣는 값이다. 운영진(LEGACY) 분철은
+ *     운영진 계정의 id 다. 닉네임 같은 다른 개최자 정보는 싣지 않는다
  */
 public record BuncheolDetailResponse(
     Long id,
@@ -45,4 +47,5 @@ public record BuncheolDetailResponse(
     String openChatUrl,
     boolean termsEditable,
     Instant opensAt,
-    Instant serverTime) {}
+    Instant serverTime,
+    Long hostId) {}

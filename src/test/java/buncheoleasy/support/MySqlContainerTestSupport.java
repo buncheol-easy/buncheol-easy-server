@@ -61,9 +61,14 @@ public abstract class MySqlContainerTestSupport {
     registry.add("spring.sql.init.schema-locations", () -> "classpath:schema.sql");
   }
 
-  /** 앞 테스트가 남긴 행과 커밋 뒤 비동기로 늦게 쓰인 행을 함께 지운다. 자동 증가 값도 처음으로 돌린다. */
+  /**
+   * 앞 테스트가 남긴 행을 지운다. 이 메서드가 돈 뒤에 늦게 쓰이는 행(커밋 뒤 비동기 리스너)은 남을 수 있다.
+   *
+   * <p>TRUNCATE 가 아니라 DELETE 다 — 자동 증가 값을 처음으로 돌리지 않아, 앞 테스트의 늦은 리스너가 다음 테스트에서 같은 id 로
+   * 다시 생긴 행을 읽거나 쓰지 않는다(없는 행을 읽고 끝난다).
+   */
   @BeforeEach
-  void truncateAllTables() {
+  void deleteAllRows() {
     jdbcTemplate.execute(
         (ConnectionCallback<Void>)
             connection -> {
@@ -80,7 +85,7 @@ public abstract class MySqlContainerTestSupport {
               try (Statement statement = connection.createStatement()) {
                 statement.execute("SET FOREIGN_KEY_CHECKS = 0");
                 for (String table : tables) {
-                  statement.execute("TRUNCATE TABLE `" + table + "`");
+                  statement.execute("DELETE FROM `" + table + "`");
                 }
                 statement.execute("SET FOREIGN_KEY_CHECKS = 1");
               }

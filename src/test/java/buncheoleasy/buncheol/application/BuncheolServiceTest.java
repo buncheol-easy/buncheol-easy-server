@@ -1692,7 +1692,6 @@ class BuncheolServiceTest {
 
       // then
       then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
-      then(participationDomainService).should(never()).countConfirmedByBuncheolId(anyLong());
     }
   }
 

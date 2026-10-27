@@ -106,9 +106,6 @@ public interface ParticipationRepository {
   /** 단일 분철의 입금확인(CONFIRMED) 참여 전체 (진행확정 시 배송 스냅샷 생성·알림 대상). */
   List<Participation> findConfirmedByBuncheolId(Long buncheolId);
 
-  /** 단일 분철의 입금확인(CONFIRMED) 참여 수 (개최자 취소 차단 사전 검사용 — docs/56 H-13). */
-  int countConfirmedByBuncheolId(Long buncheolId);
-
   /**
    * 여러 분철의 입금확인(CONFIRMED) 참여 수 집계 — 개최 목록의 취소 가능 여부 판정용 (docs/56 S-2). 0 건인 분철은 결과에서 빠지므로 호출
    * 측이 기본값 0 으로 채운다.

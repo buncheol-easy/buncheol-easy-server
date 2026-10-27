@@ -1326,7 +1326,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("findConfirmedByBuncheolId / countConfirmedByBuncheolId — 입금확인 참여만")
+  @DisplayName("findConfirmedByBuncheolId — 입금확인 참여만")
   class ConfirmedByBuncheolIdTest {
 
     @Test
@@ -1360,15 +1360,13 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(participationRepository.findConfirmedByBuncheolId(buncheolId))
           .singleElement()
           .satisfies(p -> assertThat(p.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED));
-      assertThat(participationRepository.countConfirmedByBuncheolId(buncheolId)).isEqualTo(1);
     }
 
     @Test
-    void 확정_참여가_없으면_빈_리스트와_0_을_반환한다() {
+    void 확정_참여가_없으면_빈_리스트를_반환한다() {
       Long buncheolId = createBuncheol();
 
       assertThat(participationRepository.findConfirmedByBuncheolId(buncheolId)).isEmpty();
-      assertThat(participationRepository.countConfirmedByBuncheolId(buncheolId)).isZero();
     }
   }
 

@@ -208,13 +208,6 @@ class ParticipationDomainServiceTest {
 
       assertThat(result).containsExactly(participation);
     }
-
-    @Test
-    void 입금확인된_참여_수_집계를_리포지토리에_위임한다() {
-      given(participationRepository.countConfirmedByBuncheolId(1L)).willReturn(3);
-
-      assertThat(participationDomainService.countConfirmedByBuncheolId(1L)).isEqualTo(3);
-    }
   }
 
   @Nested

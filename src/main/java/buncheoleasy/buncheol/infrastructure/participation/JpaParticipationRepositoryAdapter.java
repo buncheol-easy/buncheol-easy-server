@@ -298,12 +298,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public int countConfirmedByBuncheolId(final Long buncheolId) {
-    return jpaParticipationRepository.countByBuncheolIdAndStatus(
-        buncheolId, ParticipationStatus.CONFIRMED);
-  }
-
-  @Override
   public List<BuncheolConfirmedParticipationCount> countConfirmedByBuncheolIds(
       final List<Long> buncheolIds) {
     if (buncheolIds.isEmpty()) {

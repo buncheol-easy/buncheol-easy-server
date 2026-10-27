@@ -188,8 +188,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   List<Participation> findByBuncheolIdAndStatusAndCancelReason(
       Long buncheolId, ParticipationStatus status, ParticipationCancelReason cancelReason);
 
-  int countByBuncheolIdAndStatus(Long buncheolId, ParticipationStatus status);
-
   /**
    * 입금 만료 폴링 대상. 🔴 <b>{@code flowType} 을 등가조건으로</b> 받는다 — 부등호({@code &lt;&gt; 'C2C'})로 쓰면
    * {@code (status, flow_type, due_at)} 인덱스가 {@code flow_type} 에서 동등 조건을 잃어 {@code due_at} 이

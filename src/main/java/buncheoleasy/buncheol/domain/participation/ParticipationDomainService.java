@@ -112,11 +112,6 @@ public class ParticipationDomainService {
     return participationRepository.findConfirmedByBuncheolId(buncheolId);
   }
 
-  // 분철의 입금확인된 참여자 수. 마감 판정은 finalizeExpiredByConfirmedHeadcount CAS 가 서브쿼리로 직접 센다.
-  public int countConfirmedByBuncheolId(final Long buncheolId) {
-    return participationRepository.countConfirmedByBuncheolId(buncheolId);
-  }
-
   /** 참여자에게 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
   public boolean hasUnfinishedParticipationBy(final Long participantId) {
     return participationRepository.existsUnfinishedByParticipantId(participantId);

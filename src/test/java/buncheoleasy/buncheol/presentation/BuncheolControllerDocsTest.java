@@ -371,7 +371,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                     화면은 이 값만 보고 삭제 버튼을 노출하면 된다.
                                     CANCELLABLE: 취소 가능 |
                                     BLOCKED_BY_STATUS: 진행확정 이후·이미 취소됨 (BCH-050) |
-                                    BLOCKED_BY_CONFIRMED_PAYMENT: 입금확인 참여 1건 이상 (BCH-093)"""),
+                                    NEEDS_STAFF: 입금 수집중 — 삭제 대신 「운영진에게 알려 주세요」 안내 (BCH-126)"""),
                             fieldWithPath("[].ended").description(ENDED_DESCRIPTION))
                         .build())));
   }
@@ -941,22 +941,22 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             """
                             호스트가 자신이 개최한 분철을 취소한다.
 
-                            모집중(`RECRUITING`)·입금 수집중(`PAYMENT_COLLECTING`, C2C)·인원미달 자동취소
-                            (`CANCELLED`) 상태에서 취소할 수 있으며, 성공 시 `HOST_CANCELLED` 로 전이된다.
+                            모집중(`RECRUITING`)·인원미달 자동취소(`CANCELLED`) 상태에서 취소할 수 있으며, 성공 시
+                            `HOST_CANCELLED` 로 전이된다. 모집중이면 살아 있는 신청이 함께 취소되고 「분철 취소 안내」가 간다.
                             진행확정(`CONFIRMED`) 등 그 외 상태이거나 마감 판정과 경합해 이미 전이된 뒤라면 409 로
                             실패한다. 취소된 분철은 목록·상세에서 노출되지 않는다.
 
-                            입금 수집중 분철은 **입금이 확인된 참여가 한 건이라도 있으면 취소할 수 없다**(docs/56 H-13).
-                            직거래 구조라 그 돈은 이미 개최자 계좌에 있고 플랫폼이 환불을 강제할 수단이 없어서다 —
-                            환불 후 문의 경유로 처리한다.
+                            회원 개최 **입금 수집중**(`PAYMENT_COLLECTING`) 분철은 입금 확인 건수와 무관하게 개최자가 직접
+                            취소할 수 없다(`409 BCH-126`). 참여자에게 계좌가 공개된 뒤라 「운영진에게 알리기」를 거치고,
+                            운영자가 확인한 뒤 어드민 파기(`POST /v1/admin/buncheols/{id}/cancel`)로 접는다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
-                            | 409 | `BCH-050` (`BUNCHEOL_CANCEL_NOT_ALLOWED`) | 모집중·입금 수집중·인원미달 자동취소 상태가 아니어서 취소 불가 |
-                            | 409 | `BCH-093` (`BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS`) | 입금이 확인된 참여가 있어 취소 불가 (환불 후 문의 경유) |
+                            | 409 | `BCH-050` (`BUNCHEOL_CANCEL_NOT_ALLOWED`) | 모집중·인원미달 자동취소 상태가 아니어서 취소 불가 |
+                            | 409 | `BCH-126` (`BUNCHEOL_CANCEL_NEEDS_STAFF`) | 입금 단계가 시작된 회원 개최 분철 — 운영진에게 알려야 함 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

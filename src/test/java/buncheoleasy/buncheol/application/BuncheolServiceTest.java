@@ -1656,42 +1656,22 @@ class BuncheolServiceTest {
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
     }
 
-    // docs/56 H-13 — 돈이 이미 개최자 계좌에 있는 분철은 접을 수 없다. 이 가드를 지우면 취소가 통과해 빨개진다.
+    // 계좌가 공개된 뒤에는 개최자 혼자 접지 않는다 — 입금 확인 건수와 무관하게 운영진 경유(BCH-126)이고, 확인 건수를 세지도 않는다.
     @Test
-    void 입금_수집중_분철에_입금확인된_참여가_있으면_취소를_막고_전용_코드로_안내한다() {
+    void 입금_수집중_분철은_입금확인과_무관하게_운영진_경유로_안내하고_취소하지_않는다() {
       // given
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
-      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(1);
 
       // when & then
       assertThatThrownBy(() -> buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS);
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NEEDS_STAFF);
 
       then(buncheolDomainService).should(never()).cancelBuncheol(anyLong(), any());
       then(participationDomainService).should(never()).cancelActiveByBuncheolId(anyLong(), any());
-    }
-
-    @Test
-    void 입금_수집중이어도_입금확인된_참여가_없으면_취소된다() {
-      // given
-      Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
-      given(participationDomainService.countConfirmedByBuncheolId(BUNCHEOL_ID)).willReturn(0);
-      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
-          .willReturn(BuncheolStatus.PAYMENT_COLLECTING);
-      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
-          .willReturn(List.of());
-
-      // when
-      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
-
-      // then
-      then(buncheolDomainService).should().cancelBuncheol(BUNCHEOL_ID, NOW);
     }
 
     // 모집중 구간은 그대로 열어 둔다 — C2C 는 이 구간에 입금확인이 있을 수 없고, LEGACY 는 회사 계좌 수납이라

@@ -16,7 +16,6 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
-import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -219,19 +218,18 @@ class MyHostedBuncheolQueryServiceTest {
   @DisplayName("취소 가능 여부 노출 테스트 (docs/56 S-2)")
   class CancellabilityTest {
 
+    // 계좌가 공개된 뒤라 입금 확인 건수와 무관하게 운영진 경유다 — 화면은 삭제 대신 「운영진에게 알려 주세요」를 띄운다.
     @Test
-    void 입금확인_참여가_있는_입금_수집중_분철은_취소_불가로_내려간다() {
-      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.PAYMENT_COLLECTING, 2L);
+    void 입금_수집중_분철은_운영진_경유로_내려간다() {
+      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.PAYMENT_COLLECTING);
 
       assertThat(result.get(0).cancellability())
-          .isEqualTo(BuncheolHostCancellability.BLOCKED_BY_CONFIRMED_PAYMENT);
+          .isEqualTo(BuncheolHostCancellability.NEEDS_STAFF);
     }
 
-    // "보냈어요" 만 누른 건은 입금확인이 아니라 집계에 안 잡힌다 — 허위 마킹 1건으로 개최자가 분철을
-    // 영영 못 접는 것을 피하려는 의도된 범위다 (docs/56 §21-2). 서버 CAS 와 같은 범위.
     @Test
-    void 입금확인이_0건인_입금_수집중_분철은_취소_가능으로_내려간다() {
-      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.PAYMENT_COLLECTING, 0L);
+    void 모집중_분철은_취소_가능으로_내려간다() {
+      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.RECRUITING);
 
       assertThat(result.get(0).cancellability())
           .isEqualTo(BuncheolHostCancellability.CANCELLABLE);
@@ -239,14 +237,13 @@ class MyHostedBuncheolQueryServiceTest {
 
     @Test
     void 진행확정된_분철은_상태_사유로_취소_불가로_내려간다() {
-      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.CONFIRMED, 0L);
+      List<MyHostedBuncheolResponse> result = 응답(BuncheolStatus.CONFIRMED);
 
       assertThat(result.get(0).cancellability())
           .isEqualTo(BuncheolHostCancellability.BLOCKED_BY_STATUS);
     }
 
-    private List<MyHostedBuncheolResponse> 응답(
-        final BuncheolStatus status, final long confirmedCount) {
+    private List<MyHostedBuncheolResponse> 응답(final BuncheolStatus status) {
       Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
       Instant createdAt = Instant.parse("2026-05-01T09:00:00Z");
       Buncheol buncheol = buncheol(10L, 100L, "분철", status, deadline, createdAt);
@@ -256,14 +253,6 @@ class MyHostedBuncheolQueryServiceTest {
       given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
           .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
       given(participationRepository.countActiveByBuncheolIds(List.of(10L))).willReturn(List.of());
-      // 입금확인 건수는 판정에 필요한 상태(입금 수집중)만 집계 대상이 된다 — 그 외 상태는 빈 목록으로 넘어간다.
-      List<Long> confirmedTargetIds =
-          BuncheolHostCancellability.requiresConfirmedCount(status) ? List.of(10L) : List.of();
-      given(participationRepository.countConfirmedByBuncheolIds(confirmedTargetIds))
-          .willReturn(
-              confirmedCount == 0L || confirmedTargetIds.isEmpty()
-                  ? List.of()
-                  : List.of(new BuncheolConfirmedParticipationCount(10L, confirmedCount)));
       given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
       given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
 

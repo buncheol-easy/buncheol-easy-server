@@ -113,8 +113,6 @@ public class ParticipationDomainService {
   }
 
   // 분철의 입금확인된 참여자 수. 마감 판정은 finalizeExpiredByConfirmedHeadcount CAS 가 서브쿼리로 직접 센다.
-  // 현재 호출처는 개최자 취소 사전 검사(BuncheolService#cancelBuncheol — docs/56 H-13) 하나이며, 안내 문구를
-  // 고르기 위한 읽기다. 실제 차단은 hostCancelIfCollectingAndNoConfirmed CAS 가 원자적으로 한다.
   public int countConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.countConfirmedByBuncheolId(buncheolId);
   }

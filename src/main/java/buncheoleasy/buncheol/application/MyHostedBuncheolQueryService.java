@@ -9,7 +9,6 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
-import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
 import buncheoleasy.group.domain.Group;
@@ -56,21 +55,6 @@ public class MyHostedBuncheolQueryService {
                     BuncheolActiveParticipationCount::buncheolId,
                     BuncheolActiveParticipationCount::count));
 
-    // 취소 가능 여부 판정용 입금확인 건수. 카드마다 조회하지 않고 한 번에 센다 (docs/56 S-2).
-    // 건수가 판정에 쓰이는 상태만 골라 넘긴다 — 개최 목록은 페이징이 없어 오래된 호스트일수록 IN 목록이 계속
-    // 길어지고, 입금 수집중 분철이 없으면(LEGACY 전용 호스트는 항상) 어댑터가 쿼리 자체를 건너뛴다.
-    List<Long> confirmedCountTargetIds =
-        buncheols.stream()
-            .filter(b -> BuncheolHostCancellability.requiresConfirmedCount(b.getStatus()))
-            .map(Buncheol::getId)
-            .toList();
-    Map<Long, Long> confirmedCountByBuncheolId =
-        participationRepository.countConfirmedByBuncheolIds(confirmedCountTargetIds).stream()
-            .collect(
-                Collectors.toMap(
-                    BuncheolConfirmedParticipationCount::buncheolId,
-                    BuncheolConfirmedParticipationCount::count));
-
     // 「종료」 판정도 같은 방식으로 한 번에 묻는다. 끝날 수 있는 건 진행확정뿐이라 그 id 만 넘기고, 없으면 어댑터가
     // 쿼리를 건너뛴다. 판정식은 회원탈퇴 가드와 공유한다 (BuncheolRepository#findEndedIds).
     List<Long> endedCheckTargetIds =
@@ -95,7 +79,6 @@ public class MyHostedBuncheolQueryService {
                     b,
                     slotCountByBuncheolId,
                     activeCountByBuncheolId,
-                    confirmedCountByBuncheolId,
                     endedIds,
                     groupNameById,
                     thumbnailByBuncheolId))
@@ -106,7 +89,6 @@ public class MyHostedBuncheolQueryService {
       final Buncheol buncheol,
       final Map<Long, Long> slotCountByBuncheolId,
       final Map<Long, Long> activeCountByBuncheolId,
-      final Map<Long, Long> confirmedCountByBuncheolId,
       final Set<Long> endedIds,
       final Map<Long, String> groupNameById,
       final Map<Long, String> thumbnailByBuncheolId) {
@@ -124,8 +106,7 @@ public class MyHostedBuncheolQueryService {
         thumbnailByBuncheolId.get(buncheol.getId()),
         buncheol.getFlowType(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 카드가 상태로 재판정하면 서버와 갈린다 (docs/56 S-2).
-        BuncheolHostCancellability.of(
-            buncheol.getStatus(), confirmedCountByBuncheolId.getOrDefault(buncheol.getId(), 0L)),
+        BuncheolHostCancellability.of(buncheol.getStatus()),
         endedIds.contains(buncheol.getId()));
   }
 }

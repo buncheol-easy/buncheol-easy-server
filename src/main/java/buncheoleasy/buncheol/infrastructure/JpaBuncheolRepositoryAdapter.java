@@ -193,16 +193,6 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int hostCancelIfCollectingAndNoConfirmed(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.hostCancelIfCollectingAndNoConfirmed(
-        buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
-        ParticipationStatus.CONFIRMED,
-        BuncheolStatus.HOST_CANCELLED,
-        now);
-  }
-
-  @Override
   public int lowerMinHeadcountIfRecruiting(
       final Long buncheolId, final int slotCount, final Instant now) {
     return jpaBuncheolRepository.lowerMinHeadcountIfRecruiting(
@@ -293,6 +283,16 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
         bank,
         account,
         holder,
+        now);
+  }
+
+  @Override
+  public int staffCancelIfCollecting(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.staffCancelIfCollecting(
+        buncheolId,
+        BuncheolStatus.PAYMENT_COLLECTING,
+        FlowType.C2C,
+        BuncheolStatus.HOST_CANCELLED,
         now);
   }
 

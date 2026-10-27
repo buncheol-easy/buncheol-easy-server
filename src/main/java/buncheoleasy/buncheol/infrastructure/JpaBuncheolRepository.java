@@ -253,25 +253,6 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("now") Instant now,
       Pageable pageable);
 
-  /**
-   * C2C 입금 수집중 분철의 개최자 취소 CAS: 입금확인(CONFIRMED)된 참여가 하나도 없을 때만 HOST_CANCELLED 로 전이한다 (docs/56
-   * H-13). 확정 참여가 이미 있으면 그 돈은 개최자 계좌에 있고 플랫폼이 환불을 강제할 수 없으므로 취소 자체를 막는다 — 문의 경유 환불 후 처리한다.
-   * 존재 판정을 UPDATE WHERE 서브쿼리(current read)로 묶어, 개최자가 입금확인과 분철취소를 동시에 실행해도 취소가 새어 나가지 않는다.
-   *
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Buncheol b "
-          + "SET b.status = :cancelledStatus, b.finalizedAt = :now, b.updatedAt = :now "
-          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus "
-          + "AND NOT EXISTS (SELECT p FROM Participation p "
-          + "  WHERE p.buncheolId = b.id AND p.status = :confirmedStatus)")
-  int hostCancelIfCollectingAndNoConfirmed(
-      @Param("buncheolId") Long buncheolId,
-      @Param("collectingStatus") BuncheolStatus collectingStatus,
-      @Param("confirmedStatus") ParticipationStatus confirmedStatus,
-      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
-      @Param("now") Instant now);
 
   // 개최자 자리 빼기 뒤 「최소 인원 ≤ 자리 수」 복원. 모집중에만 낮춘다 — C2C 는 마감 정각에 신청 인원이 최소 인원
   // 미만이면 유예 없이 취소되므로(findIdsByStatusAndDeadlineBefore), 뺀 자리만큼 영영 못 채울 최소 인원이 남으면 신청자까지
@@ -432,5 +413,18 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("collectingStatus") BuncheolStatus collectingStatus,
       @Param("c2cFlow") FlowType c2cFlow,
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
+      @Param("now") Instant now);
+
+  /** 운영진 파기 CAS (회원 개최 PAYMENT_COLLECTING → HOST_CANCELLED) — 포트 javadoc 참고. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Buncheol b "
+          + "SET b.status = :cancelledStatus, b.finalizedAt = :now, b.updatedAt = :now "
+          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus AND b.flowType = :c2cFlow")
+  int staffCancelIfCollecting(
+      @Param("buncheolId") Long buncheolId,
+      @Param("collectingStatus") BuncheolStatus collectingStatus,
+      @Param("c2cFlow") FlowType c2cFlow,
+      @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);
 }

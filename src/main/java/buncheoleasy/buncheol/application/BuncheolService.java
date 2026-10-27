@@ -446,15 +446,10 @@ public class BuncheolService {
   }
 
   /**
-   * 개최자의 분철 취소. 모집중·입금 수집중·인원미달 자동취소 상태에서만 가능하고, 활성 참여는 같은 트랜잭션에서 cascade 취소된다.
+   * 개최자의 분철 취소. 모집중·인원미달 자동취소 상태에서만 가능하고, 모집중이면 활성 참여가 같은 트랜잭션에서 cascade 취소된다.
    *
-   * <p>개최자가 <b>입금확인(CONFIRMED)한</b> 참여가 1건이라도 있으면 취소를 막는다 (docs/56 H-13). 직거래 구조라 개최자가 수령을
-   * 인정한 돈은 이미 그의 계좌에 있는데 분철을 접으면 플랫폼이 환불을 강제할 수단이 없다. 인원 미달인데 일부만 입금한 경우 개최자가 스스로 접을 수
-   * 없게 되는 것은 인지된 트레이드오프이고, 문의 경유 환불로 처리한다 — 그래서 에러 문구가 "환불한 뒤 고객센터로 문의" 를 안내한다.
-   *
-   * <p>⚠️ 판정 범위는 <b>CONFIRMED 뿐</b>이다. 참여자가 "보냈어요"(PAYMENT_SENT)만 누른 건은 실제로 돈이 갔더라도 개최자가
-   * 입금확인을 누르지 않은 채 취소하면 그대로 통과한다. 마킹은 참여자의 자기 신고라 그것만으로 취소를 막으면 허위 마킹 하나로 개최자가 분철을
-   * 영영 접지 못하게 되므로, 판정 기준을 개최자가 수령을 인정한 시점으로 뒀다(docs/56 §14-3 결정 그대로). 남는 리스크는 문의 경유로 처리한다.
+   * <p>입금 수집중(회원 개최)에는 개최자 혼자 접지 않는다 — 참여자에게 계좌가 공개된 뒤라 입금 확인 건수와 무관하게 BCH-126 으로
+   * 「운영진에게 알려 주세요」를 안내하고, 운영자가 실제 입금·환불 계획을 확인한 뒤 어드민에서 파기한다.
    */
   @Transactional
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
@@ -464,26 +459,18 @@ public class BuncheolService {
     buncheol.validateOwner(hostId);
     final Instant now = Instant.now(clock);
 
-    // H-13 안내용 사전 검사. 실제 차단은 아래 CAS 서브쿼리가 원자적으로 하고, 여기서는 "왜 못 접는지 + 무엇을 해야 하는지" 를
-    // 알려 주기 위해 먼저 읽는다 — CAS 만 두면 상태 위반과 구분되지 않아 BCH-050(범용 문구)으로 떨어진다.
-    // 판정은 개최 목록 응답이 그대로 내려주는 것과 같은 값이다 (docs/56 S-2).
-    long confirmedCount =
-        BuncheolHostCancellability.requiresConfirmedCount(buncheol.getStatus())
-            ? participationDomainService.countConfirmedByBuncheolId(buncheolId)
-            : 0L;
-    // 매핑을 switch 식으로 둬야 사유가 추가될 때 컴파일 에러로 잡힌다 — == 비교나 switch 문으로 두면 새 차단 사유가
-    // 사전 검사를 통과해 목록은 "취소 불가"라 말하는데 API 는 취소를 허용하는 fail-open 이 된다.
-    // BLOCKED_BY_STATUS 만 여기서 던지지 않고 CAS 에 맡긴다 — 경합에서 어느 상태로부터 전이됐는지는 CAS 만 알 수 있다.
+    // 잠근 상태로 가른다 — 개최 목록이 내려주는 것과 같은 판정이다(docs/56 S-2). 매핑을 switch 식으로 둬야 사유가 추가될 때
+    // 컴파일 에러로 잡힌다. BLOCKED_BY_STATUS 는 여기서 던지지 않고 아래 CAS 에 맡긴다(BCH-050).
     ErrorCode blockedCode =
-        switch (BuncheolHostCancellability.of(buncheol.getStatus(), confirmedCount)) {
+        switch (BuncheolHostCancellability.of(buncheol.getStatus())) {
           case CANCELLABLE, BLOCKED_BY_STATUS -> null;
-          case BLOCKED_BY_CONFIRMED_PAYMENT -> ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS;
+          case NEEDS_STAFF -> ErrorCode.BUNCHEOL_CANCEL_NEEDS_STAFF;
         };
     if (blockedCode != null) {
       throw new BusinessException(blockedCode);
     }
 
-    // 모집중·입금 수집중·인원미달 자동취소 상태에서만 취소 (→ HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
+    // 모집중·인원미달 자동취소 상태에서만 취소 (→ HOST_CANCELLED CAS).
     BuncheolStatus priorStatus = buncheolDomainService.cancelBuncheol(buncheolId, now);
 
     // 자동취소(CANCELLED)된 분철은 마감 스케줄러가 같은 트랜잭션에서 참여 취소·배송 스냅샷 정리·취소 알림까지 이미 끝냈다.
@@ -492,27 +479,15 @@ public class BuncheolService {
     if (priorStatus == BuncheolStatus.CANCELLED) {
       return;
     }
+    cancelledFinalizer().finalizeCancelled(buncheolId, now, BuncheolCancelReason.HOST_CANCELLED);
+  }
 
-    // 취소 확정 후 같은 트랜잭션에서 활성 참여(입금확인중·입금확인됨)를 모두 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이한다.
-    // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이
-    // 자발취소·만료된 참여에 중복 알림이 가지 않도록).
-    participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
-    // cascade 는 참여를 한 번의 UPDATE 로 전이시켜 어느 묶음이 비었는지 개별로 알 수 없다 — 같은 CAS 조건을
-    // 분철 범위로 넓혀 일괄 판정한다. 안 닫으면 취소된 분철에 활성 묶음이 영구히 남는다.
-    participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
-    List<Long> cancelledIds =
-        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId).stream()
-            .map(Participation::getId)
-            .sorted()
-            .toList();
-    // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
-    deliveryDomainService.deleteByParticipationIds(cancelledIds);
-    // 분철 단위로 1번 발행한다 — 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다.
-    if (!cancelledIds.isEmpty()) {
-      eventPublisher.publishEvent(
-          new BuncheolCancelledEvent(
-              buncheolId, cancelledIds, BuncheolCancelReason.HOST_CANCELLED));
-    }
+  private BuncheolCancelledFinalizer cancelledFinalizer() {
+    return new BuncheolCancelledFinalizer(
+        participationDomainService,
+        participationBundleDomainService,
+        deliveryDomainService,
+        eventPublisher);
   }
 
   /**

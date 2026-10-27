@@ -121,6 +121,54 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
   }
 
   @Nested
+  @DisplayName("운영진 파기 CAS staffCancelIfCollecting")
+  class StaffCancelIfCollecting {
+
+    // 입금 확인 건수와 무관하다 — 확인된 참여가 있어도 파기된다(연쇄 취소는 호출자가 한다).
+    @Test
+    void 회원_개최_입금_수집_중이면_확인된_참여가_있어도_숨기고_마감_판정_시각을_남긴다() {
+      long buncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "PAYMENT_COLLECTING", HOUR.negated(), 1, HOUR.negated());
+      long participantId = fixture.user(false);
+      long bundleId =
+          fixture.bundle(buncheolId, participantId, fixture.shippingAddress(participantId), HOUR);
+      fixture.participation(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          participantId,
+          bundleId,
+          "CONFIRMED",
+          "C2C",
+          HOUR);
+
+      Integer updated =
+          transactionTemplate.execute(
+              status -> buncheolRepository.staffCancelIfCollecting(buncheolId, Instant.now()));
+
+      assertThat(updated).isEqualTo(1);
+      assertThat(status(buncheolId)).isEqualTo("HOST_CANCELLED");
+      assertThat(finalizedAt(buncheolId)).isNotNull();
+    }
+
+    @Test
+    void 입금_수집_중이_아니거나_운영진_분철이면_건드리지_않는다() {
+      long recruiting = buncheol("C2C", "RECRUITING", HOUR);
+      long confirmed = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long staff = fixture.buncheol(hostId, groupId, "LEGACY", "PAYMENT_COLLECTING", HOUR, 1, HOUR);
+
+      for (long buncheolId : new long[] {recruiting, confirmed, staff}) {
+        Integer updated =
+            transactionTemplate.execute(
+                status -> buncheolRepository.staffCancelIfCollecting(buncheolId, Instant.now()));
+        assertThat(updated).isZero();
+      }
+      assertThat(status(recruiting)).isEqualTo("RECRUITING");
+      assertThat(status(confirmed)).isEqualTo("CONFIRMED");
+      assertThat(status(staff)).isEqualTo("PAYMENT_COLLECTING");
+    }
+  }
+
+  @Nested
   @DisplayName("입금 미확인 참여 취소 cancelUnconfirmedByBuncheolId")
   class CancelUnconfirmed {
 

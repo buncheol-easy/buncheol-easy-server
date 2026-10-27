@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import buncheoleasy.admin.application.AdminBuncheolCommandService;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -52,6 +53,7 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   @Autowired private ParticipationBundleService participationBundleService;
   @Autowired private BuncheolService buncheolService;
   @Autowired private BuncheolAutoCloseService buncheolAutoCloseService;
+  @Autowired private AdminBuncheolCommandService adminBuncheolCommandService;
 
   private MySqlFixture fixture;
   private ExecutorService executor;
@@ -288,6 +290,87 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
                   confirmedBundle,
                   sentBundle))
           .containsExactly(confirmedBundle);
+    }
+
+    @Test
+    void 운영진_파기는_분철_행을_먼저_기다리고_확인된_참여까지_전원_취소한다() throws Exception {
+      long buncheolId =
+          fixture.buncheol(
+              hostId, groupId, "C2C", "PAYMENT_COLLECTING", Duration.ofHours(-2), 1, Duration.ofHours(-1));
+      long bundleId =
+          fixture.bundle(buncheolId, participantId, shippingAddressId, Duration.ofHours(-1));
+      long confirmed =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleId,
+              "CONFIRMED",
+              "C2C",
+              Duration.ofHours(-1));
+      long sent =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleId,
+              "PAYMENT_SENT",
+              "C2C",
+              Duration.ofHours(-1));
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            adminBuncheolCommandService.cancel(buncheolId);
+            return null;
+          });
+
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("HOST_CANCELLED");
+      for (long id : new long[] {confirmed, sent}) {
+        assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT CONCAT(status, '/', cancel_reason) FROM participations WHERE id = ?",
+                    String.class,
+                    id))
+            .isEqualTo("CANCELLED/BUNCHEOL_CANCELLED");
+      }
+      assertThat(bundleClosed(bundleId)).isTrue();
+    }
+
+    // 계좌가 공개된 뒤에는 개최자 혼자 접지 않는다 — 분철 행을 먼저 잠근 뒤 BCH-126 으로 거절하고 아무것도 바꾸지 않는다.
+    @Test
+    void 입금_수집_중_개최자_삭제는_분철_행을_먼저_기다리고_운영진_경유로_거절한다() throws Exception {
+      long buncheolId =
+          fixture.buncheol(
+              hostId, groupId, "C2C", "PAYMENT_COLLECTING", Duration.ofHours(-2), 1, Duration.ofHours(-1));
+      long bundleId =
+          fixture.bundle(buncheolId, participantId, shippingAddressId, Duration.ofHours(-1));
+      long awaiting =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleId,
+              "AWAITING_PAYMENT",
+              "C2C",
+              Duration.ofHours(-1));
+
+      assertThatThrownBy(
+              () ->
+                  assertLocksBuncheolFirst(
+                      buncheolId,
+                      () -> {
+                        buncheolService.cancelBuncheol(hostId, buncheolId);
+                        return null;
+                      }))
+          .isInstanceOf(ExecutionException.class)
+          .cause()
+          .isInstanceOf(BusinessException.class)
+          .extracting(e -> ((BusinessException) e).getErrorCode())
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NEEDS_STAFF);
+
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("PAYMENT_COLLECTING");
+      assertThat(statusOf("participations", awaiting)).isEqualTo("AWAITING_PAYMENT");
     }
 
     @Test

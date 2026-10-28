@@ -2,6 +2,7 @@ package buncheoleasy.notification.application;
 
 import static buncheoleasy.notification.infrastructure.AlimtalkExecutorConfig.ALIMTALK_EXECUTOR;
 
+import buncheoleasy.buncheol.application.BuncheolAutoCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
@@ -241,6 +242,29 @@ public class AlimtalkNotificationListener {
             "분철ID", String.valueOf(view.buncheol().getId()));
     recordSafely(view.host().getId(), template, variables);
     String hostPhone = hostPhoneOrNull(view.host(), buncheolId);
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(template, hostPhone, variables);
+  }
+
+  /**
+   * (개최자) 회원 개최 분철이 마감 때 최소 진행 멤버 수에 못 미쳐 자동 취소됨 — 분철당 1통. 신청이 0명이어도 보낸다(참여자 취소 안내가
+   * 없어 개최자는 마감된 것을 알 길이 없다). 신청 멤버 수는 이벤트가 실은 취소 자리 수다 — 리스너가 다시 세면 취소 뒤라 0 이 된다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBuncheolAutoCancelled(final BuncheolAutoCancelledEvent event) {
+    BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
+    AlimtalkTemplate template = AlimtalkTemplate.HOST_AUTO_CANCELLED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "신청멤버수", String.valueOf(event.appliedSlotCount()),
+            "최소진행멤버수", String.valueOf(view.buncheol().getMinHeadcount()));
+    recordSafely(view.host().getId(), template, variables);
+    String hostPhone = hostPhoneOrNull(view.host(), event.buncheolId());
     if (hostPhone == null) {
       return;
     }

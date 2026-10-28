@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -175,6 +177,20 @@ class BuncheolAutoCloseServiceTest {
       then(eventPublisher).should(never()).publishEvent(any());
     }
 
+    // 운영진 분철의 개최자는 운영진이다 — 미달 취소를 개최자에게 알리지 않는다.
+    @Test
+    void 운영진_분철_미달_취소는_개최자_미달_알림을_내지_않는다() {
+      given(buncheolDomainService.finalizeExpiredByConfirmedHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+      Buncheol buncheol = buncheolWithStatus(BuncheolStatus.CANCELLED);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolAutoCancelledEvent.class));
+    }
+
     @Nested
     @DisplayName("회원 개최")
     class MemberTest {
@@ -223,14 +239,51 @@ class BuncheolAutoCloseServiceTest {
         assertThat(result).isTrue();
         then(participationDomainService).should().cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
         then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
-        ArgumentCaptor<BuncheolCancelledEvent> eventCaptor =
-            ArgumentCaptor.forClass(BuncheolCancelledEvent.class);
-        then(eventPublisher).should().publishEvent(eventCaptor.capture());
-        assertThat(eventCaptor.getValue())
-            .isEqualTo(
+        // 개최자 알림 이벤트가 따로 하나 더 나간다(아래 테스트) — 참여자 취소 이벤트는 값으로 한 번만 본다.
+        then(eventPublisher)
+            .should()
+            .publishEvent(
                 new BuncheolCancelledEvent(
                     BUNCHEOL_ID, List.of(704L, 705L), BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET));
         then(buncheolConfirmedFinalizer).should(never()).finalizeConfirmed(anyLong());
+      }
+
+      // 신청 멤버 수는 연쇄 취소가 실제로 취소한 수다 — 분철 행 잠금 아래라 마감 판정 때 센 신청 자리 수와 같다.
+      @Test
+      void 최소_인원_미달_취소는_개최자_알림_이벤트를_취소된_신청_수와_함께_발행한다() {
+        Buncheol locked =
+            lockedMemberBuncheol(BuncheolStatus.RECRUITING, NOW.minus(1, ChronoUnit.HOURS));
+        given(paymentStarter.startAtDeadline(locked, NOW)).willReturn(false);
+        given(buncheolDomainService.cancelBelowMinHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+        Participation first = mock(Participation.class);
+        given(first.getId()).willReturn(704L);
+        Participation second = mock(Participation.class);
+        given(second.getId()).willReturn(705L);
+        given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+            .willReturn(List.of(first, second));
+
+        buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+        InOrder order = inOrder(eventPublisher);
+        order.verify(eventPublisher).publishEvent(any(BuncheolCancelledEvent.class));
+        order.verify(eventPublisher).publishEvent(new BuncheolAutoCancelledEvent(BUNCHEOL_ID, 2));
+      }
+
+      // 참여자 취소 이벤트는 취소된 참여가 없으면 나가지 않지만, 개최자는 신청 0명이어도 마감된 것을 알아야 한다.
+      @Test
+      void 신청이_0명이어도_개최자_알림_이벤트는_발행한다() {
+        Buncheol locked =
+            lockedMemberBuncheol(BuncheolStatus.RECRUITING, NOW.minus(1, ChronoUnit.HOURS));
+        given(paymentStarter.startAtDeadline(locked, NOW)).willReturn(false);
+        given(buncheolDomainService.cancelBelowMinHeadcount(BUNCHEOL_ID, NOW)).willReturn(true);
+        given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+            .willReturn(List.of());
+
+        boolean result = buncheolAutoCloseService.finalizeExpired(BUNCHEOL_ID, NOW);
+
+        assertThat(result).isTrue();
+        then(eventPublisher).should().publishEvent(new BuncheolAutoCancelledEvent(BUNCHEOL_ID, 0));
+        then(eventPublisher).should(never()).publishEvent(any(BuncheolCancelledEvent.class));
       }
 
       // 🔴 신청자 0명이면 개최자가 마감을 연장할 수 있다. 폴링이 옛 마감으로 골랐어도 잠금 뒤 다시 읽은 마감이 안 지났으면

@@ -96,6 +96,18 @@ class NotificationInboxRecorderTest {
     assertThat(saved.getLinkPath()).isEqualTo("/products/77/manage");
   }
 
+  // 취소된 분철은 다시 열 수 없어 개최자가 할 수 있는 일은 새로 개최하는 것뿐이다.
+  @Test
+  void 개최자_자동_취소_알림의_경로는_개최_화면을_가리킨다() {
+    Map<String, String> variables =
+        Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청멤버수", "0", "최소진행멤버수", "2");
+
+    InboxMessage saved = record(3L, AlimtalkTemplate.HOST_AUTO_CANCELLED, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/upload");
+    assertThat(saved.getTitle()).isEqualTo("분철 자동 취소 안내");
+  }
+
   @Test
   void 경로_변수가_누락되면_미치환_토큰이_남은_경로_대신_경로_없이_기록한다() {
     Map<String, String> variables =

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import buncheoleasy.buncheol.application.BuncheolAutoCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
@@ -598,6 +599,69 @@ class AlimtalkNotificationListenerTest {
       lenient().when(bundle.getDueAt()).thenReturn(BUNDLE_DUE_AT);
       return new ParticipationView(
           participation, bundle, buncheol, memberName, participant, mock(User.class), amount);
+    }
+  }
+
+  @Nested
+  @DisplayName("개최자 미달 자동 취소 안내(onBuncheolAutoCancelled)")
+  class BuncheolAutoCancelled {
+
+    private Buncheol cancelledBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      given(buncheol.getMinHeadcount()).willReturn(3);
+      return buncheol;
+    }
+
+    // 신청 멤버 수는 이벤트가 실은 값이다 — 리스너가 다시 세면 이미 취소된 뒤라 0 이 된다.
+    @Test
+    @DisplayName("개최자에게 HOST_AUTO_CANCELLED 를 1통 보내고 신청 멤버 수와 최소 진행 멤버 수를 싣는다")
+    void sendsHostNotice() {
+      Buncheol buncheol = cancelledBuncheol();
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      given(assembler.loadBuncheolHost(BUNCHEOL_ID)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onBuncheolAutoCancelled(new BuncheolAutoCancelledEvent(BUNCHEOL_ID, 2));
+
+      Map<String, String> variables = captureSend(AlimtalkTemplate.HOST_AUTO_CANCELLED, HOST_PHONE);
+      assertThat(variables)
+          .containsOnly(
+              Map.entry("닉네임", "개최자닉"),
+              Map.entry("분철명", "세븐틴 미니 12집 분철"),
+              Map.entry("신청멤버수", "2"),
+              Map.entry("최소진행멤버수", "3"));
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.HOST_AUTO_CANCELLED), any());
+    }
+
+    @Test
+    @DisplayName("신청이 0명이어도 보낸다")
+    void sendsWhenNobodyApplied() {
+      Buncheol buncheol = cancelledBuncheol();
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      given(assembler.loadBuncheolHost(BUNCHEOL_ID)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onBuncheolAutoCancelled(new BuncheolAutoCancelledEvent(BUNCHEOL_ID, 0));
+
+      assertThat(captureSend(AlimtalkTemplate.HOST_AUTO_CANCELLED, HOST_PHONE))
+          .containsEntry("신청멤버수", "0");
+    }
+
+    @Test
+    @DisplayName("개최자 전화번호가 없으면 수신함에만 남기고 발송은 건너뛴다")
+    void recordsOnlyWhenHostPhoneMissing() {
+      Buncheol buncheol = cancelledBuncheol();
+      User host = mock(User.class);
+      given(host.getNickname()).willReturn(Nickname.of("개최자닉"));
+      given(host.getId()).willReturn(3L);
+      given(host.getPhoneNumber()).willReturn(null);
+      given(assembler.loadBuncheolHost(BUNCHEOL_ID)).willReturn(new BuncheolHostView(buncheol, host));
+
+      listener.onBuncheolAutoCancelled(new BuncheolAutoCancelledEvent(BUNCHEOL_ID, 1));
+
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.HOST_AUTO_CANCELLED), any());
+      verify(sender, never()).send(any(), any(), any());
     }
   }
 

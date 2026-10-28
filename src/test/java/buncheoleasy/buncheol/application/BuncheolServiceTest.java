@@ -1530,6 +1530,21 @@ class BuncheolServiceTest {
       then(eventPublisher).should().publishEvent(any(BuncheolCancelledEvent.class));
     }
 
+    // 개최자가 직접 한 일이라 개최자에게 「분철 자동 취소 안내」를 보내지 않는다.
+    @Test
+    void 모집중_개최자_삭제는_개최자_미달_알림을_내지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .willReturn(BuncheolStatus.RECRUITING);
+      given(participationDomainService.findCascadeCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+
+      buncheolService.cancelBuncheol(HOST_ID, BUNCHEOL_ID);
+
+      then(eventPublisher).should(never()).publishEvent(any(BuncheolAutoCancelledEvent.class));
+    }
+
     // 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다 — 리스너가 사람 단위로 묶으려면 한 번에 봐야 한다.
     @Test
     void 취소된_참여가_여러_건이어도_취소_이벤트는_분철_단위로_한_번_발행된다() {

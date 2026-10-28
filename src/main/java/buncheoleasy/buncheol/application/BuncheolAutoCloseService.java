@@ -69,8 +69,9 @@ public class BuncheolAutoCloseService {
   }
 
   /**
-   * 회원 개최 마감 판정. 신청 자리가 최소 인원 이상이면 입금 단계를 시작하고({@link PaymentStarter}), 미달이면 취소하고 신청자 전원에게
-   * 알린다. 미달 취소는 돈이 오간 적 없는 단계라 환불이 없다. 시작과 미달 취소를 한 트랜잭션, 분철 행 잠금 아래에서 판정한다.
+   * 회원 개최 마감 판정. 신청 자리가 최소 인원 이상이면 입금 단계를 시작하고({@link PaymentStarter}), 미달이면 취소하고 신청자 전원과
+   * 개최자에게 알린다(개최자는 신청 0명이어도). 미달 취소는 돈이 오간 적 없는 단계라 환불이 없다. 시작과 미달 취소를 한 트랜잭션, 분철 행
+   * 잠금 아래에서 판정한다.
    */
   private boolean finalizeExpiredC2c(final Long buncheolId, final Instant now) {
     // 분철 행을 잠그고 최신 값으로 다시 읽는다 — 첫 조회(finalizeExpired)는 잠금 전이라 그 사이 신청·마감 연장·삭제를 못 본다.
@@ -86,7 +87,9 @@ public class BuncheolAutoCloseService {
       // 잠금 아래라 오면 안 되는 경우다. 참여·알림은 건드리지 않고 다음 폴링에 맡긴다.
       return false;
     }
-    finalizeAsCancelled(buncheolId, now, BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET);
+    int cancelledCount =
+        finalizeAsCancelled(buncheolId, now, BuncheolCancelReason.MIN_HEADCOUNT_NOT_MET);
+    eventPublisher.publishEvent(new BuncheolAutoCancelledEvent(buncheolId, cancelledCount));
     return true;
   }
 
@@ -100,9 +103,9 @@ public class BuncheolAutoCloseService {
 
   // 미달 취소: 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 취소하고 참여자에게 사유와 함께 취소 알림을 보낸다.
   // 운영진 분철은 입금확인 인원, 회원 개최는 신청 인원이 최소 인원에 못 미친 경우다. 입금확인된 참여의 환불은 오프라인 처리.
-  private void finalizeAsCancelled(
+  private int finalizeAsCancelled(
       final Long buncheolId, final Instant now, final BuncheolCancelReason reason) {
-    new BuncheolCancelledFinalizer(
+    return new BuncheolCancelledFinalizer(
             participationDomainService,
             participationBundleDomainService,
             deliveryDomainService,

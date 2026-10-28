@@ -28,6 +28,7 @@ public class NotificationInboxRecorder {
 
   private static final String PATH_MY_PARTICIPATIONS = "/profile/participations";
   private static final String PATH_BUNCHEOL_MANAGE = "/products/#{분철ID}/manage";
+  private static final String PATH_UPLOAD = "/upload";
 
   private final InboxMessageRepository inboxMessageRepository;
 
@@ -74,6 +75,7 @@ public class NotificationInboxRecorder {
               C2C_BUNCHEOL_CANCELLED ->
           PATH_MY_PARTICIPATIONS;
       case HOST_PAYMENT_STARTED, C2C_PAYMENT_SENT -> PATH_BUNCHEOL_MANAGE;
+      case HOST_AUTO_CANCELLED -> PATH_UPLOAD;
       case PICKUP_REMINDER_CU, PICKUP_REMINDER_GS25 -> null;
     };
   }

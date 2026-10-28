@@ -220,6 +220,41 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
+  @DisplayName("개최자 미달 자동 취소(HOST_AUTO_CANCELLED)")
+  class HostAutoCancelled {
+
+    // 등록본 UN_0479 와 글자 그대로 같아야 알리고가 받는다(마지막 줄 뒤 줄바꿈 없음).
+    @Test
+    @DisplayName("UN_0479 등록본과 글자 그대로 같고 개최 화면으로 안내한다")
+    void render() {
+      Map<String, String> variables =
+          Map.of(
+              "닉네임", "개최자닉",
+              "분철명", "세븐틴 미니 12집 분철",
+              "신청멤버수", "2",
+              "최소진행멤버수", "3");
+
+      assertThat(AlimtalkTemplate.HOST_AUTO_CANCELLED.subject()).isEqualTo("분철 자동 취소 안내");
+      assertThat(AlimtalkTemplate.HOST_AUTO_CANCELLED.render(variables))
+          .isEqualTo(
+              "개최자닉님, 개최하신 분철이 마감되었지만 신청된 멤버가 최소 진행 멤버 수보다 적어 자동으로 취소되었어요.\n"
+              + "\n"
+              + "입금 단계가 시작되기 전이라 따로 하실 일은 없어요.\n"
+              + "신청한 참여자가 있었다면 그분들께도 취소 안내를 보냈어요.\n"
+              + "마감 기한이나 최소 진행 멤버 수를 바꿔 새로 개최할 수 있어요.\n"
+              + "\n"
+              + "▶ 분철명: 세븐틴 미니 12집 분철\n"
+              + "▶ 신청된 멤버: 2명\n"
+              + "▶ 최소 진행 멤버 수: 3명");
+      assertThat(AlimtalkTemplate.HOST_AUTO_CANCELLED.buttons()).hasSize(2);
+      assertThat(AlimtalkTemplate.HOST_AUTO_CANCELLED.buttons().get(1).name())
+          .isEqualTo("새로 개최하러 가기");
+      assertThat(AlimtalkTemplate.HOST_AUTO_CANCELLED.buttons().get(1).mobileUrl())
+          .isEqualTo("#{baseUrl}/upload");
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 입금 확인(C2C_PAYMENT_CONFIRMED)")
   class C2cPaymentConfirmed {
 

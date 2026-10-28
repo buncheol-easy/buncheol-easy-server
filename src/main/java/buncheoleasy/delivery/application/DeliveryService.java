@@ -60,7 +60,8 @@ public class DeliveryService {
   /**
    * 발송을 시작해도 되는지 — 운영진 분철과 회원 개최 모두 <b>분철 진행확정(CONFIRMED)</b>을 요구한다. 회원 개최는 배송이 진행 확정
    * 때 생기고 그 전에 입금 단계 분철이 운영진 파기로 취소될 수 있어, 진행 확정 전 발송은 「보낸 물건이 있는데 분철이 취소되는」
-   * 모순을 만든다. CONFIRMED 는 이후 다른 상태로 가지 않으므로 check-then-act 갭이 없다.
+   * 모순을 만든다. 회원 개최 CONFIRMED 는 운영진 파기(운송장 전)로 취소될 수 있다. 파기는 배송 행을 잠그고 지우므로, 이 검사 뒤
+   * 파기가 먼저 커밋되면 아래 운송장 CAS 가 0행으로 실패한다(check-then-act 갭은 배송 행 CAS 가 닫는다).
    */
   private void validateShippable(final Buncheol buncheol) {
     if (buncheol.getStatus() != BuncheolStatus.CONFIRMED) {

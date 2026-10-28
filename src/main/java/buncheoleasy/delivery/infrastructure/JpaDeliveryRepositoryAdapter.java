@@ -145,4 +145,12 @@ public class JpaDeliveryRepositoryAdapter implements DeliveryRepository {
     }
     jpaDeliveryRepository.deleteByParticipationIdIn(participationIds);
   }
+
+  @Override
+  public List<Delivery> findAllByParticipationIdsForUpdate(final List<Long> participationIds) {
+    if (participationIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaDeliveryRepository.findAllByParticipationIdsForUpdate(participationIds);
+  }
 }

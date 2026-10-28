@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest.CancelParticipation;
 import buncheoleasy.buncheol.dto.request.ParticipateRequest;
+import buncheoleasy.delivery.application.DeliveryService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.support.MySqlContainerTestSupport;
@@ -21,6 +22,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -56,6 +58,7 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   @Autowired private BuncheolService buncheolService;
   @Autowired private BuncheolAutoCloseService buncheolAutoCloseService;
   @Autowired private AdminBuncheolCommandService adminBuncheolCommandService;
+  @Autowired private DeliveryService deliveryService;
 
   private MySqlFixture fixture;
   private ExecutorService executor;
@@ -420,6 +423,21 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
       assertThat(bundleClosed(bundleId)).isTrue();
     }
 
+    @Test
+    void 진행_확정_분철_운영진_파기는_분철_행을_먼저_기다리고_운송장_전_배송을_지운다() throws Exception {
+      ConfirmedWithDeliveries confirmed = confirmedWithDeliveries();
+
+      assertLocksBuncheolFirst(
+          confirmed.buncheolId(),
+          () -> {
+            adminBuncheolCommandService.cancel(confirmed.buncheolId());
+            return null;
+          },
+          confirmed.participationIds());
+
+      assertCancelledWithoutDeliveries(confirmed);
+    }
+
     // 계좌가 공개된 뒤에는 개최자 혼자 접지 않는다 — 분철 행을 먼저 잠근 뒤 BCH-126 으로 거절하고 아무것도 바꾸지 않는다.
     @Test
     void 입금_수집_중_개최자_삭제는_분철_행을_먼저_기다리고_운영진_경유로_거절한다() throws Exception {
@@ -528,6 +546,86 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
       assertThat(awaitInboxCount(List.of(otherId, participantId), CONFIRMED_NOTICE))
           .as("진행 확정 안내가 두 참여자 모두에게 1건씩")
           .containsExactly(1, 1);
+    }
+  }
+
+  @Nested
+  @DisplayName("진행 확정 뒤 파기와 운송장 등록")
+  class CancelVsTracking {
+
+    @Test
+    void 운송장_등록이_먼저_커밋되면_파기는_배송_행을_기다린_뒤_BCH_130_으로_거절된다() throws Exception {
+      ConfirmedWithDeliveries confirmed = confirmedWithDeliveries();
+
+      Future<?> result;
+      try (Connection tracking = holdTrackingUpdate(confirmed.deliveryIds().get(0))) {
+        result = executor.submit(() -> {
+          adminBuncheolCommandService.cancel(confirmed.buncheolId());
+          return null;
+        });
+        assertThat(awaitLockWait(result, "deliveries")).as("파기가 배송 행을 기다려야 한다").isTrue();
+        tracking.commit();
+      }
+
+      assertThatThrownBy(() -> result.get(10, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class)
+          .cause()
+          .isInstanceOf(BusinessException.class)
+          .extracting(e -> ((BusinessException) e).getErrorCode())
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_HAS_TRACKING);
+      assertThat(statusOf("buncheols", confirmed.buncheolId())).isEqualTo("CONFIRMED");
+      for (long id : confirmed.participationIds()) {
+        assertThat(statusOf("participations", id)).isEqualTo("CONFIRMED");
+      }
+      assertThat(statusOf("deliveries", confirmed.deliveryIds().get(0))).isEqualTo("SHIPPING");
+      assertThat(statusOf("deliveries", confirmed.deliveryIds().get(1))).isEqualTo("SNAPSHOTTED");
+    }
+
+    @Test
+    void 운송장_등록이_되돌려지면_파기가_배송_행을_기다린_뒤_파기한다() throws Exception {
+      ConfirmedWithDeliveries confirmed = confirmedWithDeliveries();
+
+      Future<?> result;
+      try (Connection tracking = holdTrackingUpdate(confirmed.deliveryIds().get(0))) {
+        result = executor.submit(() -> {
+          adminBuncheolCommandService.cancel(confirmed.buncheolId());
+          return null;
+        });
+        assertThat(awaitLockWait(result, "deliveries")).as("파기가 배송 행을 기다려야 한다").isTrue();
+        tracking.rollback();
+      }
+      result.get(10, TimeUnit.SECONDS);
+
+      assertCancelledWithoutDeliveries(confirmed);
+    }
+
+    @Test
+    void 파기가_먼저_끝나면_운송장_등록은_배송_없음으로_실패하고_아무것도_생기지_않는다() {
+      ConfirmedWithDeliveries confirmed = confirmedWithDeliveries();
+      adminBuncheolCommandService.cancel(confirmed.buncheolId());
+
+      assertThatThrownBy(
+              () ->
+                  deliveryService.registerTracking(
+                      hostId, confirmed.deliveryIds().get(0), "T1"))
+          .isInstanceOf(BusinessException.class)
+          .extracting(e -> ((BusinessException) e).getErrorCode())
+          .isEqualTo(ErrorCode.DELIVERY_NOT_FOUND);
+      assertCancelledWithoutDeliveries(confirmed);
+    }
+
+    // 운송장 등록 CAS 가 배송 행을 쥔 채 커밋 전인 상태를 흉내 낸다.
+    private Connection holdTrackingUpdate(final long deliveryId) throws SQLException {
+      Connection tracking = dataSource.getConnection();
+      tracking.setAutoCommit(false);
+      try (PreparedStatement ps =
+          tracking.prepareStatement(
+              "UPDATE deliveries SET status = 'SHIPPING', tracking_number = 'T1',"
+                  + " tracking_registered_at = UTC_TIMESTAMP() WHERE id = ?")) {
+        ps.setLong(1, deliveryId);
+        ps.executeUpdate();
+      }
+      return tracking;
     }
   }
 
@@ -643,6 +741,10 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   }
 
   private boolean awaitBuncheolLockWait(final Future<?> result) throws Exception {
+    return awaitLockWait(result, "buncheols");
+  }
+
+  private boolean awaitLockWait(final Future<?> result, final String table) throws Exception {
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
     while (System.nanoTime() < deadline) {
       Integer waits =
@@ -650,8 +752,9 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
               "SELECT COUNT(*) FROM performance_schema.data_lock_waits w"
                   + " JOIN performance_schema.data_locks l"
                   + "   ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID"
-                  + " WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = 'buncheols'",
-              Integer.class);
+                  + " WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = ?",
+              Integer.class,
+              table);
       if (waits != null && waits > 0) {
         return true;
       }
@@ -699,6 +802,48 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
         probe.rollback();
       }
     }
+  }
+
+  private record ConfirmedWithDeliveries(
+      long buncheolId, List<Long> participationIds, List<Long> deliveryIds) {}
+
+  /** 진행 확정된 회원 개최 분철. 확인된 묶음 둘(참여자 둘)에 운송장 전 배송이 하나씩 있다. */
+  private ConfirmedWithDeliveries confirmedWithDeliveries() {
+    long buncheolId =
+        fixture.buncheol(
+            hostId, groupId, "C2C", "CONFIRMED", Duration.ofHours(-2), 1, Duration.ofHours(-1));
+    long otherId = fixture.user(false);
+    List<Long> participationIds = new ArrayList<>();
+    List<Long> deliveryIds = new ArrayList<>();
+    for (long[] person :
+        new long[][] {{participantId, shippingAddressId}, {otherId, fixture.shippingAddress(otherId)}}) {
+      long bundleId = fixture.bundle(buncheolId, person[0], person[1], Duration.ofHours(-1));
+      long participationId =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              person[0],
+              bundleId,
+              "CONFIRMED",
+              "C2C",
+              Duration.ofHours(-1));
+      participationIds.add(participationId);
+      deliveryIds.add(fixture.delivery(participationId, bundleId));
+    }
+    return new ConfirmedWithDeliveries(buncheolId, participationIds, deliveryIds);
+  }
+
+  private void assertCancelledWithoutDeliveries(final ConfirmedWithDeliveries confirmed) {
+    assertThat(statusOf("buncheols", confirmed.buncheolId())).isEqualTo("HOST_CANCELLED");
+    for (long id : confirmed.participationIds()) {
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT CONCAT(status, '/', cancel_reason) FROM participations WHERE id = ?",
+                  String.class,
+                  id))
+          .isEqualTo("CANCELLED/BUNCHEOL_CANCELLED");
+    }
+    assertThat(deliveryBundleIds(confirmed.buncheolId())).isEmpty();
   }
 
   private List<Long> deliveryBundleIds(final long buncheolId) {

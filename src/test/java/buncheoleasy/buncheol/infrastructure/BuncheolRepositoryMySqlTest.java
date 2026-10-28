@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.support.MySqlContainerTestSupport;
 import buncheoleasy.support.MySqlFixture;
@@ -121,8 +122,8 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
   }
 
   @Nested
-  @DisplayName("운영진 파기 CAS staffCancelIfCollecting")
-  class StaffCancelIfCollecting {
+  @DisplayName("운영진 파기 CAS staffCancelIfStatus")
+  class StaffCancelIfStatus {
 
     // 입금 확인 건수와 무관하다 — 확인된 참여가 있어도 파기된다(연쇄 취소는 호출자가 한다).
     @Test
@@ -141,30 +142,50 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
           "C2C",
           HOUR);
 
-      Integer updated =
-          transactionTemplate.execute(
-              status -> buncheolRepository.staffCancelIfCollecting(buncheolId, Instant.now()));
-
-      assertThat(updated).isEqualTo(1);
+      assertThat(staffCancel(buncheolId, BuncheolStatus.PAYMENT_COLLECTING)).isEqualTo(1);
       assertThat(status(buncheolId)).isEqualTo("HOST_CANCELLED");
       assertThat(finalizedAt(buncheolId)).isNotNull();
     }
 
     @Test
-    void 입금_수집_중이_아니거나_운영진_분철이면_건드리지_않는다() {
+    void 회원_개최_진행_확정이면_진행_확정을_기대할_때_숨긴다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+
+      assertThat(staffCancel(buncheolId, BuncheolStatus.CONFIRMED)).isEqualTo(1);
+      assertThat(status(buncheolId)).isEqualTo("HOST_CANCELLED");
+      assertThat(finalizedAt(buncheolId)).isNotNull();
+    }
+
+    @Test
+    void 기대한_상태가_아니면_건드리지_않는다() {
       long recruiting = buncheol("C2C", "RECRUITING", HOUR);
       long confirmed = buncheol("C2C", "CONFIRMED", HOUR.negated());
-      long staff = fixture.buncheol(hostId, groupId, "LEGACY", "PAYMENT_COLLECTING", HOUR, 1, HOUR);
+      long collecting =
+          fixture.buncheol(hostId, groupId, "C2C", "PAYMENT_COLLECTING", HOUR.negated(), 1, HOUR);
 
-      for (long buncheolId : new long[] {recruiting, confirmed, staff}) {
-        Integer updated =
-            transactionTemplate.execute(
-                status -> buncheolRepository.staffCancelIfCollecting(buncheolId, Instant.now()));
-        assertThat(updated).isZero();
-      }
+      assertThat(staffCancel(recruiting, BuncheolStatus.PAYMENT_COLLECTING)).isZero();
+      assertThat(staffCancel(confirmed, BuncheolStatus.PAYMENT_COLLECTING)).isZero();
+      assertThat(staffCancel(collecting, BuncheolStatus.CONFIRMED)).isZero();
       assertThat(status(recruiting)).isEqualTo("RECRUITING");
       assertThat(status(confirmed)).isEqualTo("CONFIRMED");
-      assertThat(status(staff)).isEqualTo("PAYMENT_COLLECTING");
+      assertThat(status(collecting)).isEqualTo("PAYMENT_COLLECTING");
+    }
+
+    @Test
+    void 운영진_분철이면_상태가_맞아도_건드리지_않는다() {
+      long collecting =
+          fixture.buncheol(hostId, groupId, "LEGACY", "PAYMENT_COLLECTING", HOUR, 1, HOUR);
+      long confirmed = buncheol("LEGACY", "CONFIRMED", HOUR.negated());
+
+      assertThat(staffCancel(collecting, BuncheolStatus.PAYMENT_COLLECTING)).isZero();
+      assertThat(staffCancel(confirmed, BuncheolStatus.CONFIRMED)).isZero();
+      assertThat(status(collecting)).isEqualTo("PAYMENT_COLLECTING");
+      assertThat(status(confirmed)).isEqualTo("CONFIRMED");
+    }
+
+    private Integer staffCancel(final long buncheolId, final BuncheolStatus expected) {
+      return transactionTemplate.execute(
+          status -> buncheolRepository.staffCancelIfStatus(buncheolId, expected, Instant.now()));
     }
   }
 

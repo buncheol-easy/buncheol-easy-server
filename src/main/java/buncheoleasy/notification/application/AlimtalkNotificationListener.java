@@ -142,8 +142,8 @@ public class AlimtalkNotificationListener {
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolConfirmed(final BuncheolConfirmedEvent event) {
-    // 전이분 스냅샷을 상태 재확인 없이 그대로 쓴다 — 분철 CONFIRMED 는 종착 상태라(어느 CAS 도 CONFIRMED 에서 출발하지
-    // 않는다) 커밋~실행 사이에 확정 참여가 이탈할 전이가 없다. PAYMENT_COLLECTING 이 열려 있는 입금 안내 쪽과 다른 이유다.
+    // 전이분 스냅샷을 상태 재확인 없이 그대로 쓴다 — 커밋~실행 사이에 확정 참여가 이탈하는 전이는 회원 개최 운영진 파기(운송장 전)
+    // 하나뿐이고, 그때는 같은 큐 뒤에 취소 안내가 따라가 순서가 맞다. PAYMENT_COLLECTING 이 열려 있는 입금 안내 쪽과 다른 이유다.
     sendEachSafely(
         groupByParticipant(loadViewsSafely(event.participationIds())), this::sendConfirmedNotice);
   }

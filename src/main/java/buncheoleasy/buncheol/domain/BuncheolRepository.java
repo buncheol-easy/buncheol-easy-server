@@ -141,13 +141,13 @@ public interface BuncheolRepository {
   int confirmIfCollecting(Long buncheolId, Instant now);
 
   /**
-   * 운영진 파기 CAS (PAYMENT_COLLECTING → HOST_CANCELLED, {@code finalized_at} 기록). 회원 개최 분철에만 적용되고 확인 건수는 보지
-   * 않는다 — 계좌가 공개된 뒤 접는 길은 운영진 경유 하나다. 이 UPDATE 가 트랜잭션의 첫 잠금이다. {@code @Modifying} bulk UPDATE
-   * 이므로 호출 측 트랜잭션이 필수다.
+   * 운영진 파기 CAS ({@code expectedStatus} → HOST_CANCELLED, {@code finalized_at} 기록). 회원 개최 분철에만 적용되고 확인 건수는
+   * 보지 않는다 — 계좌가 공개된 뒤 접는 길은 운영진 경유 하나다. 호출자는 분철 행을 잠근 채 읽은 상태를 {@code expectedStatus} 로
+   * 넘긴다(입금 수집 중, 또는 운송장 전인 진행 확정). {@code @Modifying} bulk UPDATE 이므로 호출 측 트랜잭션이 필수다.
    *
-   * @return 갱신된 행 수 (0 이면 입금 수집중이 아니거나 회원 개최가 아니거나 없는 분철)
+   * @return 갱신된 행 수 (0 이면 상태가 {@code expectedStatus} 가 아니거나 회원 개최가 아니거나 없는 분철)
    */
-  int staffCancelIfCollecting(Long buncheolId, Instant now);
+  int staffCancelIfStatus(Long buncheolId, BuncheolStatus expectedStatus, Instant now);
 
   /**
    * 모집중({@link BuncheolStatus#RECRUITING}) 분철의 최소 인원이 {@code slotCount} 보다 크면 {@code slotCount} 로

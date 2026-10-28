@@ -138,9 +138,10 @@ public class BuncheolDomainService {
         > 0;
   }
 
-  /** 운영진 파기 CAS (회원 개최 PAYMENT_COLLECTING → HOST_CANCELLED) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
-  public boolean staffCancelIfCollecting(final Long buncheolId, final Instant now) {
-    return buncheolRepository.staffCancelIfCollecting(buncheolId, now) > 0;
+  /** 운영진 파기 CAS (회원 개최 {@code expectedStatus} → HOST_CANCELLED) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public boolean staffCancelIfStatus(
+      final Long buncheolId, final BuncheolStatus expectedStatus, final Instant now) {
+    return buncheolRepository.staffCancelIfStatus(buncheolId, expectedStatus, now) > 0;
   }
 
   /** 회원 개최 진행 확정 CAS (PAYMENT_COLLECTING → CONFIRMED) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */

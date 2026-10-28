@@ -414,15 +414,15 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
       @Param("confirmedStatus") BuncheolStatus confirmedStatus,
       @Param("now") Instant now);
 
-  /** 운영진 파기 CAS (회원 개최 PAYMENT_COLLECTING → HOST_CANCELLED) — 포트 javadoc 참고. */
+  /** 운영진 파기 CAS (회원 개최 expectedStatus → HOST_CANCELLED) — 포트 javadoc 참고. */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Buncheol b "
           + "SET b.status = :cancelledStatus, b.finalizedAt = :now, b.updatedAt = :now "
-          + "WHERE b.id = :buncheolId AND b.status = :collectingStatus AND b.flowType = :c2cFlow")
-  int staffCancelIfCollecting(
+          + "WHERE b.id = :buncheolId AND b.status = :expectedStatus AND b.flowType = :c2cFlow")
+  int staffCancelIfStatus(
       @Param("buncheolId") Long buncheolId,
-      @Param("collectingStatus") BuncheolStatus collectingStatus,
+      @Param("expectedStatus") BuncheolStatus expectedStatus,
       @Param("c2cFlow") FlowType c2cFlow,
       @Param("cancelledStatus") BuncheolStatus cancelledStatus,
       @Param("now") Instant now);

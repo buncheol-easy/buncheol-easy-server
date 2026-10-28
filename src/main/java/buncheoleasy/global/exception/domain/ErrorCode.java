@@ -262,6 +262,9 @@ public enum ErrorCode {
   BUNCHEOL_NOT_OPEN_YET("BCH-128", "아직 열리지 않은 분철이에요.", HttpStatus.CONFLICT),
   BUNCHEOL_OPENS_AT_INVALID(
       "BCH-129", "오픈 시각은 지금 이후, 마감 전으로 정해 주세요.", HttpStatus.BAD_REQUEST),
+  // 진행 확정 뒤 운영진 파기는 운송장 전에만 된다. 상태 위반(BCH-050)과 분리한다 — 상태가 틀린 게 아니라 발송이 시작됐다.
+  BUNCHEOL_CANCEL_HAS_TRACKING(
+      "BCH-130", "운송장이 등록된 배송이 있어 파기할 수 없어요.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

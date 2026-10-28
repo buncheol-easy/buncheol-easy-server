@@ -287,10 +287,11 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int staffCancelIfCollecting(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.staffCancelIfCollecting(
+  public int staffCancelIfStatus(
+      final Long buncheolId, final BuncheolStatus expectedStatus, final Instant now) {
+    return jpaBuncheolRepository.staffCancelIfStatus(
         buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
+        expectedStatus,
         FlowType.C2C,
         BuncheolStatus.HOST_CANCELLED,
         now);

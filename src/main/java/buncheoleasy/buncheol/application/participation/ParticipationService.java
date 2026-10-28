@@ -517,7 +517,7 @@ public class ParticipationService {
    * 개최자·어드민 확인은 {@link #requireLegacy}, 웹훅 자동확인은 {@code NOT_CONFIRMABLE} 조기 반환,
    * 0원 참여 즉시확정({@code confirmFreeParticipation})은 {@code participateSingle} 의 플로우 분기다.
    * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는
-   * 개최자의 진행 확정({@code BuncheolService#confirmBuncheol})만 한다.
+   * {@code BuncheolConfirmer}(개최자 진행 확정, 마지막 묶음 입금 확인)만 한다.
    */
   private void applyPaymentConfirmed(
       final Participation participation, final Buncheol buncheol, final Instant now) {

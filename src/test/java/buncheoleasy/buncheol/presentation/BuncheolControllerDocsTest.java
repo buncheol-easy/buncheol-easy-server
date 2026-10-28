@@ -68,7 +68,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   private static final String CONFIRM_CHECK_DESCRIPTION =
       "회원 개최 진행 확정 판정. 진행 확정 API 게이트와 같은 판정이다. ALL_PAID(모두 입금 확인) | DUE_PASSED(입금 기한 지남, 확인된"
           + " 참여 있음) | BEFORE_DUE(미확인 참여가 있고 기한 전) | NO_CONFIRMED(확인된 참여 없음). 앞의 둘이면 진행 확정"
-          + " 버튼을 켜고 「개최한 분철」 카드에 「진행 확정해 주세요」 배지를 띄운다. 입금 수집중이 아니면 null";
+          + " 버튼을 켜고, 「개최한 분철」 카드의 「진행 확정해 주세요」 배지는 DUE_PASSED 일 때만 띄운다. 전원 입금은 마지막 묶음"
+          + " 입금 확인이 바로 진행 확정하므로 ALL_PAID 는 정상 흐름에서 오지 않는다(옛 데이터 대비). 입금 수집중이 아니면 null";
 
   private static final String ENDED_DESCRIPTION =
       "분철이 완전히 끝났는지. true = 진행확정(CONFIRMED)이고, 신청·입금 확인 중·보냈어요 상태의 참여가 없고, 확정 참여 전원의 택배가 편의점에 도착(DELIVERED·RECEIVED)했다. 확정 참여가 0명인 진행확정도 true. 진행확정이 아니면 항상 false — 취소(CANCELLED)도 false 이므로 「종료」 묶음에 취소를 함께 담으려면 status 와 함께 판정할 것. 판정 기준은 회원탈퇴 가드와 같다";
@@ -895,8 +896,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .description(
                             """
                             회원 개최 입금 수집 중 분철의 진행을 확정한다 (`PAYMENT_COLLECTING` → `CONFIRMED`).
-                            모든 참여가 입금 확인됐으면(관리 응답 `confirmCheck = ALL_PAID`) 바로, 미확인 참여가 있으면 입금
-                            기한이 지난 뒤(`DUE_PASSED`)에만 된다. 입금이 확인되지 않은 참여(입금 대기·「보냈어요」)는 같은
+                            미확인 참여가 있으면 입금 기한이 지난 뒤(관리 응답 `confirmCheck = DUE_PASSED`)에만 된다. 전원
+                            입금은 마지막 묶음 입금 확인(`POST /v1/participation-bundles/{id}/confirm`)이 그 자리에서 진행
+                            확정하므로, 모두 확인된 상태(`ALL_PAID`)로 이 API 에 오는 것은 옛 데이터뿐이다(그때도 된다).
+                            입금이 확인되지 않은 참여(입금 대기·「보냈어요」)는 같은
                             트랜잭션에서 취소되고(사유 `PAYMENT_NOT_CONFIRMED`) 「참여 취소 안내」가 간다. 입금 확인된 묶음마다
                             배송이 생기고 이때부터 운송장을 넣을 수 있다. 확인된 참여에게 「진행 확정 안내」가 간다.
 

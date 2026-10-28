@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  * 참여의 입금확인 때, 회원 개최는 진행 확정 때 호출자가 만든다.
  *
  * <p>분철이 CONFIRMED 로 전이되는 경로 — 운영진 분철의 deadline 마감 스케줄러({@code BuncheolAutoCloseService})·전 슬롯 입금확인 시
- * 조기 확정({@code ParticipationService#confirmPayment}), 회원 개최의 진행 확정({@code BuncheolService#confirmBuncheol}) —
+ * 조기 확정({@code ParticipationService#confirmPayment}), 회원 개최의 진행 확정({@link BuncheolConfirmer}) —
  * 이 동일한 후속 처리를 공유한다. 호출 측 {@code @Transactional} 안에서 호출해야 한다.
  */
 @Component

@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * 배송 정보를 스냅샷으로 생성한다. 부르는 시점은 플로우마다 다르다 — 운영진 분철은 입금 확인 때({@link
- * buncheoleasy.buncheol.application.participation.ParticipationService#confirmPayment}), 회원 개최는 진행 확정 때({@code
- * BuncheolService#confirmBuncheol}). 참여·배송지·유저 정보를 그 시점 값으로 박제해 {@link Delivery} 로 보관하므로 이후 원본 변경에
+ * buncheoleasy.buncheol.application.participation.ParticipationService#confirmPayment}), 회원 개최는 진행 확정 때({@link
+ * BuncheolConfirmer}). 참여·배송지·유저 정보를 그 시점 값으로 박제해 {@link Delivery} 로 보관하므로 이후 원본 변경에
  * 영향받지 않는다. 호출자 트랜잭션 안에서 실행된다.
  *
  * <p>🔴 <b>단위는 참여가 아니라 묶음이다</b> (docs/70 결정 4 — 택배 1개 = 묶음 1개). 다슬롯 묶음은 슬롯마다

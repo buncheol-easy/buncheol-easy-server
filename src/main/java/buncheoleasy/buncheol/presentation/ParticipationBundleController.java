@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.presentation;
 
+import buncheoleasy.buncheol.application.participation.BundleConfirmResult;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.dto.request.BundleConfirmRequest;
 import buncheoleasy.buncheol.dto.response.BundleConfirmResponse;
@@ -49,15 +50,18 @@ public class ParticipationBundleController {
    *
    * <p>요청의 {@code expectedSlotIds} 에는 개최 관리 응답에서 {@code confirmTarget} 이 {@code true} 인
    * 슬롯만 담는다. 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
+   *
+   * <p>이 묶음으로 분철의 미확인이 0 이 되면 같은 요청에서 진행 확정까지 하고 응답의 {@code buncheolConfirmed} 가 true 다.
    */
   @PostMapping("/{bundleId}/confirm")
   public ResponseEntity<BundleConfirmResponse> confirmPayment(
       @AuthenticationPrincipal final Long hostId,
       @PathVariable final Long bundleId,
       @Valid @RequestBody final BundleConfirmRequest request) {
+    BundleConfirmResult result =
+        participationBundleService.confirmPayment(hostId, bundleId, request.expectedSlotIds());
     return ResponseEntity.ok(
         new BundleConfirmResponse(
-            bundleId,
-            participationBundleService.confirmPayment(hostId, bundleId, request.expectedSlotIds())));
+            bundleId, result.confirmedParticipationIds(), result.buncheolConfirmed()));
   }
 }

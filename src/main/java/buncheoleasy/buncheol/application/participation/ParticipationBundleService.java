@@ -1,10 +1,13 @@
 package buncheoleasy.buncheol.application.participation;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmer;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -17,6 +20,7 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 묶음 단위 개최자 조작. 묶음은 현실의 돈 단위(이체 1회·배송비 1회·택배 1개)이므로 조작도 그 단위로 한다. */
@@ -26,7 +30,9 @@ public class ParticipationBundleService {
 
   private final ParticipationBundleDomainService participationBundleDomainService;
   private final ParticipationRepository participationRepository;
+  private final ParticipationDomainService participationDomainService;
   private final BuncheolDomainService buncheolDomainService;
+  private final BuncheolConfirmer buncheolConfirmer;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -125,9 +131,17 @@ public class ParticipationBundleService {
    * 409 로 막고 새로고침을 유도한다 — 개최자가 <b>보지 못한 슬롯까지 확정</b>하면 안 된다.
    *
    * <p>기한 경과를 검사하지 않는다 — 개최자 확인이 늦어도 유효해야 한다 (docs/46 §3-6).
+   *
+   * <p>이 묶음으로 미확인이 0 이 되면 같은 트랜잭션에서 분철을 진행 확정한다({@link BuncheolConfirmer}) — 확인된 묶음마다 배송이
+   * 생기고 진행확정 알림이 간다. 진행 확정이 실패하면(배송지 없음 등) 이 입금 확인도 함께 되돌린다. 확인만 남기면 "모두 확인됐는데 확정이
+   * 안 된" 분철이 생긴다.
+   *
+   * <p>🔴 READ COMMITTED 다({@link BuncheolConfirmer} 계약). 분철 행 잠금 앞에서 묶음을 일반 조회하므로, REPEATABLE READ 면 그
+   * 스냅샷이 남아 잠금을 기다리는 사이 다른 탭에서 확인된 묶음의 참여자가 진행확정 알림 대상(일반 조회)에서 빠진다. 판단(대조, 다시 세기,
+   * CAS)은 모두 잠금 읽기라 격리에 흔들리지 않고, 입금 수집 중에는 새 참여 INSERT 가 없어 간격 잠금이 빠져도 된다.
    */
-  @Transactional
-  public List<Long> confirmPayment(
+  @Transactional(isolation = Isolation.READ_COMMITTED)
+  public BundleConfirmResult confirmPayment(
       final Long hostId, final Long bundleId, final List<Long> expectedSlotIds) {
     final Instant now = Instant.now(clock);
     ParticipationBundle bundle =
@@ -164,9 +178,25 @@ public class ParticipationBundleService {
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
     }
 
-    // 배송은 여기서 만들지 않고 분철도 진행 확정하지 않는다 — 모두 입금 확인돼도 개최자의 진행 확정(BuncheolService#confirmBuncheol)
-    // 때 확인된 묶음마다 배송이 생긴다.
     eventPublisher.publishEvent(new BundlePaymentConfirmedEvent(bundleId, payableIds));
-    return payableIds;
+
+    // 분철 행을 쥔 채 다시 센다. 위 대조는 이 묶음뿐이고, 다른 묶음은 분철 행을 기다리는 사이 다른 탭의 입금 확인·「보냈어요」가
+    // 바꿨을 수 있다. 잠금 읽기는 최신 커밋을 보고, 그 뒤 같은 분철의 회원 개최 쓰기는 분철 행 앞에서 기다린다.
+    List<Participation> active =
+        participationDomainService.findActiveByBuncheolIdForUpdate(bundle.getBuncheolId());
+    ConfirmCheck check =
+        ConfirmCheck.of(
+            buncheol.getStatus(),
+            active.stream().filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED).count(),
+            active.stream()
+                .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
+                .count(),
+            buncheol.getPaymentDueAt(),
+            now);
+    if (check != ConfirmCheck.ALL_PAID) {
+      return new BundleConfirmResult(payableIds, false);
+    }
+    buncheolConfirmer.confirm(bundle.getBuncheolId(), active, now);
+    return new BundleConfirmResult(payableIds, true);
   }
 }

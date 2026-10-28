@@ -10,6 +10,7 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import buncheoleasy.buncheol.application.participation.BundleConfirmResult;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.global.docs.DocsTestSupport;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -86,7 +87,7 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
   @Test
   void 개최자_묶음_입금확인() throws Exception {
     given(participationBundleService.confirmPayment(eq(USER_ID), eq(BUNDLE_ID), any()))
-        .willReturn(List.of(232L, 233L));
+        .willReturn(new BundleConfirmResult(List.of(232L, 233L), true));
 
     mockMvc
         .perform(
@@ -117,9 +118,13 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
 
                             **입금 기한이 지나도 확인할 수 있다** — 개최자 확인이 늦어도 유효해야 한다.
 
-                            참여자에게는 **묶음 1통**으로 확인 알림이 간다. 배송은 여기서 만들지 않고, 전 슬롯이 확정돼도
-                            분철은 저절로 진행확정되지 않는다 — 개최자의 진행 확정(`POST /v1/buncheols/{id}/confirm`) 때
-                            확인된 묶음마다 배송이 생긴다.
+                            참여자에게는 **묶음 1통**으로 확인 알림이 간다.
+
+                            **이 묶음으로 분철의 미확인 참여가 0 이 되면 같은 요청에서 분철을 진행 확정한다** — 확인된
+                            묶음마다 배송이 생기고(운송장 입력칸이 열림) 확인된 참여자에게 진행확정 알림이 간다. 응답의
+                            `buncheolConfirmed` 가 `true` 다. 진행 확정에 실패하면(배송지 없음 등) 이 입금 확인도 함께
+                            되돌린다. 미확인이 남아 있으면 진행 확정은 입금 기한 뒤 개최자가 한다
+                            (`POST /v1/buncheols/{id}/confirm`).
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
@@ -142,7 +147,10 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                                 .description("확인한 묶음 ID"),
                             fieldWithPath("confirmedParticipationIds")
                                 .type(JsonFieldType.ARRAY)
-                                .description("확정된 참여 ID 목록"))
+                                .description("확정된 참여 ID 목록"),
+                            fieldWithPath("buncheolConfirmed")
+                                .type(JsonFieldType.BOOLEAN)
+                                .description("이 확인으로 분철이 진행 확정됐는가"))
                         .requestSchema(Schema.schema("BundleConfirmRequest"))
                         .responseSchema(Schema.schema("BundleConfirmResponse"))
                         .build())));

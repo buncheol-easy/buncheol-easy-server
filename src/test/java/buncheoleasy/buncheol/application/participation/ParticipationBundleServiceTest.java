@@ -6,17 +6,21 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmer;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
+import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.participation.RefundAccount;
@@ -34,6 +38,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -54,7 +59,9 @@ class ParticipationBundleServiceTest {
 
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
   @Mock private ParticipationRepository participationRepository;
+  @Mock private ParticipationDomainService participationDomainService;
   @Mock private BuncheolDomainService buncheolDomainService;
+  @Mock private BuncheolConfirmer buncheolConfirmer;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -235,35 +242,127 @@ class ParticipationBundleServiceTest {
                   .toList());
     }
 
+    /** 이 묶음을 확인한 뒤 분철 행 잠금 아래에서 다시 센 살아 있는 참여. */
+    private void stubActiveAfter(final Participation... participations) {
+      given(participationDomainService.findActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(participations));
+    }
+
+    private Buncheol collectingBuncheol() {
+      Buncheol buncheol = c2cBuncheol(HOST_ID);
+      lenient().when(buncheol.getStatus()).thenReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      lenient().when(buncheol.getPaymentDueAt()).thenReturn(NOW.plusSeconds(3600));
+      return buncheol;
+    }
+
     @Test
     @DisplayName("확인 가능 슬롯 전부를 한 번에 확정한다")
     void confirmsAllPayableSlots() {
-      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), collectingBuncheol());
       stubPayable(232L, 233L);
       given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
+      stubActiveAfter(
+          slot(232L, ParticipationStatus.CONFIRMED, null, null),
+          slot(233L, ParticipationStatus.CONFIRMED, null, null),
+          slot(300L, ParticipationStatus.AWAITING_PAYMENT, null, null));
 
-      List<Long> confirmed =
+      BundleConfirmResult result =
           participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L));
 
-      assertThat(confirmed).containsExactly(232L, 233L);
+      assertThat(result.confirmedParticipationIds()).containsExactly(232L, 233L);
       ArgumentCaptor<BundlePaymentConfirmedEvent> captor =
           ArgumentCaptor.forClass(BundlePaymentConfirmedEvent.class);
       then(eventPublisher).should().publishEvent(captor.capture());
       assertThat(captor.getValue().confirmedParticipationIds()).containsExactly(232L, 233L);
     }
 
-    // 모두 입금 확인돼도 분철은 저절로 진행 확정되지 않고, 배송도 여기서 만들지 않는다 — 개최자의 진행 확정 때 생긴다.
+    // 🔴 이 묶음 대조만으로는 모른다 — 다른 묶음은 분철 행을 기다리는 사이 바뀌었을 수 있어 잠금 아래에서 다시 센다.
     @Test
-    @DisplayName("묶음 입금확인은 배송을 만들지 않고 분철을 진행확정하지 않는다")
-    void doesNotCreateDeliveryNorConfirmBuncheol() {
-      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), c2cBuncheol(HOST_ID));
+    @DisplayName("마지막 미확인 묶음이면 같은 트랜잭션에서 다시 센 참여로 진행 확정하고 true 를 돌려준다")
+    void confirmsBuncheolWhenLastUnconfirmedBundle() {
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), collectingBuncheol());
       stubPayable(232L, 233L);
       given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
+      List<Participation> active =
+          List.of(
+              slot(232L, ParticipationStatus.CONFIRMED, null, null),
+              slot(233L, ParticipationStatus.CONFIRMED, null, null),
+              slot(300L, ParticipationStatus.CONFIRMED, null, null));
+      given(participationDomainService.findActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(active);
 
-      participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L, 233L));
+      BundleConfirmResult result =
+          participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L, 233L));
 
-      then(buncheolDomainService).should(never()).confirmIfCollecting(anyLong(), any());
-      then(participationRepository).should(never()).findAllByBundleIds(any());
+      assertThat(result.buncheolConfirmed()).isTrue();
+      // 「입금 확인 안내」를 먼저 내고 진행 확정(그 안의 진행확정 알림)이 뒤에 온다.
+      InOrder order =
+          inOrder(participationRepository, eventPublisher, participationDomainService, buncheolConfirmer);
+      order.verify(participationRepository).confirmBundleIfPayable(BUNDLE_ID, NOW);
+      order.verify(eventPublisher).publishEvent(any(BundlePaymentConfirmedEvent.class));
+      order.verify(participationDomainService).findActiveByBuncheolIdForUpdate(BUNCHEOL_ID);
+      order.verify(buncheolConfirmer).confirm(BUNCHEOL_ID, active, NOW);
+    }
+
+    @Test
+    @DisplayName("다른 묶음에 입금 대기가 남아 있으면 진행 확정하지 않고 false 를 돌려준다")
+    void doesNotConfirmBuncheolWhileOtherBundleAwaits() {
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), collectingBuncheol());
+      stubPayable(232L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
+      stubActiveAfter(
+          slot(232L, ParticipationStatus.CONFIRMED, null, null),
+          slot(300L, ParticipationStatus.AWAITING_PAYMENT, null, null));
+
+      BundleConfirmResult result =
+          participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L));
+
+      assertThat(result.buncheolConfirmed()).isFalse();
+      then(buncheolConfirmer).shouldHaveNoInteractions();
+    }
+
+    // 「보냈어요」는 참여자의 신고일 뿐 입금 확인이 아니다.
+    @Test
+    @DisplayName("남은 것이 「보냈어요」뿐이어도 진행 확정하지 않는다")
+    void doesNotConfirmBuncheolWhileOtherBundleOnlySent() {
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), collectingBuncheol());
+      stubPayable(232L);
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
+      stubActiveAfter(
+          slot(232L, ParticipationStatus.CONFIRMED, null, null),
+          slot(300L, ParticipationStatus.PAYMENT_SENT, null, null));
+
+      BundleConfirmResult result =
+          participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L));
+
+      assertThat(result.buncheolConfirmed()).isFalse();
+      then(buncheolConfirmer).shouldHaveNoInteractions();
+    }
+
+    // 0원 묶음도 입금 확인을 거치는 묶음이다 — 알림만 건너뛸 뿐 진행 확정 판정은 같다.
+    @Test
+    @DisplayName("0원 묶음이 마지막이어도 진행 확정한다")
+    void confirmsBuncheolWhenLastBundleIsFree() {
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(3600), collectingBuncheol());
+      Participation free =
+          Participation.createApplied(BUNCHEOL_ID, 732L, 10L, 1L, 0L, 0L);
+      setField(free, "id", 232L);
+      setField(free, "bundleId", BUNDLE_ID);
+      setField(free, "status", ParticipationStatus.AWAITING_PAYMENT);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID)).willReturn(List.of(free));
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
+      List<Participation> active =
+          List.of(
+              slot(232L, ParticipationStatus.CONFIRMED, null, null),
+              slot(300L, ParticipationStatus.CONFIRMED, null, null));
+      given(participationDomainService.findActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(active);
+
+      BundleConfirmResult result =
+          participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L));
+
+      assertThat(result.buncheolConfirmed()).isTrue();
+      then(buncheolConfirmer).should().confirm(BUNCHEOL_ID, active, NOW);
     }
 
     // 🔴 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
@@ -288,7 +387,10 @@ class ParticipationBundleServiceTest {
       stubPayable(232L, 233L);
       given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
 
-      assertThat(participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L)))
+      assertThat(
+              participationBundleService
+                  .confirmPayment(HOST_ID, BUNDLE_ID, List.of(233L, 232L))
+                  .confirmedParticipationIds())
           .containsExactly(232L, 233L);
     }
 

@@ -15,7 +15,8 @@ import java.util.List;
  * @param ended 분철이 완전히 끝났는지 — 개최 목록({@code MyHostedBuncheolResponse#ended})과 <b>같은 조회</b>로 판정한다. 목록
  *     카드와 관리 화면 머리가 다른 말을 하면 안 된다. 진행확정이 아니면 항상 {@code false}.
  * @param confirmCheck 회원 개최 진행 확정 판정. 진행 확정 API 게이트와 <b>같은 판정</b>({@link ConfirmCheck})이라 화면은
- *     {@code ALL_PAID}·{@code DUE_PASSED} 일 때만 진행 확정 버튼을 켠다. 입금 수집중이 아니면 {@code null}.
+ *     {@code ALL_PAID}·{@code DUE_PASSED} 일 때만 진행 확정 버튼을 켠다. 전원 입금은 마지막 묶음 입금 확인이 바로 진행 확정하므로
+ *     실제로 켜지는 것은 {@code DUE_PASSED} 다({@code ALL_PAID} 는 옛 데이터 대비). 입금 수집중이 아니면 {@code null}.
  */
 public record BuncheolManagementResponse(
     Long id,

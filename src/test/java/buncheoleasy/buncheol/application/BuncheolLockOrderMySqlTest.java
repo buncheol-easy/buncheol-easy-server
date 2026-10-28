@@ -21,6 +21,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -47,6 +48,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
 
   private static final Duration DAY = Duration.ofDays(1);
+  private static final String CONFIRMED_NOTICE = "분철 진행 확정 안내";
 
   @Autowired private DataSource dataSource;
   @Autowired private ParticipationService participationService;
@@ -136,6 +138,43 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
                   hostId, bundleId, List.of(participationId)));
 
       assertThat(statusOf("participations", participationId)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 마지막_미확인_묶음_입금_확인은_분철_행을_먼저_기다리고_진행_확정까지_한다() throws Exception {
+      long buncheolId = buncheol("C2C", "PAYMENT_COLLECTING", DAY);
+      long confirmedBundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, DAY);
+      long confirmedId =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              confirmedBundleId,
+              "CONFIRMED",
+              "C2C",
+              DAY);
+      long otherId = fixture.user(false);
+      long lastBundleId =
+          fixture.bundle(buncheolId, otherId, fixture.shippingAddress(otherId), DAY);
+      long lastId =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              otherId,
+              lastBundleId,
+              "PAYMENT_SENT",
+              "C2C",
+              DAY);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> participationBundleService.confirmPayment(hostId, lastBundleId, List.of(lastId)),
+          List.of(confirmedId, lastId));
+
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CONFIRMED");
+      assertThat(statusOf("participations", lastId)).isEqualTo("CONFIRMED");
+      assertThat(deliveryBundleIds(buncheolId))
+          .containsExactlyInAnyOrder(confirmedBundleId, lastBundleId);
     }
 
     @Test
@@ -436,6 +475,63 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   }
 
   @Nested
+  @DisplayName("잠금을 기다린 뒤 읽기")
+  class AfterLockWait {
+
+    // 묶음 입금 확인은 분철 행 잠금 앞에서 묶음을 일반 조회한다. REPEATABLE READ 면 그 조회가 만든 스냅샷이 남아, 잠금을 기다리는 사이
+    // 다른 탭에서 확인된 묶음 A 의 참여가 진행확정 알림 대상(일반 조회)에서 빠진다.
+    @Test
+    void 분철_행을_기다리는_사이_다른_묶음이_확인돼도_진행_확정_알림이_모두에게_간다() throws Exception {
+      long buncheolId = buncheol("C2C", "PAYMENT_COLLECTING", DAY);
+      long otherId = fixture.user(false);
+      long bundleA = fixture.bundle(buncheolId, otherId, fixture.shippingAddress(otherId), DAY);
+      fixture.participation(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          otherId,
+          bundleA,
+          "AWAITING_PAYMENT",
+          "C2C",
+          DAY);
+      long bundleB = fixture.bundle(buncheolId, participantId, shippingAddressId, DAY);
+      long participationB =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleB,
+              "AWAITING_PAYMENT",
+              "C2C",
+              DAY);
+
+      Future<?> result;
+      try (Connection holder = holdBuncheolRow(buncheolId)) {
+        result =
+            executor.submit(
+                () ->
+                    participationBundleService.confirmPayment(
+                        hostId, bundleB, List.of(participationB)));
+        assertThat(awaitBuncheolLockWait(result)).as("경로가 분철 행 잠금을 기다려야 한다").isTrue();
+        try (PreparedStatement ps =
+            holder.prepareStatement(
+                "UPDATE participations SET status = 'CONFIRMED', confirmed_at = UTC_TIMESTAMP()"
+                    + " WHERE bundle_id = ?")) {
+          ps.setLong(1, bundleA);
+          ps.executeUpdate();
+        }
+        holder.commit();
+      }
+      result.get(10, TimeUnit.SECONDS);
+
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CONFIRMED");
+      assertThat(deliveryBundleIds(buncheolId)).containsExactlyInAnyOrder(bundleA, bundleB);
+      assertThat(awaitInboxCount(List.of(otherId, participantId), CONFIRMED_NOTICE))
+          .as("진행 확정 안내가 두 참여자 모두에게 1건씩")
+          .containsExactly(1, 1);
+    }
+  }
+
+  @Nested
   @DisplayName("운영진 분철")
   class Staff {
 
@@ -511,6 +607,13 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
    */
   private void assertLocksBuncheolFirst(final long buncheolId, final Callable<?> path)
       throws Exception {
+    assertLocksBuncheolFirst(buncheolId, path, List.of());
+  }
+
+  /** {@code deliveryParticipationIds} 가 있으면 그 참여의 배송 행(진행 확정이 만드는 것)도 아직 안 잡았는지 본다. */
+  private void assertLocksBuncheolFirst(
+      final long buncheolId, final Callable<?> path, final List<Long> deliveryParticipationIds)
+      throws Exception {
     Future<?> result;
     try (Connection holder = holdBuncheolRow(buncheolId)) {
       result = executor.submit(path);
@@ -518,7 +621,7 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
         assertThat(awaitBuncheolLockWait(result))
             .as("경로가 분철 행 잠금을 기다려야 한다")
             .isTrue();
-        assertThatCode(() -> lockParticipationsAndBundlesNowait(buncheolId))
+        assertThatCode(() -> lockParticipationsAndBundlesNowait(buncheolId, deliveryParticipationIds))
             .as("분철 행을 기다리는 동안 참여·묶음 행을 잡고 있으면 안 된다")
             .doesNotThrowAnyException();
       } finally {
@@ -560,7 +663,8 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     return false;
   }
 
-  private void lockParticipationsAndBundlesNowait(final long buncheolId) throws SQLException {
+  private void lockParticipationsAndBundlesNowait(
+      final long buncheolId, final List<Long> deliveryParticipationIds) throws SQLException {
     try (Connection probe = dataSource.getConnection()) {
       probe.setAutoCommit(false);
       try {
@@ -575,10 +679,58 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
             }
           }
         }
+        if (!deliveryParticipationIds.isEmpty()) {
+          String placeholders =
+              String.join(",", Collections.nCopies(deliveryParticipationIds.size(), "?"));
+          try (PreparedStatement ps =
+              probe.prepareStatement(
+                  "SELECT id FROM deliveries WHERE participation_id IN ("
+                      + placeholders
+                      + ") FOR UPDATE NOWAIT")) {
+            for (int i = 0; i < deliveryParticipationIds.size(); i++) {
+              ps.setLong(i + 1, deliveryParticipationIds.get(i));
+            }
+            try (ResultSet ignored = ps.executeQuery()) {
+              // 잠금을 얻었으면 충분하다.
+            }
+          }
+        }
       } finally {
         probe.rollback();
       }
     }
+  }
+
+  private List<Long> deliveryBundleIds(final long buncheolId) {
+    return jdbcTemplate.queryForList(
+        "SELECT d.bundle_id FROM deliveries d"
+            + " JOIN participation_bundles pb ON pb.id = d.bundle_id WHERE pb.buncheol_id = ?",
+        Long.class,
+        buncheolId);
+  }
+
+  /** 커밋 뒤 비동기 리스너가 남기는 수신함 기록을 최대 5초 기다려 사람마다 센다. 모두 1 이상이 되면 바로 돌려준다. */
+  private List<Integer> awaitInboxCount(final List<Long> recipientIds, final String title)
+      throws InterruptedException {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    List<Integer> counts;
+    do {
+      counts =
+          recipientIds.stream()
+              .map(
+                  id ->
+                      jdbcTemplate.queryForObject(
+                          "SELECT COUNT(*) FROM inbox_messages WHERE recipient_id = ? AND title = ?",
+                          Integer.class,
+                          id,
+                          title))
+              .toList();
+      if (counts.stream().allMatch(count -> count > 0)) {
+        return counts;
+      }
+      Thread.sleep(50);
+    } while (System.nanoTime() < deadline);
+    return counts;
   }
 
   private String statusOf(final String table, final long id) {

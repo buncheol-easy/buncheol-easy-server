@@ -20,7 +20,6 @@ import static org.springframework.test.util.ReflectionTestUtils.setField;
 
 import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
 import buncheoleasy.buncheol.application.image.ImageFile;
-import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolParams;
@@ -98,9 +97,7 @@ class BuncheolServiceTest {
 
   @Mock private PaymentStarter paymentStarter;
 
-  @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
-
-  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
+  @Mock private BuncheolConfirmer buncheolConfirmer;
 
   @Mock private BuncheolImageDomainService buncheolImageDomainService;
 
@@ -1727,36 +1724,24 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 모두_입금_확인됐으면_기한_전이라도_진행_확정하고_확인된_참여마다_배송을_만든다() {
+    void 모두_입금_확인됐으면_기한_전이라도_잠금_읽기로_센_참여로_진행_확정한다() {
       lockedCollecting(NOW.plusSeconds(3600));
       Participation first = participation(601L, ParticipationStatus.CONFIRMED);
       Participation second = participation(602L, ParticipationStatus.CONFIRMED);
       givenActive(first, second);
-      given(buncheolDomainService.confirmIfCollecting(BUNCHEOL_ID, NOW)).willReturn(true);
-      given(participationDomainService.cancelUnconfirmedByBuncheolId(BUNCHEOL_ID, NOW))
-          .willReturn(0);
 
       buncheolService.confirmBuncheol(HOST_ID, BUNCHEOL_ID, request());
 
-      // 묶음에 배송이 이미 있으면 DeliverySnapshotCreator 가 건너뛴다 — 묶음당 1개.
-      then(deliverySnapshotCreator).should().create(first);
-      then(deliverySnapshotCreator).should().create(second);
-      then(participationBundleDomainService).should().closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
-      then(buncheolConfirmedFinalizer).should().finalizeConfirmed(BUNCHEOL_ID);
-      then(eventPublisher).should(never()).publishEvent(any(PaymentNotConfirmedEvent.class));
+      then(buncheolConfirmer).should().confirm(BUNCHEOL_ID, List.of(first, second), NOW);
     }
 
     @Test
-    void 기한이_지나면_확인된_참여로_진행_확정하고_미확인_참여를_빼며_빠짐_이벤트를_한_번_발행한다() {
+    void 기한이_지나면_빠질_참여_목록을_집합으로_대조하고_진행_확정한다() {
       lockedCollecting(DUE);
       Participation confirmed = participation(601L, ParticipationStatus.CONFIRMED);
-      givenActive(
-          confirmed,
-          participation(603L, ParticipationStatus.PAYMENT_SENT),
-          participation(602L, ParticipationStatus.AWAITING_PAYMENT));
-      given(buncheolDomainService.confirmIfCollecting(BUNCHEOL_ID, NOW)).willReturn(true);
-      given(participationDomainService.cancelUnconfirmedByBuncheolId(BUNCHEOL_ID, NOW))
-          .willReturn(2);
+      Participation sent = participation(603L, ParticipationStatus.PAYMENT_SENT);
+      Participation awaiting = participation(602L, ParticipationStatus.AWAITING_PAYMENT);
+      givenActive(confirmed, sent, awaiting);
 
       // 순서는 화면이 보장하지 않는다 — 집합으로 대조한다.
       buncheolService.confirmBuncheol(
@@ -1766,14 +1751,7 @@ class BuncheolServiceTest {
               new CancelParticipation(602L, ParticipationStatus.AWAITING_PAYMENT),
               new CancelParticipation(603L, ParticipationStatus.PAYMENT_SENT)));
 
-      InOrder order = inOrder(buncheolDomainService, participationDomainService);
-      order.verify(buncheolDomainService).confirmIfCollecting(BUNCHEOL_ID, NOW);
-      order.verify(participationDomainService).cancelUnconfirmedByBuncheolId(BUNCHEOL_ID, NOW);
-      then(deliverySnapshotCreator).should().create(confirmed);
-      then(deliverySnapshotCreator).shouldHaveNoMoreInteractions();
-      then(eventPublisher)
-          .should()
-          .publishEvent(new PaymentNotConfirmedEvent(BUNCHEOL_ID, List.of(602L, 603L)));
+      then(buncheolConfirmer).should().confirm(BUNCHEOL_ID, List.of(confirmed, sent, awaiting), NOW);
     }
 
     @Test
@@ -1793,7 +1771,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
 
-      then(buncheolDomainService).should(never()).confirmIfCollecting(anyLong(), any());
+      then(buncheolConfirmer).shouldHaveNoInteractions();
     }
 
     // 확인된 자리가 0 이면 기한이 지나도 진행 확정할 것이 없다 — 운영진 경유다.
@@ -1846,8 +1824,7 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_CONFIRM_LIST_CHANGED);
 
-      then(buncheolDomainService).should(never()).confirmIfCollecting(anyLong(), any());
-      then(participationDomainService).should(never()).cancelUnconfirmedByBuncheolId(anyLong(), any());
+      then(buncheolConfirmer).shouldHaveNoInteractions();
     }
 
     // 🔴 「보냈어요」는 id 는 그대로 두고 상태만 바꾼다 — id 로만 대조하면 강조 없이 본 사람을 빼게 된다.
@@ -1896,52 +1873,11 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
     }
 
-    // 분철 행을 잠근 채 상태를 봤으므로 CAS 가 0 행이면 내부 불변식 위반이다 — 참여를 빼지 않고 롤백한다.
-    @Test
-    void 진행_확정_CAS_가_0행이면_참여를_빼지_않는다() {
-      lockedCollecting(DUE);
-      givenActive(participation(601L, ParticipationStatus.CONFIRMED));
-      given(buncheolDomainService.confirmIfCollecting(BUNCHEOL_ID, NOW)).willReturn(false);
-
-      assertThatThrownBy(() -> buncheolService.confirmBuncheol(HOST_ID, BUNCHEOL_ID, request()))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
-
-      then(participationDomainService).should(never()).cancelUnconfirmedByBuncheolId(anyLong(), any());
-      then(deliverySnapshotCreator).shouldHaveNoInteractions();
-    }
-
-    @Test
-    void 빠진_참여_수가_센_수와_다르면_롤백한다() {
-      lockedCollecting(DUE);
-      givenActive(
-          participation(601L, ParticipationStatus.CONFIRMED),
-          participation(602L, ParticipationStatus.AWAITING_PAYMENT));
-      given(buncheolDomainService.confirmIfCollecting(BUNCHEOL_ID, NOW)).willReturn(true);
-      given(participationDomainService.cancelUnconfirmedByBuncheolId(BUNCHEOL_ID, NOW))
-          .willReturn(0);
-
-      assertThatThrownBy(
-              () ->
-                  buncheolService.confirmBuncheol(
-                      HOST_ID,
-                      BUNCHEOL_ID,
-                      request(new CancelParticipation(602L, ParticipationStatus.AWAITING_PAYMENT))))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
-
-      then(deliverySnapshotCreator).shouldHaveNoInteractions();
-      then(buncheolConfirmedFinalizer).shouldHaveNoInteractions();
-    }
-
     // 🔴 잠금 조회가 트랜잭션의 첫 분철 조회여야 한다 — 앞에서 getBuncheol 을 부르면 낡은 인스턴스가 돌아온다.
     @Test
     void 분철_잠금_조회가_첫_분철_조회이고_참여는_잠금_읽기로_센다() {
       lockedCollecting(NOW.plusSeconds(3600));
       givenActive(participation(601L, ParticipationStatus.CONFIRMED));
-      given(buncheolDomainService.confirmIfCollecting(BUNCHEOL_ID, NOW)).willReturn(true);
 
       buncheolService.confirmBuncheol(HOST_ID, BUNCHEOL_ID, request());
 

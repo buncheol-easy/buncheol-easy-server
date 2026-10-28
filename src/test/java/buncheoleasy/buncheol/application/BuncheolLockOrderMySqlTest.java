@@ -719,7 +719,8 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
         assertThat(awaitBuncheolLockWait(result))
             .as("경로가 분철 행 잠금을 기다려야 한다")
             .isTrue();
-        assertThatCode(() -> lockParticipationsAndBundlesNowait(buncheolId, deliveryParticipationIds))
+        assertThatCode(
+                () -> lockParticipationsAndBundlesNowait(buncheolId, deliveryParticipationIds))
             .as("분철 행을 기다리는 동안 참여·묶음 행을 잡고 있으면 안 된다")
             .doesNotThrowAnyException();
       } finally {
@@ -815,8 +816,9 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     long otherId = fixture.user(false);
     List<Long> participationIds = new ArrayList<>();
     List<Long> deliveryIds = new ArrayList<>();
+    long otherAddressId = fixture.shippingAddress(otherId);
     for (long[] person :
-        new long[][] {{participantId, shippingAddressId}, {otherId, fixture.shippingAddress(otherId)}}) {
+        new long[][] {{participantId, shippingAddressId}, {otherId, otherAddressId}}) {
       long bundleId = fixture.bundle(buncheolId, person[0], person[1], Duration.ofHours(-1));
       long participationId =
           fixture.participation(
@@ -865,7 +867,8 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
               .map(
                   id ->
                       jdbcTemplate.queryForObject(
-                          "SELECT COUNT(*) FROM inbox_messages WHERE recipient_id = ? AND title = ?",
+                          "SELECT COUNT(*) FROM inbox_messages"
+                              + " WHERE recipient_id = ? AND title = ?",
                           Integer.class,
                           id,
                           title))

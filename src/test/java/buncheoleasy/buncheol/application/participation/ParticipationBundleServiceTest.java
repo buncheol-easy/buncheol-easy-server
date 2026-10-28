@@ -297,7 +297,11 @@ class ParticipationBundleServiceTest {
       assertThat(result.buncheolConfirmed()).isTrue();
       // 「입금 확인 안내」를 먼저 내고 진행 확정(그 안의 진행확정 알림)이 뒤에 온다.
       InOrder order =
-          inOrder(participationRepository, eventPublisher, participationDomainService, buncheolConfirmer);
+          inOrder(
+              participationRepository,
+              eventPublisher,
+              participationDomainService,
+              buncheolConfirmer);
       order.verify(participationRepository).confirmBundleIfPayable(BUNDLE_ID, NOW);
       order.verify(eventPublisher).publishEvent(any(BundlePaymentConfirmedEvent.class));
       order.verify(participationDomainService).findActiveByBuncheolIdForUpdate(BUNCHEOL_ID);
@@ -349,7 +353,8 @@ class ParticipationBundleServiceTest {
       setField(free, "id", 232L);
       setField(free, "bundleId", BUNDLE_ID);
       setField(free, "status", ParticipationStatus.AWAITING_PAYMENT);
-      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID)).willReturn(List.of(free));
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(free));
       given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
       List<Participation> active =
           List.of(

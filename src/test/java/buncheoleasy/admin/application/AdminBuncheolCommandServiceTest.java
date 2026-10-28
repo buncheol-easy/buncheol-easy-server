@@ -89,7 +89,8 @@ class AdminBuncheolCommandServiceTest {
         .willReturn(active);
   }
 
-  private void givenDeliveries(final List<Long> participationIds, final DeliveryStatus... statuses) {
+  private void givenDeliveries(
+      final List<Long> participationIds, final DeliveryStatus... statuses) {
     List<Delivery> deliveries = Arrays.stream(statuses).map(status -> delivery(status)).toList();
     given(deliveryDomainService.findAllByParticipationIdsForUpdate(participationIds))
         .willReturn(deliveries);
@@ -108,7 +109,8 @@ class AdminBuncheolCommandServiceTest {
     adminBuncheolCommandService.cancel(BUNCHEOL_ID);
 
     InOrder order =
-        inOrder(buncheolDomainService, participationDomainService, participationBundleDomainService);
+        inOrder(
+            buncheolDomainService, participationDomainService, participationBundleDomainService);
     order.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
     order
         .verify(buncheolDomainService)
@@ -137,7 +139,8 @@ class AdminBuncheolCommandServiceTest {
     adminBuncheolCommandService.cancel(BUNCHEOL_ID);
 
     // 분철 → 참여 → 배송 순서로 잠근 뒤 CAS 한다.
-    InOrder order = inOrder(buncheolDomainService, participationDomainService, deliveryDomainService);
+    InOrder order =
+        inOrder(buncheolDomainService, participationDomainService, deliveryDomainService);
     order.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
     order.verify(participationDomainService).findActiveByBuncheolIdForUpdate(BUNCHEOL_ID);
     order.verify(deliveryDomainService).findAllByParticipationIdsForUpdate(List.of(601L, 602L));

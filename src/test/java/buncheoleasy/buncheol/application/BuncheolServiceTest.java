@@ -1766,7 +1766,9 @@ class BuncheolServiceTest {
               new CancelParticipation(602L, ParticipationStatus.AWAITING_PAYMENT),
               new CancelParticipation(603L, ParticipationStatus.PAYMENT_SENT)));
 
-      then(buncheolConfirmer).should().confirm(BUNCHEOL_ID, List.of(confirmed, sent, awaiting), NOW);
+      then(buncheolConfirmer)
+          .should()
+          .confirm(BUNCHEOL_ID, List.of(confirmed, sent, awaiting), NOW);
     }
 
     @Test

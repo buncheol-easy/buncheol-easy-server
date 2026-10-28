@@ -115,7 +115,9 @@ class BuncheolConfirmerTest {
         .extracting("errorCode")
         .isEqualTo(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
 
-    then(participationDomainService).should(never()).cancelUnconfirmedByBuncheolId(anyLong(), any());
+    then(participationDomainService)
+        .should(never())
+        .cancelUnconfirmedByBuncheolId(anyLong(), any());
     then(deliverySnapshotCreator).shouldHaveNoInteractions();
     then(buncheolConfirmedFinalizer).shouldHaveNoInteractions();
   }

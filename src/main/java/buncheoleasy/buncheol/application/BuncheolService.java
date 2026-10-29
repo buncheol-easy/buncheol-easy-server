@@ -481,7 +481,8 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 개최자가 신청을 받는 동안(모집중·마감 전) 빈 자리를 분철에서 뺀다 — 다른 곳에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
+   * C2C 개최자가 신청을 받는 동안(모집중·마감 전, 또는 진행 확정 뒤 추가 모집 중) 빈 자리를 분철에서 뺀다 — 다른 곳에서 먼저 팔린
+   * 멤버나 추가 모집을 하지 않을 멤버를 신청 대상에서 내리는 용도다.
    *
    * <ul>
    *   <li>참여·참여 코드 기록이 하나도 없는 자리는 행을 지운다 — 상세·목록·찜·멤버 검색에서 처음부터 없던 멤버처럼 사라진다.
@@ -493,7 +494,8 @@ public class BuncheolService {
    * 분철은 어디에서도 전제하지 않는다. 단 그 자리에 신청자가 있으면 BCH-118 이 먼저다 — 신청자가 있는 분철에 「분철을 취소해
    * 주세요」를 권하면 안 된다.
    *
-   * <p>모집중에 빼서 열린 자리 수가 최소 인원보다 작아지면 최소 인원을 열린 자리 수로 낮춘다. 그대로 두면 C2C 는 마감 정각에 인원
+   * <p>모집중에 빼서 열린 자리 수가 최소 인원보다 작아지면 최소 인원을 열린 자리 수로 낮춘다(진행 확정 뒤에는 최소 인원·입금 단계와
+   * 무관해 하지 않는다). 그대로 두면 C2C 는 마감 정각에 인원
    * 미달로 즉시 취소되어 신청자까지 전원 취소된다. 빼고 나니 남은 열린 자리가 모두 신청됐으면 같은 트랜잭션에서 입금 단계를 시작한다
    * ({@link PaymentStarter#startIfFull}, 신청 경로와 같은 판정).
    *
@@ -503,7 +505,7 @@ public class BuncheolService {
   @Transactional
   public void removeMember(final Long hostId, final Long buncheolId, final Long buncheolMemberId) {
     final Instant now = Instant.now(clock);
-    lockForSlotEdit(hostId, buncheolId, now);
+    Buncheol buncheol = lockForSlotEdit(hostId, buncheolId, now);
 
     // 잠금 조회라 분철 락을 기다리는 동안 커밋된 다른 빼기까지 센다 — 스냅샷으로 세면 두 탭에서 동시에 빼기를 눌렀을 때
     // 둘 다 "2자리 남음" 을 보고 자리가 0 이 될 수 있다.
@@ -534,6 +536,10 @@ public class BuncheolService {
         && !buncheolMemberDomainService.closeIfUnoccupied(buncheolMemberId, buncheolId)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT);
     }
+    // 진행 확정 뒤(추가 모집 중) 빼기는 최소 인원·입금 단계와 무관하다. 잠금 읽기로 읽은 상태라 최신이다.
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+      return;
+    }
 
     // 모집중 여부는 UPDATE 조건도 함께 본다. 위 DELETE·닫기가 영속성 컨텍스트를 비웠으므로 엔티티 더티체킹이 아니라 UPDATE 로
     // 쓴다.
@@ -545,7 +551,8 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 개최자가 신청을 받는 동안 그 분철 그룹의 멤버를 자리로 (다시) 넣는다 — 실수로 뺀 자리를 되살리는 경로다. 개최와 같은
+   * C2C 개최자가 신청을 받는 동안(모집 중, 추가 모집 중) 그 분철 그룹의 멤버를 자리로 (다시) 넣는다 — 실수로 뺀 자리를 되살리거나
+   * 추가 모집할 자리를 만드는 경로다. 개최와 같은
    * 검사(그룹 소속·중복 금지·가격 규칙)를 하고, 선착순(OPEN) 자리로 만든다. 최소 인원은 올리지 않는다.
    *
    * <p>같은 멤버의 닫힌({@code CLOSED}) 자리가 있으면 새로 만들지 않고 <b>그 자리를 다시 연다</b>(가격은 새로 받은 값) — 기록이 FK 로
@@ -579,11 +586,10 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 개최자가 <b>모집중·마감 전</b>에 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 — 그 자리에 활성 신청자가 있으면 바꾸지
-   * 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
+   * C2C 개최자가 신청을 받는 동안(모집중·마감 전, 또는 진행 확정 뒤 추가 모집 중) 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 —
+   * 그 자리에 활성 신청자가 있으면 바꾸지 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
    *
-   * <p>빼기·넣기와 같이 입금 단계가 시작되면 열지 않는다({@link #lockForSlotEdit}). 아래 모집중 검사는 마감 뒤 판정 전 구간도
-   * 막는다.
+   * <p>열리는 구간은 빼기·넣기와 같다({@link #lockForSlotEdit}). 마감 뒤 판정 전 모집중도 그 판정이 막는다.
    *
    * <p>닫힌 자리는 바꾸지 않는다 — 다시 넣기({@link #addMember})가 가격을 받아 연다. 판정과 쓰기는 조건부 UPDATE 하나이고, 락 순서는
    * 분철 행(X) → 자리 행(X, UPDATE) → 참여 행(S, NOT EXISTS) 으로 빼기와 같다.
@@ -592,8 +598,7 @@ public class BuncheolService {
   public void changeMemberPrice(
       final Long hostId, final Long buncheolId, final Long buncheolMemberId, final long price) {
     final Instant now = Instant.now(clock);
-    Buncheol buncheol = lockForSlotEdit(hostId, buncheolId, now);
-    buncheol.validateRecruiting(now);
+    lockForSlotEdit(hostId, buncheolId, now);
 
     if (!buncheolMemberDomainService.changePriceIfUnoccupied(buncheolMemberId, buncheolId, price)) {
       // 판정은 위 UPDATE 로 끝났고, 여기서 읽는 것은 어느 안내를 줄지뿐이다 — 그 분철의 자리가 아니면 빼기와 같은 404.
@@ -603,8 +608,8 @@ public class BuncheolService {
   }
 
   /**
-   * 자리 빼기·넣기·가격 바꾸기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다. 모집중·마감 전에만
-   * 연다 — 입금 단계가 시작되면 자리가 거래 조건이 된다.
+   * 자리 빼기·넣기·가격 바꾸기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다. 모집중·마감 전과
+   * 진행 확정 뒤 추가 모집 중에만 연다 — 입금 단계에는 자리가 거래 조건이고, 추가 모집을 끄거나 「종료」되면 신청을 받지 않는다.
    *
    * <p>🔴 이 잠금 조회가 트랜잭션의 <b>첫 분철 조회</b>여야 한다. 앞에서 {@code getBuncheol} 을 부르면 영속성 컨텍스트가 락 이전에
    * 읽은 인스턴스를 그대로 돌려줘 상태 판정이 낡는다(ParticipationService#participateC2c 주석과 같은 함정).

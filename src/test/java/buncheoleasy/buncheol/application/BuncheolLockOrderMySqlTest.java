@@ -772,6 +772,26 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     }
 
     @Test
+    void 추가_모집_중_자리_빼기는_분철_행을_먼저_기다리고_입금_단계와_무관하다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      fixture.openExtraRecruit(buncheolId);
+      long emptySlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            buncheolService.removeMember(hostId, buncheolId, emptySlotId);
+            return null;
+          });
+
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT COUNT(*) FROM buncheol_members WHERE id = ?", Integer.class, emptySlotId))
+          .isZero();
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
     void 추가_신청은_분철_행을_먼저_기다리고_추가_묶음으로_들어간다() throws Exception {
       long buncheolId = confirmedNotEnded();
       fixture.openExtraRecruit(buncheolId);

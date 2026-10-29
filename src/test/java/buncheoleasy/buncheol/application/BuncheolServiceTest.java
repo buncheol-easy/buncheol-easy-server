@@ -2533,6 +2533,102 @@ class BuncheolServiceTest {
     }
   }
 
+  @Nested
+  @DisplayName("진행 확정 뒤 추가 모집 중 자리 편집 테스트")
+  class ExtraRecruitSlotEditTest {
+
+    private static final Long SLOT_ID = 7L;
+    private static final Long OTHER_SLOT_ID = 8L;
+
+    // 원래 마감은 이미 지났다 — 추가 모집 판정은 마감을 보지 않는다.
+    private Buncheol givenConfirmed(final boolean extraRecruitOpen, final boolean ended) {
+      Buncheol buncheol = slotEditBuncheol(FlowType.C2C, BuncheolStatus.CONFIRMED);
+      setField(buncheol, "deadline", NOW.minus(2, ChronoUnit.DAYS));
+      setField(buncheol, "extraRecruitOpen", extraRecruitOpen);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      lenient().when(buncheolDomainService.isEnded(BUNCHEOL_ID)).thenReturn(ended);
+      return buncheol;
+    }
+
+    @Test
+    void 켜져_있으면_빼기가_되고_최소_인원과_입금_단계는_건드리지_않는다() {
+      givenConfirmed(true, false);
+      given(buncheolMemberDomainService.findAllByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(slot(SLOT_ID, MEMBER_ID), slot(OTHER_SLOT_ID, MEMBER_ID + 1)));
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID)).willReturn(true);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolMemberDomainService).should().removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID);
+      then(buncheolDomainService).should(never()).lowerMinHeadcountToSlotCount(any(), anyInt(), any());
+      then(paymentStarter).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 켜져_있으면_넣기가_된다() {
+      Buncheol buncheol = givenConfirmed(true, false);
+      given(buncheolMemberDomainService.findInBuncheol(BUNCHEOL_ID, MEMBER_ID))
+          .willReturn(Optional.empty());
+      given(buncheolMemberDomainService.addOpenSlot(BUNCHEOL_ID, MEMBER_ID, 15_000L))
+          .willReturn(slot(SLOT_ID, MEMBER_ID));
+
+      Long slotId =
+          buncheolService.addMember(
+              HOST_ID, BUNCHEOL_ID, new BuncheolMemberAddRequest(MEMBER_ID, 15_000L));
+
+      assertThat(slotId).isEqualTo(SLOT_ID);
+      then(groupDomainService)
+          .should()
+          .getGroupMembersByIdsInGroup(buncheol.getGroupId(), List.of(MEMBER_ID));
+    }
+
+    @Test
+    void 켜져_있으면_빈_자리_가격을_바꾼다() {
+      givenConfirmed(true, false);
+      given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
+          .willReturn(true);
+
+      buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L);
+
+      then(buncheolMemberDomainService).should().changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L);
+    }
+
+    @Test
+    void 스위치가_꺼져_있으면_빼기_넣기_가격_모두_막는다() {
+      givenConfirmed(false, false);
+
+      assertSlotEditBlocked();
+      then(buncheolDomainService).should(never()).isEnded(any());
+    }
+
+    @Test
+    void 종료된_분철이면_스위치가_켜져_있어도_막는다() {
+      givenConfirmed(true, true);
+
+      assertSlotEditBlocked();
+    }
+
+    private void assertSlotEditBlocked() {
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      assertThatThrownBy(
+              () ->
+                  buncheolService.addMember(
+                      HOST_ID, BUNCHEOL_ID, new BuncheolMemberAddRequest(MEMBER_ID, 15_000L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      then(buncheolMemberDomainService).shouldHaveNoInteractions();
+    }
+  }
+
   /** 자리 빼기·넣기용 실제 분철 — 개최자·플로우·상태 검사를 목이 아니라 도메인 코드로 태운다. */
   private Buncheol slotEditBuncheol(final FlowType flowType, final BuncheolStatus status) {
     Buncheol buncheol =

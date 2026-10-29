@@ -26,8 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 여기서 접는다. 입금 확인 건수와 무관하게 분철을 숨기고(HOST_CANCELLED) 입금 확인된 참여까지 전원 취소하며 참여자에게 「분철 취소 안내」를
  * 보낸다. 환불은 개최자가 하고 운영자가 확인한다(기능 없음).
  *
- * <p>진행 확정 뒤라도 운송장이 하나도 등록되기 전이면 파기할 수 있다. 진행 확정 때 만들어진 배송은 취소 연쇄가 지운다. 운송장이 하나라도
- * 있으면 발송이 시작된 것이라 BCH-130 으로 거절한다.
+ * <p>운송장이 하나라도 있으면 발송이 시작된 것이라 상태와 무관하게 BCH-130 으로 거절한다. 옛 서버는 진행 확정 전에도 운송장을 받아서
+ * 입금 수집 중 분철에도 운송장이 있을 수 있다. 운송장 전이면 진행 확정 뒤라도 파기하고, 진행 확정 때 만들어진 배송은 취소 연쇄가 지운다.
  */
 @Slf4j
 @Service
@@ -55,8 +55,7 @@ public class AdminBuncheolCommandService {
       throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
     }
     switch (before) {
-      case PAYMENT_COLLECTING -> {}
-      case CONFIRMED -> requireNoTracking(buncheolId);
+      case PAYMENT_COLLECTING, CONFIRMED -> requireNoTracking(buncheolId);
       default -> throw new BusinessException(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
     }
     if (!buncheolDomainService.staffCancelIfStatus(buncheolId, before, now)) {
@@ -76,9 +75,9 @@ public class AdminBuncheolCommandService {
   }
 
   /**
-   * 운송장 전 = 그 분철의 배송이 모두 SNAPSHOTTED. 운송장 번호를 쓰는 길은 상태를 SHIPPING 으로 함께 바꾸는 CAS 하나라 상태만 보면
-   * 된다. 배송 행을 잠가 읽으므로 운송장 등록과 겹치면 배송 행에서 한쪽만 반영된다 — 등록이 먼저 커밋되면 여기서 SHIPPING 을 보고, 파기가
-   * 먼저 커밋되면 등록 CAS 가 지워진 행을 보고 실패한다.
+   * 운송장 전 = 살아 있는 참여의 배송이 모두 SNAPSHOTTED(배송이 없어도 운송장 전). 입금 수집 중·진행 확정 모두 같은 검사다. 운송장
+   * 번호를 쓰는 길은 상태를 SHIPPING 으로 함께 바꾸는 CAS 하나라 상태만 보면 된다. 배송 행을 잠가 읽으므로 운송장 등록과 겹치면 배송
+   * 행에서 한쪽만 반영된다 — 등록이 먼저 커밋되면 여기서 SHIPPING 을 보고, 파기가 먼저 커밋되면 등록 CAS 가 지워진 행을 보고 실패한다.
    */
   private void requireNoTracking(final Long buncheolId) {
     List<Long> activeIds =

@@ -42,15 +42,15 @@ class AdminBuncheolControllerDocsTest extends DocsTestSupport {
                             사람당 1통 간다. 환불은 개최자가 하고 운영자가 확인한다.
 
                             **진행 확정(`CONFIRMED`)된 회원 개최 분철도 운송장이 하나도 등록되기 전이면 파기한다.** 결과는 같고,
-                            진행 확정 때 만들어진 배송 기록(모두 `SNAPSHOTTED`)도 함께 지운다. 운송장이 하나라도 있으면 발송이
-                            시작된 것이라 `BCH-130` 으로 거절하고 아무것도 바꾸지 않는다.
+                            진행 확정 때 만들어진 배송 기록(모두 `SNAPSHOTTED`)도 함께 지운다. 상태와 무관하게 운송장이 하나라도
+                            있으면 발송이 시작된 것이라 `BCH-130` 으로 거절하고 아무것도 바꾸지 않는다.
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-050` (`BUNCHEOL_CANCEL_NOT_ALLOWED`) | 입금 수집 중이거나 진행 확정된 회원 개최 분철이 아님(모집중·취소·운영진 분철) |
-                            | 409 | `BCH-130` (`BUNCHEOL_CANCEL_HAS_TRACKING`) | 진행 확정 분철에 운송장이 등록된 배송이 있음 |
+                            | 409 | `BCH-130` (`BUNCHEOL_CANCEL_HAS_TRACKING`) | 배송 가운데 운송장이 등록된 것이 있음 |
                             """)
                         .requestHeaders(adminAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

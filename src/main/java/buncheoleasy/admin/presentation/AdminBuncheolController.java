@@ -18,7 +18,7 @@ public class AdminBuncheolController {
 
   /**
    * 회원 개최 분철 파기(입금 수집중, 또는 운송장 전인 진행 확정). 분철을 숨기고 입금 확인된 참여까지 전원 취소하며 참여자에게 분철 취소
-   * 안내를 보낸다. 진행 확정 분철에 운송장이 하나라도 있으면 409(BCH-130).
+   * 안내를 보낸다. 상태와 무관하게 운송장이 하나라도 있으면 409(BCH-130).
    */
   @PostMapping("/{id}/cancel")
   public ResponseEntity<Void> cancel(@PathVariable final Long id) {

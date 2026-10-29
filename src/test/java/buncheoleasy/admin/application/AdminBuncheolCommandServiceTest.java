@@ -32,6 +32,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -100,6 +101,8 @@ class AdminBuncheolCommandServiceTest {
   @Test
   void 입금_수집_중이면_분철을_숨기고_살아_있는_참여를_전원_취소하며_취소_안내를_한_번_보낸다() {
     givenLocked(BuncheolStatus.PAYMENT_COLLECTING, false);
+    givenActive(601L, 602L);
+    givenDeliveries(List.of(601L, 602L));
     given(
             buncheolDomainService.staffCancelIfStatus(
                 BUNCHEOL_ID, BuncheolStatus.PAYMENT_COLLECTING, NOW))
@@ -108,17 +111,22 @@ class AdminBuncheolCommandServiceTest {
 
     adminBuncheolCommandService.cancel(BUNCHEOL_ID);
 
+    // 입금 수집 중에도 운송장을 본다 — 분철 → 참여 → 배송 순서로 잠근 뒤 CAS 한다.
     InOrder order =
         inOrder(
-            buncheolDomainService, participationDomainService, participationBundleDomainService);
+            buncheolDomainService,
+            participationDomainService,
+            participationBundleDomainService,
+            deliveryDomainService);
     order.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+    order.verify(participationDomainService).findActiveByBuncheolIdForUpdate(BUNCHEOL_ID);
+    order.verify(deliveryDomainService).findAllByParticipationIdsForUpdate(List.of(601L, 602L));
     order
         .verify(buncheolDomainService)
         .staffCancelIfStatus(BUNCHEOL_ID, BuncheolStatus.PAYMENT_COLLECTING, NOW);
     order.verify(participationDomainService).cancelActiveByBuncheolId(BUNCHEOL_ID, NOW);
     order.verify(participationBundleDomainService).closeEmptyByBuncheolId(BUNCHEOL_ID, NOW);
     then(deliveryDomainService).should().deleteByParticipationIds(List.of(601L, 602L));
-    then(deliveryDomainService).should(never()).findAllByParticipationIdsForUpdate(anyList());
     then(eventPublisher)
         .should()
         .publishEvent(
@@ -171,12 +179,19 @@ class AdminBuncheolCommandServiceTest {
   }
 
   // 발송이 시작된 분철은 운영자가 따로 처리한다 — 상태 위반(BCH-050)과 다른 코드로 알리고 아무것도 바꾸지 않는다.
+  // 입금 수집 중 줄은 옛 서버가 진행 확정 전에 받은 운송장이다.
   @ParameterizedTest
-  @EnumSource(
-      value = DeliveryStatus.class,
-      names = {"SHIPPING", "DELIVERED", "RECEIVED"})
-  void 진행_확정_분철에_운송장이_하나라도_있으면_BCH_130_으로_거절한다(final DeliveryStatus shipped) {
-    givenLocked(BuncheolStatus.CONFIRMED, false);
+  @CsvSource({
+    "PAYMENT_COLLECTING, SHIPPING",
+    "PAYMENT_COLLECTING, DELIVERED",
+    "PAYMENT_COLLECTING, RECEIVED",
+    "CONFIRMED, SHIPPING",
+    "CONFIRMED, DELIVERED",
+    "CONFIRMED, RECEIVED"
+  })
+  void 운송장이_하나라도_있으면_입금_수집_중이든_진행_확정이든_BCH_130_으로_거절한다(
+      final BuncheolStatus status, final DeliveryStatus shipped) {
+    givenLocked(status, false);
     givenActive(601L, 602L);
     givenDeliveries(List.of(601L, 602L), DeliveryStatus.SNAPSHOTTED, shipped);
 

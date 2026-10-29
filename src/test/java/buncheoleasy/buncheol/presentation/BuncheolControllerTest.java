@@ -1129,7 +1129,7 @@ class BuncheolControllerTest {
               "https://cdn.example.com/buncheol-10-thumb.jpg",
               FlowType.LEGACY,
               BuncheolHostCancellability.CANCELLABLE,
-              false, null, false);
+              false, null, false, 0L);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -1417,7 +1417,7 @@ class BuncheolControllerTest {
                   "010-1234-5678",
                   "1234567890",
                   DeliveryStatus.SHIPPING), null,
-              true, false, null);
+              true, false, null, false);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
@@ -1434,7 +1434,7 @@ class BuncheolControllerTest {
               null,
               null,
               null, null,
-              true, false, null);
+              true, false, null, false);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,

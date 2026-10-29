@@ -25,6 +25,8 @@ import java.time.Instant;
  * 버튼이 꺼져 있어 배지를 띄우지 않는다. 입금 수집중이 아니면 {@code null}.
  *
  * <p>{@code extraRecruitOpen} 은 추가 모집 스위치 값이다. 카드의 「추가 모집 중」 칩은 {@code ended} 가 false 일 때만 띄운다.
+ *
+ * <p>{@code pendingAcceptCount} 는 수락을 기다리는 추가 신청 <b>묶음</b> 수다(「수락해 주세요」 배지). 진행 확정 분철이 아니면 0 이다.
  */
 public record MyHostedBuncheolResponse(
     Long buncheolId,
@@ -40,4 +42,5 @@ public record MyHostedBuncheolResponse(
     BuncheolHostCancellability cancellability,
     boolean ended,
     ConfirmCheck confirmCheck,
-    boolean extraRecruitOpen) {}
+    boolean extraRecruitOpen,
+    long pendingAcceptCount) {}

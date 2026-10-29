@@ -292,7 +292,7 @@ class ParticipationControllerTest {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.BLOCKED_BY_STATUS, null, null);
+            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false);
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
           .willReturn(List.of(response));
@@ -361,7 +361,7 @@ class ParticipationControllerTest {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, false);
 
       given(participationDetailQueryService.getDetail(PARTICIPANT_ID, PARTICIPATION_ID))
           .willReturn(response);

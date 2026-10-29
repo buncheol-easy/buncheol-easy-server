@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolAppliedBundleCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -155,6 +156,16 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(
       @Param("buncheolIds") List<Long> buncheolIds,
       @Param("statuses") Collection<ParticipationStatus> statuses);
+
+  // 묶음 수를 센다 — 같은 사람이 자리를 여럿 골라도 수락은 묶음 단위다. 미연결 행(bundle_id NULL)은 COUNT(DISTINCT) 에서 빠진다.
+  @Query(
+      "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolAppliedBundleCount("
+          + "p.buncheolId, COUNT(DISTINCT p.bundleId)) "
+          + "FROM Participation p "
+          + "WHERE p.buncheolId IN :buncheolIds AND p.status = :status "
+          + "GROUP BY p.buncheolId")
+  List<BuncheolAppliedBundleCount> countBundlesByBuncheolIdsAndStatus(
+      @Param("buncheolIds") List<Long> buncheolIds, @Param("status") ParticipationStatus status);
 
   @Query(
       "SELECT p FROM Participation p "

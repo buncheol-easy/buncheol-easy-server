@@ -1,6 +1,7 @@
 package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolAppliedBundleCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -329,6 +330,16 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
     }
     return jpaParticipationRepository.countConfirmedByBuncheolIds(
         buncheolIds, ParticipationStatus.CONFIRMED);
+  }
+
+  @Override
+  public List<BuncheolAppliedBundleCount> countAppliedBundlesByBuncheolIds(
+      final List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaParticipationRepository.countBundlesByBuncheolIdsAndStatus(
+        buncheolIds, ParticipationStatus.APPLIED);
   }
 
   @Override

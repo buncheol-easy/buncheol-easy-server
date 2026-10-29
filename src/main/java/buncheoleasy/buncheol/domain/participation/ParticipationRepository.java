@@ -133,6 +133,12 @@ public interface ParticipationRepository {
    */
   List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(List<Long> buncheolIds);
 
+  /**
+   * 여러 분철의 신청(APPLIED) <b>묶음</b> 수 집계 — 진행 확정 분철이면 수락 전 추가 신청 묶음 수다. 0 건인 분철은 결과에서 빠지므로 호출
+   * 측이 기본값 0 으로 채운다. 빈 목록이면 쿼리 없이 빈 결과다.
+   */
+  List<BuncheolAppliedBundleCount> countAppliedBundlesByBuncheolIds(List<Long> buncheolIds);
+
   /** 입금 만료가 임박/도과한 참여 폴링 (입금 만료 스케줄러용). status=AWAITING_PAYMENT, due_at <= now. */
   List<Participation> findOverduePaymentTargets(Instant now, int limit);
 

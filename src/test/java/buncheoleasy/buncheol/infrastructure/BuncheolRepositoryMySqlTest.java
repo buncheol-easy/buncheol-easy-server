@@ -11,6 +11,7 @@ import buncheoleasy.support.MySqlContainerTestSupport;
 import buncheoleasy.support.MySqlFixture;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -391,6 +392,27 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
                   applied))
           .isEqualTo("CANCELLED/HOST_REJECTED/1");
       assertThat(participationStatus(confirmed)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 수락_대기_묶음_수는_신청이_든_묶음을_한_번씩_센다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long otherBuncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long twoSlotBundle = fixture.bundle(buncheolId, participantId, addressId, null);
+      slotParticipation(buncheolId, participantId, twoSlotBundle, "APPLIED");
+      slotParticipation(buncheolId, participantId, twoSlotBundle, "APPLIED");
+      long oneSlotBundle = fixture.bundle(buncheolId, participantId, addressId, null);
+      slotParticipation(buncheolId, participantId, oneSlotBundle, "APPLIED");
+      long acceptedBundle = fixture.bundle(buncheolId, participantId, addressId, HOUR);
+      slotParticipation(buncheolId, participantId, acceptedBundle, "AWAITING_PAYMENT");
+
+      assertThat(
+              participationRepository.countAppliedBundlesByBuncheolIds(
+                  List.of(buncheolId, otherBuncheolId)))
+          .extracting(c -> c.buncheolId() + ":" + c.count())
+          .containsExactly(buncheolId + ":2");
     }
 
     private long slotParticipation(

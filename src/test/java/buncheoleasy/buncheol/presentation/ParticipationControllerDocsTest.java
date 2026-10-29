@@ -248,7 +248,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.BLOCKED_BY_STATUS, null, null);
+            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -280,7 +280,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null, false);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -439,7 +439,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.NUMBER)
                                 .description(
                                     "그 분철의 살아 있는 자리 수(같은 문구의 N). 입금 수집중 분철만, 그 밖은 null. buncheolMemberCount(열린 자리 수)와 다르다")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"))
                         .build())));
   }
 
@@ -468,7 +469,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, false);
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -564,7 +565,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                     화면은 이 값만 보고 취소 버튼을 노출하면 된다.
                                     CANCELLABLE: 취소 가능(회원 개최 신청 단계) |
                                     BLOCKED_BY_STATUS: 입금 단계 시작 이후(입금 대기·보냈어요·입금확인) — BCH-086 |
-                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""))
+                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""),
+                            fieldWithPath("extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"))
                         .build())));
   }
 

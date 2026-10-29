@@ -274,6 +274,7 @@ class BuncheolManagementQueryServiceTest {
 
       assertThat(response.participants().get(0).releasability())
           .isEqualTo(BundleReleasability.RELEASABLE);
+      assertThat(response.participants().get(0).extra()).isFalse();
     }
 
     // 🔴 탈퇴 회원(조회에서 빠짐)은 null 이 아니라 고정 문구다 — null 로 내리면 클라 별칭 폴백이

@@ -351,7 +351,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             FlowType.LEGACY,
             BuncheolHostCancellability.CANCELLABLE,
-            false, null, false);
+            false, null, false, 0L);
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -396,7 +396,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.STRING)
                                 .description(CONFIRM_CHECK_DESCRIPTION)
                                 .optional(),
-                            fieldWithPath("[].extraRecruitOpen").description(EXTRA_RECRUIT_OPEN_DESCRIPTION))
+                            fieldWithPath("[].extraRecruitOpen").description(EXTRA_RECRUIT_OPEN_DESCRIPTION),
+                            fieldWithPath("[].pendingAcceptCount")
+                                .description(
+                                    "수락을 기다리는 추가 신청 묶음 수(「수락해 주세요」 배지). 진행 확정 분철이 아니면 0"))
                         .build())));
   }
 
@@ -1306,7 +1309,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 "010-1234-5678",
                 "1234567890",
                 DeliveryStatus.SHIPPING), null,
-            true, false, null);
+            true, false, null, false);
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
@@ -1323,7 +1326,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             null,
             null,
             null, null,
-            true, false, null);
+            true, false, null, false);
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
@@ -1341,7 +1344,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             new RefundAccountResponse("카카오뱅크", "3333012345678", "가을팬"),
             null,
             null,
-            true, false, null);
+            true, false, null, false);
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
@@ -1565,6 +1568,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.STRING)
                                 .description(RELEASABILITY_DESCRIPTION)
                                 .optional(),
+                            fieldWithPath("participants[].extra")
+                                .description(
+                                    "이 슬롯의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 모집」 칩). 입금 확인 뒤에도 그대로"),
                             fieldWithPath("cancelledParticipants")
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
@@ -1631,6 +1637,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.STRING)
                                 .description(RELEASABILITY_DESCRIPTION)
                                 .optional(),
+                            fieldWithPath("cancelledParticipants[].extra")
+                                .description(
+                                    "이 슬롯의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 모집」 칩). 입금 확인 뒤에도 그대로"),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")

@@ -197,6 +197,34 @@ class MyParticipationQueryServiceTest {
     assertThat(result.get(0).paymentSentAt()).isEqualTo(사본시각);
   }
 
+  @Test
+  void 추가_신청으로_열린_묶음의_참여는_extra_가_참이다() {
+    Instant deadline = Instant.now().minus(7, ChronoUnit.DAYS);
+    Buncheol buncheol = buncheol(10L, "C2C 분철", deadline, BuncheolStatus.CONFIRMED);
+    Participation participation =
+        participation(233L, 10L, 101L, 10_000L, ParticipationStatus.APPLIED, DUE_AT, null, null);
+    setField(participation, "bundleId", 9999L);
+
+    given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+        .willReturn(List.of(participation));
+    given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+    given(groupMemberRepository.findAllByIds(List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "해린")));
+    given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+    given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+    ParticipationBundle bundle = bundleWithAddress(9999L, 1L);
+    given(bundle.isExtra()).willReturn(true);
+    given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+        .willReturn(Map.of(9999L, bundle));
+
+    List<MyParticipationResponse> result =
+        myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+    assertThat(result.get(0).extra()).isTrue();
+  }
+
   // 🔴 C2C 의 입금 기한 정본은 묶음이다. 사본에 다른 값을 심어 어느 쪽을 읽는지 드러나게 한다.
   @Test
   void C2C_입금기한은_묶음_정본에서_읽는다() {

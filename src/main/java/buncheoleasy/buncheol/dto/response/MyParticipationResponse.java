@@ -32,6 +32,8 @@ import java.util.List;
  * <p>{@code confirmedSlotCount}·{@code activeSlotCount} 는 그 분철의 입금 확인된 자리 수와 살아 있는 자리 수다 — 참여자 화면의
  * "N자리 중 M자리 입금 확인" 입금 현황용이고 누가 입금했는지는 싣지 않는다. 입금 수집중 분철만 값이 있고 그 밖에는 {@code null} 이다.
  * {@code buncheolMemberCount}(열린 자리 수)와 다른 값이다.
+ *
+ * <p>{@code extra} 는 이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지다. 진행 확정 분철의 신청(APPLIED)은 수락 대기다.
  */
 public record MyParticipationResponse(
     Long participationId,
@@ -63,4 +65,5 @@ public record MyParticipationResponse(
     String openChatUrl,
     ParticipationCancellability cancellability,
     Integer confirmedSlotCount,
-    Integer activeSlotCount) {}
+    Integer activeSlotCount,
+    boolean extra) {}

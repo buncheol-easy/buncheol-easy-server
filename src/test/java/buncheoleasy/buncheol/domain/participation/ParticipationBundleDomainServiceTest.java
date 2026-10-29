@@ -15,6 +15,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -95,6 +96,23 @@ class ParticipationBundleDomainServiceTest {
     InOrder inOrder = Mockito.inOrder(participationBundleRepository, participationRepository);
     inOrder.verify(participationBundleRepository).save(any());
     inOrder.verify(participationRepository).linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW);
+  }
+
+  @Test
+  void 추가_묶음_여부는_묶음에서_읽고_미연결_행은_거짓이다() {
+    ParticipationBundle extraBundle =
+        ParticipationBundle.open(BUNCHEOL_ID, PARTICIPANT_ID, 1L, 0L, REFUND_ACCOUNT, null, true);
+    Participation linked = participation();
+    setField(linked, "bundleId", NEW_BUNDLE_ID);
+    Participation unlinked = participation();
+
+    assertThat(
+            ParticipationBundleDomainService.extraOf(Map.of(NEW_BUNDLE_ID, extraBundle), linked))
+        .isTrue();
+    assertThat(ParticipationBundleDomainService.extraOf(Map.of(), linked)).isFalse();
+    assertThat(
+            ParticipationBundleDomainService.extraOf(Map.of(NEW_BUNDLE_ID, extraBundle), unlinked))
+        .isFalse();
   }
 
   @Test

@@ -287,7 +287,8 @@ public class BuncheolManagementQueryService {
         // 불변 맵은 null 키 조회에서 NPE 다 — 미연결 행은 먼저 거른다.
         participation.getBundleId() == null
             ? null
-            : releasabilityByBundleId.get(participation.getBundleId()));
+            : releasabilityByBundleId.get(participation.getBundleId()),
+        ParticipationBundleDomainService.extraOf(bundleById, participation));
   }
 
   private static Map<Long, BundleReleasability> releasabilityByBundleId(

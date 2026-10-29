@@ -34,6 +34,9 @@ import java.time.Instant;
  * 판정이라 화면은 {@code RELEASABLE} 일 때만 버튼을 켜고, {@code BEFORE_DUE} 면 꺼진 버튼과 기한 안내를 보인다. 회원 개최의 살아
  * 있는 슬롯에만 있고, 취소분·미연결 행·운영진 분철은 null 이다.
  *
+ * <p>{@code extra} 는 이 슬롯의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지다(「추가 모집」·「추가 신청」 표시). 입금 확인 뒤에도
+ * 그대로다. 미연결 행은 false 다.
+ *
  * <p><b>계좌 노출 범위</b>(docs/70 결정 21) — 개최자가 통장을 대조하는 데 필요한 것은 <b>입금자명뿐</b>이므로 평시에는 {@code
  * depositorName} 만 내리고 {@code refundAccount} 는 {@code null} 이다. 계좌번호는 <b>개최자가 실제로 환불해야 하는 건</b>, 즉
  * 취소분 중 <b>개최자가 입금확인한</b> 건에만 채운다 — 직거래라 환불 주체가 개최자다.
@@ -66,4 +69,5 @@ public record BuncheolManagementParticipantResponse(
     Instant paymentSentAt,
     boolean confirmTarget,
     boolean acceptTarget,
-    BundleReleasability releasability) {}
+    BundleReleasability releasability,
+    boolean extra) {}

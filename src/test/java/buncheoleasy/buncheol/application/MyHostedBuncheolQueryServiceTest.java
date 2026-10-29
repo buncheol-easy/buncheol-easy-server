@@ -18,6 +18,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolAppliedBundleCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.dto.response.MyHostedBuncheolResponse;
@@ -318,6 +319,27 @@ class MyHostedBuncheolQueryServiceTest {
 
       assertThat(result).extracting(MyHostedBuncheolResponse::ended).containsOnly(false);
       verify(buncheolRepository).findEndedIds(List.of());
+    }
+
+    @Test
+    void 수락_대기_묶음_수는_진행확정_분철만_한_번에_센다() {
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(
+              List.of(
+                  분철(10L, BuncheolStatus.CONFIRMED),
+                  분철(20L, BuncheolStatus.CONFIRMED),
+                  분철(30L, BuncheolStatus.RECRUITING)));
+      // 대상은 진행 확정 두 건뿐이다 — 다른 id 가 섞이면 strict stub 이 인자 불일치로 실패한다.
+      given(participationRepository.countAppliedBundlesByBuncheolIds(List.of(10L, 20L)))
+          .willReturn(List.of(new BuncheolAppliedBundleCount(10L, 2L)));
+
+      List<MyHostedBuncheolResponse> result =
+          myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+
+      assertThat(result)
+          .extracting(
+              MyHostedBuncheolResponse::buncheolId, MyHostedBuncheolResponse::pendingAcceptCount)
+          .containsExactly(tuple(10L, 2L), tuple(20L, 0L), tuple(30L, 0L));
     }
 
     @Test

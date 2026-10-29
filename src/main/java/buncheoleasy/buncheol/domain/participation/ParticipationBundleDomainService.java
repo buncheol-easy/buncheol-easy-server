@@ -136,6 +136,16 @@ public class ParticipationBundleDomainService {
     }
   }
 
+  /** 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는가. 미연결 행이나 맵에 없는 묶음은 false 다(화면 표시용). */
+  public static boolean extraOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    if (participation.getBundleId() == null) {
+      return false;
+    }
+    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
+    return bundle != null && bundle.isExtra();
+  }
+
   /** 묶음 단건. 묶음 단위 API 의 진입점이다. */
   public Optional<ParticipationBundle> findById(final Long bundleId) {
     return participationBundleRepository.findById(bundleId);

@@ -54,6 +54,11 @@ public class JpaParticipationBundleRepositoryAdapter implements ParticipationBun
   }
 
   @Override
+  public Optional<ParticipationBundle> findByIdForShare(final Long id) {
+    return jpaParticipationBundleRepository.findByIdForShare(id);
+  }
+
+  @Override
   public boolean closeIfNoActiveSlots(final Long bundleId, final Instant now) {
     return jpaParticipationBundleRepository.closeIfNoActiveSlots(
             bundleId, ParticipationStatus.active(), now)

@@ -356,7 +356,7 @@ public class ParticipationService {
       // (ParticipationBundle.open 은 이 값을 검증하지 않는다). updatable=false 라 코드로 복구 불가라,
       // 읽기 실패(500)보다 <b>더 비가역</b>이다. 배송 스냅샷과 같은 규약으로 닫는다.
       shippingAddressId =
-          participationBundleDomainService.requireShippingAddressIdOf(existing.get());
+          participationBundleDomainService.requireInheritedShippingAddressId(existing.get());
       shippingFee = 0L;
     } else {
       ShippingAddress shippingAddress =

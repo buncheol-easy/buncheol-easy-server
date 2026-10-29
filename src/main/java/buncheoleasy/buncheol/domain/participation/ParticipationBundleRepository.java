@@ -46,6 +46,9 @@ public interface ParticipationBundleRepository {
    */
   boolean closeIfNoActiveSlots(Long bundleId, Instant now);
 
+  /** 묶음 단건 잠금 읽기(FOR SHARE) — 최신 커밋을 본다. 호출 측 {@code @Transactional} 필수. */
+  Optional<ParticipationBundle> findByIdForShare(Long id);
+
   /**
    * 분철의 묶음 중 활성 슬롯이 없는 것을 일괄로 닫는다 (분철 취소 cascade·자동 마감용). 반환은 닫힌 묶음 수.
    *

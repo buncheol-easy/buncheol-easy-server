@@ -1028,7 +1028,7 @@ class ParticipationServiceTest {
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
-          .when(participationBundleDomainService.requireShippingAddressIdOf(existing))
+          .when(participationBundleDomainService.requireInheritedShippingAddressId(existing))
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
@@ -1227,7 +1227,7 @@ class ParticipationServiceTest {
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
-          .when(participationBundleDomainService.requireShippingAddressIdOf(existing))
+          .when(participationBundleDomainService.requireInheritedShippingAddressId(existing))
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
@@ -2250,7 +2250,7 @@ class ParticipationServiceTest {
       Participation pending = pendingExtra();
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.of(pending));
-      given(participationBundleDomainService.requireShippingAddressIdOf(pending))
+      given(participationBundleDomainService.requireInheritedShippingAddressId(pending))
           .willReturn(SHIPPING_ADDRESS_ID);
       givenExtraInsert(PARTICIPATION_ID);
 
@@ -2281,7 +2281,7 @@ class ParticipationServiceTest {
       // 두 슬롯 모두 수락 전 추가 신청(450)에 붙는다. 그 참여는 이번 요청이 만든 것이 아니라 알림에 빠져야 한다.
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.of(pending));
-      given(participationBundleDomainService.requireShippingAddressIdOf(pending))
+      given(participationBundleDomainService.requireInheritedShippingAddressId(pending))
           .willReturn(SHIPPING_ADDRESS_ID);
       givenExtraInsert(PARTICIPATION_ID, PARTICIPATION_ID + 1);
 

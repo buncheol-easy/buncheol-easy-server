@@ -312,6 +312,30 @@ class ParticipationBundleDomainServiceTest {
           .isEqualTo(BUNDLE_ADDRESS_ID);
     }
 
+    // 신청의 상속 원본은 앞 신청이 막 만든 묶음일 수 있어 잠금 읽기로 읽는다(일반 조회는 잠금 전 스냅샷).
+    @Test
+    void 상속할_배송지는_묶음을_잠금_읽기로_읽는다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findByIdForShare(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(BUNDLE_ADDRESS_ID)));
+
+      assertThat(participationBundleDomainService.requireInheritedShippingAddressId(participation))
+          .isEqualTo(BUNDLE_ADDRESS_ID);
+      then(participationBundleRepository).should(never()).findById(any());
+    }
+
+    @Test
+    void 상속할_묶음이_보이지_않으면_이름을_가진_예외로_닫는다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findByIdForShare(BUNDLE_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(
+              () -> participationBundleDomainService.requireInheritedShippingAddressId(participation))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
+
     private Participation linked() {
       Participation participation = participationFixture(311L, BUNDLE_ID, 0L);
       // 사본에는 다른 값을 심는다 — 사본을 읽으면 위 두 테스트가 실패한다.

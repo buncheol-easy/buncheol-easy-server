@@ -212,6 +212,31 @@ public class ParticipationBundleDomainService {
     return shippingAddressId;
   }
 
+  /**
+   * 신청이 상속할 배송지(그 원본 참여의 묶음 정본)를 <b>잠금 읽기</b>로 읽는다. 없으면 {@link #requireShippingAddressIdOf} 와 같이
+   * 실패한다. 호출 측 {@code @Transactional} 필수.
+   *
+   * <p>🔴 원본 참여는 분철 행을 잠근 뒤 잠금 읽기로 고르므로, 같은 사람의 앞 신청이 기다리는 사이 막 만든 묶음일 수 있다. 일반 조회는
+   * 잠금 전 스냅샷이라 그 묶음을 못 봐서, 두 탭에서 동시에 신청하면 둘째가 「배송지를 찾을 수 없음」으로 실패했다.
+   */
+  public Long requireInheritedShippingAddressId(final Participation source) {
+    Long shippingAddressId =
+        source.getBundleId() == null
+            ? source.getShippingAddressId()
+            : participationBundleRepository
+                .findByIdForShare(source.getBundleId())
+                .map(ParticipationBundle::getShippingAddressId)
+                .orElse(null);
+    if (shippingAddressId == null) {
+      log.warn(
+          "상속할 배송지가 없다 — 삭제 가드가 뚫렸을 수 있다. participationId={}, bundleId={}",
+          source.getId(),
+          source.getBundleId());
+      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
+    return shippingAddressId;
+  }
+
   public Long shippingAddressIdOf(final Participation participation) {
     ParticipationBundle bundle = findByParticipation(participation).orElse(null);
     if (bundle == null) {

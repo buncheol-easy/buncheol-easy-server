@@ -105,9 +105,10 @@ public class BuncheolDetailQueryService {
                 .count();
 
     final Instant now = Instant.now(clock);
-    // 「종료」 판정은 추가 모집을 켠 진행 확정 회원 개최에서만 조회한다 — 공개 엔드포인트라 나머지 분철에는 쿼리를 내지 않는다.
+    // 「종료」는 관리 응답과 같은 조회다. 진행 확정 회원 개최만 묻는다 — 공개 엔드포인트라 운영진 분철·그 밖의 상태에는 쿼리를 내지 않는다.
     boolean ended =
-        buncheol.needsEndedCheck()
+        buncheol.getStatus() == BuncheolStatus.CONFIRMED
+            && !buncheol.isStaff()
             && buncheolRepository.findEndedIds(List.of(buncheolId)).contains(buncheolId);
     // 공석 슬롯을 "신청 가능"으로 내릴지의 기준 — 참여 가드와 같은 도메인 술어를 쓴다 (docs/53 Q-14).
     boolean openForNewParticipation = buncheol.acceptsNewParticipation(now, ended);
@@ -196,7 +197,8 @@ public class BuncheolDetailQueryService {
         termsEditable,
         staffSetting.map(StaffBuncheolSetting::getOpensAt).orElse(null),
         now,
-        buncheol.isExtraRecruiting(ended));
+        buncheol.isExtraRecruiting(ended),
+        ended);
   }
 
   private BuncheolMemberDetailResponse toMemberDetail(

@@ -491,6 +491,7 @@ class BuncheolDetailQueryServiceTest {
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
       assertThat(response.extraRecruiting()).isTrue();
+      assertThat(response.ended()).isFalse();
       assertThat(response.members().get(0).saleStatus())
           .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
       assertThat(response.members().get(0).removed()).isFalse();
@@ -509,13 +510,25 @@ class BuncheolDetailQueryServiceTest {
           .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
     }
 
+    // 끝난 분철에 "개최자가 추가 모집을 열면…" 안내가 뜨지 않게 스위치와 상관없이 「종료」를 싣는다.
     @Test
-    void 추가_모집을_켜지_않은_분철은_종료_판정을_조회하지_않는다() {
+    void 추가_모집을_켜지_않은_진행확정_회원_개최도_종료_여부를_싣는다() {
       stubEmptySlot(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of(BUNCHEOL_ID));
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
+      assertThat(response.ended()).isTrue();
       assertThat(response.extraRecruiting()).isFalse();
+    }
+
+    @Test
+    void 진행확정이_아니면_종료_판정을_조회하지_않는다() {
+      stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.ended()).isFalse();
       then(buncheolRepository).should(never()).findEndedIds(any());
     }
 
@@ -527,6 +540,7 @@ class BuncheolDetailQueryServiceTest {
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
       assertThat(response.extraRecruiting()).isFalse();
+      assertThat(response.ended()).isFalse();
       assertThat(response.members().get(0).saleStatus())
           .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
       then(buncheolRepository).should(never()).findEndedIds(any());

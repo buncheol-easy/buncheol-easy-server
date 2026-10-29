@@ -288,7 +288,8 @@ public class BuncheolManagementQueryService {
         participation.getBundleId() == null
             ? null
             : releasabilityByBundleId.get(participation.getBundleId()),
-        ParticipationBundleDomainService.extraOf(bundleById, participation));
+        ParticipationBundleDomainService.extraOf(bundleById, participation),
+        participation.getCreatedAt());
   }
 
   private static Map<Long, BundleReleasability> releasabilityByBundleId(

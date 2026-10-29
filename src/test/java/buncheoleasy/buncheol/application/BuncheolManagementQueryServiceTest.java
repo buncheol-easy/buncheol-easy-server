@@ -238,6 +238,8 @@ class BuncheolManagementQueryServiceTest {
           .willReturn(List.of(groupMember(1001L, "안유진")));
       Participation applied =
           participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.APPLIED);
+      Instant appliedAt = Instant.parse("2026-11-07T05:30:00Z");
+      setField(applied, "createdAt", appliedAt);
       given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(applied));
       given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
       given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
@@ -250,6 +252,8 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants().get(0).acceptTarget())
           .isEqualTo(status == BuncheolStatus.CONFIRMED);
       assertThat(response.participants().get(0).confirmTarget()).isFalse();
+      // 수락 대기 카드의 "신청 [시각]" — 참여가 만들어진 시각을 그대로 싣는다.
+      assertThat(response.participants().get(0).appliedAt()).isEqualTo(appliedAt);
     }
 
     @Test

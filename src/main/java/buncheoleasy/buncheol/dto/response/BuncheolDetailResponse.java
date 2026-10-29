@@ -27,6 +27,8 @@ import java.util.List;
  * @param extraRecruiting 지금 추가 신청을 받는지 — 진행 확정된 회원 개최이고, 개최자가 추가 모집을 켰고, 「종료」 전이다. 참여 가드와
  *     같은 판정({@code Buncheol#isExtraRecruiting})이라 true 면 빈 자리가 {@code AVAILABLE} 로 내려간다. 원래 마감은 지났으므로 화면은
  *     이 값이 true 면 상태·마감으로 신청을 막지 않는다
+ * @param ended 「종료」(진행 확정 뒤 모든 배송 도착, 끝나지 않은 참여 없음)인지. 관리 응답의 {@code ended} 와 같은 조회다. 회원 개최에서만
+ *     판정하고 운영진 분철·진행 확정 전·취소는 늘 false 다
  */
 public record BuncheolDetailResponse(
     Long id,
@@ -49,4 +51,5 @@ public record BuncheolDetailResponse(
     boolean termsEditable,
     Instant opensAt,
     Instant serverTime,
-    boolean extraRecruiting) {}
+    boolean extraRecruiting,
+    boolean ended) {}

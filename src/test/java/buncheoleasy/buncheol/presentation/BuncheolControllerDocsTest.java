@@ -648,7 +648,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
               null,
               false,
               Instant.parse("2026-05-20T10:00:00Z"),
-              Instant.parse("2026-05-20T10:25:00Z"), false);
+              Instant.parse("2026-05-20T10:25:00Z"), false, false);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -702,6 +702,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               응답은 조회 시점 판정이라, 화면이 열어 둔 채 오픈 시각을 넘기면 다시 불러와야 `AVAILABLE` 로 바뀐다
                             - `serverTime` 은 이 응답을 만든 서버 시각 (UTC ISO-8601). 기기 시계가 틀려도 오픈까지 남은 시간을 맞게 세도록
                               화면이 이 값과 기기 시계의 차이를 보정해 쓴다
+                            - `ended` 는 「종료」(진행 확정 뒤 모든 배송 도착)인지다. 관리 응답의 `ended` 와 같은 판정이고 회원 개최에서만
+                              판정한다(운영진 분철은 늘 `false`). 끝난 분철에 추가 모집 안내를 띄우지 않을 때 쓴다
                             - `extraRecruiting` 은 지금 추가 신청을 받는지다. `true` = 진행 확정된 회원 개최 · 개최자가 추가 모집을 켬 · 「종료」 전.
                               이때 빈 자리는 `AVAILABLE` 이고 원래 마감은 지났으므로, 화면은 이 값이 `true` 면 상태·마감으로 신청을 막지 않는다
                             - 멤버별 `removed` 는 개최자가 「빼기」로 뺀 자리인지다. 추가 모집을 켜지 않은 진행 확정 분철에서는 빈 자리도
@@ -763,7 +765,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               "termsEditable": false,
                               "opensAt": "2026-05-20T10:00:00Z",
                               "serverTime": "2026-05-20T10:25:00Z",
-                              "extraRecruiting": false
+                              "extraRecruiting": false,
+                              "ended": false
                             }
                             ```
 
@@ -897,7 +900,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "응답을 만든 서버 시각 (UTC ISO-8601). 오픈까지 남은 시간을 기기 시계 대신 이 값에"
                                         + " 맞춰 센다"),
-                            fieldWithPath("extraRecruiting").description(EXTRA_RECRUITING_DESCRIPTION))
+                            fieldWithPath("extraRecruiting").description(EXTRA_RECRUITING_DESCRIPTION),
+                            fieldWithPath("ended")
+                                .description(
+                                    "「종료」(진행 확정 뒤 모든 배송 도착)인지. 관리 응답의 ended 와 같은 판정이다."
+                                        + " 회원 개최에서만 판정하고 운영진 분철·진행 확정 전·취소는 늘 false"))
                         .build())));
   }
 
@@ -1312,7 +1319,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 "010-1234-5678",
                 "1234567890",
                 DeliveryStatus.SHIPPING), null,
-            true, false, null, false);
+            true, false, null, false, Instant.parse("2026-05-20T10:00:00Z"));
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
@@ -1329,7 +1336,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             null,
             null,
             null, null,
-            true, false, null, false);
+            true, false, null, false, Instant.parse("2026-05-20T10:00:00Z"));
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
@@ -1347,7 +1354,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             new RefundAccountResponse("카카오뱅크", "3333012345678", "가을팬"),
             null,
             null,
-            true, false, null, false);
+            true, false, null, false, Instant.parse("2026-05-20T10:00:00Z"));
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
@@ -1574,6 +1581,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("participants[].extra")
                                 .description(
                                     "이 슬롯의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 모집」 칩). 입금 확인 뒤에도 그대로"),
+                            fieldWithPath("participants[].appliedAt")
+                                .description("참여(신청)가 만들어진 시각 (UTC ISO-8601). 수락 대기 카드의 \"신청 [시각]\" 표시용"),
                             fieldWithPath("cancelledParticipants")
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
@@ -1643,6 +1652,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("cancelledParticipants[].extra")
                                 .description(
                                     "이 슬롯의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 모집」 칩). 입금 확인 뒤에도 그대로"),
+                            fieldWithPath("cancelledParticipants[].appliedAt")
+                                .description("참여(신청)가 만들어진 시각 (UTC ISO-8601). 수락 대기 카드의 \"신청 [시각]\" 표시용"),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")

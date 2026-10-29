@@ -16,7 +16,9 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("BuncheolDomainService 단위 테스트")
@@ -40,6 +43,59 @@ class BuncheolDomainServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
 
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+
+  @Nested
+  @DisplayName("추가 모집 판정 테스트")
+  class ExtraRecruitingTest {
+
+    private Buncheol buncheol(
+        final BuncheolStatus status, final FlowType flowType, final boolean extraRecruitOpen) {
+      Buncheol buncheol =
+          Buncheol.create(
+              1L,
+              new BuncheolParams(
+                  1L, "분철", null, "공식 스토어", NOW.plusSeconds(3600), 1, 3000, null, flowType,
+                  null),
+              NOW);
+      ReflectionTestUtils.setField(buncheol, "id", BUNCHEOL_ID);
+      ReflectionTestUtils.setField(buncheol, "status", status);
+      ReflectionTestUtils.setField(buncheol, "extraRecruitOpen", extraRecruitOpen);
+      return buncheol;
+    }
+
+    @Test
+    void 스위치가_켜진_진행확정_회원_개최는_종료_전이면_추가_모집_중이다() {
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of());
+
+      assertThat(
+              buncheolDomainService.isExtraRecruiting(
+                  buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C, true)))
+          .isTrue();
+    }
+
+    @Test
+    void 종료됐으면_추가_모집_중이_아니다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C, true);
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of(BUNCHEOL_ID));
+
+      assertThat(buncheolDomainService.isExtraRecruiting(buncheol)).isFalse();
+      assertThat(buncheolDomainService.isEndedForExtraRecruit(buncheol)).isTrue();
+    }
+
+    // 결과에 쓰이지 않는 「종료」는 묻지 않는다 — 스위치가 꺼졌거나, 진행 확정이 아니거나, 운영진 분철이다.
+    @Test
+    void 판정에_필요_없으면_종료를_조회하지_않는다() {
+      for (Buncheol buncheol :
+          List.of(
+              buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C, false),
+              buncheol(BuncheolStatus.RECRUITING, FlowType.C2C, true),
+              buncheol(BuncheolStatus.CONFIRMED, FlowType.LEGACY, true))) {
+        assertThat(buncheolDomainService.isExtraRecruiting(buncheol)).isFalse();
+        assertThat(buncheolDomainService.isEndedForExtraRecruit(buncheol)).isFalse();
+      }
+      then(buncheolRepository).should(never()).findEndedIds(any());
+    }
+  }
 
   @Nested
   @DisplayName("호스트 분철 취소 테스트")

@@ -621,8 +621,8 @@ public class BuncheolService {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
     // 참여 가드·상세의 공석 표시와 같은 술어 — 신청을 받는 구간(모집 중, 추가 모집 중)에서만 자리를 바꾼다.
-    boolean ended = buncheol.needsEndedCheck() && buncheolDomainService.isEnded(buncheolId);
-    if (!buncheol.acceptsNewParticipation(now, ended)) {
+    if (!buncheol.acceptsNewParticipation(
+        now, buncheolDomainService.isEndedForExtraRecruit(buncheol))) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
     return buncheol;

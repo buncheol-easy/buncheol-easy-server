@@ -2546,7 +2546,10 @@ class BuncheolServiceTest {
       setField(buncheol, "deadline", NOW.minus(2, ChronoUnit.DAYS));
       setField(buncheol, "extraRecruitOpen", extraRecruitOpen);
       given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
-      lenient().when(buncheolDomainService.isEnded(BUNCHEOL_ID)).thenReturn(ended);
+      // 조회 여부(스위치가 꺼지면 묻지 않음)는 BuncheolDomainServiceTest 가 본다. 여기서는 판정 결과만 심는다.
+      lenient()
+          .when(buncheolDomainService.isEndedForExtraRecruit(buncheol))
+          .thenReturn(extraRecruitOpen && ended);
       return buncheol;
     }
 
@@ -2598,7 +2601,6 @@ class BuncheolServiceTest {
       givenConfirmed(false, false);
 
       assertSlotEditBlocked();
-      then(buncheolDomainService).should(never()).isEnded(any());
     }
 
     @Test

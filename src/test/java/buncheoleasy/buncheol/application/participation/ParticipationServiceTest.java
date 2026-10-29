@@ -2198,7 +2198,7 @@ class ParticipationServiceTest {
     @Test
     void 추가_모집_중이면_원래_마감이_지났어도_신청으로_받고_계좌와_기한_없이_응답한다() {
       Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
-      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty());
@@ -2220,7 +2220,7 @@ class ParticipationServiceTest {
     @Test
     void 수락_전_추가_신청이_없으면_새_추가_묶음을_열고_배송비를_받는다() {
       Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
-      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty());
@@ -2245,7 +2245,7 @@ class ParticipationServiceTest {
     @Test
     void 수락_전_추가_신청이_있으면_그_묶음에_붙고_배송비는_0원이다() {
       Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
-      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
       Participation pending = pendingExtra();
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
@@ -2274,7 +2274,7 @@ class ParticipationServiceTest {
     @Test
     void 개최자_알림은_요청마다_한_번이고_이번_요청의_참여만_싣는다() {
       Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
-      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
       givenSlot(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE);
       Participation pending = pendingExtra();
@@ -2318,11 +2318,11 @@ class ParticipationServiceTest {
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
       then(eventPublisher).should(never()).publishEvent(any(ExtraAppliedEvent.class));
-      then(buncheolDomainService).should(never()).isEnded(any());
+      then(buncheolDomainService).should(never()).isExtraRecruiting(any());
     }
 
     @Test
-    void 스위치가_꺼진_진행확정_분철은_받지_않고_종료_판정도_하지_않는다() {
+    void 스위치가_꺼진_진행확정_분철은_받지_않는다() {
       confirmedC2c(BuncheolStatus.CONFIRMED, false);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
 
@@ -2333,14 +2333,13 @@ class ParticipationServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-      then(buncheolDomainService).should(never()).isEnded(any());
       then(participationDomainService).should(never()).createParticipationIfExtraRecruiting(any());
     }
 
     @Test
     void 종료된_분철은_스위치가_켜져_있어도_받지_않는다() {
-      confirmedC2c(BuncheolStatus.CONFIRMED, true);
-      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(true);
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(false);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
 
       assertThatThrownBy(
@@ -2371,7 +2370,7 @@ class ParticipationServiceTest {
     @Test
     void 조건부_INSERT_가_0행이면_받지_않는다() {
       Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
-      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
       givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
       given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
           .willReturn(Optional.empty());

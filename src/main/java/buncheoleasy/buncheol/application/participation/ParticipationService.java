@@ -99,9 +99,8 @@ public class ParticipationService {
     if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
-    boolean extraRecruitOpen =
-        buncheol.getStatus() == BuncheolStatus.CONFIRMED && buncheol.isExtraRecruitOpen();
-    if (buncheol.getStatus() != BuncheolStatus.RECRUITING && !extraRecruitOpen) {
+    // 추가 모집은 「종료」까지 봐야 하지만 여기는 안내용이라 조회하지 않고 스위치까지만 본다(위 운영진 검사 뒤라 회원 개최다).
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING && !buncheol.needsEndedCheck()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
     // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 쓸 수 없다.
@@ -333,9 +332,9 @@ public class ParticipationService {
     // INSERT 도 같은 조건으로 막지만 더 일찍 나갈 뿐 결과(BCH-060)는 같다.
     // 「종료」 판정은 일반 조회라 락 전 스냅샷을 본다. 「종료」는 한 방향이라 낡은 값은 "아직 종료 아님" 쪽으로만 틀리고, 그때 받은
     // 신청은 수락 대기가 될 뿐이라 개최자가 거절할 수 있다(받아들인 경합).
-    final boolean ended =
-        buncheol.needsEndedCheck() && buncheolDomainService.isEnded(buncheol.getId());
-    final boolean extra = buncheol.isExtraRecruiting(ended);
+    final boolean extra =
+        buncheol.getStatus() != BuncheolStatus.RECRUITING
+            && buncheolDomainService.isExtraRecruiting(buncheol);
     if (buncheol.getStatus() != BuncheolStatus.RECRUITING && !extra) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }

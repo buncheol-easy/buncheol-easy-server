@@ -206,6 +206,22 @@ public class BuncheolDomainService {
   }
 
   /**
+   * 지금 추가 신청을 받는가 — 진행 확정 회원 개최 + 스위치 켜짐 + 「종료」 전({@link Buncheol#isExtraRecruiting}). 「종료」 조회는
+   * {@link #isEndedForExtraRecruit} 와 같다.
+   */
+  public boolean isExtraRecruiting(final Buncheol buncheol) {
+    return buncheol.isExtraRecruiting(isEndedForExtraRecruit(buncheol));
+  }
+
+  /**
+   * 추가 모집 판정에 넘길 「종료」 여부. 판정에 필요할 때({@link Buncheol#needsEndedCheck}, 스위치가 켜진 진행 확정 회원 개최)만 조회하고
+   * 아니면 조회 없이 false 다 — 결과에 쓰이지 않는다. 잠금 전 스냅샷 주의는 {@link #isEnded} 와 같다.
+   */
+  public boolean isEndedForExtraRecruit(final Buncheol buncheol) {
+    return buncheol.needsEndedCheck() && isEnded(buncheol.getId());
+  }
+
+  /**
    * 잠금 조회 + 잠금 시점 최신 값으로 다시 채우기 — 같은 트랜잭션에서 잠금 전에 이미 분철을 읽은 경로용(포트 javadoc).
    * 호출 측 {@code @Transactional} 필수.
    */

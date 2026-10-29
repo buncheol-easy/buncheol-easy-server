@@ -266,8 +266,6 @@ public class ParticipationBundleService {
     return appliedIds;
   }
 
-
-
   /**
    * 개최자가 묶음의 입금을 <b>한 번에</b> 확인한다 (docs/70 결정 6 — all-or-nothing).
    *

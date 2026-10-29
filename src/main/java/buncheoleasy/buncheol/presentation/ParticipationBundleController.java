@@ -45,17 +45,6 @@ public class ParticipationBundleController {
   }
 
   /**
-   * 개최자 입금확인 API — 묶음의 확인 가능 슬롯을 <b>한 번에</b> 확정한다 (all-or-nothing).
-   *
-   * <p>부분 확인은 애초에 성립하지 않는다 — 확인 API 에 금액이 없어 시스템은 실입금액을 모르고, 개최자가
-   * 판단하는 것은 "이 이체가 들어왔는가" 하나뿐이다.
-   *
-   * <p>요청의 {@code expectedSlotIds} 에는 개최 관리 응답에서 {@code confirmTarget} 이 {@code true} 인
-   * 슬롯만 담는다. 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
-   *
-   * <p>이 묶음으로 분철의 미확인이 0 이 되면 같은 요청에서 진행 확정까지 하고 응답의 {@code buncheolConfirmed} 가 true 다.
-   */
-  /**
    * 개최자 추가 신청 수락 API — 진행 확정 뒤 수락 전 묶음을 <b>한 번에</b> 입금 대기로 넘긴다. 묶음 기한은 지금 + 24시간이다.
    *
    * <p>요청의 {@code expectedSlotIds} 에는 관리 응답에서 {@code acceptTarget} 이 {@code true} 인 그 묶음의 슬롯만 담는다.
@@ -90,6 +79,18 @@ public class ParticipationBundleController {
         new BundleReleaseResponse(bundleId, participationBundleService.release(hostId, bundleId)));
   }
 
+  /**
+   * 개최자 입금확인 API — 묶음의 확인 가능 슬롯을 <b>한 번에</b> 확정한다 (all-or-nothing).
+   *
+   * <p>부분 확인은 애초에 성립하지 않는다 — 확인 API 에 금액이 없어 시스템은 실입금액을 모르고, 개최자가
+   * 판단하는 것은 "이 이체가 들어왔는가" 하나뿐이다.
+   *
+   * <p>요청의 {@code expectedSlotIds} 에는 개최 관리 응답에서 {@code confirmTarget} 이 {@code true} 인
+   * 슬롯만 담는다. 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
+   *
+   * <p>이 묶음으로 분철의 미확인이 0 이 되면 같은 요청에서 진행 확정까지 하고 응답의 {@code buncheolConfirmed} 가 true 다.
+   * 진행 확정 뒤 추가 묶음이면 그 묶음의 배송을 만들고 {@code buncheolConfirmed} 는 false 다.
+   */
   @PostMapping("/{bundleId}/confirm")
   public ResponseEntity<BundleConfirmResponse> confirmPayment(
       @AuthenticationPrincipal final Long hostId,

@@ -322,7 +322,7 @@ CREATE TABLE IF NOT EXISTS participation_bundles
     refund_bank         VARCHAR(50) NOT NULL COMMENT '환불 은행',
     refund_account      VARCHAR(50) NOT NULL COMMENT '환불 계좌번호',
     refund_holder       VARCHAR(50) NOT NULL COMMENT '환불 예금주 = 개최자 통장 대조 키(입금자명)',
-    due_at              DATETIME    NULL COMMENT '입금 기한. C2C 는 자동 취소하지 않는다 — 이 시각부터 개최자 진행 확정이 열린다',
+    due_at              DATETIME    NULL COMMENT '입금 기한. C2C 는 자동 취소하지 않는다 — 입금 단계는 이 시각부터 개최자 진행 확정이, 진행 확정 뒤 추가 묶음(수락 + 24h)은 「제외」가 열린다',
     payment_sent_at     DATETIME    NULL COMMENT '참여자 「보냈어요」 마킹 시각 (묶음 1회)',
     closed_at           DATETIME    NULL COMMENT '묶음 종료(활성 슬롯 0) 시각. NULL = 활성',
     -- 기존 배포 DB 에는 수동 ALTER 필요 (P0-5).
@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS participations
     refund_bank                  VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 은행 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_account               VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 계좌번호 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_holder                VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 예금주 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
-    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+10분, deadline), 지나면 자동 취소 | C2C=입금 단계 시작 때 일괄 24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
+    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+10분, deadline), 지나면 자동 취소 | C2C=입금 단계 시작 때 일괄 24h, 추가 신청은 수락 때 24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',
     cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT(LEGACY 입금 만료) | BUNCHEOL_CANCELLED(분철 취소 연쇄) | USER_CANCELLED(C2C 자발 취소) | PAYMENT_NOT_CONFIRMED(C2C 진행 확정 때 입금 미확인으로 빠짐) | HOST_RELEASED(「제외」, 진행 확정 뒤 추가 참여 미입금) | HOST_REJECTED(C2C 추가 신청 거절)',

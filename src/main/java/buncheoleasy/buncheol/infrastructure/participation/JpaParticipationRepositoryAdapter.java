@@ -400,6 +400,22 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public int acceptBundleIfApplied(final Long bundleId, final Instant dueAt, final Instant now) {
+    return jpaParticipationRepository.acceptBundleIfApplied(
+        bundleId, ParticipationStatus.APPLIED, ParticipationStatus.AWAITING_PAYMENT, dueAt, now);
+  }
+
+  @Override
+  public int rejectBundleIfApplied(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.cancelBundleIfStatus(
+        bundleId,
+        ParticipationStatus.APPLIED,
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.HOST_REJECTED,
+        now);
+  }
+
+  @Override
   public int markBundlePaymentSent(final Long bundleId, final Instant now) {
     return jpaParticipationRepository.markBundlePaymentSent(
         bundleId, ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT, now);

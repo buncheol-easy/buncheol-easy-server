@@ -71,6 +71,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
           + " 버튼을 켜고, 「개최한 분철」 카드의 「진행 확정해 주세요」 배지는 DUE_PASSED 일 때만 띄운다. 전원 입금은 마지막 묶음"
           + " 입금 확인이 바로 진행 확정하므로 ALL_PAID 는 정상 흐름에서 오지 않는다(옛 데이터 대비). 입금 수집중이 아니면 null";
 
+  private static final String ACCEPT_TARGET_DESCRIPTION =
+      "이 슬롯이 추가 신청 수락·거절의 대상인지(진행 확정 분철의 신청 = 수락 대기). 수락·거절 API 의 expectedSlotIds 에는"
+          + " 그 묶음에서 이 값이 true 인 슬롯만 싣는다. 다르면 409(BCH-115)";
   private static final String EXTRA_RECRUITING_DESCRIPTION =
       "지금 추가 신청을 받는지. true = 진행 확정된 회원 개최 · 개최자가 추가 모집을 켬 · 「종료」 전."
           + " true 면 빈 자리에 신청할 수 있다(원래 마감은 지났다). 카드의 「추가 모집」 배지 판정용";
@@ -1299,7 +1302,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                 "010-1234-5678",
                 "1234567890",
                 DeliveryStatus.SHIPPING), null,
-            true);
+            true, false);
     BuncheolManagementParticipantResponse awaiting =
         new BuncheolManagementParticipantResponse(
             602L,
@@ -1316,7 +1319,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             null,
             null,
             null, null,
-            true);
+            true, false);
     BuncheolManagementParticipantResponse cancelled =
         new BuncheolManagementParticipantResponse(
             603L,
@@ -1334,7 +1337,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             new RefundAccountResponse("카카오뱅크", "3333012345678", "가을팬"),
             null,
             null,
-            true);
+            true, false);
     BuncheolManagementResponse response =
         new BuncheolManagementResponse(
             10L,
@@ -1553,6 +1556,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("participants[].confirmTarget")
                                 .description(
                                     "이 슬롯이 묶음 입금확인의 대상인지. 묶음 확인 API 의 expectedSlotIds 에는 **이 값이 true 인 슬롯만** 실어야 한다 — 취소분·확정분까지 실으면 영원히 409(BCH-115) 가 난다. 서버가 같은 판정을 내려주므로 화면이 상태 문자열을 해석할 필요가 없다"),
+                            fieldWithPath("participants[].acceptTarget").description(ACCEPT_TARGET_DESCRIPTION),
                             fieldWithPath("cancelledParticipants")
                                 .description("취소된 참여 배열. 입금 흔적이 있는 건에만 환불 계좌가 함께 온다. 참여 수·정원 집계에 포함되지 않는다"),
                             fieldWithPath("cancelledParticipants[].participationId")
@@ -1614,6 +1618,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("cancelledParticipants[].confirmTarget")
                                 .description(
                                     "이 슬롯이 묶음 입금확인의 대상인지. 묶음 확인 API 의 expectedSlotIds 에는 **이 값이 true 인 슬롯만** 실어야 한다 — 취소분·확정분까지 실으면 영원히 409(BCH-115) 가 난다. 서버가 같은 판정을 내려주므로 화면이 상태 문자열을 해석할 필요가 없다"),
+                            fieldWithPath("cancelledParticipants[].acceptTarget").description(ACCEPT_TARGET_DESCRIPTION),
                             fieldWithPath("flowType")
                                 .description("분철 진행 방식 (LEGACY: 즉시 입금 | C2C: 신청→확정→입금 직거래)"),
                             fieldWithPath("paymentDueAt")

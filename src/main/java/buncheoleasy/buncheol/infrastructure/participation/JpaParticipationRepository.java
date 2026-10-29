@@ -364,6 +364,33 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 
+  /** 추가 신청 수락 CAS — 묶음의 신청(APPLIED) 전부를 입금 기한과 함께 AWAITING_PAYMENT 로. 판정은 호출부가 잠금 조회로 앞세운다. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :awaitingStatus, p.dueAt = :dueAt, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status = :appliedStatus")
+  int acceptBundleIfApplied(
+      @Param("bundleId") Long bundleId,
+      @Param("appliedStatus") ParticipationStatus appliedStatus,
+      @Param("awaitingStatus") ParticipationStatus awaitingStatus,
+      @Param("dueAt") Instant dueAt,
+      @Param("now") Instant now);
+
+  /** 묶음의 지정 상태 참여를 한 사유로 취소하는 CAS. 추가 신청 거절이 쓴다. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status = :fromStatus")
+  int cancelBundleIfStatus(
+      @Param("bundleId") Long bundleId,
+      @Param("fromStatus") ParticipationStatus fromStatus,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
+      @Param("now") Instant now);
+
   /** 입금 단계 시작: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (PaymentStarter). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

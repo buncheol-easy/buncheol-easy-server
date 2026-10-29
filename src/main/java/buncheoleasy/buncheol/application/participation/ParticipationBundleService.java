@@ -1,8 +1,10 @@
 package buncheoleasy.buncheol.application.participation;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmer;
+import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
@@ -114,6 +116,90 @@ public class ParticipationBundleService {
     // 알림은 <b>묶음 전체</b>의 마킹분으로 만든다 — 개최자는 이 금액으로 이체 1건을 대조한다(BundlePaymentSentEvent).
     eventPublisher.publishEvent(new BundlePaymentSentEvent(bundleId, markedIds, sentIds));
     return markedIds;
+  }
+
+  /**
+   * 개최자가 진행 확정 뒤 추가 신청 묶음을 <b>한 번에</b> 수락한다 (APPLIED → AWAITING_PAYMENT). 묶음 기한은 지금 + 24시간이고,
+   * 참여자에게 계좌·금액·기한 알림톡이 간다. 일부만 수락하는 것은 없다 — 묶음은 이체 1회·택배 1개다.
+   *
+   * <p>{@code expectedSlotIds} 는 관리 응답에서 {@code acceptTarget} 이 참인 슬롯이다. 잠금 아래 서버가 본 수락 전 슬롯 집합과
+   * 다르면 409(BCH-115)다(입금 확인과 같은 대조). 진행 확정 분철이 아니거나 수락 전 슬롯이 없으면 BCH-132.
+   *
+   * <p>분철 행이 첫 잠금이다. 잠금 전 일반 조회는 묶음 하나뿐이고 판단은 묶음 참여 잠금 조회와 CAS 로만 한다 — 기다리는 사이 참여자가
+   * 취소했으면 잠금 조회가 그것을 본다.
+   */
+  @Transactional
+  public void accept(final Long hostId, final Long bundleId, final List<Long> expectedSlotIds) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle = getBundle(bundleId);
+    lockConfirmedForExtraDecision(hostId, bundle);
+    List<Long> appliedIds = requireAppliedSlots(bundleId, expectedSlotIds);
+
+    Instant dueAt = now.plus(PaymentStarter.PAYMENT_TIME_LIMIT);
+    if (participationRepository.acceptBundleIfApplied(bundleId, dueAt, now) != appliedIds.size()) {
+      // 잠금을 쥔 채 판정했으므로 여기 오면 내부 불변식 위반이다 — 롤백해 일부만 넘어간 묶음을 남기지 않는다.
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    participationBundleDomainService.assignDueAt(bundleId, dueAt, now);
+    eventPublisher.publishEvent(new ExtraAcceptedEvent(bundleId, appliedIds));
+  }
+
+  /**
+   * 개최자가 진행 확정 뒤 추가 신청 묶음을 <b>한 번에</b> 거절한다 (APPLIED → CANCELLED, {@code HOST_REJECTED}). 묶음이 닫히고 그
+   * 자리는 다시 빈다. 대조와 오류는 {@link #accept} 와 같다.
+   */
+  @Transactional
+  public void reject(final Long hostId, final Long bundleId, final List<Long> expectedSlotIds) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle = getBundle(bundleId);
+    lockConfirmedForExtraDecision(hostId, bundle);
+    List<Long> appliedIds = requireAppliedSlots(bundleId, expectedSlotIds);
+
+    if (participationRepository.rejectBundleIfApplied(bundleId, now) != appliedIds.size()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    participationBundleDomainService.closeIfEmpty(bundleId, now);
+    eventPublisher.publishEvent(new ExtraRejectedEvent(bundleId, appliedIds));
+  }
+
+  private ParticipationBundle getBundle(final Long bundleId) {
+    return participationBundleDomainService
+        .findById(bundleId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.BUNDLE_NOT_FOUND));
+  }
+
+  // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate). 운영진 분철은 잠근 뒤 BCH-084 — 묶음 입금 확인과 같은 꼴이다.
+  private Buncheol lockForHost(final Long hostId, final ParticipationBundle bundle) {
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(bundle.getBuncheolId());
+    buncheol.validateOwner(hostId);
+    if (buncheol.isStaff()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    return buncheol;
+  }
+
+  // 수락·거절은 진행 확정 분철에서만 있다. 모집 중 신청(APPLIED)은 입금 단계 시작이 넘긴다.
+  private void lockConfirmedForExtraDecision(final Long hostId, final ParticipationBundle bundle) {
+    if (lockForHost(hostId, bundle).getStatus() != BuncheolStatus.CONFIRMED) {
+      throw new BusinessException(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+    }
+  }
+
+  // 잠금 조회로 묶음의 수락 전 슬롯을 고르고 화면이 본 목록과 집합으로 대조한다.
+  private List<Long> requireAppliedSlots(final Long bundleId, final List<Long> expectedSlotIds) {
+    List<Long> appliedIds =
+        participationRepository.findAllByBundleIdForUpdate(bundleId).stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.APPLIED)
+            .map(Participation::getId)
+            .sorted()
+            .toList();
+    if (appliedIds.isEmpty()) {
+      throw new BusinessException(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+    }
+    if (!Set.copyOf(appliedIds).equals(Set.copyOf(expectedSlotIds))) {
+      throw new BusinessException(ErrorCode.BUNDLE_SLOTS_CHANGED);
+    }
+    return appliedIds;
   }
 
 

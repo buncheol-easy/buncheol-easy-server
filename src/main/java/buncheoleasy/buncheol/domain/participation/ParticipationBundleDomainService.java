@@ -125,6 +125,17 @@ public class ParticipationBundleDomainService {
     participationBundleRepository.closeIfNoActiveSlots(bundleId, now);
   }
 
+  /**
+   * 추가 신청 수락 때 그 묶음의 입금 기한을 채운다. 호출부가 분철 행과 묶음 참여를 잠근 채 부르므로 1행이 아니면 내부 불변식 위반이다 —
+   * 롤백해 참여만 입금 대기로 넘어가고 묶음 기한이 빈 상태를 남기지 않는다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void assignDueAt(final Long bundleId, final Instant dueAt, final Instant now) {
+    if (participationBundleRepository.assignDueAt(bundleId, dueAt, now) != 1) {
+      log.warn("추가 신청 수락 묶음 기한 채우기 실패 — 닫혔거나 이미 기한이 있다. bundleId={}", bundleId);
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
   /** 묶음 단건. 묶음 단위 API 의 진입점이다. */
   public Optional<ParticipationBundle> findById(final Long bundleId) {
     return participationBundleRepository.findById(bundleId);

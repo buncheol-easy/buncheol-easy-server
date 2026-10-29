@@ -23,7 +23,7 @@ interface JpaBuncheolRepository extends JpaRepository<Buncheol, Long> {
 
   /**
    * 진행확정 분철 {@code b} 에 아직 끝나지 않은 일이 남았는가 — 미확정 활성 참여가 있거나, 확정 참여 중 묶음 배송이
-   * 끝나지 않은 건이 있다(배송 행이 없는 확정 참여도 미종료).
+   * 끝나지 않은 건이 있다(배송 행이 없는 확정 참여도 미종료). 진행 확정 뒤 수락 전 추가 신청(APPLIED)도 끝나지 않은 일이다.
    *
    * <p>🔴 <b>회원탈퇴 가드({@link #existsUnfinishedByHostId})와 개최 목록 「종료」 판정({@link #findEndedIds})이
    * 이 문자열을 그대로 공유한다.</b> 가드는 {@code EXISTS}, 종료 판정은 {@code NOT EXISTS} 로 같은 식을 쓴다 — 한쪽만

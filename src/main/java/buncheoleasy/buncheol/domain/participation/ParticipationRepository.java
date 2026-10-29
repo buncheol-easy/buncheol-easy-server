@@ -168,6 +168,21 @@ public interface ParticipationRepository {
   int confirmBundleIfPayable(Long bundleId, Instant now);
 
   /**
+   * 추가 신청 수락 — 묶음의 신청(APPLIED) 전부를 입금 대기로 넘기고 참여의 입금 기한을 채운다. 묶음 기한은 {@code
+   * ParticipationBundleRepository} 가 따로 채운다.
+   *
+   * @return 실제로 넘어간 슬롯 수
+   */
+  int acceptBundleIfApplied(Long bundleId, Instant dueAt, Instant now);
+
+  /**
+   * 추가 신청 거절 — 묶음의 신청(APPLIED) 전부를 {@code HOST_REJECTED} 로 취소한다. 묶음 닫기는 호출부가 한다.
+   *
+   * @return 실제로 취소된 슬롯 수
+   */
+  int rejectBundleIfApplied(Long bundleId, Instant now);
+
+  /**
    * C2C 참여자 자발 취소 CAS — APPLIED 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은
    * {@link ParticipationCancellability#cancellableStatuses()} 를 공유한다.
    *

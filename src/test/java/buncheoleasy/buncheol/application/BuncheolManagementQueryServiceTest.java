@@ -225,6 +225,32 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants().get(0).dueAt()).isEqualTo(묶음기한).isNotEqualTo(DUE_AT);
     }
 
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"CONFIRMED", "RECRUITING"})
+    void 진행확정_분철의_신청만_수락_대상이다(final BuncheolStatus status) {
+      stubBasicBuncheol(status, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation applied =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.APPLIED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(applied));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants().get(0).acceptTarget())
+          .isEqualTo(status == BuncheolStatus.CONFIRMED);
+      assertThat(response.participants().get(0).confirmTarget()).isFalse();
+    }
+
     // 🔴 탈퇴 회원(조회에서 빠짐)은 null 이 아니라 고정 문구다 — null 로 내리면 클라 별칭 폴백이
     // 예금주 실명을 닉네임 자리에 채운다(실명 노출 경로).
     @Test

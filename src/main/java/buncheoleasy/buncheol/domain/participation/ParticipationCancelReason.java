@@ -22,9 +22,11 @@ public enum ParticipationCancelReason {
   // 회원 개최 진행 확정 때 입금이 확인되지 않아 빠짐(입금 대기·「보냈어요」). 개최자의 진행 확정과 같은 트랜잭션에서 분철 범위로 쓴다.
   // 「보냈어요」를 누르고 실제로 보냈다면 환불은 개최자와 운영진이 직접 확인한다.
   PAYMENT_NOT_CONFIRMED("입금 미확인"),
-  // 옛 「제외」 기록, 읽기용. 개최자가 입금 기한이 지난 묶음을 빼던 기능은 없어졌다(P0-2). staging 에 옛 기록이 있어 값을 남긴다
-  // — 지우면 그 행을 읽는 화면이 500 이다.
-  HOST_RELEASED("개최자 제외");
+  // 「제외」: 진행 확정 뒤 수락한 추가 참여가 입금 기한이 지나도록 입금 확인이 안 돼 개최자가 묶음을 뺐다. 옛 입금 수집 중 「제외」
+  // 기록도 이 값이다(staging).
+  HOST_RELEASED("개최자 제외"),
+  // 진행 확정 뒤 추가 신청(APPLIED)을 개최자가 수락하지 않았다. 계좌가 공개되기 전이라 돈이 오가지 않았다.
+  HOST_REJECTED("개최자 거절");
 
   private final String description;
 
@@ -41,15 +43,16 @@ public enum ParticipationCancelReason {
   public boolean isCancelledByParticipant() {
     return switch (this) {
       case USER_CANCELLED -> true;
-      case PAYMENT_TIMEOUT, BUNCHEOL_CANCELLED, PAYMENT_NOT_CONFIRMED, HOST_RELEASED -> false;
+      case PAYMENT_TIMEOUT, BUNCHEOL_CANCELLED, PAYMENT_NOT_CONFIRMED, HOST_RELEASED, HOST_REJECTED ->
+          false;
     };
   }
 
   /**
    * 개최자 <b>또는 시스템</b>이 한 취소. 참여자가 스스로 뺀 것이 아니다.
    *
-   * <p>이름에 「시스템」을 넣은 이유 — 개최자가 직접 고른 취소는 {@code PAYMENT_NOT_CONFIRMED}(진행 확정)와 옛
-   * {@code HOST_RELEASED} 뿐이다. {@code PAYMENT_TIMEOUT} 은 만료 스케줄러, {@code BUNCHEOL_CANCELLED} 는 개최자 취소·
+   * <p>이름에 「시스템」을 넣은 이유 — 개최자가 직접 고른 취소는 {@code PAYMENT_NOT_CONFIRMED}(진행 확정), {@code
+   * HOST_RELEASED}(「제외」), {@code HOST_REJECTED}(추가 신청 거절)뿐이다. {@code PAYMENT_TIMEOUT} 은 만료 스케줄러, {@code BUNCHEOL_CANCELLED} 는 개최자 취소·
    * 최소 인원 미달 자동 취소·운영진 파기다. 호출부는 이름만 보고 판단하므로 이름이 분류를 담아야 한다.
    *
    * <p>⚠️ 위를 부정으로 정의하지 않고 <b>exhaustive switch</b> 로 둔다 — 사유가 늘면 컴파일 단계에서

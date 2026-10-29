@@ -71,4 +71,12 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       @Param("buncheolId") Long buncheolId,
       @Param("dueAt") Instant dueAt,
       @Param("now") Instant now);
+
+  /** 추가 신청 수락 때 그 묶음 하나에 입금 기한을 채운다. 열린 묶음이고 기한이 비어 있을 때만. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.dueAt = :dueAt, b.updatedAt = :now "
+          + "WHERE b.id = :bundleId AND b.closedAt IS NULL AND b.dueAt IS NULL")
+  int assignDueAt(
+      @Param("bundleId") Long bundleId, @Param("dueAt") Instant dueAt, @Param("now") Instant now);
 }

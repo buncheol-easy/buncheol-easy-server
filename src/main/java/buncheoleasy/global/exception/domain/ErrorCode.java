@@ -270,6 +270,9 @@ public enum ErrorCode {
   // 켜기만 막는다. 끄기는 언제든 된다.
   EXTRA_RECRUIT_NOT_ALLOWED(
       "BCH-131", "진행이 확정된 분철이 끝나기 전에만 추가 모집을 켤 수 있어요.", HttpStatus.CONFLICT),
+  // 진행 확정 분철의 수락 전 추가 신청(APPLIED)이 없다 — 이미 수락·거절됐거나 참여자가 취소했다. 목록이 어긋난 것은 BCH-115.
+  BUNDLE_ACCEPT_NOT_ALLOWED(
+      "BCH-132", "수락하거나 거절할 추가 신청이 없어요. 이미 처리됐거나 취소된 신청이에요.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

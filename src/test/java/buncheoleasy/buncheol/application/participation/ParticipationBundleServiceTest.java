@@ -27,6 +27,7 @@ import buncheoleasy.buncheol.domain.participation.RefundAccount;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
@@ -456,4 +457,141 @@ class ParticipationBundleServiceTest {
     }
   }
 
+  @Nested
+  @DisplayName("accept·reject — 개최자 추가 신청 수락·거절")
+  class AcceptRejectTest {
+
+    private Buncheol lockedWithStatus(final BuncheolStatus status) {
+      Buncheol buncheol = c2cBuncheol(HOST_ID);
+      lenient().when(buncheol.getStatus()).thenReturn(status);
+      stubBundleAndLockedBuncheol(null, buncheol);
+      return buncheol;
+    }
+
+    private void stubSlots(final Participation... slots) {
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(Arrays.asList(slots));
+    }
+
+    @Test
+    @DisplayName("수락하면 신청 슬롯 전부가 지금 + 24시간 기한으로 넘어가고 묶음 기한도 같은 값이다")
+    void acceptsAllAppliedSlotsWithDueAt() {
+      lockedWithStatus(BuncheolStatus.CONFIRMED);
+      stubSlots(
+          slot(232L, ParticipationStatus.APPLIED, null, null),
+          slot(233L, ParticipationStatus.APPLIED, null, null));
+      Instant dueAt = NOW.plus(Duration.ofHours(24));
+      given(participationRepository.acceptBundleIfApplied(BUNDLE_ID, dueAt, NOW)).willReturn(2);
+
+      participationBundleService.accept(HOST_ID, BUNDLE_ID, List.of(233L, 232L));
+
+      InOrder inOrder = inOrder(buncheolDomainService, participationRepository, participationBundleDomainService);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(participationRepository).findAllByBundleIdForUpdate(BUNDLE_ID);
+      inOrder.verify(participationRepository).acceptBundleIfApplied(BUNDLE_ID, dueAt, NOW);
+      inOrder.verify(participationBundleDomainService).assignDueAt(BUNDLE_ID, dueAt, NOW);
+      then(eventPublisher)
+          .should()
+          .publishEvent(new ExtraAcceptedEvent(BUNDLE_ID, List.of(232L, 233L)));
+    }
+
+    @Test
+    @DisplayName("거절하면 신청 슬롯 전부가 개최자 거절로 취소되고 묶음을 닫는다")
+    void rejectsAllAppliedSlotsAndClosesBundle() {
+      lockedWithStatus(BuncheolStatus.CONFIRMED);
+      stubSlots(slot(232L, ParticipationStatus.APPLIED, null, null));
+      given(participationRepository.rejectBundleIfApplied(BUNDLE_ID, NOW)).willReturn(1);
+
+      participationBundleService.reject(HOST_ID, BUNDLE_ID, List.of(232L));
+
+      then(participationBundleDomainService).should().closeIfEmpty(BUNDLE_ID, NOW);
+      then(participationRepository).should(never()).acceptBundleIfApplied(any(), any(), any());
+      then(eventPublisher).should().publishEvent(new ExtraRejectedEvent(BUNDLE_ID, List.of(232L)));
+    }
+
+    @Test
+    @DisplayName("화면이 본 슬롯과 다르면 BCH-115 로 막고 아무것도 쓰지 않는다")
+    void rejectsWhenSlotsChanged() {
+      lockedWithStatus(BuncheolStatus.CONFIRMED);
+      // 그 사이 참여자가 233 을 취소했다.
+      stubSlots(
+          slot(232L, ParticipationStatus.APPLIED, null, null),
+          slot(233L, ParticipationStatus.CANCELLED, ParticipationCancelReason.USER_CANCELLED, NOW));
+
+      assertThatThrownBy(
+              () -> participationBundleService.accept(HOST_ID, BUNDLE_ID, List.of(232L, 233L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNDLE_SLOTS_CHANGED);
+      then(participationRepository).should(never()).acceptBundleIfApplied(any(), any(), any());
+      then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("수락 전 슬롯이 없으면(이미 처리·취소됨) BCH-132")
+    void rejectsWhenNothingApplied() {
+      lockedWithStatus(BuncheolStatus.CONFIRMED);
+      stubSlots(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null));
+
+      assertThatThrownBy(() -> participationBundleService.reject(HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+      then(participationRepository).should(never()).rejectBundleIfApplied(any(), any());
+    }
+
+    @Test
+    @DisplayName("모집 중 분철의 신청은 수락·거절 대상이 아니다(BCH-132) — 참여를 잠그기 전에 막는다")
+    void rejectsRecruitingBuncheol() {
+      lockedWithStatus(BuncheolStatus.RECRUITING);
+
+      assertThatThrownBy(() -> participationBundleService.accept(HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+      then(participationRepository).should(never()).findAllByBundleIdForUpdate(any());
+    }
+
+    @Test
+    @DisplayName("개최자가 아니면 거부한다")
+    void rejectsOtherHost() {
+      lockedWithStatus(BuncheolStatus.CONFIRMED);
+
+      assertThatThrownBy(
+              () -> participationBundleService.accept(OTHER_HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+    }
+
+    @Test
+    @DisplayName("운영진 분철은 잠근 뒤 BCH-084")
+    void rejectsStaffBuncheol() {
+      Buncheol buncheol = lockedWithStatus(BuncheolStatus.CONFIRMED);
+      given(buncheol.isStaff()).willReturn(true);
+
+      assertThatThrownBy(() -> participationBundleService.reject(HOST_ID, BUNDLE_ID, List.of(232L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+
+    @Test
+    @DisplayName("잠금 아래 판정한 수와 CAS 수가 다르면 내부 불변식 위반으로 롤백한다")
+    void rollsBackOnPartialTransition() {
+      lockedWithStatus(BuncheolStatus.CONFIRMED);
+      stubSlots(
+          slot(232L, ParticipationStatus.APPLIED, null, null),
+          slot(233L, ParticipationStatus.APPLIED, null, null));
+      given(participationRepository.acceptBundleIfApplied(any(), any(), any())).willReturn(1);
+
+      assertThatThrownBy(
+              () -> participationBundleService.accept(HOST_ID, BUNDLE_ID, List.of(232L, 233L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+      then(participationBundleDomainService).should(never()).assignDueAt(any(), any(), any());
+      then(eventPublisher).shouldHaveNoInteractions();
+    }
+  }
 }

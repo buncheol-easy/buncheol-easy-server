@@ -794,6 +794,70 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     }
   }
 
+  @Nested
+  @DisplayName("회원 개최 추가 신청 수락·거절")
+  class ExtraDecision {
+
+    @Test
+    void 추가_신청_수락은_분철_행을_먼저_기다리고_묶음에_기한을_채운다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      long bundleId = pendingExtraBundle(buncheolId);
+      long participationId = onlyParticipationOf(bundleId);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            participationBundleService.accept(hostId, bundleId, List.of(participationId));
+            return null;
+          });
+
+      assertThat(statusOf("participations", participationId)).isEqualTo("AWAITING_PAYMENT");
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT due_at IS NOT NULL FROM participation_bundles WHERE id = ?",
+                  Boolean.class,
+                  bundleId))
+          .isTrue();
+    }
+
+    @Test
+    void 추가_신청_거절은_분철_행을_먼저_기다리고_묶음을_닫는다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      long bundleId = pendingExtraBundle(buncheolId);
+      long participationId = onlyParticipationOf(bundleId);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            participationBundleService.reject(hostId, bundleId, List.of(participationId));
+            return null;
+          });
+
+      assertThat(statusOf("participations", participationId)).isEqualTo("CANCELLED");
+      assertThat(bundleClosed(bundleId)).isTrue();
+    }
+  }
+
+  /** 수락 전 추가 신청 묶음(참여자 participantId, 자리 1). */
+  private long pendingExtraBundle(final long buncheolId) {
+    long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);
+    fixture.markExtra(bundleId);
+    fixture.participation(
+        buncheolId,
+        fixture.slot(buncheolId, fixture.groupMember(groupId)),
+        participantId,
+        bundleId,
+        "APPLIED",
+        "C2C",
+        null);
+    return bundleId;
+  }
+
+  private long onlyParticipationOf(final long bundleId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT id FROM participations WHERE bundle_id = ?", Long.class, bundleId);
+  }
+
   /** 진행 확정 회원 개최. 다른 사람의 확인된 참여가 배송 없이 남아 있어 「종료」가 아니다. 계좌 스냅샷이 있다. */
   private long confirmedNotEnded() {
     long buncheolId =

@@ -6,6 +6,7 @@ import static com.epages.restdocs.apispec.ResourceDocumentation.resource;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -156,4 +157,96 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                         .build())));
   }
 
+  @Test
+  void 개최자_추가_신청_수락() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participation-bundles/{bundleId}/accept", BUNDLE_ID)
+                .with(userAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"expectedSlotIds\":[232,233]}"))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participation-bundles-accept",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("ParticipationBundle")
+                        .summary("개최자 추가 신청 수락")
+                        .description(
+                            """
+                            진행 확정 뒤 추가 모집으로 들어온 수락 전 묶음(신청 `APPLIED`)을 **한 번에** 수락한다.
+                            슬롯은 `AWAITING_PAYMENT` 가 되고 묶음 입금 기한은 **지금 + 24시간**이다. 참여자에게 계좌·금액·기한
+                            알림톡이 묶음 1통으로 간다. 묶음 일부만 수락하는 것은 없다.
+
+                            `expectedSlotIds` 에는 관리 응답에서 `acceptTarget` 이 `true` 인 그 묶음의 슬롯을 싣는다. 서버가
+                            본 수락 전 슬롯 집합과 다르면 409(BCH-115)로 막는다 — 그 사이 참여자가 일부를 취소했으면 새로 고쳐 다시 본다.
+
+                            수락 전에는 계좌가 공개되지 않아 돈이 오가지 않는다. 수락하지 않고 오래 두어도 자동 처리는 없다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `expectedSlotIds` 누락·빈 목록 |
+                            | 404 | `BCH-114` (`BUNDLE_NOT_FOUND`) | 묶음 없음 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 개최자가 아님 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 분철 |
+                            | 409 | `BCH-132` (`BUNDLE_ACCEPT_NOT_ALLOWED`) | 진행 확정 분철이 아니거나 수락 전 슬롯이 없음(이미 처리됐거나 취소됨) |
+                            | 409 | `BCH-115` (`BUNDLE_SLOTS_CHANGED`) | 화면이 본 슬롯 집합과 다름 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("bundleId").description("참여 묶음 ID"))
+                        .requestSchema(Schema.schema("BundleSlotsRequest"))
+                        .requestFields(
+                            fieldWithPath("expectedSlotIds")
+                                .type(JsonFieldType.ARRAY)
+                                .description("화면이 본 수락 대상 참여 ID 목록 (필수, acceptTarget 이 true 인 슬롯)"))
+                        .build())));
+    then(participationBundleService).should().accept(USER_ID, BUNDLE_ID, List.of(232L, 233L));
+  }
+
+  @Test
+  void 개최자_추가_신청_거절() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/participation-bundles/{bundleId}/reject", BUNDLE_ID)
+                .with(userAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"expectedSlotIds\":[232]}"))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "participation-bundles-reject",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("ParticipationBundle")
+                        .summary("개최자 추가 신청 거절")
+                        .description(
+                            """
+                            진행 확정 뒤 추가 모집으로 들어온 수락 전 묶음(신청 `APPLIED`)을 **한 번에** 거절한다. 슬롯은
+                            `CANCELLED`(취소 사유 `HOST_REJECTED`)가 되고 묶음이 닫혀 그 자리는 다시 빈다. 참여자에게 알림톡이
+                            묶음 1통으로 간다. 입금 전이라 돌려줄 돈은 없다.
+
+                            요청과 대조 규칙은 수락과 같다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `expectedSlotIds` 누락·빈 목록 |
+                            | 404 | `BCH-114` (`BUNDLE_NOT_FOUND`) | 묶음 없음 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 개최자가 아님 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 분철 |
+                            | 409 | `BCH-132` (`BUNDLE_ACCEPT_NOT_ALLOWED`) | 진행 확정 분철이 아니거나 수락 전 슬롯이 없음(이미 처리됐거나 취소됨) |
+                            | 409 | `BCH-115` (`BUNDLE_SLOTS_CHANGED`) | 화면이 본 슬롯 집합과 다름 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("bundleId").description("참여 묶음 ID"))
+                        .requestSchema(Schema.schema("BundleSlotsRequest"))
+                        .requestFields(
+                            fieldWithPath("expectedSlotIds")
+                                .type(JsonFieldType.ARRAY)
+                                .description("화면이 본 거절 대상 참여 ID 목록 (필수, acceptTarget 이 true 인 슬롯)"))
+                        .build())));
+    then(participationBundleService).should().reject(USER_ID, BUNDLE_ID, List.of(232L));
+  }
 }

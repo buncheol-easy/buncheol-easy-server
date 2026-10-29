@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.presentation;
 import buncheoleasy.buncheol.application.participation.BundleConfirmResult;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.dto.request.BundleConfirmRequest;
+import buncheoleasy.buncheol.dto.request.BundleSlotsRequest;
 import buncheoleasy.buncheol.dto.response.BundleConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BundlePaymentSentResponse;
 import jakarta.validation.Valid;
@@ -53,6 +54,30 @@ public class ParticipationBundleController {
    *
    * <p>이 묶음으로 분철의 미확인이 0 이 되면 같은 요청에서 진행 확정까지 하고 응답의 {@code buncheolConfirmed} 가 true 다.
    */
+  /**
+   * 개최자 추가 신청 수락 API — 진행 확정 뒤 수락 전 묶음을 <b>한 번에</b> 입금 대기로 넘긴다. 묶음 기한은 지금 + 24시간이다.
+   *
+   * <p>요청의 {@code expectedSlotIds} 에는 관리 응답에서 {@code acceptTarget} 이 {@code true} 인 그 묶음의 슬롯만 담는다.
+   */
+  @PostMapping("/{bundleId}/accept")
+  public ResponseEntity<Void> accept(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long bundleId,
+      @Valid @RequestBody final BundleSlotsRequest request) {
+    participationBundleService.accept(hostId, bundleId, request.expectedSlotIds());
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 개최자 추가 신청 거절 API — 수락 전 묶음을 <b>한 번에</b> 취소한다. 그 자리는 다시 빈다. 요청은 수락과 같다. */
+  @PostMapping("/{bundleId}/reject")
+  public ResponseEntity<Void> reject(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long bundleId,
+      @Valid @RequestBody final BundleSlotsRequest request) {
+    participationBundleService.reject(hostId, bundleId, request.expectedSlotIds());
+    return ResponseEntity.noContent().build();
+  }
+
   @PostMapping("/{bundleId}/confirm")
   public ResponseEntity<BundleConfirmResponse> confirmPayment(
       @AuthenticationPrincipal final Long hostId,

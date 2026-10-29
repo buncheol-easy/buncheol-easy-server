@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.support.MySqlContainerTestSupport;
 import buncheoleasy.support.MySqlFixture;
@@ -25,6 +26,7 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
 
   @Autowired private BuncheolRepository buncheolRepository;
   @Autowired private ParticipationRepository participationRepository;
+  @Autowired private ParticipationBundleRepository participationBundleRepository;
   @Autowired private TransactionTemplate transactionTemplate;
 
   private MySqlFixture fixture;
@@ -292,6 +294,83 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
           fixture.shippingAddress(participantId),
           15_000L,
           0L);
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 신청 수락·거절 CAS")
+  class AcceptReject {
+
+    @Test
+    void 수락은_그_묶음의_신청만_입금_대기로_넘기고_묶음과_참여에_기한을_채운다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long bundleId = fixture.bundle(buncheolId, participantId, addressId, null);
+      long applied = slotParticipation(buncheolId, participantId, bundleId, "APPLIED");
+      long otherBundleId = fixture.bundle(buncheolId, participantId, addressId, null);
+      long otherApplied = slotParticipation(buncheolId, participantId, otherBundleId, "APPLIED");
+      Instant dueAt = Instant.now().plus(Duration.ofHours(24));
+
+      Integer accepted =
+          transactionTemplate.execute(
+              status -> {
+                int moved = participationRepository.acceptBundleIfApplied(bundleId, dueAt, Instant.now());
+                assertThat(participationBundleRepository.assignDueAt(bundleId, dueAt, Instant.now()))
+                    .isEqualTo(1);
+                // 이미 기한이 있으면 다시 채우지 않는다.
+                assertThat(participationBundleRepository.assignDueAt(bundleId, dueAt, Instant.now()))
+                    .isZero();
+                return moved;
+              });
+
+      assertThat(accepted).isEqualTo(1);
+      assertThat(participationStatus(applied)).isEqualTo("AWAITING_PAYMENT");
+      assertThat(participationStatus(otherApplied)).isEqualTo("APPLIED");
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT (SELECT due_at IS NOT NULL FROM participations WHERE id = ?)"
+                      + " + (SELECT due_at IS NOT NULL FROM participation_bundles WHERE id = ?)",
+                  Integer.class,
+                  applied,
+                  bundleId))
+          .isEqualTo(2);
+    }
+
+    @Test
+    void 거절은_그_묶음의_신청만_개최자_거절로_취소한다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long bundleId = fixture.bundle(buncheolId, participantId, addressId, null);
+      long applied = slotParticipation(buncheolId, participantId, bundleId, "APPLIED");
+      long confirmed = slotParticipation(buncheolId, participantId, bundleId, "CONFIRMED");
+
+      Integer rejected =
+          transactionTemplate.execute(
+              status -> participationRepository.rejectBundleIfApplied(bundleId, Instant.now()));
+
+      assertThat(rejected).isEqualTo(1);
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT CONCAT(status, '/', cancel_reason, '/', cancelled_at IS NOT NULL)"
+                      + " FROM participations WHERE id = ?",
+                  String.class,
+                  applied))
+          .isEqualTo("CANCELLED/HOST_REJECTED/1");
+      assertThat(participationStatus(confirmed)).isEqualTo("CONFIRMED");
+    }
+
+    private long slotParticipation(
+        final long buncheolId, final long participantId, final long bundleId, final String status) {
+      return fixture.participation(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          participantId,
+          bundleId,
+          status,
+          "C2C",
+          null);
     }
   }
 

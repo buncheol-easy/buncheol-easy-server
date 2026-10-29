@@ -140,7 +140,8 @@ public class BuncheolManagementQueryService {
                         deliveryByBundleId,
                         bundleById,
                         shippingFees,
-                        c2c))
+                        c2c,
+                        buncheol.getStatus()))
             .toList();
     // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
     List<BuncheolManagementParticipantResponse> cancelledParticipants =
@@ -154,7 +155,8 @@ public class BuncheolManagementQueryService {
                         Map.of(),
                         bundleById,
                         shippingFees,
-                        c2c))
+                        c2c,
+                        buncheol.getStatus()))
             .toList();
 
     // 「종료」는 개최 목록과 <b>같은 조회</b>를 분철 1개로 돌려 얻는다 — 위에서 읽은 참여·배송으로 다시 계산하면 식이
@@ -216,7 +218,8 @@ public class BuncheolManagementQueryService {
       final Map<Long, Delivery> deliveryByBundleId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
-      final boolean c2c) {
+      final boolean c2c,
+      final BuncheolStatus buncheolStatus) {
     User participant = userById.get(participation.getParticipantId());
     // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다.
     boolean withdrawn = participant == null;
@@ -267,7 +270,10 @@ public class BuncheolManagementQueryService {
         // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
         ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
         // 묶음 확인 API 의 expectedSlotIds 는 이 값이 true 인 슬롯만 실어야 한다 — 판정을 서버가 준다.
-        ParticipationStatus.payableStatuses().contains(participation.getStatus()));
+        ParticipationStatus.payableStatuses().contains(participation.getStatus()),
+        // 진행 확정 분철의 신청(APPLIED)은 곧 수락 전 추가 신청이다 — 수락·거절 API 의 판정과 같다.
+        buncheolStatus == BuncheolStatus.CONFIRMED
+            && participation.getStatus() == ParticipationStatus.APPLIED);
   }
 
   /**

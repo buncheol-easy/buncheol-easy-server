@@ -73,6 +73,11 @@ public class JpaParticipationBundleRepositoryAdapter implements ParticipationBun
   }
 
   @Override
+  public int assignDueAt(final Long bundleId, final Instant dueAt, final Instant now) {
+    return jpaParticipationBundleRepository.assignDueAt(bundleId, dueAt, now);
+  }
+
+  @Override
   public int markPaymentSent(final Long bundleId, final Instant now) {
     return jpaParticipationBundleRepository.markPaymentSent(bundleId, now);
   }

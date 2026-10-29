@@ -599,6 +599,36 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
       assertCancelledWithoutDeliveries(confirmed);
     }
 
+    // 운송장 등록은 앞의 검사(일반 조회)를 지나 배송 행 CAS 에서 기다린다. 파기가 커밋되면 CAS 가 지워진 행을 보고 0행이 된다.
+    @Test
+    void 파기가_배송_행을_쥐고_있으면_운송장_등록은_기다린_뒤_상태_위반으로_실패한다() throws Exception {
+      ConfirmedWithDeliveries confirmed = confirmedWithDeliveries();
+      long deliveryId = confirmed.deliveryIds().get(0);
+
+      Future<?> result;
+      try (Connection cancelling = holdCancelDeletingDelivery(confirmed.buncheolId(), deliveryId)) {
+        result =
+            executor.submit(
+                () -> {
+                  deliveryService.registerTracking(hostId, deliveryId, "T1");
+                  return null;
+                });
+        assertThat(awaitLockWait(result, "deliveries")).as("운송장 등록이 배송 행을 기다려야 한다").isTrue();
+        cancelling.commit();
+      }
+
+      assertThatThrownBy(() -> result.get(10, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class)
+          .cause()
+          .isInstanceOf(BusinessException.class)
+          .extracting(e -> ((BusinessException) e).getErrorCode())
+          .isEqualTo(ErrorCode.DELIVERY_STATE_TRANSITION_INVALID);
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT COUNT(*) FROM deliveries WHERE id = ?", Integer.class, deliveryId))
+          .isZero();
+    }
+
     @Test
     void 파기가_먼저_끝나면_운송장_등록은_배송_없음으로_실패하고_아무것도_생기지_않는다() {
       ConfirmedWithDeliveries confirmed = confirmedWithDeliveries();
@@ -612,6 +642,27 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
           .extracting(e -> ((BusinessException) e).getErrorCode())
           .isEqualTo(ErrorCode.DELIVERY_NOT_FOUND);
       assertCancelledWithoutDeliveries(confirmed);
+    }
+
+    // 파기가 분철 행을 잡고 분철을 접은 뒤, 취소 연쇄가 배송 행을 잠가 지운 채 커밋 전인 상태를 흉내 낸다.
+    private Connection holdCancelDeletingDelivery(final long buncheolId, final long deliveryId)
+        throws SQLException {
+      Connection cancelling = holdBuncheolRow(buncheolId);
+      try (PreparedStatement hide =
+              cancelling.prepareStatement(
+                  "UPDATE buncheols SET status = 'HOST_CANCELLED' WHERE id = ?");
+          PreparedStatement lock =
+              cancelling.prepareStatement("SELECT id FROM deliveries WHERE id = ? FOR UPDATE");
+          PreparedStatement delete =
+              cancelling.prepareStatement("DELETE FROM deliveries WHERE id = ?")) {
+        hide.setLong(1, buncheolId);
+        hide.executeUpdate();
+        lock.setLong(1, deliveryId);
+        lock.executeQuery().close();
+        delete.setLong(1, deliveryId);
+        delete.executeUpdate();
+      }
+      return cancelling;
     }
 
     // 운송장 등록 CAS 가 배송 행을 쥔 채 커밋 전인 상태를 흉내 낸다.

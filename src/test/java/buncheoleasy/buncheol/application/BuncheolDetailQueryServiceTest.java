@@ -52,6 +52,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -476,6 +477,63 @@ class BuncheolDetailQueryServiceTest {
       assertThat(response.members())
           .extracting(BuncheolMemberDetailResponse::saleStatus)
           .containsExactly(BuncheolMemberSaleStatus.AVAILABLE, BuncheolMemberSaleStatus.CLOSED);
+      assertThat(response.members())
+          .extracting(BuncheolMemberDetailResponse::removed)
+          .containsExactly(false, true);
+    }
+
+    @Test
+    void 추가_모집_중인_진행확정_분철은_마감이_지났어도_빈_자리가_AVAILABLE_이다() {
+      stubEmptySlot(BuncheolStatus.CONFIRMED, FlowType.C2C, NOW.minusSeconds(3600));
+      openExtraRecruit();
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of());
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.extraRecruiting()).isTrue();
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+      assertThat(response.members().get(0).removed()).isFalse();
+    }
+
+    @Test
+    void 추가_모집을_켜_두어도_종료된_분철의_빈_자리는_CLOSED_다() {
+      stubEmptySlot(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      openExtraRecruit();
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of(BUNCHEOL_ID));
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.extraRecruiting()).isFalse();
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+    }
+
+    @Test
+    void 추가_모집을_켜지_않은_분철은_종료_판정을_조회하지_않는다() {
+      stubEmptySlot(BuncheolStatus.CONFIRMED, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.extraRecruiting()).isFalse();
+      then(buncheolRepository).should(never()).findEndedIds(any());
+    }
+
+    @Test
+    void 운영진_분철은_스위치_값이_켜져_있어도_종료_판정을_조회하지_않는다() {
+      stubEmptySlot(BuncheolStatus.CONFIRMED, FlowType.LEGACY);
+      openExtraRecruit();
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.extraRecruiting()).isFalse();
+      assertThat(response.members().get(0).saleStatus())
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
+      then(buncheolRepository).should(never()).findEndedIds(any());
+    }
+
+    private void openExtraRecruit() {
+      setField(buncheolRepository.findById(BUNCHEOL_ID).orElseThrow(), "extraRecruitOpen", true);
     }
 
     // 닫힌 분철에선 코드가 있어도 참여 INSERT 가 막힌다.

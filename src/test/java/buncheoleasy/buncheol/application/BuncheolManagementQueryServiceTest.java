@@ -1055,6 +1055,20 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.ended()).isFalse();
       verify(buncheolRepository, never()).findEndedIds(anyList());
     }
+
+    @Test
+    void 추가_모집_스위치_값은_종료와_따로_싣는다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      setField(
+          buncheolRepository.findById(BUNCHEOL_ID).orElseThrow(), "extraRecruitOpen", true);
+      given(buncheolRepository.findEndedIds(List.of(BUNCHEOL_ID))).willReturn(Set.of(BUNCHEOL_ID));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.extraRecruitOpen()).isTrue();
+      assertThat(response.ended()).isTrue();
+    }
   }
 
   private void stubBasicBuncheol(final BuncheolStatus status) {

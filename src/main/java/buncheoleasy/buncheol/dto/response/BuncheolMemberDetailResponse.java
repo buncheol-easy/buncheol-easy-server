@@ -12,6 +12,8 @@ import java.time.Instant;
  *     풀리고, C2C 는 이 시각이 지나도 풀리지 않는다 — 풀릴 때 분철이 신규 참여를 받지 않는 상태면 AVAILABLE 이 아니라
  *     CLOSED 가 되므로 "이 시각에 다시 신청 가능"으로 안내하면 안 된다
  * @param participatedByMe 이 슬롯을 점유한 활성 참여(선점·구매)가 호출 유저의 것인지. 비로그인 호출이면 항상 false
+ * @param removed 개최자가 「빼기」로 뺀 자리인지. 신청을 받지 않는 분철에서는 빈 자리도 {@code CLOSED} 라 {@code saleStatus} 만으로는
+ *     뺀 자리와 가르지 못한다. 「빼기」는 회원 개최에만 있어 운영진 분철은 늘 false
  */
 public record BuncheolMemberDetailResponse(
     Long buncheolMemberId,
@@ -21,4 +23,5 @@ public record BuncheolMemberDetailResponse(
     long price,
     BuncheolMemberSaleStatus saleStatus,
     Instant paymentDueAt,
-    boolean participatedByMe) {}
+    boolean participatedByMe,
+    boolean removed) {}

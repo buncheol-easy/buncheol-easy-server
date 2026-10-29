@@ -345,6 +345,37 @@ class MyBookmarkedBuncheolQueryServiceTest {
     }
 
     @Test
+    void 추가_모집_중인_진행확정_분철은_남은_멤버를_싣고_extraRecruiting_이_true_다() {
+      given(buncheolBookmarkRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(USER_ID))
+          .willReturn(List.of(bookmark(500L, USER_ID, 10L), bookmark(501L, USER_ID, 20L)));
+      Buncheol open =
+          buncheol(10L, 100L, "추가 모집", BuncheolStatus.CONFIRMED, Instant.parse("2026-05-01T12:00:00Z"));
+      Buncheol ended =
+          buncheol(20L, 100L, "끝남", BuncheolStatus.CONFIRMED, Instant.parse("2026-05-01T12:00:00Z"));
+      for (Buncheol b : List.of(open, ended)) {
+        setField(b, "flowType", FlowType.C2C);
+        setField(b, "extraRecruitOpen", true);
+      }
+      given(buncheolRepository.findAllByIds(List.of(10L, 20L))).willReturn(List.of(open, ended));
+      given(buncheolRepository.findEndedIds(List.of(10L, 20L))).willReturn(Set.of(20L));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 20L), Set.of()))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("하니"), 20L, List.of("민지")),
+                  Map.of(10L, List.of("하니"), 20L, List.of("민지"))));
+
+      List<MyBookmarkedBuncheolResponse> result =
+          myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
+              USER_ID, BookmarkSortOption.LATEST, false, false);
+
+      assertThat(result.get(0).extraRecruiting()).isTrue();
+      assertThat(result.get(0).availableMemberNames()).containsExactly("하니");
+      assertThat(result.get(1).extraRecruiting()).isFalse();
+      assertThat(result.get(1).availableMemberNames()).isEmpty();
+    }
+
+    @Test
     void 배송비가_모두_0원인_분철만_freeShippingEventTarget_true_로_내려간다() {
       BuncheolBookmark bm1 = bookmark(500L, USER_ID, 10L);
       BuncheolBookmark bm2 = bookmark(501L, USER_ID, 20L);

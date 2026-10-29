@@ -371,6 +371,24 @@ public class BuncheolService {
   }
 
   /**
+   * 회원 개최 개최자가 추가 모집 스위치를 켜거나 끈다. 켜기는 진행 확정된 분철이 「종료」 전일 때만 되고(BCH-131), 끄기는 언제든 된다 —
+   * 새 신청만 막고 이미 들어온 추가 신청은 그대로 수락·거절할 수 있다. 운영진 분철은 BCH-084.
+   *
+   * <p>분철 행이 첫 잠금이다({@link BuncheolDomainService#getBuncheolForUpdate}). 앞에 일반 조회가 없어 켜기의 종료 판정(일반
+   * 조회)이 잠금 뒤 스냅샷을 본다.
+   */
+  @Transactional
+  public void changeExtraRecruit(final Long hostId, final Long buncheolId, final boolean open) {
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
+    buncheol.validateOwner(hostId);
+    if (buncheol.isStaff()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    boolean ended = open && buncheolDomainService.isEnded(buncheolId);
+    buncheol.changeExtraRecruit(open, ended);
+  }
+
+  /**
    * 개최자의 회원 개최 진행 확정 (PAYMENT_COLLECTING → CONFIRMED). 입금 기한이 지났고 확인된 참여가 있을 때 한다({@link
    * ConfirmCheck}). 전원 입금은 마지막 묶음 입금 확인이 그 자리에서 진행 확정하므로 여기 오는 {@code ALL_PAID} 는 옛 데이터뿐이다.
    * 입금이 확인되지 않은 참여(입금 대기·「보냈어요」)는 같은 트랜잭션에서 빠지고({@code PAYMENT_NOT_CONFIRMED}), 확인된 묶음마다 배송이
@@ -597,8 +615,9 @@ public class BuncheolService {
     if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
-    // 참여 가드·상세의 공석 표시와 같은 술어 — 신청을 받는 구간에서만 자리를 바꾼다.
-    if (!buncheol.acceptsNewParticipation(now)) {
+    // 참여 가드·상세의 공석 표시와 같은 술어 — 신청을 받는 구간(모집 중, 추가 모집 중)에서만 자리를 바꾼다.
+    boolean ended = buncheol.needsEndedCheck() && buncheolDomainService.isEnded(buncheolId);
+    if (!buncheol.acceptsNewParticipation(now, ended)) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
     return buncheol;

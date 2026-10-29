@@ -111,6 +111,15 @@ public class MyBookmarkedBuncheolQueryService {
                 .map(Buncheol::getId)
                 .toList());
 
+    // 「종료」 판정은 추가 모집을 켠 진행 확정 회원 개최만 모아 한 번 조회한다(공개 목록과 같은 방식).
+    Set<Long> endedIds =
+        buncheolRepository.findEndedIds(
+            visibleBuncheolIds.stream()
+                .map(buncheolById::get)
+                .filter(Buncheol::needsEndedCheck)
+                .map(Buncheol::getId)
+                .toList());
+
     // 기준 시각은 응답당 한 번만 뽑는다 — 카드마다 now 를 새로 읽으면 마감 경계에 걸친 분철이
     // 같은 목록 안에서 서로 다른 기준으로 판정된다 (공개 목록 조회와 같은 방식).
     Instant now = Instant.now(clock);
@@ -125,6 +134,7 @@ public class MyBookmarkedBuncheolQueryService {
                     thumbnailByBuncheolId,
                     memberNames,
                     opensAtByBuncheolId,
+                    endedIds,
                     now))
         .toList();
   }
@@ -187,8 +197,10 @@ public class MyBookmarkedBuncheolQueryService {
       final Map<Long, String> thumbnailByBuncheolId,
       final BuncheolMemberNameResolver.MemberNames memberNames,
       final Map<Long, Instant> opensAtByBuncheolId,
+      final Set<Long> endedIds,
       final Instant now) {
     Buncheol buncheol = buncheolById.get(bookmark.getBuncheolId());
+    boolean ended = endedIds.contains(buncheol.getId());
     return new MyBookmarkedBuncheolResponse(
         bookmark.getId(),
         buncheol.getId(),
@@ -198,10 +210,11 @@ public class MyBookmarkedBuncheolQueryService {
         groupNameById.get(buncheol.getGroupId()),
         thumbnailByBuncheolId.get(buncheol.getId()),
         memberNames.all().getOrDefault(buncheol.getId(), List.of()),
-        availableMemberNames(buncheol, memberNames, now),
+        availableMemberNames(buncheol, memberNames, now, ended),
         buncheol.isFreeShippingEventTarget(),
         buncheol.getCreatedAt(),
-        opensAtByBuncheolId.get(buncheol.getId()));
+        opensAtByBuncheolId.get(buncheol.getId()),
+        buncheol.isExtraRecruiting(ended));
   }
 
   /**
@@ -211,8 +224,9 @@ public class MyBookmarkedBuncheolQueryService {
   private List<String> availableMemberNames(
       final Buncheol buncheol,
       final BuncheolMemberNameResolver.MemberNames memberNames,
-      final Instant now) {
-    if (!buncheol.acceptsNewParticipation(now)) {
+      final Instant now,
+      final boolean ended) {
+    if (!buncheol.acceptsNewParticipation(now, ended)) {
       return List.of();
     }
     return memberNames.available().getOrDefault(buncheol.getId(), List.of());

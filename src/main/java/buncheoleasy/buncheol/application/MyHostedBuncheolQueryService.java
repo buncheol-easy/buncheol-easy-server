@@ -148,6 +148,7 @@ public class MyHostedBuncheolQueryService {
             confirmedCount,
             unconfirmedCount,
             buncheol.getPaymentDueAt(),
-            now));
+            now),
+        buncheol.isExtraRecruitOpen());
   }
 }

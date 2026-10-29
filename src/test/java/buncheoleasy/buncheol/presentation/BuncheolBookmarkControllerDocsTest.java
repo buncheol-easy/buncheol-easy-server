@@ -105,7 +105,7 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
             List.of("민지", "다니엘", "혜인"),
             true,
             Instant.parse("2026-05-15T08:00:00Z"),
-            null);
+            null, false);
     given(
             myBookmarkedBuncheolQueryService.getMyBookmarkedBuncheols(
                 USER_ID, BookmarkSortOption.LATEST, false, false))
@@ -193,7 +193,10 @@ class BuncheolBookmarkControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.STRING)
                                 .description(
                                     "예약 오픈 시각 (UTC ISO-8601). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null. 카드의 \"M/D HH:mm 오픈\" 표시용 — 공개 목록 조회와 같은 값")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].extraRecruiting")
+                                .description(
+                                    "지금 추가 신청을 받는지 — 공개 목록 조회와 같은 값. 카드의 「추가 모집」 배지 판정용"))
                         .build())));
   }
 }

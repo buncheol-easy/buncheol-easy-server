@@ -266,6 +266,11 @@ public enum ErrorCode {
   BUNCHEOL_CANCEL_HAS_TRACKING(
       "BCH-130", "운송장이 등록된 배송이 있어 파기할 수 없어요.", HttpStatus.CONFLICT),
 
+  // ── 회원 개최 추가 모집 ──
+  // 켜기만 막는다. 끄기는 언제든 된다.
+  EXTRA_RECRUIT_NOT_ALLOWED(
+      "BCH-131", "진행이 확정된 분철이 끝나기 전에만 추가 모집을 켤 수 있어요.", HttpStatus.CONFLICT),
+
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),
   DELIVERY_STORE_NAME_REQUIRED("DLV-002", "편의점 지점명은 필수입니다.", HttpStatus.BAD_REQUEST),

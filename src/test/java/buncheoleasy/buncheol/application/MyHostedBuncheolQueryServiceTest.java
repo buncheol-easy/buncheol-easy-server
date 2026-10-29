@@ -320,6 +320,22 @@ class MyHostedBuncheolQueryServiceTest {
       verify(buncheolRepository).findEndedIds(List.of());
     }
 
+    @Test
+    void 추가_모집_스위치_값을_그대로_싣는다() {
+      Buncheol open = 분철(10L, BuncheolStatus.CONFIRMED);
+      setField(open, "extraRecruitOpen", true);
+      given(buncheolRepository.findVisibleByHostIdOrderByCreatedAtDesc(HOST_ID))
+          .willReturn(List.of(open, 분철(20L, BuncheolStatus.CONFIRMED)));
+
+      List<MyHostedBuncheolResponse> result =
+          myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID);
+
+      assertThat(result)
+          .extracting(
+              MyHostedBuncheolResponse::buncheolId, MyHostedBuncheolResponse::extraRecruitOpen)
+          .containsExactly(tuple(10L, true), tuple(20L, false));
+    }
+
     private Buncheol 분철(final Long id, final BuncheolStatus status) {
       return buncheol(id, 100L, "분철 " + id, status, DEADLINE, CREATED_AT);
     }

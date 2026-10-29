@@ -71,6 +71,12 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
           + " 버튼을 켜고, 「개최한 분철」 카드의 「진행 확정해 주세요」 배지는 DUE_PASSED 일 때만 띄운다. 전원 입금은 마지막 묶음"
           + " 입금 확인이 바로 진행 확정하므로 ALL_PAID 는 정상 흐름에서 오지 않는다(옛 데이터 대비). 입금 수집중이 아니면 null";
 
+  private static final String EXTRA_RECRUITING_DESCRIPTION =
+      "지금 추가 신청을 받는지. true = 진행 확정된 회원 개최 · 개최자가 추가 모집을 켬 · 「종료」 전."
+          + " true 면 빈 자리에 신청할 수 있다(원래 마감은 지났다). 카드의 「추가 모집」 배지 판정용";
+  private static final String EXTRA_RECRUIT_OPEN_DESCRIPTION =
+      "추가 모집 스위치 값(개최자가 켜고 끈다). 지금 신청을 받는지와는 다르다 — 켜져 있어도 ended 면 받지 않는다."
+          + " 운영진 분철과 새 분철은 false";
   private static final String ENDED_DESCRIPTION =
       "분철이 완전히 끝났는지. true = 진행확정(CONFIRMED)이고, 신청·입금 확인 중·보냈어요 상태의 참여가 없고, 확정 참여 전원의 택배가 편의점에 도착(DELIVERED·RECEIVED)했다. 확정 참여가 0명인 진행확정도 true. 진행확정이 아니면 항상 false — 취소(CANCELLED)도 false 이므로 「종료」 묶음에 취소를 함께 담으려면 status 와 함께 판정할 것. 판정 기준은 회원탈퇴 가드와 같다";
 
@@ -338,7 +344,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             "https://cdn.example.com/buncheol-10-thumb.jpg",
             FlowType.LEGACY,
             BuncheolHostCancellability.CANCELLABLE,
-            false, null);
+            false, null, false);
     given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID)).willReturn(List.of(response));
 
     mockMvc
@@ -382,7 +388,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].confirmCheck")
                                 .type(JsonFieldType.STRING)
                                 .description(CONFIRM_CHECK_DESCRIPTION)
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].extraRecruitOpen").description(EXTRA_RECRUIT_OPEN_DESCRIPTION))
                         .build())));
   }
 
@@ -457,7 +464,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             false,
             true,
             createdAt,
-            null);
+            null, false);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -580,6 +587,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " null. 지난 시각이어도 그대로 실리므로 화면이 지금 시각과 비교해 \"M/D HH:mm"
                                         + " 오픈\" 을 붙인다. 오픈 전에도 availableMemberNames 는 빈 자리 이름을 싣는다")
                                 .optional(),
+                            fieldWithPath("items[].extraRecruiting").description(EXTRA_RECRUITING_DESCRIPTION),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -613,10 +621,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                     101L, 1001L, "민지", "https://cdn.example.com/minji.png", 40_000L,
                     BuncheolMemberSaleStatus.AWAITING_PAYMENT,
                     Instant.parse("2026-05-20T10:30:00Z"),
-                    true),
+                    true, false),
                 new BuncheolMemberDetailResponse(
                     102L, 1002L, "해린", "https://cdn.example.com/haerin.png", 30_000L,
-                    BuncheolMemberSaleStatus.AVAILABLE, null, false)),
+                    BuncheolMemberSaleStatus.AVAILABLE, null, false, false)),
             true,
             new MyParticipationSummaryResponse(
                 1,
@@ -630,7 +638,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
               null,
               false,
               Instant.parse("2026-05-20T10:00:00Z"),
-              Instant.parse("2026-05-20T10:25:00Z"));
+              Instant.parse("2026-05-20T10:25:00Z"), false);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -684,6 +692,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               응답은 조회 시점 판정이라, 화면이 열어 둔 채 오픈 시각을 넘기면 다시 불러와야 `AVAILABLE` 로 바뀐다
                             - `serverTime` 은 이 응답을 만든 서버 시각 (UTC ISO-8601). 기기 시계가 틀려도 오픈까지 남은 시간을 맞게 세도록
                               화면이 이 값과 기기 시계의 차이를 보정해 쓴다
+                            - `extraRecruiting` 은 지금 추가 신청을 받는지다. `true` = 진행 확정된 회원 개최 · 개최자가 추가 모집을 켬 · 「종료」 전.
+                              이때 빈 자리는 `AVAILABLE` 이고 원래 마감은 지났으므로, 화면은 이 값이 `true` 면 상태·마감으로 신청을 막지 않는다
+                            - 멤버별 `removed` 는 개최자가 「빼기」로 뺀 자리인지다. 추가 모집을 켜지 않은 진행 확정 분철에서는 빈 자리도
+                              `CLOSED` 라 `saleStatus` 만으로는 뺀 자리와 가르지 못한다
 
                             **응답 예시**
                             ```json
@@ -714,7 +726,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                   "price": 40000,
                                   "saleStatus": "AWAITING_PAYMENT",
                                   "paymentDueAt": "2026-05-20T10:30:00Z",
-                                  "participatedByMe": true
+                                  "participatedByMe": true,
+                                  "removed": false
                                 },
                                 {
                                   "buncheolMemberId": 102,
@@ -724,7 +737,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                   "price": 30000,
                                   "saleStatus": "AVAILABLE",
                                   "paymentDueAt": null,
-                                  "participatedByMe": false
+                                  "participatedByMe": false,
+                                  "removed": false
                                 }
                               ],
                               "hostedByMe": true,
@@ -738,7 +752,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               },
                               "termsEditable": false,
                               "opensAt": "2026-05-20T10:00:00Z",
-                              "serverTime": "2026-05-20T10:25:00Z"
+                              "serverTime": "2026-05-20T10:25:00Z",
+                              "extraRecruiting": false
                             }
                             ```
 
@@ -798,6 +813,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "그 슬롯을 점유한 활성 참여(선점·구매)가 호출 유저의 것인지 여부"
                                         + " (비로그인 호출이면 항상 false)"),
+                            fieldWithPath("members[].removed")
+                                .description(
+                                    "개최자가 「빼기」로 뺀 자리인지. 신청을 받지 않는 분철에서는 빈 자리도 CLOSED 라"
+                                        + " saleStatus 만으로는 뺀 자리와 가르지 못한다. 운영진 분철은 늘 false"),
                             fieldWithPath("hostedByMe")
                                 .description("호출 유저가 개최자인지 여부 (비로그인은 false)"),
                             fieldWithPath("myParticipation")
@@ -867,7 +886,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("serverTime")
                                 .description(
                                     "응답을 만든 서버 시각 (UTC ISO-8601). 오픈까지 남은 시간을 기기 시계 대신 이 값에"
-                                        + " 맞춰 센다"))
+                                        + " 맞춰 센다"),
+                            fieldWithPath("extraRecruiting").description(EXTRA_RECRUITING_DESCRIPTION))
                         .build())));
   }
 
@@ -1208,6 +1228,52 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
+  void 추가_모집_켜고_끄기() throws Exception {
+    mockMvc
+        .perform(
+            patch("/v1/buncheols/{id}/extra-recruit", 10L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"open\": true}")
+                .with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-change-extra-recruit",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("추가 모집 켜고 끄기")
+                        .description(
+                            """
+                            회원 개최 개최자가 진행 확정 뒤 빈 자리의 추가 모집을 켜거나 끈다. 새 분철은 꺼져 있다.
+
+                            - **켜기**(`open: true`)는 진행 확정(`CONFIRMED`)된 분철이 「종료」(모든 배송 도착) 전일 때만 된다.
+                              켜 두면 상세의 빈 자리가 `AVAILABLE` 이 되고(`extraRecruiting: true`) 참여자가 추가 신청할 수 있다.
+                              추가 신청은 개최자가 수락해야 입금 단계로 간다. 자리 넣기·빼기·가격 바꾸기도 켜 둔 동안 된다.
+                            - **끄기**(`open: false`)는 언제든 된다(이미 꺼져 있어도 204). 새 신청만 막고, 이미 들어온 추가 신청은
+                              그대로 수락·거절·「제외」할 수 있다.
+                            - 「종료」가 되면 스위치 값과 상관없이 신청을 받지 않는다(`extraRecruiting: false`).
+
+                            **권한**: 해당 분철의 **개최자 본인만** 호출 가능.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 400 | `C-001` (`INVALID_INPUT_VALUE`) | `open` 누락 |
+                            | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
+                            | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
+                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 분철 |
+                            | 409 | `BCH-131` (`EXTRA_RECRUIT_NOT_ALLOWED`) | 켜기인데 진행 확정이 아니거나 이미 「종료」 |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .pathParameters(parameterWithName("id").description("분철 ID"))
+                        .requestSchema(Schema.schema("ExtraRecruitRequest"))
+                        .requestFields(
+                            fieldWithPath("open").description("true 면 켜고 false 면 끈다 (필수)"))
+                        .build())));
+  }
+
+  @Test
   void 개최자_분철_관리_화면_조회() throws Exception {
     Instant deadline = Instant.parse("2026-05-27T00:00:00Z");
     BuncheolManagementParticipantResponse confirmed =
@@ -1285,7 +1351,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             FlowType.LEGACY,
             null,
             "https://open.kakao.com/o/gAbCdEf",
-            false, null);
+            false, null, false);
     given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -1562,7 +1628,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("confirmCheck")
                                 .type(JsonFieldType.STRING)
                                 .description(CONFIRM_CHECK_DESCRIPTION)
-                                .optional())
+                                .optional(),
+                            fieldWithPath("extraRecruitOpen").description(EXTRA_RECRUIT_OPEN_DESCRIPTION))
                         .build())));
   }
 }

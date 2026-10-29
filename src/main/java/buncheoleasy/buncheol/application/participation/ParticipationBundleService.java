@@ -1,6 +1,8 @@
 package buncheoleasy.buncheol.application.participation;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
@@ -37,6 +39,7 @@ public class ParticipationBundleService {
   private final ParticipationDomainService participationDomainService;
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolConfirmer buncheolConfirmer;
+  private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -283,6 +286,10 @@ public class ParticipationBundleService {
    * 생기고 진행확정 알림이 간다. 진행 확정이 실패하면(배송지 없음 등) 이 입금 확인도 함께 되돌린다. 확인만 남기면 "모두 확인됐는데 확정이
    * 안 된" 분철이 생긴다.
    *
+   * <p>진행 확정 뒤 추가 묶음이면(잠근 분철이 CONFIRMED) 같은 트랜잭션에서 <b>그 묶음의 배송을 바로 만들고</b> 이 묶음 참여자에게만
+   * 진행 확정 안내를 보낸다 — 운송장 칸이 열린다. 입금 확인 안내({@link BundlePaymentConfirmedEvent})는 "진행 확정되면 다시 알려
+   * 드릴게요" 라는 약속이라 이미 진행 확정된 분철에서는 보내지 않는다. 응답의 {@code buncheolConfirmed} 는 false 다.
+   *
    * <p>🔴 READ COMMITTED 다({@link BuncheolConfirmer} 계약). 분철 행 잠금 앞에서 묶음을 일반 조회하므로, REPEATABLE READ 면 그
    * 스냅샷이 남아 잠금을 기다리는 사이 다른 탭에서 확인된 묶음의 참여자가 진행확정 알림 대상(일반 조회)에서 빠진다. 판단(대조, 다시 세기,
    * CAS)은 모두 잠금 읽기라 격리에 흔들리지 않고, 입금 수집 중에는 새 참여 INSERT 가 없어 간격 잠금이 빠져도 된다.
@@ -305,12 +312,11 @@ public class ParticipationBundleService {
 
     // 잠금 조회로 앞세운다 — all-or-nothing 판정을 CAS 서브쿼리로 넣을 수 없고(MySQL error 1093),
     // 락이 있어야 판정과 UPDATE 사이에 참여자의 자발 취소·마킹이 끼어들지 못한다.
-    List<Long> payableIds =
+    List<Participation> payable =
         participationRepository.findAllByBundleIdForUpdate(bundleId).stream()
             .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
-            .map(Participation::getId)
-            .sorted()
             .toList();
+    List<Long> payableIds = payable.stream().map(Participation::getId).sorted().toList();
     if (payableIds.isEmpty()) {
       throw new BusinessException(ErrorCode.BUNDLE_CONFIRM_NOT_ALLOWED);
     }
@@ -323,6 +329,13 @@ public class ParticipationBundleService {
     if (confirmed != payableIds.size()) {
       // 락을 쥔 채 판정했으므로 여기 오면 내부 불변식 위반이다 — 롤백해 부분 확정을 남기지 않는다.
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+
+    if (buncheol.getStatus() == BuncheolStatus.CONFIRMED) {
+      // 묶음당 배송 1개 — 두 번째 슬롯부터는 DeliverySnapshotCreator 가 건너뛴다. READ COMMITTED 라 배송 유무 조회가 최신이다.
+      payable.forEach(deliverySnapshotCreator::create);
+      eventPublisher.publishEvent(new BuncheolConfirmedEvent(bundle.getBuncheolId(), payableIds));
+      return new BundleConfirmResult(payableIds, false);
     }
 
     eventPublisher.publishEvent(new BundlePaymentConfirmedEvent(bundleId, payableIds));

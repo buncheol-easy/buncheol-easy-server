@@ -12,7 +12,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.util.ReflectionTestUtils.setField;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -63,6 +65,7 @@ class ParticipationBundleServiceTest {
   @Mock private ParticipationDomainService participationDomainService;
   @Mock private BuncheolDomainService buncheolDomainService;
   @Mock private BuncheolConfirmer buncheolConfirmer;
+  @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -726,6 +729,61 @@ class ParticipationBundleServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
       then(participationRepository).should(never()).findAllByBundleIdForUpdate(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("confirmPayment — 진행 확정 뒤 추가 묶음 입금 확인")
+  class ConfirmExtraBundleTest {
+
+    @Test
+    @DisplayName("그 묶음의 배송을 만들고 이 묶음 참여자에게만 진행 확정 안내를 낸다. 입금 확인 안내와 자동 진행 확정은 없다")
+    void createsDeliveryAndNotifiesOnlyThisBundle() {
+      Buncheol buncheol = c2cBuncheol(HOST_ID);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.CONFIRMED);
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(60), buncheol);
+      Participation first = slot(232L, ParticipationStatus.PAYMENT_SENT, null, null);
+      Participation second = slot(233L, ParticipationStatus.AWAITING_PAYMENT, null, null);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(first, second));
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(2);
+
+      BundleConfirmResult result =
+          participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L, 233L));
+
+      assertThat(result.confirmedParticipationIds()).containsExactly(232L, 233L);
+      assertThat(result.buncheolConfirmed()).isFalse();
+      then(deliverySnapshotCreator).should().create(first);
+      then(deliverySnapshotCreator).should().create(second);
+      then(eventPublisher)
+          .should()
+          .publishEvent(new BuncheolConfirmedEvent(BUNCHEOL_ID, List.of(232L, 233L)));
+      then(eventPublisher).should(never()).publishEvent(any(BundlePaymentConfirmedEvent.class));
+      then(participationDomainService).shouldHaveNoInteractions();
+      then(buncheolConfirmer).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("입금 수집 중 분철의 묶음 입금 확인은 배송을 만들지 않는다(P0-2 그대로)")
+    void collectingBundleDoesNotCreateDelivery() {
+      Buncheol buncheol = c2cBuncheol(HOST_ID);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      stubBundleAndLockedBuncheol(NOW.plusSeconds(3600), buncheol);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+      given(participationRepository.confirmBundleIfPayable(BUNDLE_ID, NOW)).willReturn(1);
+      given(participationDomainService.findActiveByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(
+              List.of(
+                  slot(232L, ParticipationStatus.CONFIRMED, null, null),
+                  slot(240L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+
+      participationBundleService.confirmPayment(HOST_ID, BUNDLE_ID, List.of(232L));
+
+      then(deliverySnapshotCreator).shouldHaveNoInteractions();
+      then(eventPublisher)
+          .should()
+          .publishEvent(new BundlePaymentConfirmedEvent(BUNDLE_ID, List.of(232L)));
     }
   }
 }

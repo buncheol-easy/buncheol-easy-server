@@ -127,6 +127,9 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                             되돌린다. 미확인이 남아 있으면 진행 확정은 입금 기한 뒤 개최자가 한다
                             (`POST /v1/buncheols/{id}/confirm`).
 
+                            **이미 진행 확정된 분철의 추가 묶음**이면 같은 요청에서 그 묶음의 배송이 생기고(운송장 입력칸이 열림) 그 묶음
+                            참여자에게만 진행 확정 알림이 간다. 입금 확인 알림은 보내지 않고 `buncheolConfirmed` 는 `false` 다.
+
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
                             |------|------|------|

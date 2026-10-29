@@ -865,6 +865,46 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     }
   }
 
+  @Nested
+  @DisplayName("회원 개최 추가 묶음 입금 확인")
+  class ExtraBundleConfirm {
+
+    @Test
+    void 추가_묶음_입금_확인은_분철_행을_먼저_기다리고_그_묶음의_배송을_하나_만든다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, DAY);
+      fixture.markExtra(bundleId);
+      long first =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleId,
+              "PAYMENT_SENT",
+              "C2C",
+              DAY);
+      long second =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleId,
+              "AWAITING_PAYMENT",
+              "C2C",
+              DAY);
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> participationBundleService.confirmPayment(hostId, bundleId, List.of(first, second)),
+          List.of(first, second));
+
+      assertThat(statusOf("participations", first)).isEqualTo("CONFIRMED");
+      assertThat(statusOf("participations", second)).isEqualTo("CONFIRMED");
+      assertThat(deliveryBundleIds(buncheolId)).containsExactly(bundleId);
+      assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CONFIRMED");
+    }
+  }
+
   /** 수락 전 추가 신청 묶음(참여자 participantId, 자리 1). */
   private long pendingExtraBundle(final long buncheolId) {
     long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);

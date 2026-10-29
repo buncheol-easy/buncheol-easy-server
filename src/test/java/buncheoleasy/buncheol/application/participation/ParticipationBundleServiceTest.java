@@ -594,4 +594,138 @@ class ParticipationBundleServiceTest {
       then(eventPublisher).shouldHaveNoInteractions();
     }
   }
+
+  @Nested
+  @DisplayName("release — 개최자 「제외」")
+  class ReleaseTest {
+
+    private void lockedConfirmed(final Instant dueAt) {
+      Buncheol buncheol = c2cBuncheol(HOST_ID);
+      lenient().when(buncheol.getStatus()).thenReturn(BuncheolStatus.CONFIRMED);
+      stubBundleAndLockedBuncheol(dueAt, buncheol);
+    }
+
+    @Test
+    @DisplayName("기한이 지난 수락 묶음을 빼고, 알림·응답은 이 트랜잭션이 취소한 슬롯만이다")
+    void releasesOnlyThisTransactionsSlots() {
+      lockedConfirmed(NOW.minusSeconds(60));
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(
+              List.of(
+                  slot(232L, ParticipationStatus.PAYMENT_SENT, null, null),
+                  slot(233L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+      given(participationRepository.releaseBundleIfDue(BUNDLE_ID, NOW)).willReturn(2);
+      // DB 가 초 단위로 잘라 저장한 이번 취소 2건과, 앞서 같은 사유로 빠졌던 옛 슬롯 1건.
+      Instant written = NOW.truncatedTo(ChronoUnit.SECONDS);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID)))
+          .willReturn(
+              List.of(
+                  slot(232L, ParticipationStatus.CANCELLED, ParticipationCancelReason.HOST_RELEASED, written),
+                  slot(233L, ParticipationStatus.CANCELLED, ParticipationCancelReason.HOST_RELEASED, written),
+                  slot(
+                      231L,
+                      ParticipationStatus.CANCELLED,
+                      ParticipationCancelReason.HOST_RELEASED,
+                      NOW.minusSeconds(3600))));
+
+      List<Long> released = participationBundleService.release(HOST_ID, BUNDLE_ID);
+
+      assertThat(released).containsExactly(232L, 233L);
+      then(participationBundleDomainService).should().closeIfEmpty(BUNDLE_ID, NOW);
+      then(eventPublisher)
+          .should()
+          .publishEvent(new BundleReleasedEvent(BUNDLE_ID, List.of(232L, 233L)));
+    }
+
+    @Test
+    @DisplayName("분철 행을 먼저 잠그고 그 뒤에 묶음 참여를 잠근다")
+    void locksBuncheolBeforeSlots() {
+      lockedConfirmed(NOW.minusSeconds(60));
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+      given(participationRepository.releaseBundleIfDue(BUNDLE_ID, NOW)).willReturn(1);
+      given(participationRepository.findAllByBundleIds(List.of(BUNDLE_ID))).willReturn(List.of());
+
+      participationBundleService.release(HOST_ID, BUNDLE_ID);
+
+      InOrder inOrder = inOrder(buncheolDomainService, participationRepository);
+      inOrder.verify(buncheolDomainService).getBuncheolForUpdate(BUNCHEOL_ID);
+      inOrder.verify(participationRepository).findAllByBundleIdForUpdate(BUNDLE_ID);
+      inOrder.verify(participationRepository).releaseBundleIfDue(BUNDLE_ID, NOW);
+    }
+
+    @Test
+    @DisplayName("판정마다 오류 코드가 정해져 있고 CAS 를 부르지 않는다")
+    void mapsEachReasonToErrorCode() {
+      assertReleaseFails(
+          NOW.plusSeconds(60),
+          ErrorCode.BUNDLE_RELEASE_BEFORE_DUE,
+          slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null));
+      assertReleaseFails(
+          null, ErrorCode.BUNDLE_RELEASE_NOT_ALLOWED, slot(232L, ParticipationStatus.APPLIED, null, null));
+      assertReleaseFails(
+          NOW.minusSeconds(60),
+          ErrorCode.BUNDLE_RELEASE_HAS_CONFIRMED,
+          slot(232L, ParticipationStatus.CONFIRMED, null, null));
+      assertReleaseFails(
+          NOW.minusSeconds(60),
+          ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID,
+          slot(232L, ParticipationStatus.CANCELLED, ParticipationCancelReason.HOST_RELEASED, NOW));
+      then(participationRepository).should(never()).releaseBundleIfDue(any(), any());
+      then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    private void assertReleaseFails(
+        final Instant dueAt, final ErrorCode expected, final Participation slot) {
+      lockedConfirmed(dueAt);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID)).willReturn(List.of(slot));
+
+      assertThatThrownBy(() -> participationBundleService.release(HOST_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("진행 확정 전 분철(입금 단계)에는 「제외」가 없다 — BCH-133")
+    void rejectsBeforeConfirmed() {
+      Buncheol buncheol = c2cBuncheol(HOST_ID);
+      given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
+      stubBundleAndLockedBuncheol(NOW.minusSeconds(60), buncheol);
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+
+      assertThatThrownBy(() -> participationBundleService.release(HOST_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNDLE_RELEASE_NOT_ALLOWED);
+    }
+
+    @Test
+    @DisplayName("판정을 통과했는데 CAS 가 0행이면 상태 위반이다")
+    void failsWhenCasMissed() {
+      lockedConfirmed(NOW.minusSeconds(60));
+      given(participationRepository.findAllByBundleIdForUpdate(BUNDLE_ID))
+          .willReturn(List.of(slot(232L, ParticipationStatus.AWAITING_PAYMENT, null, null)));
+      given(participationRepository.releaseBundleIfDue(BUNDLE_ID, NOW)).willReturn(0);
+
+      assertThatThrownBy(() -> participationBundleService.release(HOST_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+      then(participationBundleDomainService).should(never()).closeIfEmpty(any(), any());
+    }
+
+    @Test
+    @DisplayName("개최자가 아니면 거부한다")
+    void rejectsOtherHost() {
+      lockedConfirmed(NOW.minusSeconds(60));
+
+      assertThatThrownBy(() -> participationBundleService.release(OTHER_HOST_ID, BUNDLE_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+      then(participationRepository).should(never()).findAllByBundleIdForUpdate(any());
+    }
+  }
 }

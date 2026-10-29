@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.dto.request.BundleConfirmRequest;
 import buncheoleasy.buncheol.dto.request.BundleSlotsRequest;
 import buncheoleasy.buncheol.dto.response.BundleConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BundlePaymentSentResponse;
+import buncheoleasy.buncheol.dto.response.BundleReleaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -76,6 +77,17 @@ public class ParticipationBundleController {
       @Valid @RequestBody final BundleSlotsRequest request) {
     participationBundleService.reject(hostId, bundleId, request.expectedSlotIds());
     return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 개최자 「제외」 API — 진행 확정 뒤 수락한 추가 묶음이 입금 기한이 지나도록 입금 확인이 안 됐으면 그 묶음을 뺀다. 응답은 실제로 취소된
+   * 슬롯 id 다(화면이 사후 대조).
+   */
+  @PostMapping("/{bundleId}/release")
+  public ResponseEntity<BundleReleaseResponse> release(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long bundleId) {
+    return ResponseEntity.ok(
+        new BundleReleaseResponse(bundleId, participationBundleService.release(hostId, bundleId)));
   }
 
   @PostMapping("/{bundleId}/confirm")

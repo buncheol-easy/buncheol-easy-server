@@ -391,6 +391,31 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 
+  /**
+   * 개최자 「제외」 CAS — 한 묶음의 입금 대기·「보냈어요」 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다.
+   *
+   * <p>🔴 <b>기한 가드는 UPDATE 의 WHERE 안에 있다.</b> 호출부의 사전 판정은 사유를 고르는 용도이고 최종 차단은 이 조건이 한다.
+   * 기한이 없으면 거부라 fail-closed 다. 묶음 표 서브쿼리는 다른 표라 현재 값(잠금 읽기)을 본다.
+   *
+   * <p>⚠️ <b>확정 슬롯 검사는 여기 없다.</b> UPDATE 대상 표를 서브쿼리 FROM 에서 참조하면 MySQL 이 거부한다(error 1093, H2 는
+   * 허용해 테스트로는 안 드러난다). 호출부가 묶음 참여를 잠금 조회로 앞세워 판정한다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE Participation p "
+          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
+          + "    p.cancelledAt = :now, p.updatedAt = :now "
+          + "WHERE p.bundleId = :bundleId AND p.status IN :releasableStatuses "
+          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
+          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL "
+          + "    AND b.dueAt IS NOT NULL AND b.dueAt <= :now)")
+  int releaseBundleIfDue(
+      @Param("bundleId") Long bundleId,
+      @Param("releasableStatuses") Collection<ParticipationStatus> releasableStatuses,
+      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
+      @Param("reason") ParticipationCancelReason reason,
+      @Param("now") Instant now);
+
   /** 입금 단계 시작: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (PaymentStarter). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

@@ -19,6 +19,7 @@ import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberAccessType;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
@@ -249,6 +250,30 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.participants().get(0).acceptTarget())
           .isEqualTo(status == BuncheolStatus.CONFIRMED);
       assertThat(response.participants().get(0).confirmTarget()).isFalse();
+    }
+
+    @Test
+    void 살아_있는_슬롯에는_그_묶음의_제외_판정을_싣는다() {
+      stubBasicBuncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L)))
+          .willReturn(List.of(groupMember(1001L, "안유진")));
+      Participation awaiting =
+          participation(601L, 101L, PARTICIPANT_USER, 53_000L, ParticipationStatus.AWAITING_PAYMENT);
+      // 기한(NOW 보다 앞)이 지난 수락 묶음.
+      stubBundleDueAt(awaiting, Instant.parse("2020-01-01T00:00:00Z"));
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of(awaiting));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(PARTICIPANT_USER)))
+          .willReturn(List.of(user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.participants().get(0).releasability())
+          .isEqualTo(BundleReleasability.RELEASABLE);
     }
 
     // 🔴 탈퇴 회원(조회에서 빠짐)은 null 이 아니라 고정 문구다 — null 로 내리면 클라 별칭 폴백이

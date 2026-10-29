@@ -337,6 +337,38 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
           .isEqualTo(2);
     }
 
+    // 묶음 표를 서브쿼리로 보는 UPDATE 가 MySQL 에서 도는지 본다(같은 표를 보면 error 1093, H2 는 허용해 안 드러난다).
+    @Test
+    void 제외는_기한이_지난_열린_묶음의_입금_대기와_보냈어요만_취소한다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long dueBundle = fixture.bundle(buncheolId, participantId, addressId, HOUR.negated());
+      long awaiting = slotParticipation(buncheolId, participantId, dueBundle, "AWAITING_PAYMENT");
+      long sent = slotParticipation(buncheolId, participantId, dueBundle, "PAYMENT_SENT");
+      long beforeDueBundle = fixture.bundle(buncheolId, participantId, addressId, HOUR);
+      long beforeDue = slotParticipation(buncheolId, participantId, beforeDueBundle, "AWAITING_PAYMENT");
+
+      Integer released =
+          transactionTemplate.execute(
+              status -> participationRepository.releaseBundleIfDue(dueBundle, Instant.now()));
+      Integer notYet =
+          transactionTemplate.execute(
+              status -> participationRepository.releaseBundleIfDue(beforeDueBundle, Instant.now()));
+
+      assertThat(released).isEqualTo(2);
+      assertThat(notYet).isZero();
+      for (long id : new long[] {awaiting, sent}) {
+        assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT CONCAT(status, '/', cancel_reason) FROM participations WHERE id = ?",
+                    String.class,
+                    id))
+            .isEqualTo("CANCELLED/HOST_RELEASED");
+      }
+      assertThat(participationStatus(beforeDue)).isEqualTo("AWAITING_PAYMENT");
+    }
+
     @Test
     void 거절은_그_묶음의_신청만_개최자_거절로_취소한다() {
       long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());

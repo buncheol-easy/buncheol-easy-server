@@ -416,6 +416,16 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public int releaseBundleIfDue(final Long bundleId, final Instant now) {
+    return jpaParticipationRepository.releaseBundleIfDue(
+        bundleId,
+        ParticipationStatus.payableStatuses(),
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.HOST_RELEASED,
+        now);
+  }
+
+  @Override
   public int markBundlePaymentSent(final Long bundleId, final Instant now) {
     return jpaParticipationRepository.markBundlePaymentSent(
         bundleId, ParticipationStatus.AWAITING_PAYMENT, ParticipationStatus.PAYMENT_SENT, now);

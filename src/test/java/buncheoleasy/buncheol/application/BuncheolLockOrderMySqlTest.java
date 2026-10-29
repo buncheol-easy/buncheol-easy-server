@@ -838,6 +838,33 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     }
   }
 
+  @Nested
+  @DisplayName("회원 개최 「제외」")
+  class Release {
+
+    @Test
+    void 제외는_분철_행을_먼저_기다리고_묶음을_닫는다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, DAY.negated());
+      fixture.markExtra(bundleId);
+      long participationId =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              participantId,
+              bundleId,
+              "PAYMENT_SENT",
+              "C2C",
+              DAY.negated());
+
+      assertLocksBuncheolFirst(
+          buncheolId, () -> participationBundleService.release(hostId, bundleId));
+
+      assertThat(statusOf("participations", participationId)).isEqualTo("CANCELLED");
+      assertThat(bundleClosed(bundleId)).isTrue();
+    }
+  }
+
   /** 수락 전 추가 신청 묶음(참여자 participantId, 자리 1). */
   private long pendingExtraBundle(final long buncheolId) {
     long bundleId = fixture.bundle(buncheolId, participantId, shippingAddressId, null);

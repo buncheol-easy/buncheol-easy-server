@@ -183,6 +183,14 @@ public interface ParticipationRepository {
   int rejectBundleIfApplied(Long bundleId, Instant now);
 
   /**
+   * 개최자 「제외」 — 묶음 기한이 지났으면 그 묶음의 입금 대기·「보냈어요」 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다. 확정 슬롯
+   * 판정은 호출부가 잠금 조회로 한다(adapter javadoc).
+   *
+   * @return 실제로 취소된 슬롯 수. 0 이면 기한 전·닫힌 묶음·대상 없음
+   */
+  int releaseBundleIfDue(Long bundleId, Instant now);
+
+  /**
    * C2C 참여자 자발 취소 CAS — APPLIED 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은
    * {@link ParticipationCancellability#cancellableStatuses()} 를 공유한다.
    *

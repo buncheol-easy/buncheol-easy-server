@@ -6,6 +6,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
@@ -129,6 +130,12 @@ public class BuncheolManagementQueryService {
         ShippingFeeAttribution.ofAllSlots(allParticipations, bundleById);
     // 0원 슬롯의 계좌 노출 판정이 플로우별로 다르다 ({@link #depositorNameOf}).
     boolean c2c = buncheol.isC2c();
+    // 「제외」 판정은 묶음 단위다. 그 묶음의 모든 슬롯(취소분 포함)으로 「제외」 API 와 같은 판정을 낸다. 운영진 분철에는 「제외」가 없다.
+    Map<Long, BundleReleasability> releasabilityByBundleId =
+        c2c
+            ? releasabilityByBundleId(
+                buncheol.getStatus(), allParticipations, bundleById, Instant.now(clock))
+            : Map.of();
     List<BuncheolManagementParticipantResponse> participants =
         participations.stream()
             .map(
@@ -141,7 +148,8 @@ public class BuncheolManagementQueryService {
                         bundleById,
                         shippingFees,
                         c2c,
-                        buncheol.getStatus()))
+                        buncheol.getStatus(),
+                        releasabilityByBundleId))
             .toList();
     // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
     List<BuncheolManagementParticipantResponse> cancelledParticipants =
@@ -156,7 +164,8 @@ public class BuncheolManagementQueryService {
                         bundleById,
                         shippingFees,
                         c2c,
-                        buncheol.getStatus()))
+                        buncheol.getStatus(),
+                        Map.of()))
             .toList();
 
     // 「종료」는 개최 목록과 <b>같은 조회</b>를 분철 1개로 돌려 얻는다 — 위에서 읽은 참여·배송으로 다시 계산하면 식이
@@ -219,7 +228,8 @@ public class BuncheolManagementQueryService {
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
       final boolean c2c,
-      final BuncheolStatus buncheolStatus) {
+      final BuncheolStatus buncheolStatus,
+      final Map<Long, BundleReleasability> releasabilityByBundleId) {
     User participant = userById.get(participation.getParticipantId());
     // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다.
     boolean withdrawn = participant == null;
@@ -273,7 +283,32 @@ public class BuncheolManagementQueryService {
         ParticipationStatus.payableStatuses().contains(participation.getStatus()),
         // 진행 확정 분철의 신청(APPLIED)은 곧 수락 전 추가 신청이다 — 수락·거절 API 의 판정과 같다.
         buncheolStatus == BuncheolStatus.CONFIRMED
-            && participation.getStatus() == ParticipationStatus.APPLIED);
+            && participation.getStatus() == ParticipationStatus.APPLIED,
+        // 불변 맵은 null 키 조회에서 NPE 다 — 미연결 행은 먼저 거른다.
+        participation.getBundleId() == null
+            ? null
+            : releasabilityByBundleId.get(participation.getBundleId()));
+  }
+
+  private static Map<Long, BundleReleasability> releasabilityByBundleId(
+      final BuncheolStatus buncheolStatus,
+      final List<Participation> allParticipations,
+      final Map<Long, ParticipationBundle> bundleById,
+      final Instant now) {
+    Map<Long, List<Participation>> slotsByBundleId =
+        allParticipations.stream()
+            .filter(p -> p.getBundleId() != null)
+            .collect(Collectors.groupingBy(Participation::getBundleId));
+    Map<Long, BundleReleasability> result = new HashMap<>();
+    slotsByBundleId.forEach(
+        (bundleId, slots) -> {
+          ParticipationBundle bundle = bundleById.get(bundleId);
+          if (bundle != null) {
+            result.put(
+                bundleId, BundleReleasability.of(buncheolStatus, bundle, slots, now));
+          }
+        });
+    return result;
   }
 
   /**

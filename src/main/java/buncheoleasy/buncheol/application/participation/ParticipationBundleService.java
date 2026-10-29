@@ -6,9 +6,11 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ConfirmCheck;
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -160,6 +162,65 @@ public class ParticipationBundleService {
     }
     participationBundleDomainService.closeIfEmpty(bundleId, now);
     eventPublisher.publishEvent(new ExtraRejectedEvent(bundleId, appliedIds));
+  }
+
+  /**
+   * 개최자가 진행 확정 뒤 수락한 추가 묶음을 「제외」한다 — 입금 기한(수락 + 24시간)이 지나도록 입금 확인이 안 된 묶음의 입금 대기·「보냈어요」
+   * 슬롯을 {@code HOST_RELEASED} 로 취소하고 묶음을 닫는다. 그 자리는 다시 비고, 참여자에게 참여 취소 안내가 간다.
+   *
+   * <p>판정({@link BundleReleasability})으로 사유를 가려 오류 코드로 바꾸고, 실제 차단은 CAS 가 한다. 판정은 관리 응답의 {@code
+   * releasability} 와 같다.
+   *
+   * <p>분철 행이 첫 잠금이다 — 같은 묶음의 입금 확인과 분철 행 앞에서 한 줄로 서서, 어느 쪽이 이기든 하나만 반영된다(확인이 이기면
+   * BCH-135, 「제외」가 이기면 확인이 BCH-116).
+   *
+   * @return 이 호출이 실제로 취소한 슬롯 id
+   */
+  @Transactional
+  public List<Long> release(final Long hostId, final Long bundleId) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle = getBundle(bundleId);
+    Buncheol buncheol = lockForHost(hostId, bundle);
+
+    // 🔴 잠금 조회로 판정한다. 확정 슬롯 검사를 CAS 서브쿼리에 넣을 수 없고(MySQL error 1093), 이 잠금이 입금 확인 CAS 를 막는다.
+    requireReleasable(
+        BundleReleasability.of(
+            buncheol.getStatus(),
+            bundle,
+            participationRepository.findAllByBundleIdForUpdate(bundleId),
+            now));
+
+    if (participationRepository.releaseBundleIfDue(bundleId, now) == 0) {
+      // 판정을 통과했는데 0행이면 그 사이 상태가 바뀐 것이다 — 화면을 새로 고치게 한다.
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    participationBundleDomainService.closeIfEmpty(bundleId, now);
+
+    // CAS 뒤에 이 트랜잭션이 실제로 취소한 슬롯을 고른다(사유와 같은 now 로 쓴 취소 시각). CAS 전 목록으로 만들면 그 사이 바뀐 슬롯이
+    // 섞여 알림이 엉뚱한 슬롯을 "기한이 지나 취소됐어요" 로 안내한다.
+    List<Long> releasedIds =
+        participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+            .filter(p -> p.getCancelReason() == ParticipationCancelReason.HOST_RELEASED)
+            .filter(p -> writtenAt(p.getCancelledAt(), now))
+            .map(Participation::getId)
+            .toList();
+    eventPublisher.publishEvent(new BundleReleasedEvent(bundleId, releasedIds));
+    return releasedIds;
+  }
+
+  /** 판정 → 오류 코드. switch <b>식</b>이라 사유가 늘면 컴파일 오류로 잡힌다(fail-open 방지). */
+  private static void requireReleasable(final BundleReleasability releasability) {
+    ErrorCode errorCode =
+        switch (releasability) {
+          case RELEASABLE -> null;
+          case BUNCHEOL_NOT_CONFIRMED, NOT_ACCEPTED -> ErrorCode.BUNDLE_RELEASE_NOT_ALLOWED;
+          case BEFORE_DUE -> ErrorCode.BUNDLE_RELEASE_BEFORE_DUE;
+          case HAS_CONFIRMED -> ErrorCode.BUNDLE_RELEASE_HAS_CONFIRMED;
+          case ALREADY_CLOSED -> ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID;
+        };
+    if (errorCode != null) {
+      throw new BusinessException(errorCode);
+    }
   }
 
   private ParticipationBundle getBundle(final Long bundleId) {

@@ -84,6 +84,10 @@ public class ParticipationBundle extends TimestampedEntity {
   @Column(name = "closed_at")
   private Instant closedAt;
 
+  // 진행 확정 뒤 추가 신청으로 열린 묶음인가. 열 때 정하고 바꾸지 않는다. 화면 표시만 읽고 판정·전이는 읽지 않는다.
+  @Column(name = "is_extra", nullable = false, updatable = false)
+  private boolean extra;
+
   /**
    * 새 묶음을 연다. 배송지·배송비·환불계좌는 <b>참여 시점 스냅샷</b>이라 생성 후 바뀌지 않는다({@code
    * updatable = false}).

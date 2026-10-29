@@ -113,6 +113,10 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   })
   private BankAccount paymentAccount;
 
+  // 회원 개최 추가 모집 스위치. 개최자가 켜고 끈다. 지금 추가 신청을 받는지는 이 값만으로 정하지 않는다(진행 확정·종료 전도 봐야 한다).
+  @Column(name = "extra_recruit_open", nullable = false)
+  private boolean extraRecruitOpen;
+
   public static Buncheol create(final Long hostId, final BuncheolParams params, final Instant now) {
     return new Buncheol(hostId, params, now);
   }

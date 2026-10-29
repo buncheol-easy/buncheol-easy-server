@@ -198,8 +198,8 @@ public class BuncheolDomainService {
 
   /**
    * 진행 확정 분철이 「종료」(끝나지 않은 일 없음, 모든 배송 도착)인가. 개최 목록과 같은 판정이다({@link
-   * BuncheolRepository#findEndedIds}). 일반 조회라 잠금 전 스냅샷을 본다 — 「종료」는 한 방향이라 낡은 값은 "아직 종료 아님" 쪽으로만
-   * 틀린다.
+   * BuncheolRepository#findEndedIds}). 일반 조회다. 잠금 앞에 일반 조회가 있는 트랜잭션(추가 신청)에서는 잠금 전 스냅샷이라 「종료」를
+   * 놓칠 수 있다 — 한 방향이라 "아직 종료 아님" 쪽으로만 틀린다. 첫 문장이 잠금 읽기인 경로(스위치, 자리 편집)는 잠금 뒤 스냅샷을 본다.
    */
   public boolean isEnded(final Long buncheolId) {
     return buncheolRepository.findEndedIds(List.of(buncheolId)).contains(buncheolId);

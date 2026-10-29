@@ -66,8 +66,9 @@ public class ParticipationService {
    * 않는다 — 부분 성공을 남기면 참여자가 "몇 개가 잡혔는지" 를 화면에서 재구성해야 한다. 조건부 INSERT 가
    * 0행을 돌리면 예외가 나므로 {@code @Transactional} 이 그대로 롤백한다.
    *
-   * <p><b>배송비·묶음은 자연히 맞는다.</b> 2번째 슬롯부터는 {@code findFirstActiveInBuncheol} 이 <b>방금 만든
-   * 첫 슬롯</b>을 찾아내 같은 묶음을 재사용하고 배송비를 0으로 둔다 — 슬롯 하나씩 N번 신청한 것과 결과가 같다.
+   * <p><b>배송비·묶음은 자연히 맞는다.</b> 2번째 슬롯부터는 상속 원본 조회({@code
+   * ParticipationDomainService#findInheritanceSource} — 모집 중은 살아 있는 참여, 진행 확정 뒤는 신청(APPLIED)만)가 <b>방금
+   * 만든 첫 슬롯</b>을 찾아내 같은 묶음을 재사용하고 배송비를 0으로 둔다 — 슬롯 하나씩 N번 신청한 것과 결과가 같다.
    * 그래서 루프가 묶음 id 를 따로 이어 나를 필요가 없다.
    *
    * <p>신청은 모집중(RECRUITING)과 회원 개최 추가 모집 중(진행 확정 + 스위치 켜짐 + 「종료」 전)에만 받는다. 아래 상태 가드는 락 이전

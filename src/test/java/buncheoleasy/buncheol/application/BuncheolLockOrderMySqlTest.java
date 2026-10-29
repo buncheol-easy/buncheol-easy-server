@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import buncheoleasy.admin.application.AdminBuncheolCommandService;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.application.participation.ParticipationService;
+import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest.CancelParticipation;
@@ -59,6 +60,7 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
   @Autowired private BuncheolAutoCloseService buncheolAutoCloseService;
   @Autowired private AdminBuncheolCommandService adminBuncheolCommandService;
   @Autowired private DeliveryService deliveryService;
+  @Autowired private BuncheolRepository buncheolRepository;
 
   private MySqlFixture fixture;
   private ExecutorService executor;
@@ -922,6 +924,173 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
       assertThat(statusOf("participations", second)).isEqualTo("CONFIRMED");
       assertThat(deliveryBundleIds(buncheolId)).containsExactly(bundleId);
       assertThat(statusOf("buncheols", buncheolId)).isEqualTo("CONFIRMED");
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 모집 잠금 뒤 판단 (M3·M5·M10)")
+  class ExtraRecruitAfterLockWait {
+
+    // M3 — 잠금 전 일반 조회는 묶음 하나뿐이고, 판단은 잠금 뒤 묶음 참여 잠금 조회로 한다.
+    @Test
+    void 수락이_분철_행을_기다리는_사이_참여자가_취소하면_수락은_BCH_132_이고_알림이_없다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      long bundleId = pendingExtraBundle(buncheolId);
+      long participationId = onlyParticipationOf(bundleId);
+
+      Future<?> accept;
+      try (Connection holder = holdBuncheolRow(buncheolId)) {
+        accept =
+            executor.submit(
+                () -> {
+                  participationBundleService.accept(hostId, bundleId, List.of(participationId));
+                  return null;
+                });
+        assertThat(awaitBuncheolLockWait(accept)).isTrue();
+        update(
+            holder,
+            "UPDATE participations SET status = 'CANCELLED', cancel_reason = 'USER_CANCELLED',"
+                + " cancelled_at = UTC_TIMESTAMP() WHERE id = ?",
+            participationId);
+        update(
+            holder,
+            "UPDATE participation_bundles SET closed_at = UTC_TIMESTAMP() WHERE id = ?",
+            bundleId);
+        holder.commit();
+      }
+
+      assertThat(causeOf(accept))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+      assertThat(statusOf("participations", participationId)).isEqualTo("CANCELLED");
+      assertThat(inboxCount(participantId, "추가 신청 수락 안내")).isZero();
+    }
+
+    @Test
+    void 수락이_먼저_끝나면_참여자_취소는_BCH_086_이고_입금_대기가_남는다() {
+      long buncheolId = confirmedNotEnded();
+      long bundleId = pendingExtraBundle(buncheolId);
+      long participationId = onlyParticipationOf(bundleId);
+
+      participationBundleService.accept(hostId, bundleId, List.of(participationId));
+
+      assertThatThrownBy(() -> participationService.cancelByParticipant(participantId, participationId))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
+      assertThat(statusOf("participations", participationId)).isEqualTo("AWAITING_PAYMENT");
+    }
+
+    // M5 — 잠금 전 getBuncheol 이 캐시한 인스턴스가 아니라 잠금 읽기로 다시 읽은 스위치 값을 본다.
+    @Test
+    void 신청이_분철_행을_기다리는_사이_스위치가_꺼지면_BCH_060_이고_참여가_생기지_않는다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      fixture.openExtraRecruit(buncheolId);
+      long emptySlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+
+      Future<?> apply;
+      try (Connection holder = holdBuncheolRow(buncheolId)) {
+        apply =
+            executor.submit(
+                () ->
+                    participationService.participate(
+                        buncheolId,
+                        participantId,
+                        new ParticipateRequest(emptySlotId, shippingAddressId)));
+        assertThat(awaitBuncheolLockWait(apply)).isTrue();
+        update(holder, "UPDATE buncheols SET extra_recruit_open = 0 WHERE id = ?", buncheolId);
+        holder.commit();
+      }
+
+      assertThat(causeOf(apply))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT COUNT(*) FROM participations WHERE buncheol_member_id = ?",
+                  Integer.class,
+                  emptySlotId))
+          .isZero();
+    }
+
+    // M10 — 받아들인 경합. 「종료」 판정은 잠금 전 스냅샷이라 마지막 배송 도착을 못 볼 수 있다. 신청은 수락 대기가 될 뿐이고
+    // 그 분철은 다시 끝나지 않은 상태가 된다. 개최자가 거절하면 「종료」가 된다.
+    @Test
+    void 신청이_기다리는_사이_마지막_배송이_도착해도_신청은_수락_대기로_남고_거절하면_종료된다() throws Exception {
+      long buncheolId =
+          fixture.buncheol(hostId, groupId, "C2C", "CONFIRMED", DAY.negated(), 1, DAY.negated());
+      long otherId = fixture.user(false);
+      long otherBundleId =
+          fixture.bundle(buncheolId, otherId, fixture.shippingAddress(otherId), DAY.negated());
+      long otherParticipationId =
+          fixture.participation(
+              buncheolId,
+              fixture.slot(buncheolId, fixture.groupMember(groupId)),
+              otherId,
+              otherBundleId,
+              "CONFIRMED",
+              "C2C",
+              DAY.negated());
+      long deliveryId = fixture.delivery(otherParticipationId, otherBundleId);
+      jdbcTemplate.update("UPDATE deliveries SET status = 'SHIPPING' WHERE id = ?", deliveryId);
+      fixture.openExtraRecruit(buncheolId);
+      long emptySlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+
+      Future<?> apply;
+      try (Connection holder = holdBuncheolRow(buncheolId)) {
+        apply =
+            executor.submit(
+                () ->
+                    participationService.participate(
+                        buncheolId,
+                        participantId,
+                        new ParticipateRequest(emptySlotId, shippingAddressId)));
+        assertThat(awaitBuncheolLockWait(apply)).isTrue();
+        update(holder, "UPDATE deliveries SET status = 'DELIVERED' WHERE id = ?", deliveryId);
+        holder.commit();
+      }
+
+      assertThat(causeOf(apply)).isNull();
+      long appliedId =
+          jdbcTemplate.queryForObject(
+              "SELECT id FROM participations WHERE buncheol_member_id = ? AND status = 'APPLIED'",
+              Long.class,
+              emptySlotId);
+      assertThat(buncheolRepository.findEndedIds(List.of(buncheolId))).isEmpty();
+
+      long appliedBundleId =
+          jdbcTemplate.queryForObject(
+              "SELECT bundle_id FROM participations WHERE id = ?", Long.class, appliedId);
+      participationBundleService.reject(hostId, appliedBundleId, List.of(appliedId));
+
+      assertThat(buncheolRepository.findEndedIds(List.of(buncheolId))).containsExactly(buncheolId);
+    }
+
+    private void update(final Connection holder, final String sql, final long id)
+        throws SQLException {
+      try (PreparedStatement ps = holder.prepareStatement(sql)) {
+        ps.setLong(1, id);
+        ps.executeUpdate();
+      }
+    }
+
+    private Throwable causeOf(final Future<?> future) throws Exception {
+      try {
+        future.get(10, TimeUnit.SECONDS);
+        return null;
+      } catch (ExecutionException e) {
+        return e.getCause();
+      }
+    }
+
+    private int inboxCount(final long recipientId, final String title) {
+      return jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM inbox_messages WHERE recipient_id = ? AND title = ?",
+          Integer.class,
+          recipientId,
+          title);
     }
   }
 

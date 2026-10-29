@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
@@ -631,10 +632,33 @@ class BuncheolTest {
     @Test
     void 진행확정_회원_개최가_종료_전이면_켤_수_있다() {
       Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      setPaymentAccount(buncheol);
 
       buncheol.changeExtraRecruit(true, false);
 
       assertThat(buncheol.isExtraRecruitOpen()).isTrue();
+    }
+
+    // 수락 안내·참여 내역이 보여 줄 입금 계좌가 없으면 추가 참여자가 입금할 길이 없다.
+    @Test
+    void 입금_계좌_스냅샷이_비어_있으면_켤_수_없다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+
+      assertThatThrownBy(() -> buncheol.changeExtraRecruit(true, false))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+    }
+
+    private void setPaymentAccount(final Buncheol buncheol) {
+      try {
+        Field field = Buncheol.class.getDeclaredField("paymentAccount");
+        field.setAccessible(true);
+        field.set(buncheol, BankAccount.of("국민", "12345678", "개최자"));
+      } catch (NoSuchFieldException | IllegalAccessException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     @ParameterizedTest
@@ -654,6 +678,7 @@ class BuncheolTest {
     @Test
     void 종료된_분철은_켤_수_없다() {
       Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      setPaymentAccount(buncheol);
 
       assertThatThrownBy(() -> buncheol.changeExtraRecruit(true, true))
           .isInstanceOf(BusinessException.class)

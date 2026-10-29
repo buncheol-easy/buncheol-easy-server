@@ -241,6 +241,9 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
    * 추가 모집 스위치를 켜거나 끈다. 켜기는 진행 확정된 회원 개최가 「종료」 전일 때만 된다(BCH-131). 끄기는 언제든 된다 — 새 신청만 막고,
    * 이미 들어온 신청은 그대로 수락·거절할 수 있다.
    *
+   * <p>입금 계좌 스냅샷이 비어 있어도 켜지 않는다(BCH-131). 수락 안내와 참여 내역이 이 계좌를 보여 주므로, 비어 있으면 추가 참여자가 입금할
+   * 길이 없다. 지금 흐름의 진행 확정은 입금 단계 시작 때 늘 스냅샷을 찍어 옛 흐름 분철에서만 생길 수 있다.
+   *
    * <p>호출부가 분철 행을 잠근 뒤 부른다. 이 칸은 다른 CAS 가 쓰지 않아 더티체킹으로 쓴다({@code @DynamicUpdate} 라 이 칸만 나간다).
    *
    * @param ended 「종료」 여부. 켜기에서만 본다
@@ -249,7 +252,7 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
     if (isStaff()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
-    if (open && (status != BuncheolStatus.CONFIRMED || ended)) {
+    if (open && (status != BuncheolStatus.CONFIRMED || ended || paymentAccount == null)) {
       throw new BusinessException(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
     }
     this.extraRecruitOpen = open;

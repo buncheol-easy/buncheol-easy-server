@@ -1283,7 +1283,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 분철 |
-                            | 409 | `BCH-131` (`EXTRA_RECRUIT_NOT_ALLOWED`) | 켜기인데 진행 확정이 아니거나 이미 「종료」 |
+                            | 409 | `BCH-131` (`EXTRA_RECRUIT_NOT_ALLOWED`) | 켜기인데 진행 확정이 아니거나 이미 「종료」이거나 입금 계좌 스냅샷이 없음(옛 흐름 분철) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
                         .pathParameters(parameterWithName("id").description("분철 ID"))

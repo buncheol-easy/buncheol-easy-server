@@ -50,6 +50,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.lang.reflect.RecordComponent;
@@ -2465,6 +2466,7 @@ class BuncheolServiceTest {
     @Test
     void 진행확정_회원_개최가_종료_전이면_켠다() {
       Buncheol buncheol = givenLocked(FlowType.C2C, BuncheolStatus.CONFIRMED);
+      setField(buncheol, "paymentAccount", BankAccount.of("국민", "12345678", "개최자"));
       given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
 
       buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, true);
@@ -2475,6 +2477,7 @@ class BuncheolServiceTest {
     @Test
     void 종료된_분철은_켜지_않는다() {
       Buncheol buncheol = givenLocked(FlowType.C2C, BuncheolStatus.CONFIRMED);
+      setField(buncheol, "paymentAccount", BankAccount.of("국민", "12345678", "개최자"));
       given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(true);
 
       assertThatThrownBy(() -> buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, true))

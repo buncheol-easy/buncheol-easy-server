@@ -96,6 +96,41 @@ class NotificationInboxRecorderTest {
     assertThat(saved.getLinkPath()).isEqualTo("/products/77/manage");
   }
 
+  @Test
+  void 추가_신청_알림은_개최자를_분철_관리로_보낸다() {
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "참여자닉네임", "참여자",
+            "분철ID", "77");
+
+    InboxMessage saved = record(3L, AlimtalkTemplate.HOST_EXTRA_APPLIED, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/products/77/manage");
+    assertThat(saved.getTitle()).isEqualTo("추가 신청 안내");
+  }
+
+  @Test
+  void 추가_신청_거절_알림은_참여_내역으로_보낸다() {
+    Map<String, String> variables =
+        Map.of("닉네임", "참여자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시");
+
+    InboxMessage saved = record(7L, AlimtalkTemplate.EXTRA_REJECTED, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
+    assertThat(saved.getTitle()).isEqualTo("추가 신청 결과 안내");
+  }
+
+  @Test
+  void 추가_신청_수락_알림은_참여_내역으로_보낸다() {
+    Map<String, String> variables =
+        Map.of("닉네임", "참여자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시");
+
+    InboxMessage saved = record(7L, AlimtalkTemplate.EXTRA_ACCEPTED, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
+    assertThat(saved.getTitle()).isEqualTo("추가 신청 수락 안내");
+  }
+
   // 취소된 분철은 다시 열 수 없어 개최자가 할 수 있는 일은 새로 개최하는 것뿐이다.
   @Test
   void 개최자_자동_취소_알림의_경로는_개최_화면을_가리킨다() {

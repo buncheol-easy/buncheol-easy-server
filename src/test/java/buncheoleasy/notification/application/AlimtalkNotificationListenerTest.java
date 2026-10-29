@@ -17,6 +17,10 @@ import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.PaymentStartedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
+import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
+import buncheoleasy.buncheol.application.participation.ExtraAcceptedEvent;
+import buncheoleasy.buncheol.application.participation.ExtraAppliedEvent;
+import buncheoleasy.buncheol.application.participation.ExtraRejectedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
@@ -1046,6 +1050,199 @@ class AlimtalkNotificationListenerTest {
           .containsEntry("입금금액", "48,000")
           .containsEntry("분철ID", "77");
       verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.C2C_PAYMENT_SENT), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 신청 개최자 알림(onExtraApplied)")
+  class ExtraApplied {
+
+    private ParticipationView appliedView(
+        final Buncheol buncheol,
+        final String memberName,
+        final User participant,
+        final User host,
+        final ParticipationStatus status) {
+      Participation participation = mock(Participation.class);
+      given(participation.getStatus()).willReturn(status);
+      return new ParticipationView(
+          participation, null, buncheol, memberName, participant, host, 25_000L);
+    }
+
+    @Test
+    @DisplayName("이번 요청 자리 가운데 아직 신청인 것만 나열해 개최자에게 1통, 분철 관리 경로용 분철ID")
+    void sendsOnlyStillAppliedSlotsOfThisRequest() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(77L);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      User participant = mock(User.class);
+      given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
+      User host = mockUser("개최자닉", HOST_PHONE);
+      given(host.getId()).willReturn(3L);
+      ParticipationView view1 =
+          appliedView(buncheol, "호시", participant, host, ParticipationStatus.APPLIED);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view1);
+      // 커밋 뒤 참여자가 곧바로 취소한 자리.
+      ParticipationView view2 =
+          appliedView(buncheol, "우지", participant, host, ParticipationStatus.CANCELLED);
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID)).willReturn(view2);
+
+      listener.onExtraApplied(
+          new ExtraAppliedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
+
+      Map<String, String> variables = captureSend(AlimtalkTemplate.HOST_EXTRA_APPLIED, HOST_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "개최자닉")
+          .containsEntry("분철명", "세븐틴 미니 12집 분철")
+          .containsEntry("멤버명", "호시")
+          .containsEntry("참여자닉네임", "참여자닉")
+          .containsEntry("분철ID", "77");
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.HOST_EXTRA_APPLIED), any());
+    }
+
+    @Test
+    @DisplayName("이번 요청 자리가 모두 취소됐으면 보내지 않는다")
+    void skipsWhenAllCancelled() {
+      ParticipationView view3 =
+          appliedView(mock(Buncheol.class), "호시", mock(User.class), mock(User.class), ParticipationStatus.CANCELLED);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view3);
+
+      listener.onExtraApplied(new ExtraAppliedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID)));
+
+      verify(sender, never()).send(any(), any(), any());
+      verify(inboxRecorder, never()).record(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("개최자 전화번호가 없으면 수신함에만 남긴다")
+    void recordsOnlyWhenHostPhoneMissing() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getId()).willReturn(77L);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      User participant = mock(User.class);
+      given(participant.getNickname()).willReturn(Nickname.of("참여자닉"));
+      User host = mock(User.class);
+      given(host.getNickname()).willReturn(Nickname.of("개최자닉"));
+      given(host.getId()).willReturn(3L);
+      given(host.getPhoneNumber()).willReturn(null);
+      ParticipationView view4 =
+          appliedView(buncheol, "호시", participant, host, ParticipationStatus.APPLIED);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view4);
+
+      listener.onExtraApplied(new ExtraAppliedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID)));
+
+      verify(inboxRecorder).record(eq(3L), eq(AlimtalkTemplate.HOST_EXTRA_APPLIED), any());
+      verify(sender, never()).send(any(), any(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 신청 수락·거절·「제외」 참여자 알림")
+  class ExtraDecision {
+
+    private Buncheol confirmedBuncheol() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("세븐틴 미니 12집 분철");
+      lenient()
+          .when(buncheol.getPaymentAccount())
+          .thenReturn(BankAccount.of("국민은행", "12345678", "홍길동"));
+      lenient().when(buncheol.isC2c()).thenReturn(true);
+      return buncheol;
+    }
+
+    private ParticipationView view(
+        final Buncheol buncheol,
+        final String memberName,
+        final User participant,
+        final ParticipationStatus status,
+        final long amount) {
+      Participation participation = mock(Participation.class);
+      lenient().when(participation.getStatus()).thenReturn(status);
+      ParticipationBundle bundle = mock(ParticipationBundle.class);
+      lenient().when(bundle.getDueAt()).thenReturn(BUNDLE_DUE_AT);
+      return new ParticipationView(
+          participation, bundle, buncheol, memberName, participant, mock(User.class), amount);
+    }
+
+    @Test
+    @DisplayName("수락: 묶음 1통에 멤버명 나열, 금액 합산, 계좌 스냅샷, 묶음 기한")
+    void acceptedSendsPaymentGuide() {
+      Buncheol buncheol = confirmedBuncheol();
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      ParticipationView view5 =
+          view(buncheol, "호시", participant, ParticipationStatus.AWAITING_PAYMENT, 28_000L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view5);
+      ParticipationView view6 =
+          view(buncheol, "우지", participant, ParticipationStatus.AWAITING_PAYMENT, 25_000L);
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID)).willReturn(view6);
+
+      listener.onExtraAccepted(
+          new ExtraAcceptedEvent(900L, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
+
+      Map<String, String> variables = captureSend(AlimtalkTemplate.EXTRA_ACCEPTED, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsEntry("닉네임", "참여자닉")
+          .containsEntry("멤버명", "호시, 우지")
+          .containsEntry("입금금액", "53,000")
+          .containsEntry("은행명", "국민은행")
+          .containsEntry("입금기한", "8월 9일(일) 09:00");
+      verify(sender, times(1)).send(any(), any(), any());
+      verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.EXTRA_ACCEPTED), any());
+    }
+
+    @Test
+    @DisplayName("수락: 커밋 뒤 취소됐으면(운영진 파기) 보내지 않는다")
+    void acceptedSkipsWhenCancelled() {
+      ParticipationView view7 =
+          view(mock(Buncheol.class), "호시", mock(User.class), ParticipationStatus.CANCELLED, 25_000L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view7);
+
+      listener.onExtraAccepted(new ExtraAcceptedEvent(900L, List.of(PARTICIPATION_ID)));
+
+      verify(sender, never()).send(any(), any(), any());
+      verify(inboxRecorder, never()).record(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("거절: 묶음 1통에 거절된 자리를 나열한다")
+    void rejectedSendsOnce() {
+      Buncheol buncheol = confirmedBuncheol();
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      ParticipationView view8 =
+          view(buncheol, "호시", participant, ParticipationStatus.CANCELLED, 25_000L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view8);
+      ParticipationView view9 =
+          view(buncheol, "우지", participant, ParticipationStatus.CANCELLED, 25_000L);
+      given(assembler.loadByParticipation(OTHER_PARTICIPATION_ID)).willReturn(view9);
+
+      listener.onExtraRejected(
+          new ExtraRejectedEvent(900L, List.of(PARTICIPATION_ID, OTHER_PARTICIPATION_ID)));
+
+      Map<String, String> variables = captureSend(AlimtalkTemplate.EXTRA_REJECTED, PARTICIPANT_PHONE);
+      assertThat(variables)
+          .containsOnlyKeys("닉네임", "분철명", "멤버명")
+          .containsEntry("멤버명", "호시, 우지");
+      verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.EXTRA_REJECTED), any());
+    }
+
+    @Test
+    @DisplayName("「제외」: C2C_PAYMENT_EXPIRED 를 묶음 1통으로 보낸다")
+    void releasedSendsPaymentExpired() {
+      Buncheol buncheol = confirmedBuncheol();
+      User participant = mockUser("참여자닉", PARTICIPANT_PHONE);
+      given(participant.getId()).willReturn(11L);
+      ParticipationView view10 =
+          view(buncheol, "호시", participant, ParticipationStatus.CANCELLED, 25_000L);
+      given(assembler.loadByParticipation(PARTICIPATION_ID)).willReturn(view10);
+
+      listener.onBundleReleased(new BundleReleasedEvent(900L, List.of(PARTICIPATION_ID)));
+
+      Map<String, String> variables =
+          captureSend(AlimtalkTemplate.C2C_PAYMENT_EXPIRED, PARTICIPANT_PHONE);
+      assertThat(variables).containsEntry("멤버명", "호시");
+      verify(inboxRecorder).record(eq(11L), eq(AlimtalkTemplate.C2C_PAYMENT_EXPIRED), any());
     }
   }
 

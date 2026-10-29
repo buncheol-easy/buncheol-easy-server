@@ -266,6 +266,46 @@ public enum AlimtalkTemplate {
           AlimtalkButton.channelAdd(),
           AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
 
+  /**
+   * 회원 개최 추가 신청 수락 — 참여자 입금 안내. 묶음(이체 1건)당 1통. 입금 기한은 그 묶음의 기한(수락 + 24시간)이다. 기한 뒤에는
+   * 개최자가 「제외」할 수 있다.
+   */
+  EXTRA_ACCEPTED(
+      "추가 신청 수락 안내",
+      """
+      #{닉네임}님, 추가 신청하신 분철에서 개최자가 신청을 수락했어요!
+
+      아래 계좌로 24시간 안에 입금해 주세요.
+      입금한 뒤에는 참여 내역에서 「보냈어요」 버튼을 꼭 눌러 주세요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 참여 멤버: #{멤버명}
+      ▶ 입금 금액: #{입금금액}원
+      ▶ 입금 계좌: #{은행명} #{계좌번호} (예금주: #{예금주})
+      ▶ 입금 기한: #{입금기한}
+
+      입금 기한이 지나도록 입금이 확인되지 않으면 개최자가 참여를 취소할 수 있어요.
+      분철이지는 통신판매중개자이며, 대금은 개최자 계좌로 직접 입금됩니다.\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
+  /** 회원 개최 추가 신청 거절 — 묶음당 1통. 수락 전이라 계좌가 공개되지 않아 돈이 오가지 않았다. */
+  EXTRA_REJECTED(
+      "추가 신청 결과 안내",
+      """
+      #{닉네임}님, 추가 신청하신 분철에서 개최자가 이번 신청을 수락하지 않았어요.
+
+      추가 신청은 취소되었고, 입금하기 전이라 따로 하실 일은 없어요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 신청 멤버: #{멤버명}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("참여 내역 보러가기", BuncheolUrls.MY_PARTICIPATIONS))),
+
   // --- C2C 개최자 대상 ---
 
   /** (개최자) 회원 개최 입금 단계 시작 — 참여자 입금 안내와 같은 순간 분철당 1통. 할 일(입금 확인·진행 확정·운영진 알리기)을 알린다. */
@@ -328,7 +368,27 @@ public enum AlimtalkTemplate {
       """,
       List.of(
           AlimtalkButton.channelAdd(),
-          AlimtalkButton.webLink("입금 확인하러 가기", BuncheolUrls.BUNCHEOL_MANAGE)));
+          AlimtalkButton.webLink("입금 확인하러 가기", BuncheolUrls.BUNCHEOL_MANAGE))),
+
+  /**
+   * (개최자) 추가 모집 중인 분철에 추가 신청이 들어옴 — 신청 요청마다 1통. 멤버명은 그 요청이 만든 자리만 싣는다(같은 사람이 수락 전
+   * 묶음에 더해도 앞 요청의 멤버를 다시 싣지 않는다).
+   */
+  HOST_EXTRA_APPLIED(
+      "추가 신청 안내",
+      """
+      #{닉네임}님, 추가 모집을 켜 두신 분철에 새 추가 신청이 들어왔어요.
+
+      아직 보낼 수 있는 상품인지 확인하신 뒤 분철 관리에서 수락하거나 거절해 주세요.
+      추가 신청을 수락하면 참여자가 24시간 안에 입금해요. 거절하면 그 자리는 다시 비어요.
+
+      ▶ 분철명: #{분철명}
+      ▶ 신청 멤버: #{멤버명}
+      ▶ 신청자: #{참여자닉네임}\
+      """,
+      List.of(
+          AlimtalkButton.channelAdd(),
+          AlimtalkButton.webLink("분철 관리 하러가기", BuncheolUrls.BUNCHEOL_MANAGE)));
 
   // Aligo 알림톡 제목(subject_1, 필수 파라미터)이자 in-app 수신함 알림 제목. 카카오 기본형이라 본문 위 강조 타이틀(emtitle_1)은 쓰지 않는다.
   private final String subject;

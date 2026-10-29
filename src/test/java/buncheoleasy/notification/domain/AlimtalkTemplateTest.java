@@ -387,6 +387,118 @@ class AlimtalkTemplateTest {
   }
 
   @Nested
+  @DisplayName("추가 모집 (HOST_EXTRA_APPLIED)")
+  class HostExtraApplied {
+
+    // 알리고 등록본(p0-5_docs_alimtalk.md 「문안 전문」)과 줄바꿈까지 같아야 한다 — 다르면 카카오가 발송을 거부한다.
+    @Test
+    @DisplayName("등록본 본문과 글자 그대로 같고 버튼은 채널 추가 → 분철 관리 하러가기")
+    void matchesRegisteredBody() {
+      String raw =
+          AlimtalkTemplate.HOST_EXTRA_APPLIED.render(
+              Map.of(
+              "닉네임", "#{닉네임}",
+              "분철명", "#{분철명}",
+              "멤버명", "#{멤버명}",
+              "참여자닉네임", "#{참여자닉네임}",
+              "분철ID", "#{분철ID}"));
+
+      assertThat(AlimtalkTemplate.HOST_EXTRA_APPLIED.subject()).isEqualTo("추가 신청 안내");
+      assertThat(raw)
+          .isEqualTo(
+              "#{닉네임}님, 추가 모집을 켜 두신 분철에 새 추가 신청이 들어왔어요.\n"
+              + "\n"
+              + "아직 보낼 수 있는 상품인지 확인하신 뒤 분철 관리에서 수락하거나 거절해 주세요.\n"
+              + "추가 신청을 수락하면 참여자가 24시간 안에 입금해요. 거절하면 그 자리는 다시 비어요.\n"
+              + "\n"
+              + "▶ 분철명: #{분철명}\n"
+              + "▶ 신청 멤버: #{멤버명}\n"
+              + "▶ 신청자: #{참여자닉네임}");
+      assertThat(raw).hasSize(185);
+      assertThat(AlimtalkTemplate.HOST_EXTRA_APPLIED.buttons()).hasSize(2);
+      assertThat(AlimtalkTemplate.HOST_EXTRA_APPLIED.buttons().get(1).name()).isEqualTo("분철 관리 하러가기");
+      assertThat(AlimtalkTemplate.HOST_EXTRA_APPLIED.buttons().get(1).mobileUrl())
+          .isEqualTo("#{baseUrl}/products/#{분철ID}/manage");
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 모집 (EXTRA_ACCEPTED)")
+  class ExtraAccepted {
+
+    // 알리고 등록본(p0-5_docs_alimtalk.md 「문안 전문」)과 줄바꿈까지 같아야 한다 — 다르면 카카오가 발송을 거부한다.
+    @Test
+    @DisplayName("등록본 본문과 글자 그대로 같고 버튼은 채널 추가 → 참여 내역 보러가기")
+    void matchesRegisteredBody() {
+      String raw =
+          AlimtalkTemplate.EXTRA_ACCEPTED.render(
+              Map.of(
+              "닉네임", "#{닉네임}",
+              "분철명", "#{분철명}",
+              "멤버명", "#{멤버명}",
+              "입금금액", "#{입금금액}",
+              "은행명", "#{은행명}",
+              "계좌번호", "#{계좌번호}",
+              "예금주", "#{예금주}",
+              "입금기한", "#{입금기한}"));
+
+      assertThat(AlimtalkTemplate.EXTRA_ACCEPTED.subject()).isEqualTo("추가 신청 수락 안내");
+      assertThat(raw)
+          .isEqualTo(
+              "#{닉네임}님, 추가 신청하신 분철에서 개최자가 신청을 수락했어요!\n"
+              + "\n"
+              + "아래 계좌로 24시간 안에 입금해 주세요.\n"
+              + "입금한 뒤에는 참여 내역에서 「보냈어요」 버튼을 꼭 눌러 주세요.\n"
+              + "\n"
+              + "▶ 분철명: #{분철명}\n"
+              + "▶ 참여 멤버: #{멤버명}\n"
+              + "▶ 입금 금액: #{입금금액}원\n"
+              + "▶ 입금 계좌: #{은행명} #{계좌번호} (예금주: #{예금주})\n"
+              + "▶ 입금 기한: #{입금기한}\n"
+              + "\n"
+              + "입금 기한이 지나도록 입금이 확인되지 않으면 개최자가 참여를 취소할 수 있어요.\n"
+              + "분철이지는 통신판매중개자이며, 대금은 개최자 계좌로 직접 입금됩니다.");
+      assertThat(raw).hasSize(288);
+      assertThat(AlimtalkTemplate.EXTRA_ACCEPTED.buttons()).hasSize(2);
+      assertThat(AlimtalkTemplate.EXTRA_ACCEPTED.buttons().get(1).name()).isEqualTo("참여 내역 보러가기");
+      assertThat(AlimtalkTemplate.EXTRA_ACCEPTED.buttons().get(1).mobileUrl())
+          .isEqualTo("#{baseUrl}/profile/participations");
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 모집 (EXTRA_REJECTED)")
+  class ExtraRejected {
+
+    // 알리고 등록본(p0-5_docs_alimtalk.md 「문안 전문」)과 줄바꿈까지 같아야 한다 — 다르면 카카오가 발송을 거부한다.
+    @Test
+    @DisplayName("등록본 본문과 글자 그대로 같고 버튼은 채널 추가 → 참여 내역 보러가기")
+    void matchesRegisteredBody() {
+      String raw =
+          AlimtalkTemplate.EXTRA_REJECTED.render(
+              Map.of(
+              "닉네임", "#{닉네임}",
+              "분철명", "#{분철명}",
+              "멤버명", "#{멤버명}"));
+
+      assertThat(AlimtalkTemplate.EXTRA_REJECTED.subject()).isEqualTo("추가 신청 결과 안내");
+      assertThat(raw)
+          .isEqualTo(
+              "#{닉네임}님, 추가 신청하신 분철에서 개최자가 이번 신청을 수락하지 않았어요.\n"
+              + "\n"
+              + "추가 신청은 취소되었고, 입금하기 전이라 따로 하실 일은 없어요.\n"
+              + "\n"
+              + "▶ 분철명: #{분철명}\n"
+              + "▶ 신청 멤버: #{멤버명}");
+      assertThat(raw).hasSize(113);
+      assertThat(AlimtalkTemplate.EXTRA_REJECTED.buttons()).hasSize(2);
+      assertThat(AlimtalkTemplate.EXTRA_REJECTED.buttons().get(1).name()).isEqualTo("참여 내역 보러가기");
+      assertThat(AlimtalkTemplate.EXTRA_REJECTED.buttons().get(1).mobileUrl())
+          .isEqualTo("#{baseUrl}/profile/participations");
+    }
+  }
+
+  @Nested
   @DisplayName("버튼 구성")
   class Buttons {
 

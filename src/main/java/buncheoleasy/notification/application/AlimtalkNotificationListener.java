@@ -9,6 +9,10 @@ import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.PaymentStartedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
+import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
+import buncheoleasy.buncheol.application.participation.ExtraAcceptedEvent;
+import buncheoleasy.buncheol.application.participation.ExtraAppliedEvent;
+import buncheoleasy.buncheol.application.participation.ExtraRejectedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
 import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
@@ -359,6 +363,96 @@ public class AlimtalkNotificationListener {
       return;
     }
     sender.send(AlimtalkTemplate.C2C_PAYMENT_SENT, hostPhone, variables);
+  }
+
+  /**
+   * (개최자) 추가 모집 중인 분철에 추가 신청이 들어옴 — <b>신청 요청마다 1통</b>. 멤버명은 그 요청이 만든 자리 가운데 아직 신청(APPLIED)인
+   * 것만 나열한다. 커밋~실행 사이에 참여자가 취소한 자리는 빼고, 다 빠지면 보내지 않는다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onExtraApplied(final ExtraAppliedEvent event) {
+    List<ParticipationView> views =
+        loadViewsSafely(event.participationIds()).stream()
+            .filter(view -> view.participation().getStatus() == ParticipationStatus.APPLIED)
+            .toList();
+    if (views.isEmpty()) {
+      return;
+    }
+    ParticipationView first = views.get(0);
+    AlimtalkTemplate template = AlimtalkTemplate.HOST_EXTRA_APPLIED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.host().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views),
+            "참여자닉네임", first.participant().getNickname().value(),
+            // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
+            "분철ID", String.valueOf(first.buncheol().getId()));
+    recordSafely(first.host().getId(), template, variables);
+    String hostPhone = hostPhoneOrNull(first.host(), first.buncheol().getId());
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(template, hostPhone, variables);
+  }
+
+  /**
+   * (참여자) 개최자가 추가 신청 묶음을 수락함 — 계좌·금액·기한을 <b>묶음 1통</b>으로 알린다. 기한은 그 묶음의 기한(수락 + 24시간)이다.
+   * 커밋~실행 사이에 취소된 슬롯(운영진 파기)은 거르고, 다 빠지면 보내지 않는다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onExtraAccepted(final ExtraAcceptedEvent event) {
+    List<ParticipationView> views =
+        loadViewsSafely(event.participationIds()).stream()
+            .filter(
+                view ->
+                    view.participation().getStatus() == ParticipationStatus.AWAITING_PAYMENT
+                        || view.participation().getStatus() == ParticipationStatus.PAYMENT_SENT)
+            .toList();
+    if (views.isEmpty()) {
+      return;
+    }
+    ParticipationView first = views.get(0);
+    long totalAmount = views.stream().mapToLong(ParticipationView::paymentAmount).sum();
+    sendC2cPaymentGuide(
+        first,
+        AlimtalkTemplate.EXTRA_ACCEPTED,
+        mergedMemberName(views),
+        totalAmount,
+        first.paymentDueAt());
+  }
+
+  /** (참여자) 개최자가 추가 신청 묶음을 거절함 — <b>묶음 1통</b>. 멤버명은 거절된 자리를 나열한다. */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onExtraRejected(final ExtraRejectedEvent event) {
+    List<ParticipationView> views = loadViewsSafely(event.participationIds());
+    if (views.isEmpty()) {
+      return;
+    }
+    ParticipationView first = views.get(0);
+    AlimtalkTemplate template = AlimtalkTemplate.EXTRA_REJECTED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(views));
+    recordSafely(first.participant().getId(), template, variables);
+    sender.send(template, first.participant().getPhoneNumber().value(), variables);
+  }
+
+  /**
+   * (참여자) 개최자가 기한이 지난 추가 묶음을 「제외」함 — 묶음 1통. 문안은 진행 확정 때 빠짐과 같은 "입금 기한이 지나 개최자가 참여를
+   * 취소했어요" 이고, 수락 안내의 마지막 문장과 이어진다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBundleReleased(final BundleReleasedEvent event) {
+    sendEachSafely(
+        groupByParticipant(loadViewsSafely(event.releasedParticipationIds())),
+        this::sendNotConfirmedNotice);
   }
 
   // 다슬롯 참여자에게는 멤버명 나열·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).

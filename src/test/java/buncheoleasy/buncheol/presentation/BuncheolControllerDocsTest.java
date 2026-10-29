@@ -1020,8 +1020,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 자리 빼기")
                         .description(
                             """
-                            C2C 개최자가 **신청을 받는 동안**(모집중·마감 전) 빈 자리 하나를 분철에서 뺀다. 입금 단계가 시작되면 `409 BCH-060`.
-                            다른 곳(X·포카마켓 등)에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
+                            C2C 개최자가 **신청을 받는 동안**(모집중·마감 전, 또는 진행 확정 뒤 추가 모집 중) 빈 자리 하나를 분철에서 뺀다.
+                            입금 단계가 시작되면 `409 BCH-060`. 다른 곳(X·포카마켓 등)에서 먼저 팔린 멤버나 추가 모집을 하지 않을 멤버를
+                            신청 대상에서 내리는 용도다. 진행 확정 뒤 빼기는 최소 인원·입금 단계 시작과 무관하다.
 
                             자리 상태에 따라 결과가 갈린다(응답은 모두 `204`):
 
@@ -1052,7 +1053,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·입금 수집중·추가 모집을 켜지 않았거나 「종료」된 진행확정·취소) |
                             | 409 | `BCH-120` (`BUNCHEOL_MEMBER_REMOVE_LAST`) | 마지막 열린 자리 — 분철 취소로 안내. 그 자리에 신청자가 있으면 `BCH-118` 이 대신 나간다 |
                             | 409 | `BCH-118` (`BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT`) | 신청자(신청·입금 확인 중·보냈어요·확정)가 있는 자리 |
                             | 409 | `BCH-119` (`BUNCHEOL_MEMBER_REMOVE_HAS_HISTORY`) | 예비 — 알 수 없는 참조가 자리를 붙잡은 경우의 마지막 선 (지금 스키마로는 나오지 않는다) |
@@ -1083,7 +1084,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 자리 가격 바꾸기")
                         .description(
                             """
-                            C2C 개최자가 **모집중(`RECRUITING`)·마감 전**에 빈 자리 하나의 가격을 바꾼다. 자리 id 는 그대로다.
+                            C2C 개최자가 **모집중(`RECRUITING`)·마감 전, 또는 진행 확정 뒤 추가 모집 중**에 빈 자리 하나의 가격을 바꾼다.
+                            자리 id 는 그대로다.
 
                             **입금 단계가 시작되면 바꿀 수 없다(`409 BCH-060`)** — 빼기·넣기도 같다.
 
@@ -1107,7 +1109,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 그 분철의 자리가 아님(이미 뺐거나 다른 분철) |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중·마감 전이 아님 — 입금 수집중·마감 지난 모집중·진행확정·취소 |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태 — 입금 수집중·마감 지난 모집중·추가 모집을 켜지 않았거나 「종료」된 진행확정·취소 |
                             | 409 | `BCH-125` (`BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED`) | 그 자리에 신청자가 있거나 닫힌 자리 |
                             """)
                         .requestHeaders(userAuthorizationHeader())
@@ -1144,7 +1146,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                         .summary("C2C 자리 다시 넣기")
                         .description(
                             """
-                            C2C 개최자가 **신청을 받는 동안**(모집중·마감 전) 분철 그룹의 멤버를 자리로 넣는다. 입금 단계가 시작되면 `409 BCH-060`.
+                            C2C 개최자가 **신청을 받는 동안**(모집중·마감 전, 또는 진행 확정 뒤 추가 모집 중) 분철 그룹의 멤버를 자리로
+                            넣는다. 입금 단계가 시작되면 `409 BCH-060`.
                             주로 잘못 뺀 자리를 되살릴 때 쓴다. 개최와 같은 규칙으로 검사하며 선착순(`OPEN`) 자리로 만든다.
                             만든 즉시 신청을 받는다. `minHeadcount` 는 바꾸지 않는다.
 
@@ -1163,7 +1166,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | 운영진 개최(LEGACY) 분철 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·진행확정·취소) |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받지 않는 상태(마감 지난 모집중·입금 수집중·추가 모집을 켜지 않았거나 「종료」된 진행확정·취소) |
                             | 409 | `BCH-121` (`BUNCHEOL_MEMBER_ALREADY_EXISTS`) | 이미 분철에 있는 멤버 |
                             """)
                         .requestHeaders(userAuthorizationHeader())

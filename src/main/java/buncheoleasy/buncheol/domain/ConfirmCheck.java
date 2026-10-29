@@ -1,10 +1,13 @@
 package buncheoleasy.buncheol.domain;
 
+import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
+import java.util.List;
 
 /**
- * 회원 개최 입금 수집 중 분철의 진행 확정 판정. 진행 확정 API 의 가드와 관리 화면·「개최한 분철」 목록 응답이 이 판정 하나를 쓴다 — 화면이
- * 따로 판정하면 "버튼은 켜졌는데 누르면 409" 가 생긴다.
+ * 회원 개최 입금 수집 중 분철의 진행 확정 판정. 진행 확정 API 의 가드, 마지막 묶음 입금 확인의 자동 진행 확정, 관리 화면·「개최한 분철」
+ * 목록 응답이 이 판정 하나를 쓴다 — 따로 판정하면 "버튼은 켜졌는데 누르면 409" 나 "모두 확인됐는데 확정이 안 된" 분철이 생긴다.
  *
  * <p>입금 기한(입금 단계 시작 + 24시간)은 화면 표시용이다. 기한이 지나도 서버가 처리하지 않고, 개최자의 진행 확정 버튼이 켜질 뿐이다.
  */
@@ -22,6 +25,28 @@ public enum ConfirmCheck {
   NO_CONFIRMED;
 
   /**
+   * 참여 목록에서 확인 수와 미확인 수를 세어 판정한다. 참여를 읽어 둔 호출자는 모두 이것을 써서 두 수를 세는 식이 하나로 남게 한다.
+   *
+   * @param active 그 분철의 살아 있는 참여
+   * @return 입금 수집 중이 아니면 {@code null}
+   */
+  public static ConfirmCheck of(
+      final BuncheolStatus status,
+      final List<Participation> active,
+      final Instant paymentDueAt,
+      final Instant now) {
+    long confirmedCount =
+        active.stream().filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED).count();
+    long unconfirmedCount =
+        active.stream()
+            .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
+            .count();
+    return of(status, confirmedCount, unconfirmedCount, paymentDueAt, now);
+  }
+
+  /**
+   * 참여를 읽지 않고 집계 쿼리로 센 호출자용(「개최한 분철」 목록).
+   *
    * @param confirmedCount 입금 확인된 참여 수
    * @param unconfirmedCount 입금 대기·「보냈어요」 참여 수({@code ParticipationStatus.payableStatuses()}).
    *     「살아 있는 참여 − 확인」으로 세면 신청(APPLIED)이 섞일 때 진행 확정 가드와 답이 갈린다

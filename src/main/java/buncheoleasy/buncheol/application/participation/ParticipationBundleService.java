@@ -185,14 +185,7 @@ public class ParticipationBundleService {
     List<Participation> active =
         participationDomainService.findActiveByBuncheolIdForUpdate(bundle.getBuncheolId());
     ConfirmCheck check =
-        ConfirmCheck.of(
-            buncheol.getStatus(),
-            active.stream().filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED).count(),
-            active.stream()
-                .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
-                .count(),
-            buncheol.getPaymentDueAt(),
-            now);
+        ConfirmCheck.of(buncheol.getStatus(), active, buncheol.getPaymentDueAt(), now);
     if (check != ConfirmCheck.ALL_PAID) {
       return new BundleConfirmResult(payableIds, false);
     }

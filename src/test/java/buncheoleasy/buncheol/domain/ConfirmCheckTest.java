@@ -1,8 +1,14 @@
 package buncheoleasy.buncheol.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
+import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,6 +21,19 @@ class ConfirmCheckTest {
 
   private static ConfirmCheck of(final long confirmed, final long unconfirmed, final Instant now) {
     return ConfirmCheck.of(BuncheolStatus.PAYMENT_COLLECTING, confirmed, unconfirmed, DUE, now);
+  }
+
+  private static ConfirmCheck ofActive(final Instant now, final ParticipationStatus... statuses) {
+    List<Participation> active =
+        Arrays.stream(statuses)
+            .map(
+                status -> {
+                  Participation participation = mock(Participation.class);
+                  given(participation.getStatus()).willReturn(status);
+                  return participation;
+                })
+            .toList();
+    return ConfirmCheck.of(BuncheolStatus.PAYMENT_COLLECTING, active, DUE, now);
   }
 
   @Test
@@ -54,6 +73,35 @@ class ConfirmCheckTest {
   void 기한이_비었으면_지나지_않은_것으로_본다() {
     assertThat(ConfirmCheck.of(BuncheolStatus.PAYMENT_COLLECTING, 1, 1, null, DUE))
         .isEqualTo(ConfirmCheck.BEFORE_DUE);
+  }
+
+  // 참여 목록을 받는 판정은 확인 수와 미확인(입금 대기·보냈어요) 수를 세어 같은 판정을 탄다.
+  @Test
+  void 참여_목록에서_확인과_입금_대기_보냈어요를_센다() {
+    assertThat(
+            ofActive(
+                DUE.minusSeconds(1), ParticipationStatus.CONFIRMED, ParticipationStatus.CONFIRMED))
+        .isEqualTo(ConfirmCheck.ALL_PAID);
+    assertThat(
+            ofActive(
+                DUE.minusSeconds(1),
+                ParticipationStatus.CONFIRMED,
+                ParticipationStatus.AWAITING_PAYMENT))
+        .isEqualTo(ConfirmCheck.BEFORE_DUE);
+    assertThat(ofActive(DUE, ParticipationStatus.CONFIRMED, ParticipationStatus.PAYMENT_SENT))
+        .isEqualTo(ConfirmCheck.DUE_PASSED);
+    assertThat(ofActive(DUE, ParticipationStatus.PAYMENT_SENT))
+        .isEqualTo(ConfirmCheck.NO_CONFIRMED);
+    assertThat(ConfirmCheck.of(BuncheolStatus.CONFIRMED, List.of(), DUE, DUE)).isNull();
+  }
+
+  // 신청(APPLIED)은 입금 확인 대상이 아니라 미확인으로 세지 않는다 — 진행 확정이 빼는 대상(입금 대기·보냈어요)과 같다.
+  @Test
+  void 참여_목록의_신청은_미확인으로_세지_않는다() {
+    assertThat(
+            ofActive(
+                DUE.minusSeconds(1), ParticipationStatus.CONFIRMED, ParticipationStatus.APPLIED))
+        .isEqualTo(ConfirmCheck.ALL_PAID);
   }
 
   @Test

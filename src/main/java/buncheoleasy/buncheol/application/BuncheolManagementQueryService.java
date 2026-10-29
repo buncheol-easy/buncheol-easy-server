@@ -181,13 +181,10 @@ public class BuncheolManagementQueryService {
         buncheol.getPaymentDueAt(),
         buncheol.getOpenChatUrl(),
         ended,
-        // 진행 확정 게이트와 같은 판정 — 확인·미확인(입금 대기·보냈어요) 수와 입금 기한.
+        // 진행 확정 게이트와 같은 판정 — 같은 살아 있는 참여 목록에서 센다.
         ConfirmCheck.of(
             buncheol.getStatus(),
-            confirmed.size(),
-            participations.stream()
-                .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
-                .count(),
+            participations,
             buncheol.getPaymentDueAt(),
             Instant.now(clock)));
   }

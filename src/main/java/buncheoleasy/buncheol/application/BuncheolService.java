@@ -399,25 +399,17 @@ public class BuncheolService {
     // 바로 아래에서 바꿀 행이라 배타 잠금으로 읽는다.
     List<Participation> active =
         participationDomainService.findActiveByBuncheolIdForUpdate(buncheolId);
-    long confirmedCount =
-        active.stream().filter(p -> p.getStatus() == ParticipationStatus.CONFIRMED).count();
+    ConfirmCheck check =
+        ConfirmCheck.of(buncheol.getStatus(), active, buncheol.getPaymentDueAt(), now);
+    if (check == null || !check.isConfirmable()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
+    }
+    // 순서와 무관하게 집합으로 대조한다 — 화면이 정렬을 보장하지 않는다.
     Set<CancelParticipation> unconfirmed =
         active.stream()
             .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
             .map(p -> new CancelParticipation(p.getId(), p.getStatus()))
             .collect(Collectors.toSet());
-
-    ConfirmCheck check =
-        ConfirmCheck.of(
-            buncheol.getStatus(),
-            confirmedCount,
-            unconfirmed.size(),
-            buncheol.getPaymentDueAt(),
-            now);
-    if (check == null || !check.isConfirmable()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
-    }
-    // 순서와 무관하게 집합으로 대조한다 — 화면이 정렬을 보장하지 않는다.
     if (!unconfirmed.equals(Set.copyOf(request.cancelParticipations()))) {
       throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_LIST_CHANGED);
     }

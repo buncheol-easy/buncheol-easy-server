@@ -113,6 +113,17 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           + " AND NOT EXISTS (SELECT 1 FROM staff_buncheol_settings s"
           + " WHERE s.buncheol_id = buncheols.id AND s.opens_at > UTC_TIMESTAMP())";
 
+  /**
+   * 회원 개최 추가 신청: 진행 확정이고 추가 모집 스위치가 켜져 있을 때만 삽입한다. 원래 마감은 이미 지났으므로 보지 않는다.
+   *
+   * <p>⚠️ {@link #INSERT_IF_RECRUITING_SQL} 과 같이 REPEATABLE READ 의 소스 행 공유 잠금에 기댄다 — 스위치 끄기·운영진 파기(분철 행
+   * 쓰기)와 직렬화되어, 끈 뒤나 파기 뒤에 들어오는 신청이 없다. 격리수준을 낮추려면 FOR SHARE 를 명시할 것.
+   */
+  private static final String INSERT_IF_EXTRA_RECRUITING_SQL =
+      INSERT_COLUMNS_SQL
+          + "FROM buncheols WHERE id = ? AND status = 'CONFIRMED' AND flow_type = 'C2C'"
+          + " AND extra_recruit_open = 1";
+
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_SQL);
@@ -121,6 +132,11 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public boolean saveIfRecruitingAndOpen(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_AND_OPEN_SQL);
+  }
+
+  @Override
+  public boolean saveIfExtraRecruiting(final Participation participation) {
+    return saveIfBuncheolCondition(participation, INSERT_IF_EXTRA_RECRUITING_SQL);
   }
 
   private boolean saveIfBuncheolCondition(final Participation participation, final String sql) {
@@ -266,6 +282,13 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
       final Long buncheolId, final Long participantId) {
     return jpaParticipationRepository.findByBuncheolIdAndParticipantIdAndStatusInForShare(
         buncheolId, participantId, ParticipationStatus.active());
+  }
+
+  @Override
+  public List<Participation> findAppliedByBuncheolIdAndParticipantIdForShare(
+      final Long buncheolId, final Long participantId) {
+    return jpaParticipationRepository.findByBuncheolIdAndParticipantIdAndStatusInForShare(
+        buncheolId, participantId, Set.of(ParticipationStatus.APPLIED));
   }
 
   @Override

@@ -70,8 +70,9 @@ public class ParticipationService {
    * 첫 슬롯</b>을 찾아내 같은 묶음을 재사용하고 배송비를 0으로 둔다 — 슬롯 하나씩 N번 신청한 것과 결과가 같다.
    * 그래서 루프가 묶음 id 를 따로 이어 나를 필요가 없다.
    *
-   * <p>신청은 모집중(RECRUITING)에만 받는다. 아래 상태 가드는 락 이전 값이라 안내용이고, 최종 판정은 {@code participateC2c} 가
-   * 락을 잡으며 최신 값으로 다시 읽어 한다(BCH-060).
+   * <p>신청은 모집중(RECRUITING)과 회원 개최 추가 모집 중(진행 확정 + 스위치 켜짐 + 「종료」 전)에만 받는다. 아래 상태 가드는 락 이전
+   * 값이라 안내용이고, 최종 판정은 {@code participateC2c} 가 락을 잡으며 최신 값으로 다시 읽어 한다(BCH-060). 추가 신청이면 요청
+   * 끝에서 개최자 알림 이벤트를 <b>한 번</b> 낸다(이번 요청의 참여만).
    *
    * <p>⚠️ 다중 슬롯은 <b>C2C 에서만</b> 열린다. LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있어 2번째
    * INSERT 가 그 자리에서 막힌다 — 요청 단계에서 먼저 거절해 원인이 드러나게 한다.
@@ -84,7 +85,8 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
     if (slotIds.size() == 1) {
-      return participateSingle(buncheolId, participantId, request, slotIds.get(0), true);
+      return publishIfExtra(
+          buncheolId, participateSingle(buncheolId, participantId, request, slotIds.get(0), true));
     }
 
     // 단수 경로와 <b>같은 순서로</b> 검증한다(프로필 → 분철). 순서가 갈리면 전화번호 미등록 유저가 같은
@@ -96,7 +98,9 @@ public class ParticipationService {
     if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
-    if (buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+    boolean extraRecruitOpen =
+        buncheol.getStatus() == BuncheolStatus.CONFIRMED && buncheol.isExtraRecruitOpen();
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING && !extraRecruitOpen) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
     // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 쓸 수 없다.
@@ -114,12 +118,23 @@ public class ParticipationService {
     }
     // 첫 슬롯이 배송비를 지므로 총액은 합산해야 한다. 기한·계좌는 묶음 단위라 전부 같다.
     ParticipateResult first = results.get(0);
-    return new ParticipateResult(
-        first.participationId(),
-        results.stream().map(ParticipateResult::participationId).toList(),
-        results.stream().mapToLong(ParticipateResult::totalAmount).sum(),
-        first.dueAt(),
-        first.hostAccount());
+    return publishIfExtra(
+        buncheolId,
+        new ParticipateResult(
+            first.participationId(),
+            results.stream().map(ParticipateResult::participationId).toList(),
+            results.stream().mapToLong(ParticipateResult::totalAmount).sum(),
+            first.dueAt(),
+            first.hostAccount(),
+            first.extra()));
+  }
+
+  // 한 요청의 슬롯은 같은 잠금 아래 같은 갈래를 탄다(분철 상태는 요청 안에서 바뀌지 않는다) — 첫 슬롯으로 정한다.
+  private ParticipateResult publishIfExtra(final Long buncheolId, final ParticipateResult result) {
+    if (result.extra()) {
+      eventPublisher.publishEvent(new ExtraAppliedEvent(buncheolId, result.participationIds()));
+    }
+    return result;
   }
 
   /**
@@ -270,11 +285,14 @@ public class ParticipationService {
   }
 
   /**
-   * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)에만 무입금 신청(APPLIED)으로 슬롯을 선점한다. 입금 단계가 시작된 분철은
+   * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)에는 무입금 신청(APPLIED)으로 슬롯을 선점한다. 진행 확정 뒤 추가 모집 중이면
+   * 같은 APPLIED 로 받는다(추가 신청) — 개최자가 수락해야 입금 단계로 간다. 입금 단계, 추가 모집을 켜지 않았거나 「종료」된 진행 확정은
    * 새 신청을 받지 않는다(BCH-060).
    *
    * <p>다슬롯 일관성(§4.7-A1·A2): 재참여는 배송지·환불계좌(입금자명)를 강제로 재사용하고 배송비는 첫 참여에만 부과한다 — 한 번의
    * 이체·한 개의 택배이므로 개최자 통장 대조(입금자명 1개)와 배송 1묶음이 성립한다. 요청의 배송지 입력은 무시된다(FE 는 프리필+잠금).
+   * 추가 신청은 수락 전 추가 신청에만 붙는다 — 입금이 확인된 원래 참여는 배송이 이미 생겨 새 묶음·새 배송비다
+   * ({@code ParticipationDomainService#inheritanceAppliesTo}).
    */
   private ParticipateResult participateC2c(
       final Buncheol loaded,
@@ -310,9 +328,14 @@ public class ParticipationService {
     // 상태는 한 번만 읽고 여기서 먼저 거른다. 스냅샷 계산 뒤로 미루면 모집이 끝난 분철에 재참여할 때
     // BUNCHEOL_NOT_RECRUITING 대신 배송지·계좌 예외가 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다.
     //
-    // 이 값은 락 시점 최신이다(위 다시 읽기). 락을 기다리는 사이 입금 단계가 시작됐거나 끝났으면 받지 않는다. 조건부 INSERT
-    // 도 같은 조건으로 막지만 더 일찍 나갈 뿐 결과(BCH-060)는 같다.
-    if (buncheol.getStatus() != BuncheolStatus.RECRUITING) {
+    // 상태·스위치는 락 시점 최신이다(위 다시 읽기). 락을 기다리는 사이 입금 단계가 시작됐거나 스위치가 꺼졌으면 받지 않는다. 조건부
+    // INSERT 도 같은 조건으로 막지만 더 일찍 나갈 뿐 결과(BCH-060)는 같다.
+    // 「종료」 판정은 일반 조회라 락 전 스냅샷을 본다. 「종료」는 한 방향이라 낡은 값은 "아직 종료 아님" 쪽으로만 틀리고, 그때 받은
+    // 신청은 수락 대기가 될 뿐이라 개최자가 거절할 수 있다(받아들인 경합).
+    final boolean ended =
+        buncheol.needsEndedCheck() && buncheolDomainService.isEnded(buncheol.getId());
+    final boolean extra = buncheol.isExtraRecruiting(ended);
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING && !extra) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
@@ -370,10 +393,14 @@ public class ParticipationService {
         refundAccount,
         reusableBundleId,
         now,
-        checkFull);
+        checkFull,
+        extra);
   }
 
-  /** C2C 무입금 신청 (RECRUITING → APPLIED 슬롯 선점). 신청 단계는 계좌·기한 없이 응답한다 (docs/46 §3-1). */
+  /**
+   * C2C 무입금 신청 (APPLIED 슬롯 선점). 신청 단계는 계좌·기한 없이 응답한다 (docs/46 §3-1). {@code extra} 면 진행 확정 뒤 추가
+   * 신청이다 — 원래 마감은 이미 지났고, 정원이 차도 아무 전이가 없다.
+   */
   private ParticipateResult applyC2c(
       final Buncheol buncheol,
       final Long participantId,
@@ -383,9 +410,12 @@ public class ParticipationService {
       final RefundAccount refundAccount,
       final Long reusableBundleId,
       final Instant now,
-      final boolean checkFull) {
+      final boolean checkFull,
+      final boolean extra) {
     // deadline 경과(마감 판정 대기) 구간의 신규 신청 차단. INSERT 의 원자 조건과 이중 방어.
-    buncheol.validateRecruiting(now);
+    if (!extra) {
+      buncheol.validateRecruiting(now);
+    }
 
     Participation participation =
         Participation.createApplied(
@@ -395,15 +425,30 @@ public class ParticipationService {
             shippingAddressId,
             member.getPrice(),
             shippingFee);
-    if (!participationDomainService.createParticipationIfRecruiting(participation)) {
+    boolean inserted =
+        extra
+            ? participationDomainService.createParticipationIfExtraRecruiting(participation)
+            : participationDomainService.createParticipationIfRecruiting(participation);
+    if (!inserted) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 신청 구간에는 입금 기한이 없다 — 입금 단계 시작 때 묶음에 일괄로 채운다(PaymentStarter).
+    // 신청 구간에는 입금 기한이 없다 — 입금 단계 시작 때(추가 신청은 수락 때) 묶음에 채운다.
     participationBundleDomainService.attach(
-        participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, null, now);
+        participation,
+        reusableBundleId,
+        shippingAddressId,
+        shippingFee,
+        refundAccount,
+        null,
+        extra,
+        now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
+    if (extra) {
+      return ParticipateResult.extraApplied(
+          participation.getId(), participation.getAmount() + shippingFee);
+    }
     // 마지막 열린 자리가 채워지면 이 요청 안에서 입금 단계가 시작된다. 응답 모양은 그대로다(계좌·기한 null — 안내는 알림톡).
     if (checkFull) {
       paymentStarter.startIfFull(buncheol, now);

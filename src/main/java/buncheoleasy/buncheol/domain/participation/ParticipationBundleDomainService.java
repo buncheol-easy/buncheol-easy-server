@@ -56,6 +56,24 @@ public class ParticipationBundleDomainService {
       final RefundAccount refundAccount,
       final Instant dueAt,
       final Instant now) {
+    attach(
+        participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, dueAt, false,
+        now);
+  }
+
+  /**
+   * {@link #attach(Participation, Long, Long, long, RefundAccount, Instant, Instant)} 에 「추가 신청으로 열린 묶음」 표시를 더한다.
+   * {@code extra} 는 새 묶음을 열 때만 쓰이고, 재사용하면 그 묶음의 값이 그대로다.
+   */
+  public void attach(
+      final Participation participation,
+      final Long reusableBundleId,
+      final Long shippingAddressId,
+      final long shippingFee,
+      final RefundAccount refundAccount,
+      final Instant dueAt,
+      final boolean extra,
+      final Instant now) {
     Long bundleId =
         reusableBundleId != null
             ? reusableBundleId
@@ -67,7 +85,8 @@ public class ParticipationBundleDomainService {
                         shippingAddressId,
                         shippingFee,
                         refundAccount,
-                        dueAt))
+                        dueAt,
+                        extra))
                 .getId();
 
     // 🔴 영향 행이 1이 아니면 멈춘다. 조용히 넘어가면 "참여는 있는데 묶음이 없는" 행이 남고, 그 행은

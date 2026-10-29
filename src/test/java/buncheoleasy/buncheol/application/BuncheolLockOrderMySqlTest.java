@@ -746,6 +746,77 @@ class BuncheolLockOrderMySqlTest extends MySqlContainerTestSupport {
     }
   }
 
+  @Nested
+  @DisplayName("회원 개최 추가 모집")
+  class ExtraRecruit {
+
+    @Test
+    void 추가_모집_켜기와_끄기는_분철_행을_먼저_기다린다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            buncheolService.changeExtraRecruit(hostId, buncheolId, true);
+            return null;
+          });
+      assertThat(extraRecruitOpen(buncheolId)).isTrue();
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () -> {
+            buncheolService.changeExtraRecruit(hostId, buncheolId, false);
+            return null;
+          });
+      assertThat(extraRecruitOpen(buncheolId)).isFalse();
+    }
+
+    @Test
+    void 추가_신청은_분철_행을_먼저_기다리고_추가_묶음으로_들어간다() throws Exception {
+      long buncheolId = confirmedNotEnded();
+      fixture.openExtraRecruit(buncheolId);
+      long emptySlotId = fixture.slot(buncheolId, fixture.groupMember(groupId));
+
+      assertLocksBuncheolFirst(
+          buncheolId,
+          () ->
+              participationService.participate(
+                  buncheolId, participantId, new ParticipateRequest(emptySlotId, shippingAddressId)));
+
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT CONCAT(p.status, '/', pb.is_extra, '/', pb.due_at IS NULL)"
+                      + " FROM participations p JOIN participation_bundles pb ON pb.id = p.bundle_id"
+                      + " WHERE p.buncheol_member_id = ?",
+                  String.class,
+                  emptySlotId))
+          .isEqualTo("APPLIED/1/1");
+    }
+  }
+
+  /** 진행 확정 회원 개최. 다른 사람의 확인된 참여가 배송 없이 남아 있어 「종료」가 아니다. 계좌 스냅샷이 있다. */
+  private long confirmedNotEnded() {
+    long buncheolId =
+        fixture.buncheol(hostId, groupId, "C2C", "CONFIRMED", DAY.negated(), 1, DAY.negated());
+    long otherId = fixture.user(false);
+    long bundleId = fixture.bundle(buncheolId, otherId, fixture.shippingAddress(otherId), DAY.negated());
+    fixture.participation(
+        buncheolId,
+        fixture.slot(buncheolId, fixture.groupMember(groupId)),
+        otherId,
+        bundleId,
+        "CONFIRMED",
+        "C2C",
+        DAY.negated());
+    return buncheolId;
+  }
+
+  private boolean extraRecruitOpen(final long buncheolId) {
+    return Boolean.TRUE.equals(
+        jdbcTemplate.queryForObject(
+            "SELECT extra_recruit_open FROM buncheols WHERE id = ?", Boolean.class, buncheolId));
+  }
+
   private long buncheol(final String flowType, final String status, final Duration paymentDue) {
     return fixture.buncheol(hostId, groupId, flowType, status, DAY, 1, paymentDue);
   }

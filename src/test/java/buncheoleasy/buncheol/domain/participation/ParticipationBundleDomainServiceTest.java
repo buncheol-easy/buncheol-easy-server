@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -94,6 +95,35 @@ class ParticipationBundleDomainServiceTest {
     InOrder inOrder = Mockito.inOrder(participationBundleRepository, participationRepository);
     inOrder.verify(participationBundleRepository).save(any());
     inOrder.verify(participationRepository).linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW);
+  }
+
+  @Test
+  void 추가_신청_표시는_새로_여는_묶음에_새긴다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW))
+        .willReturn(true);
+
+    participationBundleDomainService.attach(
+        participation, null, SHIPPING_ADDRESS_ID, 3000L, REFUND_ACCOUNT, null, true, NOW);
+
+    ArgumentCaptor<ParticipationBundle> saved = ArgumentCaptor.forClass(ParticipationBundle.class);
+    then(participationBundleRepository).should().save(saved.capture());
+    assertThat(saved.getValue().isExtra()).isTrue();
+  }
+
+  @Test
+  void 추가_신청_표시가_없는_기존_경로는_추가_묶음이_아니다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW))
+        .willReturn(true);
+
+    attach(participation, null);
+
+    ArgumentCaptor<ParticipationBundle> saved = ArgumentCaptor.forClass(ParticipationBundle.class);
+    then(participationBundleRepository).should().save(saved.capture());
+    assertThat(saved.getValue().isExtra()).isFalse();
   }
 
   @Test

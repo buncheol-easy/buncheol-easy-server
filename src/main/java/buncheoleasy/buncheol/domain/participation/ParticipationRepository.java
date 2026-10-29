@@ -22,6 +22,14 @@ public interface ParticipationRepository {
    */
   boolean saveIfRecruitingAndOpen(Participation participation);
 
+  /**
+   * 회원 개최 분철이 진행 확정이고 추가 모집 스위치가 켜져 있을 때만 참여를 INSERT 한다 (원자적, 추가 신청). 「종료」 여부는 보지 않는다 —
+   * 호출부가 분철 행을 잠근 뒤 판정한다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return INSERT 된 경우 true, 진행 확정이 아니거나 스위치가 꺼져 있으면 false
+   */
+  boolean saveIfExtraRecruiting(Participation participation);
+
   Optional<Participation> findById(Long id);
 
   /** 내 참여 목록 (참여자별 최신순). */
@@ -75,6 +83,13 @@ public interface ParticipationRepository {
    * 잠금 전 스냅샷이 아니라 최신 값을 봐야 한다. 호출 측 {@code @Transactional} 필수.
    */
   List<Participation> findActiveByBuncheolIdAndParticipantIdForShare(
+      Long buncheolId, Long participantId);
+
+  /**
+   * 분철 내 참여자의 신청(APPLIED) 참여, 오래된 순 — 잠금 읽기(FOR SHARE). 진행 확정 분철에서는 수락 전 추가 신청이다. 잠금 이유는
+   * {@link #findActiveByBuncheolIdAndParticipantIdForShare} 와 같다. 호출 측 {@code @Transactional} 필수.
+   */
+  List<Participation> findAppliedByBuncheolIdAndParticipantIdForShare(
       Long buncheolId, Long participantId);
 
   /**

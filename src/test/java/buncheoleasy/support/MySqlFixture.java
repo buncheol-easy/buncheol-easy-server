@@ -80,6 +80,16 @@ public final class MySqlFixture {
         collecting);
   }
 
+  /** 추가 모집 스위치를 켠다(진행 확정 회원 개최에서만 뜻이 있다). */
+  public void openExtraRecruit(final long buncheolId) {
+    jdbc.update("UPDATE buncheols SET extra_recruit_open = 1 WHERE id = ?", buncheolId);
+  }
+
+  /** 추가 신청으로 열린 묶음 표시를 단다. */
+  public void markExtra(final long bundleId) {
+    jdbc.update("UPDATE participation_bundles SET is_extra = 1 WHERE id = ?", bundleId);
+  }
+
   public long slot(final long buncheolId, final long groupMemberId) {
     return insert(
         "INSERT INTO buncheol_members (buncheol_id, member_id, price) VALUES (?, ?, 15000)",

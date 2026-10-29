@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.support.MySqlContainerTestSupport;
 import buncheoleasy.support.MySqlFixture;
@@ -238,6 +239,59 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
           status,
           "C2C",
           HOUR.negated());
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 신청 조건부 INSERT saveIfExtraRecruiting")
+  class SaveIfExtraRecruiting {
+
+    @Test
+    void 진행_확정된_회원_개최가_스위치를_켰으면_원래_마감이_지났어도_넣는다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      openExtraRecruit(buncheolId);
+
+      Participation applied = applied(buncheolId);
+      Boolean inserted =
+          transactionTemplate.execute(status -> participationRepository.saveIfExtraRecruiting(applied));
+
+      assertThat(inserted).isTrue();
+      assertThat(applied.getId()).isNotNull();
+      assertThat(participationStatus(applied.getId())).isEqualTo("APPLIED");
+    }
+
+    @Test
+    void 스위치가_꺼졌거나_진행_확정이_아니거나_운영진_분철이면_넣지_않는다() {
+      long switchOff = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long collecting = buncheol("C2C", "PAYMENT_COLLECTING", HOUR.negated());
+      openExtraRecruit(collecting);
+      long staff = buncheol("LEGACY", "CONFIRMED", HOUR.negated());
+      openExtraRecruit(staff);
+
+      for (long buncheolId : new long[] {switchOff, collecting, staff}) {
+        Participation applied = applied(buncheolId);
+        Boolean inserted =
+            transactionTemplate.execute(
+                status -> participationRepository.saveIfExtraRecruiting(applied));
+        assertThat(inserted).as("buncheol %d", buncheolId).isFalse();
+      }
+      assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM participations", Long.class))
+          .isZero();
+    }
+
+    private void openExtraRecruit(final long buncheolId) {
+      jdbcTemplate.update("UPDATE buncheols SET extra_recruit_open = 1 WHERE id = ?", buncheolId);
+    }
+
+    private Participation applied(final long buncheolId) {
+      long participantId = fixture.user(false);
+      return Participation.createApplied(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          participantId,
+          fixture.shippingAddress(participantId),
+          15_000L,
+          0L);
     }
   }
 

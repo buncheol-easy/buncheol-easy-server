@@ -25,6 +25,11 @@ public class ParticipationDomainService {
     return participationRepository.saveIfRecruitingAndOpen(participation);
   }
 
+  /** 회원 개최 추가 신청 INSERT — 진행 확정·스위치 켜짐을 원자 확인한다(포트 javadoc). */
+  public boolean createParticipationIfExtraRecruiting(final Participation participation) {
+    return participationRepository.saveIfExtraRecruiting(participation);
+  }
+
   /**
    * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 호출 측 {@code @Transactional} 필수.
    *
@@ -46,7 +51,9 @@ public class ParticipationDomainService {
    *   <li><b>C2C 여야 한다.</b> LEGACY 는 1인 1활성슬롯이라 묶음이 곧 참여다 — 묶을 것이 애초에 없어 항상 새로
    *       열고({@code attach(.., null, ..)}), 애초에 추가 신청 자체가 {@code
    *       PARTICIPATION_ALREADY_JOINED_BUNCHEOL} 로 막힌다.
-   *   <li><b>모집중이어야 한다.</b> 신청은 모집중에만 받는다 — 입금 단계 뒤에는 재참여 자체가 없다.
+   *   <li><b>모집중이거나 진행 확정이어야 한다.</b> 신청은 모집중과 추가 모집 중에만 받는다 — 입금 단계에는 재참여 자체가 없다.
+   *       진행 확정 뒤에는 <b>수락 전 추가 신청(APPLIED)만</b> 원본이 된다. 입금이 확인된 원래 참여는 배송이 이미 생겼으므로(묶음 = 택배
+   *       1개, 분할 발송 없음) 그 사람의 추가 신청은 새 묶음·새 배송비다.
    * </ol>
    *
    * <p>🔴 <b>게이트를 하나라도 호출부에 남기지 마라.</b> 쓰기 경로는 {@code participateSingle} 이 먼저
@@ -55,7 +62,9 @@ public class ParticipationDomainService {
    * 그리는데 서버에는 그 약속을 이행할 경로가 없는, 이 판정을 합치려던 이유 그 자체인 어긋남이다.
    */
   public static boolean inheritanceAppliesTo(final Buncheol buncheol) {
-    return buncheol.isC2c() && buncheol.getStatus() == BuncheolStatus.RECRUITING;
+    return buncheol.isC2c()
+        && (buncheol.getStatus() == BuncheolStatus.RECRUITING
+            || buncheol.getStatus() == BuncheolStatus.CONFIRMED);
   }
 
   /**
@@ -68,9 +77,16 @@ public class ParticipationDomainService {
    */
   public Optional<Participation> findInheritanceSource(
       final Buncheol buncheol, final Long participantId) {
-    return inheritanceAppliesTo(buncheol)
-        ? findFirstActiveInBuncheol(buncheol.getId(), participantId)
-        : Optional.empty();
+    if (!inheritanceAppliesTo(buncheol)) {
+      return Optional.empty();
+    }
+    if (buncheol.getStatus() == BuncheolStatus.CONFIRMED) {
+      return participationRepository
+          .findAppliedByBuncheolIdAndParticipantIdForShare(buncheol.getId(), participantId)
+          .stream()
+          .findFirst();
+    }
+    return findFirstActiveInBuncheol(buncheol.getId(), participantId);
   }
 
   /**
@@ -84,11 +100,16 @@ public class ParticipationDomainService {
       final Buncheol buncheol,
       final Long participantId,
       final List<Participation> knownActiveInBuncheol) {
-    return inheritanceAppliesTo(buncheol)
-        ? knownActiveInBuncheol.stream()
-            .filter(participation -> participation.getParticipantId().equals(participantId))
-            .findFirst()
-        : Optional.empty();
+    if (!inheritanceAppliesTo(buncheol)) {
+      return Optional.empty();
+    }
+    boolean appliedOnly = buncheol.getStatus() == BuncheolStatus.CONFIRMED;
+    return knownActiveInBuncheol.stream()
+        .filter(participation -> participation.getParticipantId().equals(participantId))
+        .filter(
+            participation ->
+                !appliedOnly || participation.getStatus() == ParticipationStatus.APPLIED)
+        .findFirst();
   }
 
   public Participation getParticipation(final Long id) {

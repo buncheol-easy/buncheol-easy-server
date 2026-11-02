@@ -219,9 +219,9 @@ class AiDraftServiceTest {
           .willReturn(HostingEligibilityResponse.blocked(reason));
       ErrorCode expected =
           switch (reason) {
+            case KAKAO_ACCOUNT_REQUIRED -> ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED;
             case PHONE_REQUIRED -> ErrorCode.USER_PROFILE_IS_NOT_COMPLETE;
-            case AGE_UNVERIFIED -> ErrorCode.USER_AGE_NOT_VERIFIED;
-            case NOT_ADULT -> ErrorCode.USER_NOT_ADULT;
+            case ADULT_CONFIRM_REQUIRED -> ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED;
             case LIMIT_EXCEEDED -> ErrorCode.BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED;
             case BANK_ACCOUNT_REQUIRED -> ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED;
           };
@@ -235,9 +235,10 @@ class AiDraftServiceTest {
     void 입력_검사는_자격_다음이다() {
       // 자격 없는 사람에게 입력 오류부터 보여 주지 않는다.
       given(buncheolService.getHostingEligibility(USER_ID))
-          .willReturn(HostingEligibilityResponse.blocked(Reason.NOT_ADULT));
+          .willReturn(HostingEligibilityResponse.blocked(Reason.ADULT_CONFIRM_REQUIRED));
 
-      assertFailsWith(new CreateAiDraftRequest(null, null), ErrorCode.USER_NOT_ADULT);
+      assertFailsWith(
+          new CreateAiDraftRequest(null, null), ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED);
     }
   }
 

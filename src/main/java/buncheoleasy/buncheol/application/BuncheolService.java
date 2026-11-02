@@ -179,7 +179,7 @@ public class BuncheolService {
 
   /**
    * 개최 방식 결정 + 자격 게이트 (docs/46 §3-8·§7.1-8). 일반 유저 = C2C 강제(LEGACY 요청은 거부 — 페이액션·운영 절차가 붙는 운영진 전용
-   * 방식), 운영진(can_host) = LEGACY 기본에 C2C 도 선택 가능. C2C 는 성인·연락처 자격 게이트를 통과해야 한다. 같은 트랜잭션이라 getUser 반복
+   * 방식), 운영진(can_host) = LEGACY 기본에 C2C 도 선택 가능. C2C 는 카카오 가입·연락처·만 19세 체크 자격 게이트를 통과해야 한다. 같은 트랜잭션이라 getUser 반복
    * 호출은 영속성 컨텍스트 캐시로 흡수된다.
    */
   private FlowType resolveHostFlowType(final Long hostId, final FlowType requested) {

@@ -486,6 +486,36 @@ class BuncheolControllerTest {
           .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }
 
+    @Test
+    void 만19세_체크가_없으면_409_USR_036_으로_거절한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.code").value("USR-036"));
+    }
+
+    @Test
+    void 카카오_가입자가_아니면_403_USR_037_으로_거절한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isForbidden())
+          .andExpect(jsonPath("$.code").value("USR-037"));
+    }
+
     // 핵심 회귀 지점은 레코드가 아니라 컨트롤러 — toImageFile 의 catch 가 IOException 을 넘어
     // BusinessException 까지 삼키도록 넓어지면 ImageFileTest 는 초록인 채 조용히 회귀한다.
     @Test
@@ -1112,13 +1142,14 @@ class BuncheolControllerTest {
     void 부적격이면_사유를_함께_반환한다() throws Exception {
       given(buncheolService.getHostingEligibility(HOST_ID))
           .willReturn(
-              HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+              HostingEligibilityResponse.blocked(
+                  HostingEligibilityResponse.Reason.ADULT_CONFIRM_REQUIRED));
 
       mockMvc
           .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.eligible").value(false))
-          .andExpect(jsonPath("$.reason").value("NOT_ADULT"));
+          .andExpect(jsonPath("$.reason").value("ADULT_CONFIRM_REQUIRED"));
     }
   }
 

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import buncheoleasy.buncheol.application.BuncheolService;
+import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
 import buncheoleasy.user.domain.serviceterm.UserServiceTermRepository;
@@ -41,6 +43,8 @@ class HostAdultConfirmIntegrationTest {
   @Autowired private UserDomainService userDomainService;
 
   @Autowired private UserServiceTermRepository userServiceTermRepository;
+
+  @Autowired private BuncheolService buncheolService;
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
@@ -187,6 +191,25 @@ class HostAdultConfirmIntegrationTest {
 
     assertThat(rowCount()).isEqualTo(1);
     assertThat(agreed()).isTrue();
+  }
+
+  @Test
+  void 체크를_하면_사전_조회가_다음_관문으로_넘어간다() {
+    assertThat(buncheolService.getHostingEligibility(userId).reason())
+        .isEqualTo(HostingEligibilityResponse.Reason.ADULT_CONFIRM_REQUIRED);
+
+    buncheolService.confirmHostAdult(userId);
+
+    assertThat(buncheolService.getHostingEligibility(userId).reason())
+        .isEqualTo(HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
+  }
+
+  @Test
+  void 운영진은_체크가_없어도_체크_사유로_막히지_않는다() {
+    jdbcTemplate.update("UPDATE users SET can_host = TRUE WHERE id = ?", userId);
+
+    assertThat(buncheolService.getHostingEligibility(userId).reason())
+        .isEqualTo(HostingEligibilityResponse.Reason.BANK_ACCOUNT_REQUIRED);
   }
 
   @Test

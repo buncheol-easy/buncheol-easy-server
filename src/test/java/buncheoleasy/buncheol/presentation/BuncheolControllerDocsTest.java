@@ -197,8 +197,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
-                            | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 연령대 추가 동의(`/oauth2/authorization/kakao/age-range`)로 해소 가능 |
-                            | 403 | `USR-033` (`USER_NOT_ADULT`) | C2C 개최 자격 — 미성년자는 개최 불가 |
+                            | 403 | `USR-037` (`USER_HOST_KAKAO_ACCOUNT_REQUIRED`) | C2C 개최 자격 — 카카오 가입자가 아님 |
+                            | 409 | `USR-036` (`USER_HOST_ADULT_CONFIRM_REQUIRED`) | C2C 개최 자격 — 「만 19세 이상」 체크 기록 없음. `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 해소 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
@@ -381,7 +381,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   void 개최_자격_사전_조회() throws Exception {
     given(buncheolService.getHostingEligibility(HOST_ID))
         .willReturn(
-            HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+            HostingEligibilityResponse.blocked(
+                HostingEligibilityResponse.Reason.ADULT_CONFIRM_REQUIRED));
 
     mockMvc
         .perform(get("/v1/buncheols/hosting-eligibility").with(userAuth()))
@@ -408,9 +409,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
+                            | `KAKAO_ACCOUNT_REQUIRED` | 카카오 가입자가 아님 — 이 계정으로는 개최 불가 | 403 `USR-037` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
-                            | `AGE_UNVERIFIED` | 연령대 미확인 — 연령대 추가 동의(`/oauth2/authorization/kakao/age-range`)로 회복 가능 | 409 `USR-032` |
-                            | `NOT_ADULT` | 미성년 확정 — 개최 불가 | 403 `USR-033` |
+                            | `ADULT_CONFIRM_REQUIRED` | 「만 19세 이상」 체크 기록 없음 — `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 회복 | 409 `USR-036` |
                             | `LIMIT_EXCEEDED` | 활성(모집중·입금 수집중) 개최 수 상한 초과 | 409 `BCH-089` |
                             | `BANK_ACCOUNT_REQUIRED` | 정산 계좌 미등록 (LEGACY·C2C 공통) | 409 `USR-025` |
                             """)
@@ -423,7 +424,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("reason")
                                 .type(JsonFieldType.STRING)
                                 .description(
-                                    "부적격 사유 (PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
+                                    "부적격 사유 (KAKAO_ACCOUNT_REQUIRED | PHONE_REQUIRED | ADULT_CONFIRM_REQUIRED | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
                                 .optional())
                         .build())));
   }

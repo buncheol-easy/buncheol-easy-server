@@ -1,5 +1,6 @@
 package buncheoleasy.buncheol.dto.response;
 
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import java.time.Instant;
 
@@ -25,6 +26,18 @@ import java.time.Instant;
  * {@code expectedSlotIds} 로 <b>이 값이 true 인 슬롯만</b> 실어야 한다 — 서버가 확인 대상을 같은 판정으로
  * 내려주므로 화면이 상태 문자열을 해석할 필요가 없고, 확인 대상 상태가 늘어도 양쪽이 갈리지 않는다.
  * 취소분·확정분까지 실으면 <b>영원히 409</b> 가 난다({@code BUNDLE_SLOTS_CHANGED}).
+ *
+ * <p>{@code acceptTarget} 은 이 슬롯이 <b>추가 신청 수락·거절의 대상</b>인지다(진행 확정 분철의 신청). 수락·거절 API 의
+ * {@code expectedSlotIds} 에는 그 묶음에서 이 값이 true 인 슬롯만 싣는다.
+ *
+ * <p>{@code releasability} 는 이 슬롯이 속한 묶음의 「제외」 판정이다({@link BundleReleasability}). 「제외」 API 의 게이트와 같은
+ * 판정이라 화면은 {@code RELEASABLE} 일 때만 버튼을 켜고, {@code BEFORE_DUE} 면 꺼진 버튼과 기한 안내를 보인다. 회원 개최의 살아
+ * 있는 슬롯에만 있고, 취소분·미연결 행·운영진 분철은 null 이다.
+ *
+ * <p>{@code extra} 는 이 슬롯의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지다(「추가 모집」·「추가 신청」 표시). 입금 확인 뒤에도
+ * 그대로다. 미연결 행은 false 다.
+ *
+ * <p>{@code appliedAt} 은 이 참여가 만들어진 시각(신청 시각, UTC)이다. 수락 대기 카드의 "신청 [시각]" 에 쓴다.
  *
  * <p><b>계좌 노출 범위</b>(docs/70 결정 21) — 개최자가 통장을 대조하는 데 필요한 것은 <b>입금자명뿐</b>이므로 평시에는 {@code
  * depositorName} 만 내리고 {@code refundAccount} 는 {@code null} 이다. 계좌번호는 <b>개최자가 실제로 환불해야 하는 건</b>, 즉
@@ -56,4 +69,8 @@ public record BuncheolManagementParticipantResponse(
     RefundAccountResponse refundAccount,
     ManagementDeliveryResponse delivery,
     Instant paymentSentAt,
-    boolean confirmTarget) {}
+    boolean confirmTarget,
+    boolean acceptTarget,
+    BundleReleasability releasability,
+    boolean extra,
+    Instant appliedAt) {}

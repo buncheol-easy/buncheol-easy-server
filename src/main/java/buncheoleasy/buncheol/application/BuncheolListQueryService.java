@@ -120,6 +120,10 @@ public class BuncheolListQueryService {
         staffBuncheolSettingRepository.findOpensAtByBuncheolIds(
             visible.stream().filter(Buncheol::isStaff).map(Buncheol::getId).toList());
 
+    // 「종료」 판정은 추가 모집을 켠 진행 확정 회원 개최만 모아 한 번 조회한다. 대부분의 페이지는 대상이 없어 쿼리를 내지 않는다.
+    final Set<Long> endedIds =
+        buncheolRepository.findEndedIds(
+            visible.stream().filter(Buncheol::needsEndedCheck).map(Buncheol::getId).toList());
     final Instant now = Instant.now(clock);
     final List<BuncheolSummaryResponse> items =
         visible.stream()
@@ -136,12 +140,13 @@ public class BuncheolListQueryService {
                         groupNameById.get(b.getGroupId()),
                         thumbnailByBuncheolId.get(b.getId()),
                         memberNames.all().getOrDefault(b.getId(), List.of()),
-                        availableMemberNames(b, memberNames, now),
+                        availableMemberNames(b, memberNames, now, endedIds.contains(b.getId())),
                         shippingFeePaybackPolicy.isEventTargetBuncheol(
                             b.getFlowType(), freeSlotBuncheolIds.contains(b.getId())),
                         b.isFreeShippingEventTarget(),
                         b.getCreatedAt(),
-                        opensAtByBuncheolId.get(b.getId())))
+                        opensAtByBuncheolId.get(b.getId()),
+                        b.isExtraRecruiting(endedIds.contains(b.getId()))))
             .toList();
 
     final String nextCursor = hasNext ? BuncheolListCursor.from(visible.getLast()).encode() : null;
@@ -189,7 +194,7 @@ public class BuncheolListQueryService {
   }
 
   /**
-   * 카드에 실을 "남은 멤버". 신규 참여를 받지 않는 분철(취소·진행확정·마감 경과)은 <b>빈 목록</b>으로 내린다 — 상세가 같은 슬롯을 {@code
+   * 카드에 실을 "남은 멤버". 신규 참여를 받지 않는 분철(취소·추가 모집 중이 아닌 진행확정·마감 경과)은 <b>빈 목록</b>으로 내린다 — 상세가 같은 슬롯을 {@code
    * CLOSED}(신청 불가)로 내리는데 목록만 "남은 멤버"로 부르면 카드와 상세가 반대 신호를 준다 (docs/56 F-2 · docs/53 Q-14 의
    * {@code BuncheolDetailQueryService#emptySlotStatus} 와 같은 판정).
    *
@@ -198,8 +203,9 @@ public class BuncheolListQueryService {
   private List<String> availableMemberNames(
       final Buncheol buncheol,
       final BuncheolMemberNameResolver.MemberNames memberNames,
-      final Instant now) {
-    if (!buncheol.acceptsNewParticipation(now)) {
+      final Instant now,
+      final boolean ended) {
+    if (!buncheol.acceptsNewParticipation(now, ended)) {
       return List.of();
     }
     return memberNames.available().getOrDefault(buncheol.getId(), List.of());

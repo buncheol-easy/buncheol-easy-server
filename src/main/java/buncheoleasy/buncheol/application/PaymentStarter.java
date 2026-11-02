@@ -33,7 +33,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class PaymentStarter {
 
-  /** 입금 기한 = 입금 단계 시작 + 24시간. 지나도 서버가 처리하지 않는다 — 개최자의 진행 확정 버튼이 켜지는 시각이다. */
+  /**
+   * 입금 기한 길이(24시간). 입금 단계 시작 때 분철 전체에, 진행 확정 뒤 추가 신청 수락 때 그 묶음에 쓴다. 지나도 서버가 처리하지 않는다 —
+   * 입금 단계에서는 개최자의 진행 확정이, 추가 묶음에서는 「제외」가 이 시각부터 열린다. 알림톡 본문의 "24시간"과 같은 값이다.
+   */
   public static final Duration PAYMENT_TIME_LIMIT = Duration.ofHours(24);
 
   private final BuncheolDomainService buncheolDomainService;

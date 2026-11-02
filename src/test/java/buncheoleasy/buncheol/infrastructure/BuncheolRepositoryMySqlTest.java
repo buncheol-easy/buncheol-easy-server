@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.participation.Participation;
+import buncheoleasy.buncheol.domain.participation.ParticipationBundleRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.support.MySqlContainerTestSupport;
 import buncheoleasy.support.MySqlFixture;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -24,6 +27,7 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
 
   @Autowired private BuncheolRepository buncheolRepository;
   @Autowired private ParticipationRepository participationRepository;
+  @Autowired private ParticipationBundleRepository participationBundleRepository;
   @Autowired private TransactionTemplate transactionTemplate;
 
   private MySqlFixture fixture;
@@ -238,6 +242,189 @@ class BuncheolRepositoryMySqlTest extends MySqlContainerTestSupport {
           status,
           "C2C",
           HOUR.negated());
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 신청 조건부 INSERT saveIfExtraRecruiting")
+  class SaveIfExtraRecruiting {
+
+    @Test
+    void 진행_확정된_회원_개최가_스위치를_켰으면_원래_마감이_지났어도_넣는다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      openExtraRecruit(buncheolId);
+
+      Participation applied = applied(buncheolId);
+      Boolean inserted =
+          transactionTemplate.execute(status -> participationRepository.saveIfExtraRecruiting(applied));
+
+      assertThat(inserted).isTrue();
+      assertThat(applied.getId()).isNotNull();
+      assertThat(participationStatus(applied.getId())).isEqualTo("APPLIED");
+    }
+
+    @Test
+    void 스위치가_꺼졌거나_진행_확정이_아니거나_운영진_분철이면_넣지_않는다() {
+      long switchOff = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long collecting = buncheol("C2C", "PAYMENT_COLLECTING", HOUR.negated());
+      openExtraRecruit(collecting);
+      long staff = buncheol("LEGACY", "CONFIRMED", HOUR.negated());
+      openExtraRecruit(staff);
+
+      for (long buncheolId : new long[] {switchOff, collecting, staff}) {
+        Participation applied = applied(buncheolId);
+        Boolean inserted =
+            transactionTemplate.execute(
+                status -> participationRepository.saveIfExtraRecruiting(applied));
+        assertThat(inserted).as("buncheol %d", buncheolId).isFalse();
+      }
+      assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM participations", Long.class))
+          .isZero();
+    }
+
+    private void openExtraRecruit(final long buncheolId) {
+      jdbcTemplate.update("UPDATE buncheols SET extra_recruit_open = 1 WHERE id = ?", buncheolId);
+    }
+
+    private Participation applied(final long buncheolId) {
+      long participantId = fixture.user(false);
+      return Participation.createApplied(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          participantId,
+          fixture.shippingAddress(participantId),
+          15_000L,
+          0L);
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 신청 수락·거절 CAS")
+  class AcceptReject {
+
+    @Test
+    void 수락은_그_묶음의_신청만_입금_대기로_넘기고_묶음과_참여에_기한을_채운다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long bundleId = fixture.bundle(buncheolId, participantId, addressId, null);
+      long applied = slotParticipation(buncheolId, participantId, bundleId, "APPLIED");
+      long otherBundleId = fixture.bundle(buncheolId, participantId, addressId, null);
+      long otherApplied = slotParticipation(buncheolId, participantId, otherBundleId, "APPLIED");
+      Instant dueAt = Instant.now().plus(Duration.ofHours(24));
+
+      Integer accepted =
+          transactionTemplate.execute(
+              status -> {
+                int moved = participationRepository.acceptBundleIfApplied(bundleId, dueAt, Instant.now());
+                assertThat(participationBundleRepository.assignDueAt(bundleId, dueAt, Instant.now()))
+                    .isEqualTo(1);
+                // 이미 기한이 있으면 다시 채우지 않는다.
+                assertThat(participationBundleRepository.assignDueAt(bundleId, dueAt, Instant.now()))
+                    .isZero();
+                return moved;
+              });
+
+      assertThat(accepted).isEqualTo(1);
+      assertThat(participationStatus(applied)).isEqualTo("AWAITING_PAYMENT");
+      assertThat(participationStatus(otherApplied)).isEqualTo("APPLIED");
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT (SELECT due_at IS NOT NULL FROM participations WHERE id = ?)"
+                      + " + (SELECT due_at IS NOT NULL FROM participation_bundles WHERE id = ?)",
+                  Integer.class,
+                  applied,
+                  bundleId))
+          .isEqualTo(2);
+    }
+
+    // 묶음 표를 서브쿼리로 보는 UPDATE 가 MySQL 에서 도는지 본다(같은 표를 보면 error 1093, H2 는 허용해 안 드러난다).
+    @Test
+    void 제외는_기한이_지난_열린_묶음의_입금_대기와_보냈어요만_취소한다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long dueBundle = fixture.bundle(buncheolId, participantId, addressId, HOUR.negated());
+      long awaiting = slotParticipation(buncheolId, participantId, dueBundle, "AWAITING_PAYMENT");
+      long sent = slotParticipation(buncheolId, participantId, dueBundle, "PAYMENT_SENT");
+      long beforeDueBundle = fixture.bundle(buncheolId, participantId, addressId, HOUR);
+      long beforeDue = slotParticipation(buncheolId, participantId, beforeDueBundle, "AWAITING_PAYMENT");
+
+      Integer released =
+          transactionTemplate.execute(
+              status -> participationRepository.releaseBundleIfDue(dueBundle, Instant.now()));
+      Integer notYet =
+          transactionTemplate.execute(
+              status -> participationRepository.releaseBundleIfDue(beforeDueBundle, Instant.now()));
+
+      assertThat(released).isEqualTo(2);
+      assertThat(notYet).isZero();
+      for (long id : new long[] {awaiting, sent}) {
+        assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT CONCAT(status, '/', cancel_reason) FROM participations WHERE id = ?",
+                    String.class,
+                    id))
+            .isEqualTo("CANCELLED/HOST_RELEASED");
+      }
+      assertThat(participationStatus(beforeDue)).isEqualTo("AWAITING_PAYMENT");
+    }
+
+    @Test
+    void 거절은_그_묶음의_신청만_개최자_거절로_취소한다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long bundleId = fixture.bundle(buncheolId, participantId, addressId, null);
+      long applied = slotParticipation(buncheolId, participantId, bundleId, "APPLIED");
+      long confirmed = slotParticipation(buncheolId, participantId, bundleId, "CONFIRMED");
+
+      Integer rejected =
+          transactionTemplate.execute(
+              status -> participationRepository.rejectBundleIfApplied(bundleId, Instant.now()));
+
+      assertThat(rejected).isEqualTo(1);
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT CONCAT(status, '/', cancel_reason, '/', cancelled_at IS NOT NULL)"
+                      + " FROM participations WHERE id = ?",
+                  String.class,
+                  applied))
+          .isEqualTo("CANCELLED/HOST_REJECTED/1");
+      assertThat(participationStatus(confirmed)).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void 수락_대기_묶음_수는_신청이_든_묶음을_한_번씩_센다() {
+      long buncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long otherBuncheolId = buncheol("C2C", "CONFIRMED", HOUR.negated());
+      long participantId = fixture.user(false);
+      long addressId = fixture.shippingAddress(participantId);
+      long twoSlotBundle = fixture.bundle(buncheolId, participantId, addressId, null);
+      slotParticipation(buncheolId, participantId, twoSlotBundle, "APPLIED");
+      slotParticipation(buncheolId, participantId, twoSlotBundle, "APPLIED");
+      long oneSlotBundle = fixture.bundle(buncheolId, participantId, addressId, null);
+      slotParticipation(buncheolId, participantId, oneSlotBundle, "APPLIED");
+      long acceptedBundle = fixture.bundle(buncheolId, participantId, addressId, HOUR);
+      slotParticipation(buncheolId, participantId, acceptedBundle, "AWAITING_PAYMENT");
+
+      assertThat(
+              participationRepository.countAppliedBundlesByBuncheolIds(
+                  List.of(buncheolId, otherBuncheolId)))
+          .extracting(c -> c.buncheolId() + ":" + c.count())
+          .containsExactly(buncheolId + ":2");
+    }
+
+    private long slotParticipation(
+        final long buncheolId, final long participantId, final long bundleId, final String status) {
+      return fixture.participation(
+          buncheolId,
+          fixture.slot(buncheolId, fixture.groupMember(groupId)),
+          participantId,
+          bundleId,
+          status,
+          "C2C",
+          null);
     }
   }
 

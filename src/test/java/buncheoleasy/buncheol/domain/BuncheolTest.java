@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
 import java.lang.reflect.Field;
 import java.time.Instant;
@@ -488,7 +489,9 @@ class BuncheolTest {
 
     @Test
     void 모집중이고_마감_전이면_받는다() {
-      assertThat(buncheol(BuncheolStatus.RECRUITING, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+      assertThat(
+              buncheol(BuncheolStatus.RECRUITING, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now(), false))
           .isTrue();
     }
 
@@ -497,7 +500,7 @@ class BuncheolTest {
       Buncheol buncheol = buncheol(BuncheolStatus.RECRUITING, FlowType.C2C);
       setDeadline(buncheol, Instant.now().minusSeconds(1));
 
-      assertThat(buncheol.acceptsNewParticipation(Instant.now())).isFalse();
+      assertThat(buncheol.acceptsNewParticipation(Instant.now(), false)).isFalse();
     }
 
     @Test
@@ -506,32 +509,81 @@ class BuncheolTest {
       Instant deadline = Instant.now().plusSeconds(60);
       setDeadline(buncheol, deadline);
 
-      assertThat(buncheol.acceptsNewParticipation(deadline)).isFalse();
+      assertThat(buncheol.acceptsNewParticipation(deadline, false)).isFalse();
     }
 
-    // 추가 모집은 없어졌다 — 입금 단계가 시작되면 빈 자리는 「마감」이고 자리 편집도 닫힌다.
     @Test
     void 입금_수집중이면_받지_않는다() {
       assertThat(
               buncheol(BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C)
-                  .acceptsNewParticipation(Instant.now()))
+                  .acceptsNewParticipation(Instant.now(), false))
           .isFalse();
       assertThat(
               buncheol(BuncheolStatus.PAYMENT_COLLECTING, FlowType.LEGACY)
-                  .acceptsNewParticipation(Instant.now()))
+                  .acceptsNewParticipation(Instant.now(), false))
           .isFalse();
     }
 
     @Test
-    void 진행확정_취소_개최자취소는_받지_않는다() {
-      assertThat(buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+    void 추가_모집을_켜지_않은_진행확정과_취소_개최자취소는_받지_않는다() {
+      assertThat(
+              buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now(), false))
           .isFalse();
-      assertThat(buncheol(BuncheolStatus.CANCELLED, FlowType.C2C).acceptsNewParticipation(Instant.now()))
+      assertThat(
+              buncheol(BuncheolStatus.CANCELLED, FlowType.C2C)
+                  .acceptsNewParticipation(Instant.now(), false))
           .isFalse();
       assertThat(
               buncheol(BuncheolStatus.HOST_CANCELLED, FlowType.C2C)
-                  .acceptsNewParticipation(Instant.now()))
+                  .acceptsNewParticipation(Instant.now(), false))
           .isFalse();
+    }
+
+    @Test
+    void 진행확정_회원_개최가_추가_모집을_켜고_종료_전이면_마감이_지났어도_받는다() {
+      Buncheol buncheol = extraRecruitOpen(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      setDeadline(buncheol, Instant.now().minusSeconds(3600));
+
+      assertThat(buncheol.acceptsNewParticipation(Instant.now(), false)).isTrue();
+      assertThat(buncheol.isExtraRecruiting(false)).isTrue();
+    }
+
+    @Test
+    void 추가_모집을_켜_두어도_종료된_분철은_받지_않는다() {
+      Buncheol buncheol = extraRecruitOpen(BuncheolStatus.CONFIRMED, FlowType.C2C);
+
+      assertThat(buncheol.acceptsNewParticipation(Instant.now(), true)).isFalse();
+      assertThat(buncheol.isExtraRecruiting(true)).isFalse();
+    }
+
+    @Test
+    void 운영진_진행확정은_스위치_값이_켜져_있어도_받지_않는다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.LEGACY);
+      setExtraRecruitOpen(buncheol, true);
+
+      assertThat(buncheol.acceptsNewParticipation(Instant.now(), false)).isFalse();
+      assertThat(buncheol.isExtraRecruiting(false)).isFalse();
+      assertThat(buncheol.needsEndedCheck()).isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CANCELLED", "HOST_CANCELLED"})
+    void 진행확정이_아니면_스위치_값이_켜져_있어도_추가_모집이_아니다(final BuncheolStatus status) {
+      Buncheol buncheol = buncheol(status, FlowType.C2C);
+      setExtraRecruitOpen(buncheol, true);
+
+      assertThat(buncheol.isExtraRecruiting(false)).isFalse();
+      assertThat(buncheol.needsEndedCheck()).isFalse();
+    }
+
+    @Test
+    void 종료_판정은_추가_모집을_켠_진행확정_회원_개최에서만_필요하다() {
+      assertThat(extraRecruitOpen(BuncheolStatus.CONFIRMED, FlowType.C2C).needsEndedCheck())
+          .isTrue();
+      assertThat(buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C).needsEndedCheck()).isFalse();
     }
 
     // 참여 가드(validateRecruiting)와 같은 술어여야 한다 — 갈리면 "화면엔 신청 가능한데 신청은 409" 가 재발한다.
@@ -542,11 +594,122 @@ class BuncheolTest {
       setDeadline(afterDeadline, Instant.now().minusSeconds(1));
 
       assertThatCode(() -> beforeDeadline.validateRecruiting(Instant.now())).doesNotThrowAnyException();
-      assertThat(beforeDeadline.acceptsNewParticipation(Instant.now())).isTrue();
+      assertThat(beforeDeadline.acceptsNewParticipation(Instant.now(), false)).isTrue();
 
       assertThatThrownBy(() -> afterDeadline.validateRecruiting(Instant.now()))
           .isInstanceOf(BusinessException.class);
-      assertThat(afterDeadline.acceptsNewParticipation(Instant.now())).isFalse();
+      assertThat(afterDeadline.acceptsNewParticipation(Instant.now(), false)).isFalse();
+    }
+
+    private Buncheol extraRecruitOpen(final BuncheolStatus status, final FlowType flowType) {
+      Buncheol buncheol = buncheol(status, flowType);
+      setExtraRecruitOpen(buncheol, true);
+      return buncheol;
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 모집 스위치 테스트")
+  class ChangeExtraRecruitTest {
+
+    private Buncheol buncheol(final BuncheolStatus status, final FlowType flowType) {
+      Buncheol buncheol =
+          Buncheol.create(
+              HOST_ID,
+              new BuncheolParams(
+                  1L, "테스트 분철 제목", "분철 설명입니다.", "공식 스토어", FUTURE_DEADLINE, MIN_HEADCOUNT, 3000, null,
+                  flowType, null),
+              Instant.now());
+      setStatus(buncheol, status);
+      return buncheol;
+    }
+
+    @Test
+    void 새_분철은_스위치가_꺼져_있다() {
+      assertThat(buncheol(BuncheolStatus.RECRUITING, FlowType.C2C).isExtraRecruitOpen()).isFalse();
+    }
+
+    @Test
+    void 진행확정_회원_개최가_종료_전이면_켤_수_있다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      setPaymentAccount(buncheol);
+
+      buncheol.changeExtraRecruit(true, false);
+
+      assertThat(buncheol.isExtraRecruitOpen()).isTrue();
+    }
+
+    // 수락 안내·참여 내역이 보여 줄 입금 계좌가 없으면 추가 참여자가 입금할 길이 없다.
+    @Test
+    void 입금_계좌_스냅샷이_비어_있으면_켤_수_없다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+
+      assertThatThrownBy(() -> buncheol.changeExtraRecruit(true, false))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+    }
+
+    private void setPaymentAccount(final Buncheol buncheol) {
+      try {
+        Field field = Buncheol.class.getDeclaredField("paymentAccount");
+        field.setAccessible(true);
+        field.set(buncheol, BankAccount.of("국민", "12345678", "개최자"));
+      } catch (NoSuchFieldException | IllegalAccessException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CANCELLED", "HOST_CANCELLED"})
+    void 진행확정이_아니면_켤_수_없다(final BuncheolStatus status) {
+      Buncheol buncheol = buncheol(status, FlowType.C2C);
+
+      assertThatThrownBy(() -> buncheol.changeExtraRecruit(true, false))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+    }
+
+    @Test
+    void 종료된_분철은_켤_수_없다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.C2C);
+      setPaymentAccount(buncheol);
+
+      assertThatThrownBy(() -> buncheol.changeExtraRecruit(true, true))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+    }
+
+    @ParameterizedTest
+    @EnumSource(BuncheolStatus.class)
+    void 끄기는_상태와_종료에_상관없이_되고_이미_꺼져_있어도_된다(final BuncheolStatus status) {
+      Buncheol buncheol = buncheol(status, FlowType.C2C);
+      setExtraRecruitOpen(buncheol, true);
+
+      buncheol.changeExtraRecruit(false, true);
+      buncheol.changeExtraRecruit(false, false);
+
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+    }
+
+    @Test
+    void 운영진_분철은_켜고_끌_수_없다() {
+      Buncheol buncheol = buncheol(BuncheolStatus.CONFIRMED, FlowType.LEGACY);
+
+      assertThatThrownBy(() -> buncheol.changeExtraRecruit(true, false))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+      assertThatThrownBy(() -> buncheol.changeExtraRecruit(false, false))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
   }
 
@@ -805,6 +968,16 @@ class BuncheolTest {
       Field statusField = Buncheol.class.getDeclaredField("status");
       statusField.setAccessible(true);
       statusField.set(buncheol, status);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private void setExtraRecruitOpen(final Buncheol buncheol, final boolean open) {
+    try {
+      Field field = Buncheol.class.getDeclaredField("extraRecruitOpen");
+      field.setAccessible(true);
+      field.set(buncheol, open);
     } catch (NoSuchFieldException | IllegalAccessException e) {
       throw new RuntimeException(e);
     }

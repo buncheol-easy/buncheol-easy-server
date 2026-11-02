@@ -1129,7 +1129,7 @@ class BuncheolControllerTest {
               "https://cdn.example.com/buncheol-10-thumb.jpg",
               FlowType.LEGACY,
               BuncheolHostCancellability.CANCELLABLE,
-              false, null);
+              false, null, false, 0L);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -1226,7 +1226,7 @@ class BuncheolControllerTest {
               false,
               false,
               Instant.parse("2026-05-15T08:00:00Z"),
-              null);
+              null, false);
       CursorResponse<BuncheolSummaryResponse> response =
           new CursorResponse<>(List.of(item), null, false);
 
@@ -1275,7 +1275,7 @@ class BuncheolControllerTest {
                       101L, 1001L, "민지", "minji.png", 50_000L,
                       BuncheolMemberSaleStatus.AWAITING_PAYMENT,
                       Instant.parse("2026-05-20T10:30:00Z"),
-                      true)),
+                      true, false)),
               true,
               new MyParticipationSummaryResponse(
                   1,
@@ -1289,7 +1289,7 @@ class BuncheolControllerTest {
               null,
               false,
               null,
-              Instant.parse("2026-05-14T12:00:00Z"));
+              Instant.parse("2026-05-14T12:00:00Z"), false, false);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -1336,7 +1336,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false, null, Instant.now());
+              null, FlowType.LEGACY, null, null, false, null, Instant.now(), false, false);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -1366,7 +1366,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false, null, Instant.now());
+              null, FlowType.LEGACY, null, null, false, null, Instant.now(), false, false);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -1417,7 +1417,7 @@ class BuncheolControllerTest {
                   "010-1234-5678",
                   "1234567890",
                   DeliveryStatus.SHIPPING), null,
-              true);
+              true, false, null, false, null);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
               602L,
@@ -1434,7 +1434,7 @@ class BuncheolControllerTest {
               null,
               null,
               null, null,
-              true);
+              true, false, null, false, null);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
               10L,
@@ -1446,7 +1446,7 @@ class BuncheolControllerTest {
               4,
               4,
               1,
-              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null, false, null);
+              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null, false, null, false);
       given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
       mockMvc

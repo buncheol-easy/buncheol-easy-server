@@ -5,6 +5,7 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.user.domain.BankAccount;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -181,8 +182,8 @@ public class BuncheolDomainService {
   /**
    * 분철 행 잠금 조회. 호출 측 {@code @Transactional} 필수.
    *
-   * <p><b>분철 단위 쓰기는 이 잠금을 첫 잠금으로 잡는다.</b> 대상은 회원 개최 분철의 상태·자리·참여·묶음을 바꾸는 쓰기 전부와
-   * 운영진 슬롯 입금 확인({@code ParticipationService#lockBuncheolBeforeConfirm})이다. 참여·묶음·자리 잠금이 모두 분철 행
+   * <p><b>분철 단위 쓰기는 이 잠금을 첫 잠금으로 잡는다.</b> 대상은 회원 개최 분철의 상태·자리·참여·묶음을 바꾸는 쓰기 전부(추가 모집
+   * 스위치, 추가 신청 수락·거절, 「제외」 포함)와 운영진 슬롯 입금 확인({@code ParticipationService#lockBuncheolBeforeConfirm})이다. 참여·묶음·자리 잠금이 모두 분철 행
    * 앞에서 한 줄로 선 뒤에 잡히므로 경로끼리 잠금 순서가 엇갈리지 않는다. 상태 보장은 CAS 가 하고 이 잠금은 순서만 맡는다.
    *
    * <p>트랜잭션의 첫 분철 조회여야 한다 — 앞에서 {@link #getBuncheol} 로 읽었으면 영속성 컨텍스트가 그 낡은 인스턴스를
@@ -193,6 +194,31 @@ public class BuncheolDomainService {
     return buncheolRepository
         .findByIdForUpdate(id)
         .orElseThrow(() -> new BusinessException(ErrorCode.BUNCHEOL_NOT_FOUND));
+  }
+
+  /**
+   * 진행 확정 분철이 「종료」(끝나지 않은 일 없음, 모든 배송 도착)인가. 개최 목록과 같은 판정이다({@link
+   * BuncheolRepository#findEndedIds}). 일반 조회다. 잠금 앞에 일반 조회가 있는 트랜잭션(추가 신청)에서는 잠금 전 스냅샷이라 「종료」를
+   * 놓칠 수 있다 — 한 방향이라 "아직 종료 아님" 쪽으로만 틀린다. 첫 문장이 잠금 읽기인 경로(스위치, 자리 편집)는 잠금 뒤 스냅샷을 본다.
+   */
+  public boolean isEnded(final Long buncheolId) {
+    return buncheolRepository.findEndedIds(List.of(buncheolId)).contains(buncheolId);
+  }
+
+  /**
+   * 지금 추가 신청을 받는가 — 진행 확정 회원 개최 + 스위치 켜짐 + 「종료」 전({@link Buncheol#isExtraRecruiting}). 「종료」 조회는
+   * {@link #isEndedForExtraRecruit} 와 같다.
+   */
+  public boolean isExtraRecruiting(final Buncheol buncheol) {
+    return buncheol.isExtraRecruiting(isEndedForExtraRecruit(buncheol));
+  }
+
+  /**
+   * 추가 모집 판정에 넘길 「종료」 여부. 판정에 필요할 때({@link Buncheol#needsEndedCheck}, 스위치가 켜진 진행 확정 회원 개최)만 조회하고
+   * 아니면 조회 없이 false 다 — 결과에 쓰이지 않는다. 잠금 전 스냅샷 주의는 {@link #isEnded} 와 같다.
+   */
+  public boolean isEndedForExtraRecruit(final Buncheol buncheol) {
+    return buncheol.needsEndedCheck() && isEnded(buncheol.getId());
   }
 
   /**

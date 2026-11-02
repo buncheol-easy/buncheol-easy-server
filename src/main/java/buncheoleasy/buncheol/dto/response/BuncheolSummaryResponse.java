@@ -25,6 +25,9 @@ import java.util.List;
  * <p>{@code flowType} 은 카드의 상태 배지·dim 판정을 상세 화면과 같은 기준으로 통일하기 위한 필드다 (docs/51 §3-1-2 — 이전에는 카드가
  * 상태값으로 플로우를 추정했다).
  *
+ * <p>{@code extraRecruiting} 은 지금 추가 신청을 받는지로, 상세의 같은 필드와 같은 판정이다. 카드의 「추가 모집」 배지에 쓴다. true 면
+ * {@code availableMemberNames} 가 빈 자리로 채워진다.
+ *
  * <p>{@code createdAt} 은 분철 개최 시각(UTC)으로, 목록 카드의 "신규" 배지 판정과 사이트맵 lastmod 에 쓴다.
  *
  * <p>{@code opensAt} 은 예약 오픈 시각(UTC)으로, 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null 이다. 카드의 "M/D HH:mm 오픈"
@@ -46,4 +49,5 @@ public record BuncheolSummaryResponse(
     boolean shippingFeePaybackTarget,
     boolean freeShippingEventTarget,
     Instant createdAt,
-    Instant opensAt) {}
+    Instant opensAt,
+    boolean extraRecruiting) {}

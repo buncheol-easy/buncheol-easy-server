@@ -1,12 +1,18 @@
 package buncheoleasy.buncheol.application.participation;
 
+import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmer;
+import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
+import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.ConfirmCheck;
+import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
+import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
@@ -33,6 +39,7 @@ public class ParticipationBundleService {
   private final ParticipationDomainService participationDomainService;
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolConfirmer buncheolConfirmer;
+  private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -116,7 +123,148 @@ public class ParticipationBundleService {
     return markedIds;
   }
 
+  /**
+   * 개최자가 진행 확정 뒤 추가 신청 묶음을 <b>한 번에</b> 수락한다 (APPLIED → AWAITING_PAYMENT). 묶음 기한은 지금 + 24시간이고,
+   * 참여자에게 계좌·금액·기한 알림톡이 간다. 일부만 수락하는 것은 없다 — 묶음은 이체 1회·택배 1개다.
+   *
+   * <p>{@code expectedSlotIds} 는 관리 응답에서 {@code acceptTarget} 이 참인 슬롯이다. 잠금 아래 서버가 본 수락 전 슬롯 집합과
+   * 다르면 409(BCH-115)다(입금 확인과 같은 대조). 진행 확정 분철이 아니거나 수락 전 슬롯이 없으면 BCH-132.
+   *
+   * <p>분철 행이 첫 잠금이다. 잠금 전 일반 조회는 묶음 하나뿐이고 판단은 묶음 참여 잠금 조회와 CAS 로만 한다 — 기다리는 사이 참여자가
+   * 취소했으면 잠금 조회가 그것을 본다.
+   */
+  @Transactional
+  public void accept(final Long hostId, final Long bundleId, final List<Long> expectedSlotIds) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle = getBundle(bundleId);
+    lockConfirmedForExtraDecision(hostId, bundle);
+    List<Long> appliedIds = requireAppliedSlots(bundleId, expectedSlotIds);
 
+    Instant dueAt = now.plus(PaymentStarter.PAYMENT_TIME_LIMIT);
+    if (participationRepository.acceptBundleIfApplied(bundleId, dueAt, now) != appliedIds.size()) {
+      // 잠금을 쥔 채 판정했으므로 여기 오면 내부 불변식 위반이다 — 롤백해 일부만 넘어간 묶음을 남기지 않는다.
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    participationBundleDomainService.assignDueAt(bundleId, dueAt, now);
+    eventPublisher.publishEvent(new ExtraAcceptedEvent(bundleId, appliedIds));
+  }
+
+  /**
+   * 개최자가 진행 확정 뒤 추가 신청 묶음을 <b>한 번에</b> 거절한다 (APPLIED → CANCELLED, {@code HOST_REJECTED}). 묶음이 닫히고 그
+   * 자리는 다시 빈다. 대조와 오류는 {@link #accept} 와 같다.
+   */
+  @Transactional
+  public void reject(final Long hostId, final Long bundleId, final List<Long> expectedSlotIds) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle = getBundle(bundleId);
+    lockConfirmedForExtraDecision(hostId, bundle);
+    List<Long> appliedIds = requireAppliedSlots(bundleId, expectedSlotIds);
+
+    if (participationRepository.rejectBundleIfApplied(bundleId, now) != appliedIds.size()) {
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    participationBundleDomainService.closeIfEmpty(bundleId, now);
+    eventPublisher.publishEvent(new ExtraRejectedEvent(bundleId, appliedIds));
+  }
+
+  /**
+   * 개최자가 진행 확정 뒤 수락한 추가 묶음을 「제외」한다 — 입금 기한(수락 + 24시간)이 지나도록 입금 확인이 안 된 묶음의 입금 대기·「보냈어요」
+   * 슬롯을 {@code HOST_RELEASED} 로 취소하고 묶음을 닫는다. 그 자리는 다시 비고, 참여자에게 참여 취소 안내가 간다.
+   *
+   * <p>판정({@link BundleReleasability})으로 사유를 가려 오류 코드로 바꾸고, 실제 차단은 CAS 가 한다. 판정은 관리 응답의 {@code
+   * releasability} 와 같다.
+   *
+   * <p>분철 행이 첫 잠금이다 — 같은 묶음의 입금 확인과 분철 행 앞에서 한 줄로 서서, 어느 쪽이 이기든 하나만 반영된다(확인이 이기면
+   * BCH-135, 「제외」가 이기면 확인이 BCH-116).
+   *
+   * @return 이 호출이 실제로 취소한 슬롯 id
+   */
+  @Transactional
+  public List<Long> release(final Long hostId, final Long bundleId) {
+    final Instant now = Instant.now(clock);
+    ParticipationBundle bundle = getBundle(bundleId);
+    Buncheol buncheol = lockForHost(hostId, bundle);
+
+    // 🔴 잠금 조회로 판정한다. 확정 슬롯 검사를 CAS 서브쿼리에 넣을 수 없고(MySQL error 1093), 이 잠금이 입금 확인 CAS 를 막는다.
+    requireReleasable(
+        BundleReleasability.of(
+            buncheol.getStatus(),
+            bundle,
+            participationRepository.findAllByBundleIdForUpdate(bundleId),
+            now));
+
+    if (participationRepository.releaseBundleIfDue(bundleId, now) == 0) {
+      // 판정을 통과했는데 0행이면 그 사이 상태가 바뀐 것이다 — 화면을 새로 고치게 한다.
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+    participationBundleDomainService.closeIfEmpty(bundleId, now);
+
+    // CAS 뒤에 이 트랜잭션이 실제로 취소한 슬롯을 고른다(사유와 같은 now 로 쓴 취소 시각). CAS 전 목록으로 만들면 그 사이 바뀐 슬롯이
+    // 섞여 알림이 엉뚱한 슬롯을 "기한이 지나 취소됐어요" 로 안내한다.
+    List<Long> releasedIds =
+        participationRepository.findAllByBundleIds(List.of(bundleId)).stream()
+            .filter(p -> p.getCancelReason() == ParticipationCancelReason.HOST_RELEASED)
+            .filter(p -> writtenAt(p.getCancelledAt(), now))
+            .map(Participation::getId)
+            .toList();
+    eventPublisher.publishEvent(new BundleReleasedEvent(bundleId, releasedIds));
+    return releasedIds;
+  }
+
+  /** 판정 → 오류 코드. switch <b>식</b>이라 사유가 늘면 컴파일 오류로 잡힌다(fail-open 방지). */
+  private static void requireReleasable(final BundleReleasability releasability) {
+    ErrorCode errorCode =
+        switch (releasability) {
+          case RELEASABLE -> null;
+          case BUNCHEOL_NOT_CONFIRMED, NOT_ACCEPTED -> ErrorCode.BUNDLE_RELEASE_NOT_ALLOWED;
+          case BEFORE_DUE -> ErrorCode.BUNDLE_RELEASE_BEFORE_DUE;
+          case HAS_CONFIRMED -> ErrorCode.BUNDLE_RELEASE_HAS_CONFIRMED;
+          case ALREADY_CLOSED -> ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID;
+        };
+    if (errorCode != null) {
+      throw new BusinessException(errorCode);
+    }
+  }
+
+  private ParticipationBundle getBundle(final Long bundleId) {
+    return participationBundleDomainService
+        .findById(bundleId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.BUNDLE_NOT_FOUND));
+  }
+
+  // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate). 운영진 분철은 잠근 뒤 BCH-084 — 묶음 입금 확인과 같은 꼴이다.
+  private Buncheol lockForHost(final Long hostId, final ParticipationBundle bundle) {
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(bundle.getBuncheolId());
+    buncheol.validateOwner(hostId);
+    if (buncheol.isStaff()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    return buncheol;
+  }
+
+  // 수락·거절은 진행 확정 분철에서만 있다. 모집 중 신청(APPLIED)은 입금 단계 시작이 넘긴다.
+  private void lockConfirmedForExtraDecision(final Long hostId, final ParticipationBundle bundle) {
+    if (lockForHost(hostId, bundle).getStatus() != BuncheolStatus.CONFIRMED) {
+      throw new BusinessException(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+    }
+  }
+
+  // 잠금 조회로 묶음의 수락 전 슬롯을 고르고 화면이 본 목록과 집합으로 대조한다.
+  private List<Long> requireAppliedSlots(final Long bundleId, final List<Long> expectedSlotIds) {
+    List<Long> appliedIds =
+        participationRepository.findAllByBundleIdForUpdate(bundleId).stream()
+            .filter(p -> p.getStatus() == ParticipationStatus.APPLIED)
+            .map(Participation::getId)
+            .sorted()
+            .toList();
+    if (appliedIds.isEmpty()) {
+      throw new BusinessException(ErrorCode.BUNDLE_ACCEPT_NOT_ALLOWED);
+    }
+    if (!Set.copyOf(appliedIds).equals(Set.copyOf(expectedSlotIds))) {
+      throw new BusinessException(ErrorCode.BUNDLE_SLOTS_CHANGED);
+    }
+    return appliedIds;
+  }
 
   /**
    * 개최자가 묶음의 입금을 <b>한 번에</b> 확인한다 (docs/70 결정 6 — all-or-nothing).
@@ -135,6 +283,10 @@ public class ParticipationBundleService {
    * <p>이 묶음으로 미확인이 0 이 되면 같은 트랜잭션에서 분철을 진행 확정한다({@link BuncheolConfirmer}) — 확인된 묶음마다 배송이
    * 생기고 진행확정 알림이 간다. 진행 확정이 실패하면(배송지 없음 등) 이 입금 확인도 함께 되돌린다. 확인만 남기면 "모두 확인됐는데 확정이
    * 안 된" 분철이 생긴다.
+   *
+   * <p>진행 확정 뒤 추가 묶음이면(잠근 분철이 CONFIRMED) 같은 트랜잭션에서 <b>그 묶음의 배송을 바로 만들고</b> 이 묶음 참여자에게만
+   * 진행 확정 안내를 보낸다 — 운송장 칸이 열린다. 입금 확인 안내({@link BundlePaymentConfirmedEvent})는 "진행 확정되면 다시 알려
+   * 드릴게요" 라는 약속이라 이미 진행 확정된 분철에서는 보내지 않는다. 응답의 {@code buncheolConfirmed} 는 false 다.
    *
    * <p>🔴 READ COMMITTED 다({@link BuncheolConfirmer} 계약). 분철 행 잠금 앞에서 묶음을 일반 조회하므로, REPEATABLE READ 면 그
    * 스냅샷이 남아 잠금을 기다리는 사이 다른 탭에서 확인된 묶음의 참여자가 진행확정 알림 대상(일반 조회)에서 빠진다. 판단(대조, 다시 세기,
@@ -158,12 +310,11 @@ public class ParticipationBundleService {
 
     // 잠금 조회로 앞세운다 — all-or-nothing 판정을 CAS 서브쿼리로 넣을 수 없고(MySQL error 1093),
     // 락이 있어야 판정과 UPDATE 사이에 참여자의 자발 취소·마킹이 끼어들지 못한다.
-    List<Long> payableIds =
+    List<Participation> payable =
         participationRepository.findAllByBundleIdForUpdate(bundleId).stream()
             .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
-            .map(Participation::getId)
-            .sorted()
             .toList();
+    List<Long> payableIds = payable.stream().map(Participation::getId).sorted().toList();
     if (payableIds.isEmpty()) {
       throw new BusinessException(ErrorCode.BUNDLE_CONFIRM_NOT_ALLOWED);
     }
@@ -176,6 +327,13 @@ public class ParticipationBundleService {
     if (confirmed != payableIds.size()) {
       // 락을 쥔 채 판정했으므로 여기 오면 내부 불변식 위반이다 — 롤백해 부분 확정을 남기지 않는다.
       throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+
+    if (buncheol.getStatus() == BuncheolStatus.CONFIRMED) {
+      // 묶음당 배송 1개 — 두 번째 슬롯부터는 DeliverySnapshotCreator 가 건너뛴다. READ COMMITTED 라 배송 유무 조회가 최신이다.
+      payable.forEach(deliverySnapshotCreator::create);
+      eventPublisher.publishEvent(new BuncheolConfirmedEvent(bundle.getBuncheolId(), payableIds));
+      return new BundleConfirmResult(payableIds, false);
     }
 
     eventPublisher.publishEvent(new BundlePaymentConfirmedEvent(bundleId, payableIds));

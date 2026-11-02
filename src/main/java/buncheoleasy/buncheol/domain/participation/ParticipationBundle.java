@@ -23,21 +23,19 @@ import lombok.NoArgsConstructor;
  * 죽었다 (docs/62 M-01). prod 실사에서 실제로 확인됐다 — 다세대 그룹 3건이 배송비 최대 3,000 / 합계 6,000 이라 사람 기준으로 묶으면
  * 9,000원이 사라진다 (docs/70 §12). <b>값이 행에 살면 그 행이 죽을 때 값도 죽는다</b> 는 것이 이 테이블의 존재 이유다.
  *
- * <p><b>경계</b> — 묶음은 {@code (분철, 사람, 결제 사이클)} 단위다. 추가 모집분은 <b>새 묶음</b>이라 기존 묶음에 섞이지 않는다 (docs/70
- * 결정 2). 그래서 한 묶음 안의 슬롯은 상태가 갈리지 않고, 「보냈어요」·입금확인이 전부 묶음 단위로 성립한다 (docs/71 §1). 추가 모집은
- * 회원 개최 단순화(P0-2)로 없어졌고 이 경계는 그 전에 생긴 묶음을 읽기 위해 남는다.
+ * <p><b>경계</b> — 묶음은 {@code (분철, 사람, 결제 사이클)} 단위다. 진행 확정 뒤 추가 신청은 <b>새 묶음</b>이라 원래 묶음에 섞이지
+ * 않는다(원래 묶음은 입금 확인이 끝나 배송이 이미 생겼다). 같은 사람이 수락 전에 멤버를 더 고르면 그 수락 전 추가 묶음에 붙는다 — 모집 중
+ * 신청이 살아 있는 신청 묶음에 붙는 것과 같은 규칙이다. 그래서 한 묶음 안의 슬롯은 상태가 갈리지 않고, 수락·「보냈어요」·입금확인이 전부
+ * 묶음 단위로 성립한다 (docs/71 §1). 추가 신청으로 열린 묶음은 {@code is_extra} 로 표시한다.
  *
- * <p>⚠️ <b>"사이클" 이 추가 모집끼리를 묶는다는 뜻은 아니다 — 추가 모집분은 슬롯마다 새 묶음이다.</b> 같은 입금 수집중 창에서 같은
- * 사람이 두 번 신청했으면 묶음이 2개이고, 배송비 재부과가 붙었으면 배송비도 2회다. 각 추가 모집 슬롯이 <b>개별 24h 기한</b>으로 따로
- * 진입하고 이체도 따로 했기 때문이다. 데이터만으로는 "한 번에 신청했는지" 를 알 수 없어 <b>쪼개는 쪽이 보수적</b>이다(합쳐 놓으면 서로 다른 두
- * 이체가 한 묶음에 섞여 되돌릴 수 없다 — 백필 STEP 3 도 같은 이유로 행별 1:1이다). 실측 prod 0건 · staging 1건이고, 화면과 청구가
- * 일치하므로 수용한다 (docs/80 §3-6 알려진 한계). 자동 병합은 규칙이 훨씬 복잡해져 기각됐다.
+ * <p>⚠️ P0-2 이전의 옛 추가 모집분은 <b>슬롯마다 새 묶음</b>이다(각 슬롯이 개별 24h 기한으로 따로 진입하고 이체도 따로 했다). 데이터만으로는
+ * "한 번에 신청했는지" 를 알 수 없어 백필도 행별 1:1로 쪼갰다(docs/80 §3-6 알려진 한계). 그 묶음은 {@code is_extra} 가 0 이다.
  *
  * <p>📌 {@code findActiveByBuncheolIdAndParticipantId}·{@code findAllByBuncheolId}·{@link #isActive()} 는
  * 아직 프로덕션 미사용이다(P3 화면이 쓸 자리). {@code findById} 는 P2-c 의 {@code findByParticipation} 이 쓴다.
  *
- * <p><b>활성 묶음 유니크는 없다</b> (docs/71 §8-3). 추가 모집분이 새 묶음이라 한 사람이 한 분철에 활성 묶음 2개를 가진 기록이 있을 수
- * 있기 때문이다. 중복 방지는 앱 가드가 하고, LEGACY 1인 1슬롯 보호는 {@code
+ * <p><b>활성 묶음 유니크는 없다</b> (docs/71 §8-3). 추가 신청분이 새 묶음이라 한 사람이 한 분철에 활성 묶음 2개를 가질 수 있기
+ * 때문이다. 중복 방지는 앱 가드가 하고, LEGACY 1인 1슬롯 보호는 {@code
  * participations.uq_participations_legacy_active_participant} 가 그대로 계속한다.
  *
  * <p><b>P2-c 완료</b> — 이 엔티티가 환불 계좌·입금자명의 <b>정본</b>이다. 응답·알림·어드민이 전부 여기서 읽고,
@@ -84,6 +82,10 @@ public class ParticipationBundle extends TimestampedEntity {
   @Column(name = "closed_at")
   private Instant closedAt;
 
+  // 진행 확정 뒤 추가 신청으로 열린 묶음인가. 열 때 정하고 바꾸지 않는다. 화면 표시만 읽고 판정·전이는 읽지 않는다.
+  @Column(name = "is_extra", nullable = false, updatable = false)
+  private boolean extra;
+
   /**
    * 새 묶음을 연다. 배송지·배송비·환불계좌는 <b>참여 시점 스냅샷</b>이라 생성 후 바뀌지 않는다({@code
    * updatable = false}).
@@ -103,6 +105,21 @@ public class ParticipationBundle extends TimestampedEntity {
       final long shippingFee,
       final RefundAccount refundAccount,
       final Instant dueAt) {
+    return open(buncheolId, participantId, shippingAddressId, shippingFee, refundAccount, dueAt, false);
+  }
+
+  /**
+   * {@link #open(Long, Long, Long, long, RefundAccount, Instant)} 에 「추가 신청으로 열린 묶음」 표시를 더한다. 표시는 열 때 정하고
+   * 바꾸지 않는다.
+   */
+  public static ParticipationBundle open(
+      final Long buncheolId,
+      final Long participantId,
+      final Long shippingAddressId,
+      final long shippingFee,
+      final RefundAccount refundAccount,
+      final Instant dueAt,
+      final boolean extra) {
     if (buncheolId == null || participantId == null || refundAccount == null) {
       throw new BusinessException(ErrorCode.PARTICIPATION_REQUIRED_FIELD_MISSING);
     }
@@ -113,6 +130,7 @@ public class ParticipationBundle extends TimestampedEntity {
     bundle.shippingFee = shippingFee;
     bundle.refundAccount = refundAccount;
     bundle.dueAt = dueAt;
+    bundle.extra = extra;
     return bundle;
   }
 

@@ -13,13 +13,16 @@ import java.util.List;
  *
  * <p>{@code participationId} 는 <b>첫 슬롯</b>이고 {@code participationIds} 가 전체다. 단수 필드를 남긴 것은
  * 구버전 클라이언트 호환 때문이다.
+ *
+ * <p>{@code extra} 는 진행 확정 뒤 추가 신청이었는지다. 서비스 안에서 개최자 알림을 고르는 데만 쓰고 응답에는 싣지 않는다.
  */
 public record ParticipateResult(
     Long participationId,
     List<Long> participationIds,
     long totalAmount,
     Instant dueAt,
-    BankAccount hostAccount) {
+    BankAccount hostAccount,
+    boolean extra) {
 
   public static ParticipateResult single(
       final Long participationId,
@@ -27,6 +30,12 @@ public record ParticipateResult(
       final Instant dueAt,
       final BankAccount hostAccount) {
     return new ParticipateResult(
-        participationId, List.of(participationId), totalAmount, dueAt, hostAccount);
+        participationId, List.of(participationId), totalAmount, dueAt, hostAccount, false);
+  }
+
+  /** 추가 신청 한 슬롯. 수락 전이라 계좌·기한이 없다. */
+  public static ParticipateResult extraApplied(final Long participationId, final long totalAmount) {
+    return new ParticipateResult(
+        participationId, List.of(participationId), totalAmount, null, null, true);
   }
 }

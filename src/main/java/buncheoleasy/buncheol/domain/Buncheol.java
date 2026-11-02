@@ -113,6 +113,10 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
   })
   private BankAccount paymentAccount;
 
+  // 회원 개최 추가 모집 스위치. 개최자가 켜고 끈다. 지금 추가 신청을 받는지는 이 값만으로 정하지 않는다(진행 확정·종료 전도 봐야 한다).
+  @Column(name = "extra_recruit_open", nullable = false)
+  private boolean extraRecruitOpen;
+
   public static Buncheol create(final Long hostId, final BuncheolParams params, final Instant now) {
     return new Buncheol(hostId, params, now);
   }
@@ -204,15 +208,54 @@ public class Buncheol extends TimestampedEntity implements Cursorable {
    * 지금 이 분철이 빈 슬롯에 신규 참여를 받는가. 참여 가드와 상세 조회의 공석 표시(docs/53 Q-14)가 같은 술어를 보게 하려고 도메인에 둔다 — 두 곳이
    * 갈리면 "화면엔 신청 가능한데 신청은 409" 가 다시 생긴다.
    *
-   * <p>운영진 분철과 회원 개최 모두 모집중·마감 전에만 받는다({@link #validateRecruiting} 과 같은 조건). 입금 단계가 시작되면
-   * 빈 자리는 「마감」이고 자리 빼기·넣기·가격 바꾸기도 닫힌다.
+   * <p>모집중·마감 전에는 운영진 분철과 회원 개최 모두 받는다({@link #validateRecruiting} 과 같은 조건). 진행 확정 뒤에는 회원 개최가
+   * 추가 모집 중일 때만 받는다({@link #isExtraRecruiting}). 입금 단계에는 받지 않는다. 자리 빼기·넣기·가격 바꾸기도 같은 구간에서만 열린다.
+   *
+   * @param ended 「종료」(모든 배송 도착) 여부. DB 판정이라 호출부가 넘긴다 — {@link #needsEndedCheck()} 가 false 면 결과에 쓰이지 않아
+   *     조회 없이 false 를 넘겨도 된다
    */
-  public boolean acceptsNewParticipation(final Instant now) {
+  public boolean acceptsNewParticipation(final Instant now, final boolean ended) {
     return switch (status) {
       case RECRUITING -> deadline.isAfter(now);
+      case CONFIRMED -> isExtraRecruiting(ended);
       // 신청이 409(BCH-060) 로 막히는 상태들. HOST_CANCELLED 는 상세 조회 자체가 404 다.
-      case PAYMENT_COLLECTING, CONFIRMED, CANCELLED, HOST_CANCELLED -> false;
+      case PAYMENT_COLLECTING, CANCELLED, HOST_CANCELLED -> false;
     };
+  }
+
+  /**
+   * 지금 추가 신청을 받는가 — 진행 확정된 회원 개최이고, 개최자가 스위치를 켰고, 「종료」 전이다. 상태 값으로 저장하지 않고 그때그때 판정한다.
+   *
+   * @param ended 「종료」 여부. DB 판정이라 호출부가 넘긴다
+   */
+  public boolean isExtraRecruiting(final boolean ended) {
+    return needsEndedCheck() && !ended;
+  }
+
+  /** 추가 모집 판정에 「종료」 여부가 필요한가. 이때만 호출부가 종료 판정을 조회한다(운영진 분철과 스위치가 꺼진 분철은 조회하지 않는다). */
+  public boolean needsEndedCheck() {
+    return status == BuncheolStatus.CONFIRMED && !isStaff() && extraRecruitOpen;
+  }
+
+  /**
+   * 추가 모집 스위치를 켜거나 끈다. 켜기는 진행 확정된 회원 개최가 「종료」 전일 때만 된다(BCH-131). 끄기는 언제든 된다 — 새 신청만 막고,
+   * 이미 들어온 신청은 그대로 수락·거절할 수 있다.
+   *
+   * <p>입금 계좌 스냅샷이 비어 있어도 켜지 않는다(BCH-131). 수락 안내와 참여 내역이 이 계좌를 보여 주므로, 비어 있으면 추가 참여자가 입금할
+   * 길이 없다. 지금 흐름의 진행 확정은 입금 단계 시작 때 늘 스냅샷을 찍어 옛 흐름 분철에서만 생길 수 있다.
+   *
+   * <p>호출부가 분철 행을 잠근 뒤 부른다. 이 칸은 다른 CAS 가 쓰지 않아 더티체킹으로 쓴다({@code @DynamicUpdate} 라 이 칸만 나간다).
+   *
+   * @param ended 「종료」 여부. 켜기에서만 본다
+   */
+  public void changeExtraRecruit(final boolean open, final boolean ended) {
+    if (isStaff()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
+    if (open && (status != BuncheolStatus.CONFIRMED || ended || paymentAccount == null)) {
+      throw new BusinessException(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+    }
+    this.extraRecruitOpen = open;
   }
 
   public void validateRecruiting(final Instant now) {

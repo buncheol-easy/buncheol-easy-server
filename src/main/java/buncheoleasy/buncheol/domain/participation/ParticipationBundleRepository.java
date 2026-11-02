@@ -46,6 +46,9 @@ public interface ParticipationBundleRepository {
    */
   boolean closeIfNoActiveSlots(Long bundleId, Instant now);
 
+  /** 묶음 단건 잠금 읽기(FOR SHARE) — 최신 커밋을 본다. 호출 측 {@code @Transactional} 필수. */
+  Optional<ParticipationBundle> findByIdForShare(Long id);
+
   /**
    * 분철의 묶음 중 활성 슬롯이 없는 것을 일괄로 닫는다 (분철 취소 cascade·자동 마감용). 반환은 닫힌 묶음 수.
    *
@@ -56,6 +59,9 @@ public interface ParticipationBundleRepository {
 
   /** 입금 단계 시작 때 분철의 활성 묶음에 입금 기한을 일괄로 채운다 (기한 없이 열린 C2C 신청 묶음 대상). 반환은 채워진 묶음 수. */
   int assignDueAtByBuncheolId(Long buncheolId, Instant dueAt, Instant now);
+
+  /** 묶음 하나에 입금 기한을 채운다(추가 신청 수락). 열린 묶음이고 기한이 비어 있을 때만. 반환은 영향 행 수. */
+  int assignDueAt(Long bundleId, Instant dueAt, Instant now);
 
   /** 「보냈어요」 시각을 묶음에 기록한다 — 정본. 자리 칸은 사본이고 나중에 제거한다. 반환은 영향 행 수. */
   int markPaymentSent(Long bundleId, Instant now);

@@ -329,6 +329,8 @@ public class MyParticipationQueryService {
             : null,
         collecting
             ? activeSlotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue()
-            : null);
+            : null,
+        ParticipationBundleDomainService.extraOf(bundleById, participation),
+        participation.getCreatedAt());
   }
 }

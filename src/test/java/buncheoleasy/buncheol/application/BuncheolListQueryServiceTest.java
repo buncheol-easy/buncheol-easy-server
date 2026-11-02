@@ -190,6 +190,60 @@ class BuncheolListQueryServiceTest {
     }
 
     @Test
+    void 추가_모집_중인_진행확정_분철은_남은_멤버를_싣고_extraRecruiting_이_true_다() {
+      Buncheol confirmed =
+          confirmedBuncheol(10L, 100L, "확정 분철", Instant.parse("2026-05-15T08:00:00Z"));
+      setField(confirmed, "flowType", FlowType.C2C);
+      setField(confirmed, "extraRecruitOpen", true);
+      Buncheol ended =
+          confirmedBuncheol(11L, 100L, "끝난 분철", Instant.parse("2026-05-14T08:00:00Z"));
+      setField(ended, "flowType", FlowType.C2C);
+      setField(ended, "extraRecruitOpen", true);
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(confirmed, ended));
+      given(buncheolRepository.findEndedIds(List.of(10L, 11L))).willReturn(Set.of(11L));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L, 11L)))
+          .willReturn(List.of());
+      given(participationRepository.findActiveBuncheolMemberIds(List.of(10L, 11L)))
+          .willReturn(List.of(501L));
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L, 11L), Set.of(501L)))
+          .willReturn(
+              new BuncheolMemberNameResolver.MemberNames(
+                  Map.of(10L, List.of("민지", "하니"), 11L, List.of("해린")),
+                  Map.of(10L, List.of("하니"), 11L, List.of("해린"))));
+      given(buncheolBookmarkRepository.findBookmarkedBuncheolIds(1L, List.of(10L, 11L)))
+          .willReturn(Set.of());
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).extraRecruiting()).isTrue();
+      assertThat(result.items().get(0).availableMemberNames()).containsExactly("하니");
+      assertThat(result.items().get(1).extraRecruiting()).isFalse();
+      assertThat(result.items().get(1).availableMemberNames()).isEmpty();
+    }
+
+    @Test
+    void 추가_모집을_켠_분철이_없으면_종료_판정에_빈_목록을_넘긴다() {
+      Buncheol confirmed =
+          confirmedBuncheol(10L, 100L, "확정 분철", Instant.parse("2026-05-15T08:00:00Z"));
+      setField(confirmed, "flowType", FlowType.C2C);
+      given(buncheolRepository.search(any(), any(), anyInt())).willReturn(List.of(confirmed));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "뉴진스")));
+      given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+      given(buncheolMemberNameResolver.resolveNames(List.of(10L), Set.of()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              1L, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items().get(0).extraRecruiting()).isFalse();
+      verify(buncheolRepository).findEndedIds(List.of());
+    }
+
+    @Test
     void 운영진_분철의_배송비가_모두_0원일_때만_freeShippingEventTarget_true_다() {
       Buncheol free =
           buncheol(

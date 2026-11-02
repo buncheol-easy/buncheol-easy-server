@@ -50,6 +50,7 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
+import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.lang.reflect.RecordComponent;
@@ -2449,6 +2450,187 @@ class BuncheolServiceTest {
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
+    }
+  }
+
+  @Nested
+  @DisplayName("추가 모집 스위치 테스트")
+  class ChangeExtraRecruitTest {
+
+    private Buncheol givenLocked(final FlowType flowType, final BuncheolStatus status) {
+      Buncheol buncheol = slotEditBuncheol(flowType, status);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      return buncheol;
+    }
+
+    @Test
+    void 진행확정_회원_개최가_종료_전이면_켠다() {
+      Buncheol buncheol = givenLocked(FlowType.C2C, BuncheolStatus.CONFIRMED);
+      setField(buncheol, "paymentAccount", BankAccount.of("국민", "12345678", "개최자"));
+      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(false);
+
+      buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, true);
+
+      assertThat(buncheol.isExtraRecruitOpen()).isTrue();
+    }
+
+    @Test
+    void 종료된_분철은_켜지_않는다() {
+      Buncheol buncheol = givenLocked(FlowType.C2C, BuncheolStatus.CONFIRMED);
+      setField(buncheol, "paymentAccount", BankAccount.of("국민", "12345678", "개최자"));
+      given(buncheolDomainService.isEnded(BUNCHEOL_ID)).willReturn(true);
+
+      assertThatThrownBy(() -> buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, true))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = BuncheolStatus.class,
+        names = {"RECRUITING", "PAYMENT_COLLECTING", "CANCELLED", "HOST_CANCELLED"})
+    void 진행확정이_아니면_켜지_않는다(final BuncheolStatus status) {
+      givenLocked(FlowType.C2C, status);
+
+      assertThatThrownBy(() -> buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, true))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.EXTRA_RECRUIT_NOT_ALLOWED);
+    }
+
+    @ParameterizedTest
+    @EnumSource(BuncheolStatus.class)
+    void 끄기는_종료_판정_없이_언제든_된다(final BuncheolStatus status) {
+      Buncheol buncheol = givenLocked(FlowType.C2C, status);
+      setField(buncheol, "extraRecruitOpen", true);
+
+      buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, false);
+
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+      then(buncheolDomainService).should(never()).isEnded(any());
+    }
+
+    @Test
+    void 개최자가_아니면_거부한다() {
+      Buncheol buncheol = givenLocked(FlowType.C2C, BuncheolStatus.CONFIRMED);
+
+      assertThatThrownBy(
+              () -> buncheolService.changeExtraRecruit(OTHER_USER_ID, BUNCHEOL_ID, true))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
+      assertThat(buncheol.isExtraRecruitOpen()).isFalse();
+    }
+
+    @Test
+    void 운영진_분철은_범용_플로우_가드로_거부한다() {
+      givenLocked(FlowType.LEGACY, BuncheolStatus.CONFIRMED);
+
+      assertThatThrownBy(() -> buncheolService.changeExtraRecruit(HOST_ID, BUNCHEOL_ID, true))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+      then(buncheolDomainService).should(never()).isEnded(any());
+    }
+  }
+
+  @Nested
+  @DisplayName("진행 확정 뒤 추가 모집 중 자리 편집 테스트")
+  class ExtraRecruitSlotEditTest {
+
+    private static final Long SLOT_ID = 7L;
+    private static final Long OTHER_SLOT_ID = 8L;
+
+    // 원래 마감은 이미 지났다 — 추가 모집 판정은 마감을 보지 않는다.
+    private Buncheol givenConfirmed(final boolean extraRecruitOpen, final boolean ended) {
+      Buncheol buncheol = slotEditBuncheol(FlowType.C2C, BuncheolStatus.CONFIRMED);
+      setField(buncheol, "deadline", NOW.minus(2, ChronoUnit.DAYS));
+      setField(buncheol, "extraRecruitOpen", extraRecruitOpen);
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      // 조회 여부(스위치가 꺼지면 묻지 않음)는 BuncheolDomainServiceTest 가 본다. 여기서는 판정 결과만 심는다.
+      lenient()
+          .when(buncheolDomainService.isEndedForExtraRecruit(buncheol))
+          .thenReturn(extraRecruitOpen && ended);
+      return buncheol;
+    }
+
+    @Test
+    void 켜져_있으면_빼기가_되고_최소_인원과_입금_단계는_건드리지_않는다() {
+      givenConfirmed(true, false);
+      given(buncheolMemberDomainService.findAllByBuncheolIdForUpdate(BUNCHEOL_ID))
+          .willReturn(List.of(slot(SLOT_ID, MEMBER_ID), slot(OTHER_SLOT_ID, MEMBER_ID + 1)));
+      given(buncheolMemberDomainService.removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID)).willReturn(true);
+
+      buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID);
+
+      then(buncheolMemberDomainService).should().removeIfUnreferenced(SLOT_ID, BUNCHEOL_ID);
+      then(buncheolDomainService).should(never()).lowerMinHeadcountToSlotCount(any(), anyInt(), any());
+      then(paymentStarter).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 켜져_있으면_넣기가_된다() {
+      Buncheol buncheol = givenConfirmed(true, false);
+      given(buncheolMemberDomainService.findInBuncheol(BUNCHEOL_ID, MEMBER_ID))
+          .willReturn(Optional.empty());
+      given(buncheolMemberDomainService.addOpenSlot(BUNCHEOL_ID, MEMBER_ID, 15_000L))
+          .willReturn(slot(SLOT_ID, MEMBER_ID));
+
+      Long slotId =
+          buncheolService.addMember(
+              HOST_ID, BUNCHEOL_ID, new BuncheolMemberAddRequest(MEMBER_ID, 15_000L));
+
+      assertThat(slotId).isEqualTo(SLOT_ID);
+      then(groupDomainService)
+          .should()
+          .getGroupMembersByIdsInGroup(buncheol.getGroupId(), List.of(MEMBER_ID));
+    }
+
+    @Test
+    void 켜져_있으면_빈_자리_가격을_바꾼다() {
+      givenConfirmed(true, false);
+      given(buncheolMemberDomainService.changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L))
+          .willReturn(true);
+
+      buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L);
+
+      then(buncheolMemberDomainService).should().changePriceIfUnoccupied(SLOT_ID, BUNCHEOL_ID, 15_000L);
+    }
+
+    @Test
+    void 스위치가_꺼져_있으면_빼기_넣기_가격_모두_막는다() {
+      givenConfirmed(false, false);
+
+      assertSlotEditBlocked();
+    }
+
+    @Test
+    void 종료된_분철이면_스위치가_켜져_있어도_막는다() {
+      givenConfirmed(true, true);
+
+      assertSlotEditBlocked();
+    }
+
+    private void assertSlotEditBlocked() {
+      assertThatThrownBy(() -> buncheolService.removeMember(HOST_ID, BUNCHEOL_ID, SLOT_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      assertThatThrownBy(
+              () ->
+                  buncheolService.addMember(
+                      HOST_ID, BUNCHEOL_ID, new BuncheolMemberAddRequest(MEMBER_ID, 15_000L)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      assertThatThrownBy(
+              () -> buncheolService.changeMemberPrice(HOST_ID, BUNCHEOL_ID, SLOT_ID, 15_000L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      then(buncheolMemberDomainService).shouldHaveNoInteractions();
     }
   }
 

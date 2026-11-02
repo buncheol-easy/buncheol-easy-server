@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.domain.participation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.BDDMockito.given;
@@ -108,15 +109,53 @@ class ParticipationDomainServiceTest {
       then(participationRepository).shouldHaveNoInteractions();
     }
 
-    // 성사 확정 뒤 추가 모집은 별도 이체·별도 택배다 (docs/80 결정 11).
-    // 🔴 <b>조회 자체를 하지 않는다</b> — 추가 모집에서 상속은 구조적으로 불가능하므로 헛쿼리다.
+    // 입금 단계에는 신청 자체가 없다 — 조회하지 않는다.
     @Test
-    void 추가_모집이면_조회도_하지_않고_비어_있다() {
+    void 입금_단계면_조회도_하지_않고_비어_있다() {
       assertThat(
               participationDomainService.findInheritanceSource(
                   buncheol(true, BuncheolStatus.PAYMENT_COLLECTING), 100L))
           .isEmpty();
 
+      then(participationRepository).shouldHaveNoInteractions();
+    }
+
+    // 진행 확정 뒤에는 수락 전 추가 신청만 원본이다. 입금 확인된 원래 참여는 배송이 이미 생겨 같은 택배로 묶을 수 없다.
+    @Test
+    void 진행확정이면_수락_전_추가_신청만_잠금_읽기로_찾는다() {
+      Participation pending = newParticipation();
+      given(
+              participationRepository.findAppliedByBuncheolIdAndParticipantIdForShare(
+                  10L, pending.getParticipantId()))
+          .willReturn(List.of(pending));
+
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.CONFIRMED), pending.getParticipantId()))
+          .contains(pending);
+      then(participationRepository)
+          .should(never())
+          .findActiveByBuncheolIdAndParticipantIdForShare(any(), any());
+    }
+
+    @Test
+    void 진행확정의_목록_경로도_수락_전_추가_신청만_고른다() {
+      Participation confirmed = newParticipation();
+      setField(confirmed, "status", ParticipationStatus.CONFIRMED);
+      Participation pending = newParticipation();
+      setField(pending, "status", ParticipationStatus.APPLIED);
+      Long participantId = pending.getParticipantId();
+
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.CONFIRMED), participantId, List.of(confirmed)))
+          .isEmpty();
+      assertThat(
+              participationDomainService.findInheritanceSource(
+                  buncheol(true, BuncheolStatus.CONFIRMED),
+                  participantId,
+                  List.of(confirmed, pending)))
+          .containsSame(pending);
       then(participationRepository).shouldHaveNoInteractions();
     }
 

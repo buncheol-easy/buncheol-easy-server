@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberPriceRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
+import buncheoleasy.buncheol.dto.request.ExtraRecruitRequest;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.buncheol.dto.request.OpenChatUrlUpdateRequest;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
@@ -161,6 +162,16 @@ public class BuncheolController {
       @PathVariable final Long id,
       @Valid @RequestBody final OpenChatUrlUpdateRequest request) {
     buncheolService.updateOpenChatUrl(hostId, id, request.openChatUrl());
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 회원 개최 추가 모집 스위치. 켜 두면 진행 확정된 분철의 빈 자리에 추가 신청을 받는다. */
+  @PatchMapping("/{id}/extra-recruit")
+  public ResponseEntity<Void> changeExtraRecruit(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @Valid @RequestBody final ExtraRecruitRequest request) {
+    buncheolService.changeExtraRecruit(hostId, id, request.open());
     return ResponseEntity.noContent().build();
   }
 

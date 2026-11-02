@@ -3,8 +3,10 @@ package buncheoleasy.buncheol.presentation;
 import buncheoleasy.buncheol.application.participation.BundleConfirmResult;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.buncheol.dto.request.BundleConfirmRequest;
+import buncheoleasy.buncheol.dto.request.BundleSlotsRequest;
 import buncheoleasy.buncheol.dto.response.BundleConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BundlePaymentSentResponse;
+import buncheoleasy.buncheol.dto.response.BundleReleaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -43,6 +45,41 @@ public class ParticipationBundleController {
   }
 
   /**
+   * 개최자 추가 신청 수락 API — 진행 확정 뒤 수락 전 묶음을 <b>한 번에</b> 입금 대기로 넘긴다. 묶음 기한은 지금 + 24시간이다.
+   *
+   * <p>요청의 {@code expectedSlotIds} 에는 관리 응답에서 {@code acceptTarget} 이 {@code true} 인 그 묶음의 슬롯만 담는다.
+   */
+  @PostMapping("/{bundleId}/accept")
+  public ResponseEntity<Void> accept(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long bundleId,
+      @Valid @RequestBody final BundleSlotsRequest request) {
+    participationBundleService.accept(hostId, bundleId, request.expectedSlotIds());
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 개최자 추가 신청 거절 API — 수락 전 묶음을 <b>한 번에</b> 취소한다. 그 자리는 다시 빈다. 요청은 수락과 같다. */
+  @PostMapping("/{bundleId}/reject")
+  public ResponseEntity<Void> reject(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long bundleId,
+      @Valid @RequestBody final BundleSlotsRequest request) {
+    participationBundleService.reject(hostId, bundleId, request.expectedSlotIds());
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 개최자 「제외」 API — 진행 확정 뒤 수락한 추가 묶음이 입금 기한이 지나도록 입금 확인이 안 됐으면 그 묶음을 뺀다. 응답은 실제로 취소된
+   * 슬롯 id 다(화면이 사후 대조).
+   */
+  @PostMapping("/{bundleId}/release")
+  public ResponseEntity<BundleReleaseResponse> release(
+      @AuthenticationPrincipal final Long hostId, @PathVariable final Long bundleId) {
+    return ResponseEntity.ok(
+        new BundleReleaseResponse(bundleId, participationBundleService.release(hostId, bundleId)));
+  }
+
+  /**
    * 개최자 입금확인 API — 묶음의 확인 가능 슬롯을 <b>한 번에</b> 확정한다 (all-or-nothing).
    *
    * <p>부분 확인은 애초에 성립하지 않는다 — 확인 API 에 금액이 없어 시스템은 실입금액을 모르고, 개최자가
@@ -52,6 +89,7 @@ public class ParticipationBundleController {
    * 슬롯만 담는다. 서버의 실제 집합과 다르면 409 로 막는다 — 개최자가 보지 못한 슬롯까지 확정되면 안 된다.
    *
    * <p>이 묶음으로 분철의 미확인이 0 이 되면 같은 요청에서 진행 확정까지 하고 응답의 {@code buncheolConfirmed} 가 true 다.
+   * 진행 확정 뒤 추가 묶음이면 그 묶음의 배송을 만들고 {@code buncheolConfirmed} 는 false 다.
    */
   @PostMapping("/{bundleId}/confirm")
   public ResponseEntity<BundleConfirmResponse> confirmPayment(

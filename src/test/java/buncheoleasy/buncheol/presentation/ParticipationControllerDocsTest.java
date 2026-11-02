@@ -103,8 +103,8 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
 
                             **다중 슬롯 신청 (`buncheolMemberIds`)**
 
-                            - **C2C 분철의 모집중(RECRUITING) 구간에서만** 열린다. LEGACY 분철에 보내면 `409 BCH-084`,
-                              입금 단계가 시작된 분철이면 `409 BCH-060` 이다(신청 자체를 받지 않는다)
+                            - **C2C 분철의 모집중(RECRUITING) 구간과 진행 확정 뒤 추가 모집 중에만** 열린다. LEGACY 분철에 보내면
+                              `409 BCH-084`, 입금 단계가 시작된 분철이면 `409 BCH-060` 이다(신청 자체를 받지 않는다)
                             - **하나라도 실패하면 전체 롤백**이다. 3개 중 하나가 이미 팔렸으면 나머지 둘도 만들어지지
                               않는다 — 부분 성공을 화면에서 재구성하지 않아도 된다
                             - 배송비는 **첫 슬롯에만** 붙고 나머지는 0원이다(한 번의 이체·한 개의 택배). `amount` 는
@@ -150,7 +150,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 404 | `BCH-061` (`PARTICIPATION_MEMBER_NOT_FOUND`) | 해당 분철에 존재하지 않는 멤버 슬롯 |
                             | 409 | `BCH-122` (`PARTICIPATION_MEMBER_CLOSED`) | 개최자가 닫은 멤버 슬롯(상세 `saleStatus=CLOSED`). 다중 슬롯이면 전체가 실패한다 |
-                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집 중인 분철이 아님(마감 지남·입금 단계 시작·진행확정·취소) |
+                            | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 신청을 받는 분철이 아님(마감 지남·입금 단계 시작·추가 모집을 켜지 않았거나 「종료」된 진행확정·취소) |
                             | 409 | `BCH-128` (`BUNCHEOL_NOT_OPEN_YET`) | 예약 오픈 전인 운영진 분철에 코드 없이 참여 |
                             | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철에 다중 슬롯을 보냄 (C2C 전용) |
                             | 409 | `BCH-075` (`PARTICIPATION_ALREADY_JOINED_BUNCHEOL`) | 같은 분철에 이미 참여 중 (분철당 1회) |
@@ -211,6 +211,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     Instant confirmedAt = Instant.parse("2026-06-01T13:00:00Z");
+    Instant appliedAt = Instant.parse("2026-05-30T09:30:00Z");
     MyParticipationResponse confirmed =
         new MyParticipationResponse(
             500L,
@@ -248,7 +249,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.BLOCKED_BY_STATUS, null, null);
+            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false, appliedAt);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -280,7 +281,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null, false, appliedAt);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -439,7 +440,10 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .type(JsonFieldType.NUMBER)
                                 .description(
                                     "그 분철의 살아 있는 자리 수(같은 문구의 N). 입금 수집중 분철만, 그 밖은 null. buncheolMemberCount(열린 자리 수)와 다르다")
-                                .optional())
+                                .optional(),
+                            fieldWithPath("[].extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"),
+                            fieldWithPath("[].appliedAt")
+                                .description("참여(신청)가 만들어진 시각 (UTC ISO-8601). 참여 내역 카드의 \"신청 [시각]\" 표시용"))
                         .build())));
   }
 
@@ -468,7 +472,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED,
+            false,
+            Instant.parse("2026-05-30T09:30:00Z"));
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -564,7 +570,10 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                     화면은 이 값만 보고 취소 버튼을 노출하면 된다.
                                     CANCELLABLE: 취소 가능(회원 개최 신청 단계) |
                                     BLOCKED_BY_STATUS: 입금 단계 시작 이후(입금 대기·보냈어요·입금확인) — BCH-086 |
-                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""))
+                                    FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""),
+                            fieldWithPath("extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"),
+                            fieldWithPath("appliedAt")
+                                .description("참여(신청)가 만들어진 시각 (UTC ISO-8601)"))
                         .build())));
   }
 

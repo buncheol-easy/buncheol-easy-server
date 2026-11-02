@@ -21,6 +21,8 @@ import java.util.List;
  * 위한 필드다.
  *
  * <p>{@code opensAt} 은 예약 오픈 시각(UTC)으로, 공개 목록({@link BuncheolSummaryResponse})과 같은 값·같은 규칙이다.
+ *
+ * <p>{@code extraRecruiting} 은 지금 추가 신청을 받는지로, 공개 목록과 같은 값·같은 규칙이다.
  */
 public record MyBookmarkedBuncheolResponse(
     Long bookmarkId,
@@ -34,4 +36,5 @@ public record MyBookmarkedBuncheolResponse(
     List<String> availableMemberNames,
     boolean freeShippingEventTarget,
     Instant createdAt,
-    Instant opensAt) {}
+    Instant opensAt,
+    boolean extraRecruiting) {}

@@ -10,6 +10,7 @@ import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolAppliedBundleCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.ParticipationRepository;
@@ -79,6 +80,18 @@ public class MyHostedBuncheolQueryService {
                 Collectors.toMap(
                     BuncheolUnconfirmedParticipationCount::buncheolId,
                     BuncheolUnconfirmedParticipationCount::count));
+    // 「수락해 주세요」 배지용 수락 전 추가 신청 묶음 수. 진행 확정 분철만 모아 한 번에 센다(없으면 쿼리 없음).
+    Map<Long, Long> pendingAcceptCountByBuncheolId =
+        participationRepository
+            .countAppliedBundlesByBuncheolIds(
+                buncheols.stream()
+                    .filter(b -> b.getStatus() == BuncheolStatus.CONFIRMED)
+                    .map(Buncheol::getId)
+                    .toList())
+            .stream()
+            .collect(
+                Collectors.toMap(
+                    BuncheolAppliedBundleCount::buncheolId, BuncheolAppliedBundleCount::count));
     final Instant now = Instant.now(clock);
 
     // 「종료」 판정도 같은 방식으로 한 번에 묻는다. 끝날 수 있는 건 진행확정뿐이라 그 id 만 넘기고, 없으면 어댑터가
@@ -107,6 +120,7 @@ public class MyHostedBuncheolQueryService {
                     activeCountByBuncheolId,
                     confirmedCountByBuncheolId,
                     unconfirmedCountByBuncheolId,
+                    pendingAcceptCountByBuncheolId,
                     now,
                     endedIds,
                     groupNameById,
@@ -120,6 +134,7 @@ public class MyHostedBuncheolQueryService {
       final Map<Long, Long> activeCountByBuncheolId,
       final Map<Long, Long> confirmedCountByBuncheolId,
       final Map<Long, Long> unconfirmedCountByBuncheolId,
+      final Map<Long, Long> pendingAcceptCountByBuncheolId,
       final Instant now,
       final Set<Long> endedIds,
       final Map<Long, String> groupNameById,
@@ -148,6 +163,8 @@ public class MyHostedBuncheolQueryService {
             confirmedCount,
             unconfirmedCount,
             buncheol.getPaymentDueAt(),
-            now));
+            now),
+        buncheol.isExtraRecruitOpen(),
+        pendingAcceptCountByBuncheolId.getOrDefault(buncheol.getId(), 0L));
   }
 }

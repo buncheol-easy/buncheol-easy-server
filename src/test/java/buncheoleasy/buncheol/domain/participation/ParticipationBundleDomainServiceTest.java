@@ -15,11 +15,13 @@ import buncheoleasy.global.exception.domain.ErrorCode;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -94,6 +96,52 @@ class ParticipationBundleDomainServiceTest {
     InOrder inOrder = Mockito.inOrder(participationBundleRepository, participationRepository);
     inOrder.verify(participationBundleRepository).save(any());
     inOrder.verify(participationRepository).linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW);
+  }
+
+  @Test
+  void 추가_묶음_여부는_묶음에서_읽고_미연결_행은_거짓이다() {
+    ParticipationBundle extraBundle =
+        ParticipationBundle.open(BUNCHEOL_ID, PARTICIPANT_ID, 1L, 0L, REFUND_ACCOUNT, null, true);
+    Participation linked = participation();
+    setField(linked, "bundleId", NEW_BUNDLE_ID);
+    Participation unlinked = participation();
+
+    assertThat(
+            ParticipationBundleDomainService.extraOf(Map.of(NEW_BUNDLE_ID, extraBundle), linked))
+        .isTrue();
+    assertThat(ParticipationBundleDomainService.extraOf(Map.of(), linked)).isFalse();
+    assertThat(
+            ParticipationBundleDomainService.extraOf(Map.of(NEW_BUNDLE_ID, extraBundle), unlinked))
+        .isFalse();
+  }
+
+  @Test
+  void 추가_신청_표시는_새로_여는_묶음에_새긴다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW))
+        .willReturn(true);
+
+    participationBundleDomainService.attach(
+        participation, null, SHIPPING_ADDRESS_ID, 3000L, REFUND_ACCOUNT, null, true, NOW);
+
+    ArgumentCaptor<ParticipationBundle> saved = ArgumentCaptor.forClass(ParticipationBundle.class);
+    then(participationBundleRepository).should().save(saved.capture());
+    assertThat(saved.getValue().isExtra()).isTrue();
+  }
+
+  @Test
+  void 추가_신청_표시가_없는_기존_경로는_추가_묶음이_아니다() {
+    Participation participation = participation();
+    givenBundleSaved();
+    given(participationRepository.linkBundle(PARTICIPATION_ID, NEW_BUNDLE_ID, NOW))
+        .willReturn(true);
+
+    attach(participation, null);
+
+    ArgumentCaptor<ParticipationBundle> saved = ArgumentCaptor.forClass(ParticipationBundle.class);
+    then(participationBundleRepository).should().save(saved.capture());
+    assertThat(saved.getValue().isExtra()).isFalse();
   }
 
   @Test
@@ -262,6 +310,30 @@ class ParticipationBundleDomainServiceTest {
 
       assertThat(participationBundleDomainService.requireShippingAddressIdOf(participation))
           .isEqualTo(BUNDLE_ADDRESS_ID);
+    }
+
+    // 신청의 상속 원본은 앞 신청이 막 만든 묶음일 수 있어 잠금 읽기로 읽는다(일반 조회는 잠금 전 스냅샷).
+    @Test
+    void 상속할_배송지는_묶음을_잠금_읽기로_읽는다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findByIdForShare(BUNDLE_ID))
+          .willReturn(Optional.of(bundle(BUNDLE_ADDRESS_ID)));
+
+      assertThat(participationBundleDomainService.requireInheritedShippingAddressId(participation))
+          .isEqualTo(BUNDLE_ADDRESS_ID);
+      then(participationBundleRepository).should(never()).findById(any());
+    }
+
+    @Test
+    void 상속할_묶음이_보이지_않으면_이름을_가진_예외로_닫는다() {
+      Participation participation = linked();
+      given(participationBundleRepository.findByIdForShare(BUNDLE_ID)).willReturn(Optional.empty());
+
+      assertThatThrownBy(
+              () -> participationBundleDomainService.requireInheritedShippingAddressId(participation))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
     }
 
     private Participation linked() {

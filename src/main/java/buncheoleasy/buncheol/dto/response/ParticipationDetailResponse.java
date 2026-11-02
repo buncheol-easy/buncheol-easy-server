@@ -16,6 +16,10 @@ import java.time.Instant;
  *
  * <p>{@code cancellability} 는 자발 취소 가능 여부와 사유로, 취소 API 게이트와 같은 판정({@link
  * ParticipationCancellability#of})을 그대로 내려준다 (docs/56 S-1).
+ *
+ * <p>{@code extra} 는 이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지다.
+ *
+ * <p>{@code appliedAt} 은 이 참여가 만들어진 시각(신청 시각, UTC)이다.
  */
 public record ParticipationDetailResponse(
     Long participationId,
@@ -33,4 +37,6 @@ public record ParticipationDetailResponse(
     FlowType flowType,
     Instant paymentSentAt,
     String openChatUrl,
-    ParticipationCancellability cancellability) {}
+    ParticipationCancellability cancellability,
+    boolean extra,
+    Instant appliedAt) {}

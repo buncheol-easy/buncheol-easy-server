@@ -22,6 +22,14 @@ public interface ParticipationRepository {
    */
   boolean saveIfRecruitingAndOpen(Participation participation);
 
+  /**
+   * 회원 개최 분철이 진행 확정이고 추가 모집 스위치가 켜져 있을 때만 참여를 INSERT 한다 (원자적, 추가 신청). 「종료」 여부는 보지 않는다 —
+   * 호출부가 분철 행을 잠근 뒤 판정한다. 슬롯 점유 충돌 처리는 {@link #saveIfRecruiting} 과 동일.
+   *
+   * @return INSERT 된 경우 true, 진행 확정이 아니거나 스위치가 꺼져 있으면 false
+   */
+  boolean saveIfExtraRecruiting(Participation participation);
+
   Optional<Participation> findById(Long id);
 
   /** 내 참여 목록 (참여자별 최신순). */
@@ -78,6 +86,13 @@ public interface ParticipationRepository {
       Long buncheolId, Long participantId);
 
   /**
+   * 분철 내 참여자의 신청(APPLIED) 참여, 오래된 순 — 잠금 읽기(FOR SHARE). 진행 확정 분철에서는 수락 전 추가 신청이다. 잠금 이유는
+   * {@link #findActiveByBuncheolIdAndParticipantIdForShare} 와 같다. 호출 측 {@code @Transactional} 필수.
+   */
+  List<Participation> findAppliedByBuncheolIdAndParticipantIdForShare(
+      Long buncheolId, Long participantId);
+
+  /**
    * 여러 묶음에 속한 참여 전체 (취소분 포함). 페이지네이션된 목록에서 배송비 귀속을 정할 때, 그 페이지에 걸린 묶음들의 형제
    * 슬롯을 한 번에 읽는다 — 페이지 조각만으로 판정하면 배송비가 두 번 걷힌다 ({@code ShippingFeeAttribution}).
    */
@@ -118,6 +133,12 @@ public interface ParticipationRepository {
    */
   List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(List<Long> buncheolIds);
 
+  /**
+   * 여러 분철의 신청(APPLIED) <b>묶음</b> 수 집계 — 진행 확정 분철이면 수락 전 추가 신청 묶음 수다. 0 건인 분철은 결과에서 빠지므로 호출
+   * 측이 기본값 0 으로 채운다. 빈 목록이면 쿼리 없이 빈 결과다.
+   */
+  List<BuncheolAppliedBundleCount> countAppliedBundlesByBuncheolIds(List<Long> buncheolIds);
+
   /** 입금 만료가 임박/도과한 참여 폴링 (입금 만료 스케줄러용). status=AWAITING_PAYMENT, due_at <= now. */
   List<Participation> findOverduePaymentTargets(Instant now, int limit);
 
@@ -151,6 +172,29 @@ public interface ParticipationRepository {
    * @return 실제로 확정된 슬롯 수
    */
   int confirmBundleIfPayable(Long bundleId, Instant now);
+
+  /**
+   * 추가 신청 수락 — 묶음의 신청(APPLIED) 전부를 입금 대기로 넘기고 참여의 입금 기한을 채운다. 묶음 기한은 {@code
+   * ParticipationBundleRepository} 가 따로 채운다.
+   *
+   * @return 실제로 넘어간 슬롯 수
+   */
+  int acceptBundleIfApplied(Long bundleId, Instant dueAt, Instant now);
+
+  /**
+   * 추가 신청 거절 — 묶음의 신청(APPLIED) 전부를 {@code HOST_REJECTED} 로 취소한다. 묶음 닫기는 호출부가 한다.
+   *
+   * @return 실제로 취소된 슬롯 수
+   */
+  int rejectBundleIfApplied(Long bundleId, Instant now);
+
+  /**
+   * 개최자 「제외」 — 묶음 기한이 지났으면 그 묶음의 입금 대기·「보냈어요」 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다. 확정 슬롯
+   * 판정은 호출부가 잠금 조회로 한다(adapter javadoc).
+   *
+   * @return 실제로 취소된 슬롯 수. 0 이면 기한 전·닫힌 묶음·대상 없음
+   */
+  int releaseBundleIfDue(Long bundleId, Instant now);
 
   /**
    * C2C 참여자 자발 취소 CAS — APPLIED 에서만 USER_CANCELLED 로 전이 (docs/46 §5). 상태 집합은

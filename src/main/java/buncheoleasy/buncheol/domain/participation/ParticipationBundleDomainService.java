@@ -56,6 +56,24 @@ public class ParticipationBundleDomainService {
       final RefundAccount refundAccount,
       final Instant dueAt,
       final Instant now) {
+    attach(
+        participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, dueAt, false,
+        now);
+  }
+
+  /**
+   * {@link #attach(Participation, Long, Long, long, RefundAccount, Instant, Instant)} 에 「추가 신청으로 열린 묶음」 표시를 더한다.
+   * {@code extra} 는 새 묶음을 열 때만 쓰이고, 재사용하면 그 묶음의 값이 그대로다.
+   */
+  public void attach(
+      final Participation participation,
+      final Long reusableBundleId,
+      final Long shippingAddressId,
+      final long shippingFee,
+      final RefundAccount refundAccount,
+      final Instant dueAt,
+      final boolean extra,
+      final Instant now) {
     Long bundleId =
         reusableBundleId != null
             ? reusableBundleId
@@ -67,7 +85,8 @@ public class ParticipationBundleDomainService {
                         shippingAddressId,
                         shippingFee,
                         refundAccount,
-                        dueAt))
+                        dueAt,
+                        extra))
                 .getId();
 
     // 🔴 영향 행이 1이 아니면 멈춘다. 조용히 넘어가면 "참여는 있는데 묶음이 없는" 행이 남고, 그 행은
@@ -104,6 +123,27 @@ public class ParticipationBundleDomainService {
       return;
     }
     participationBundleRepository.closeIfNoActiveSlots(bundleId, now);
+  }
+
+  /**
+   * 추가 신청 수락 때 그 묶음의 입금 기한을 채운다. 호출부가 분철 행과 묶음 참여를 잠근 채 부르므로 1행이 아니면 내부 불변식 위반이다 —
+   * 롤백해 참여만 입금 대기로 넘어가고 묶음 기한이 빈 상태를 남기지 않는다. 호출 측 {@code @Transactional} 필수.
+   */
+  public void assignDueAt(final Long bundleId, final Instant dueAt, final Instant now) {
+    if (participationBundleRepository.assignDueAt(bundleId, dueAt, now) != 1) {
+      log.warn("추가 신청 수락 묶음 기한 채우기 실패 — 닫혔거나 이미 기한이 있다. bundleId={}", bundleId);
+      throw new BusinessException(ErrorCode.PARTICIPATION_STATE_TRANSITION_INVALID);
+    }
+  }
+
+  /** 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는가. 미연결 행이나 맵에 없는 묶음은 false 다(화면 표시용). */
+  public static boolean extraOf(
+      final Map<Long, ParticipationBundle> bundleById, final Participation participation) {
+    if (participation.getBundleId() == null) {
+      return false;
+    }
+    ParticipationBundle bundle = bundleById.get(participation.getBundleId());
+    return bundle != null && bundle.isExtra();
   }
 
   /** 묶음 단건. 묶음 단위 API 의 진입점이다. */
@@ -167,6 +207,31 @@ public class ParticipationBundleDomainService {
               + " participationId={}, bundleId={}",
           participation.getId(),
           participation.getBundleId());
+      throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
+    }
+    return shippingAddressId;
+  }
+
+  /**
+   * 신청이 상속할 배송지(그 원본 참여의 묶음 정본)를 <b>잠금 읽기</b>로 읽는다. 없으면 {@link #requireShippingAddressIdOf} 와 같이
+   * 실패한다. 호출 측 {@code @Transactional} 필수.
+   *
+   * <p>🔴 원본 참여는 분철 행을 잠근 뒤 잠금 읽기로 고르므로, 같은 사람의 앞 신청이 기다리는 사이 막 만든 묶음일 수 있다. 일반 조회는
+   * 잠금 전 스냅샷이라 그 묶음을 못 봐서, 두 탭에서 동시에 신청하면 둘째가 「배송지를 찾을 수 없음」으로 실패했다.
+   */
+  public Long requireInheritedShippingAddressId(final Participation source) {
+    Long shippingAddressId =
+        source.getBundleId() == null
+            ? source.getShippingAddressId()
+            : participationBundleRepository
+                .findByIdForShare(source.getBundleId())
+                .map(ParticipationBundle::getShippingAddressId)
+                .orElse(null);
+    if (shippingAddressId == null) {
+      log.warn(
+          "상속할 배송지가 없다 — 삭제 가드가 뚫렸을 수 있다. participationId={}, bundleId={}",
+          source.getId(),
+          source.getBundleId());
       throw new BusinessException(ErrorCode.SHIPPING_ADDRESS_NOT_FOUND);
     }
     return shippingAddressId;

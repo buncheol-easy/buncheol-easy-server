@@ -3,6 +3,7 @@ package buncheoleasy.buncheol.application.participation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -10,6 +11,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -22,6 +24,7 @@ import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.FlowType;
+import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -1025,7 +1028,7 @@ class ParticipationServiceTest {
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
-          .when(participationBundleDomainService.requireShippingAddressIdOf(existing))
+          .when(participationBundleDomainService.requireInheritedShippingAddressId(existing))
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
@@ -1087,7 +1090,7 @@ class ParticipationServiceTest {
           .attach(
               any(), eq(EXISTING_BUNDLE_ID), eq(INHERITED_ADDRESS_ID), eq(0L),
               // 재사용이면 계좌를 아예 안 넘긴다 — any() 로 두면 스냅샷을 떠도 통과한다.
-              isNull(), isNull(), eq(NOW));
+              isNull(), isNull(), eq(false), eq(NOW));
       // 그래서 유저 조회 헛쿼리도 없다.
       then(userDomainService).should(never()).getUser(PARTICIPANT_ID);
     }
@@ -1139,7 +1142,9 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should()
-          .attach(any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(SHIPPING_FEE), any(), isNull(), eq(NOW));
+          .attach(
+              any(), isNull(), eq(SHIPPING_ADDRESS_ID), eq(SHIPPING_FEE), any(), isNull(), eq(false),
+              eq(NOW));
     }
 
     // 계좌 강제(PR #151) 이전에 만들어진 활성 C2C 참여를 가진 사람은 프로필 계좌가 없을 수 있다.
@@ -1155,7 +1160,8 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should()
-          .attach(any(), eq(EXISTING_BUNDLE_ID), any(), eq(0L), isNull(), isNull(), eq(NOW));
+          .attach(
+              any(), eq(EXISTING_BUNDLE_ID), any(), eq(0L), isNull(), isNull(), eq(false), eq(NOW));
     }
 
     // 배포선 창에서 생긴 미연결 행(bundle_id NULL)이 재사용 후보가 되는 경우. 새로 열되
@@ -1171,7 +1177,8 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should()
-          .attach(any(), isNull(), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(), eq(NOW));
+          .attach(
+              any(), isNull(), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(), eq(false), eq(NOW));
     }
   }
 
@@ -1220,7 +1227,7 @@ class ParticipationServiceTest {
           .thenReturn(Optional.of(existing));
       // 배송지 정본은 묶음이다. 사본이 아니라 이 값이 상속돼야 한다.
       lenient()
-          .when(participationBundleDomainService.requireShippingAddressIdOf(existing))
+          .when(participationBundleDomainService.requireInheritedShippingAddressId(existing))
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
@@ -1278,7 +1285,7 @@ class ParticipationServiceTest {
       then(participationBundleDomainService)
           .should()
           .attach(any(), eq(INHERITED_BUNDLE_ID), eq(INHERITED_ADDRESS_ID), eq(0L), any(), isNull(),
-              eq(NOW));
+              eq(false), eq(NOW));
       // 상속 구간에서는 배송지 검증을 아예 타지 않는다(요청 입력을 무시한다).
       then(participationShippingAddressResolver).should(never()).resolve(any(), any(), any());
     }
@@ -2082,6 +2089,7 @@ class ParticipationServiceTest {
               eq(CHANGED_SHIPPING_FEE),
               any(),
               isNull(),
+              eq(false),
               eq(NOW));
     }
 
@@ -2127,7 +2135,280 @@ class ParticipationServiceTest {
 
       then(participationBundleDomainService)
           .should(never())
-          .attach(any(), any(), any(), anyLong(), any(), any(), any());
+          .attach(any(), any(), any(), anyLong(), any(), any(), anyBoolean(), any());
+    }
+  }
+
+  @Nested
+  @DisplayName("진행 확정 뒤 추가 신청 테스트")
+  class ExtraApplyTest {
+
+    private static final Long PENDING_BUNDLE_ID = 800L;
+
+    /** 진행 확정 회원 개최. 원래 마감은 하루 전에 지났다. 판정은 목이 아니라 도메인 코드로 태운다. */
+    private Buncheol confirmedC2c(final BuncheolStatus status, final boolean extraRecruitOpen) {
+      Buncheol buncheol = newInstance(Buncheol.class);
+      setField(buncheol, "id", BUNCHEOL_ID);
+      setField(buncheol, "hostId", HOST_ID);
+      setField(buncheol, "flowType", FlowType.C2C);
+      setField(buncheol, "status", status);
+      setField(buncheol, "deadline", NOW.minus(Duration.ofDays(1)));
+      setField(buncheol, "minHeadcount", 2);
+      setField(buncheol, "shippingFeePolicy", ShippingFeePolicy.of((int) SHIPPING_FEE, null));
+      setField(buncheol, "extraRecruitOpen", extraRecruitOpen);
+      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+      // 다중 신청 사전 가드에서 막히는 경우는 잠금까지 가지 않는다.
+      lenient()
+          .when(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID))
+          .thenReturn(buncheol);
+      return buncheol;
+    }
+
+    private void givenSlot(final Long slotId, final long price) {
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(slotId, BUNCHEOL_ID))
+          .willReturn(buncheolMember(slotId, price));
+    }
+
+    private void givenNewBundle(final Buncheol buncheol) {
+      given(participationShippingAddressResolver.resolve(PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
+          .willReturn(shippingAddress());
+      givenParticipantAccount();
+    }
+
+    private void givenExtraInsert(final Long... ids) {
+      var stub = given(participationDomainService.createParticipationIfExtraRecruiting(any()));
+      for (Long id : ids) {
+        stub =
+            stub.willAnswer(
+                invocation -> {
+                  setField(invocation.getArgument(0), "id", id);
+                  return true;
+                });
+      }
+    }
+
+    private Participation pendingExtra() {
+      Participation pending = newInstance(Participation.class);
+      setField(pending, "id", 450L);
+      setField(pending, "status", ParticipationStatus.APPLIED);
+      setField(pending, "bundleId", PENDING_BUNDLE_ID);
+      return pending;
+    }
+
+    @Test
+    void 추가_모집_중이면_원래_마감이_지났어도_신청으로_받고_계좌와_기한_없이_응답한다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      givenNewBundle(buncheol);
+      givenExtraInsert(PARTICIPATION_ID);
+
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      assertThat(result.participationIds()).containsExactly(PARTICIPATION_ID);
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE + SHIPPING_FEE);
+      assertThat(result.dueAt()).isNull();
+      assertThat(result.hostAccount()).isNull();
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(paymentStarter).shouldHaveNoInteractions();
+    }
+
+    // 원래 참여(입금 확인)는 배송이 이미 생겨 상속 원본이 아니다 — 새 묶음, 새 배송비, 추가 표시.
+    @Test
+    void 수락_전_추가_신청이_없으면_새_추가_묶음을_열고_배송비를_받는다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      givenNewBundle(buncheol);
+      givenExtraInsert(PARTICIPATION_ID);
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(participationBundleDomainService)
+          .should()
+          .attach(
+              any(),
+              isNull(),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(SHIPPING_FEE),
+              eq(REFUND_ACCOUNT_SNAPSHOT),
+              isNull(),
+              eq(true),
+              eq(NOW));
+    }
+
+    @Test
+    void 수락_전_추가_신청이_있으면_그_묶음에_붙고_배송비는_0원이다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+      Participation pending = pendingExtra();
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.of(pending));
+      given(participationBundleDomainService.requireInheritedShippingAddressId(pending))
+          .willReturn(SHIPPING_ADDRESS_ID);
+      givenExtraInsert(PARTICIPATION_ID);
+
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      assertThat(result.totalAmount()).isEqualTo(MEMBER_PRICE);
+      then(participationBundleDomainService)
+          .should()
+          .attach(
+              any(),
+              eq(PENDING_BUNDLE_ID),
+              eq(SHIPPING_ADDRESS_ID),
+              eq(0L),
+              isNull(),
+              isNull(),
+              eq(true),
+              eq(NOW));
+    }
+
+    @Test
+    void 개최자_알림은_요청마다_한_번이고_이번_요청의_참여만_싣는다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+      givenSlot(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE);
+      Participation pending = pendingExtra();
+      // 두 슬롯 모두 수락 전 추가 신청(450)에 붙는다. 그 참여는 이번 요청이 만든 것이 아니라 알림에 빠져야 한다.
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.of(pending));
+      given(participationBundleDomainService.requireInheritedShippingAddressId(pending))
+          .willReturn(SHIPPING_ADDRESS_ID);
+      givenExtraInsert(PARTICIPATION_ID, PARTICIPATION_ID + 1);
+
+      participationService.participate(
+          BUNCHEOL_ID,
+          PARTICIPANT_ID,
+          new ParticipateRequest(
+              null, List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID), SHIPPING_ADDRESS_ID, null, null));
+
+      ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
+      then(eventPublisher).should(atLeastOnce()).publishEvent(events.capture());
+      assertThat(events.getAllValues())
+          .filteredOn(ExtraAppliedEvent.class::isInstance)
+          .containsExactly(
+              new ExtraAppliedEvent(BUNCHEOL_ID, List.of(PARTICIPATION_ID, PARTICIPATION_ID + 1)));
+      then(paymentStarter).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 모집중_신청에는_개최자_알림을_내지_않는다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.RECRUITING, false);
+      setField(buncheol, "deadline", NOW.plus(Duration.ofDays(1)));
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      givenNewBundle(buncheol);
+      given(participationDomainService.createParticipationIfRecruiting(any()))
+          .willAnswer(
+              invocation -> {
+                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
+                return true;
+              });
+
+      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+
+      then(eventPublisher).should(never()).publishEvent(any(ExtraAppliedEvent.class));
+      then(buncheolDomainService).should(never()).isExtraRecruiting(any());
+    }
+
+    @Test
+    void 스위치가_꺼진_진행확정_분철은_받지_않는다() {
+      confirmedC2c(BuncheolStatus.CONFIRMED, false);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      then(participationDomainService).should(never()).createParticipationIfExtraRecruiting(any());
+    }
+
+    @Test
+    void 종료된_분철은_스위치가_켜져_있어도_받지_않는다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(false);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      then(participationDomainService).should(never()).createParticipationIfExtraRecruiting(any());
+    }
+
+    @Test
+    void 입금_수집중이면_받지_않는다() {
+      confirmedC2c(BuncheolStatus.PAYMENT_COLLECTING, true);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+    }
+
+    // 잠금을 기다리는 사이 스위치가 꺼졌으면 조건부 INSERT 가 0행이다(이중 방어).
+    @Test
+    void 조건부_INSERT_가_0행이면_받지_않는다() {
+      Buncheol buncheol = confirmedC2c(BuncheolStatus.CONFIRMED, true);
+      given(buncheolDomainService.isExtraRecruiting(buncheol)).willReturn(true);
+      givenSlot(BUNCHEOL_MEMBER_ID, MEMBER_PRICE);
+      given(participationDomainService.findInheritanceSource(buncheol, PARTICIPANT_ID))
+          .willReturn(Optional.empty());
+      givenNewBundle(buncheol);
+      given(participationDomainService.createParticipationIfExtraRecruiting(any()))
+          .willReturn(false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      then(participationBundleDomainService)
+          .should(never())
+          .attach(any(), any(), any(), anyLong(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    void 다중_신청_사전_가드는_스위치가_꺼진_진행확정을_막는다() {
+      confirmedC2c(BuncheolStatus.CONFIRMED, false);
+
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID,
+                      PARTICIPANT_ID,
+                      new ParticipateRequest(
+                          null,
+                          List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID),
+                          SHIPPING_ADDRESS_ID,
+                          null,
+                          null)))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
+      then(buncheolDomainService).should(never()).getLatestBuncheolForUpdate(any());
     }
   }
 }

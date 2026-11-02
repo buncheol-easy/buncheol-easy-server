@@ -226,6 +226,8 @@ CREATE TABLE IF NOT EXISTS buncheols
     payment_bank      VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 은행 (확정 후 프로필 변경과 무관하게 안내 계좌 고정)',
     payment_account   VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 계좌번호',
     payment_holder    VARCHAR(50)  NULL COMMENT 'C2C: 확정 시점 개최자 계좌 스냅샷 — 예금주',
+    -- 기존 배포 DB 에는 수동 ALTER 필요 (P0-5).
+    extra_recruit_open TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '추가 모집 스위치. 개최자가 켠다. 켜져 있고 진행 확정·종료 전이면 빈 자리에 추가 신청을 받는다',
 
     PRIMARY KEY (id),
 
@@ -320,9 +322,11 @@ CREATE TABLE IF NOT EXISTS participation_bundles
     refund_bank         VARCHAR(50) NOT NULL COMMENT '환불 은행',
     refund_account      VARCHAR(50) NOT NULL COMMENT '환불 계좌번호',
     refund_holder       VARCHAR(50) NOT NULL COMMENT '환불 예금주 = 개최자 통장 대조 키(입금자명)',
-    due_at              DATETIME    NULL COMMENT '입금 기한. C2C 는 자동 취소하지 않는다 — 이 시각부터 개최자 진행 확정이 열린다',
+    due_at              DATETIME    NULL COMMENT '입금 기한. C2C 는 자동 취소하지 않는다 — 입금 단계는 이 시각부터 개최자 진행 확정이, 진행 확정 뒤 추가 묶음(수락 + 24h)은 「제외」가 열린다',
     payment_sent_at     DATETIME    NULL COMMENT '참여자 「보냈어요」 마킹 시각 (묶음 1회)',
     closed_at           DATETIME    NULL COMMENT '묶음 종료(활성 슬롯 0) 시각. NULL = 활성',
+    -- 기존 배포 DB 에는 수동 ALTER 필요 (P0-5).
+    is_extra            TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '진행 확정 뒤 추가 신청으로 열린 묶음. 열 때 정하고 바꾸지 않는다',
     created_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -374,10 +378,10 @@ CREATE TABLE IF NOT EXISTS participations
     refund_bank                  VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 은행 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_account               VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 계좌번호 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
     refund_holder                VARCHAR(50)  NULL COMMENT '[P4 에서 삭제] 환불 예금주 — 정본은 participation_bundles. P2-c 이후 신규 행은 전부 NULL',
-    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+10분, deadline), 지나면 자동 취소 | C2C=입금 단계 시작 때 일괄 24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
+    due_at                       DATETIME     NULL COMMENT '입금 기한. LEGACY=min(점유+10분, deadline), 지나면 자동 취소 | C2C=입금 단계 시작 때 일괄 24h, 추가 신청은 수락 때 24h(APPLIED 단계 NULL), 자동 취소 없음·정본은 participation_bundles.due_at',
     confirmed_at                 DATETIME     NULL COMMENT '개최자 입금확인 시각',
     cancelled_at                 DATETIME     NULL COMMENT '참여 취소 시각',
-    cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT(LEGACY 입금 만료) | BUNCHEOL_CANCELLED(분철 취소 연쇄) | USER_CANCELLED(C2C 자발 취소) | PAYMENT_NOT_CONFIRMED(C2C 진행 확정 때 입금 미확인으로 빠짐) | HOST_RELEASED(옛 「제외」 기록, 읽기용)',
+    cancel_reason                VARCHAR(30)  NULL COMMENT 'PAYMENT_TIMEOUT(LEGACY 입금 만료) | BUNCHEOL_CANCELLED(분철 취소 연쇄) | USER_CANCELLED(C2C 자발 취소) | PAYMENT_NOT_CONFIRMED(C2C 진행 확정 때 입금 미확인으로 빠짐) | HOST_RELEASED(「제외」, 진행 확정 뒤 추가 참여 미입금) | HOST_REJECTED(C2C 추가 신청 거절)',
     status                       VARCHAR(30)  NOT NULL COMMENT 'APPLIED(C2C 신청) | AWAITING_PAYMENT | PAYMENT_SENT(C2C 보냈어요) | CONFIRMED | CANCELLED',
     -- 오픈 이벤트 배송비 환급. ELIGIBLE/EXPIRED 는 조회 시 파생하며 저장하지 않는다 (PaybackStatus javadoc).
     payback_status               VARCHAR(20)  NOT NULL DEFAULT 'NONE' COMMENT 'NONE | REQUESTED | COMPLETED | REJECTED (ELIGIBLE/EXPIRED 는 파생 전용)',

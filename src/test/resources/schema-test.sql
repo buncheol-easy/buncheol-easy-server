@@ -183,6 +183,7 @@ CREATE TABLE buncheols
     payment_bank      VARCHAR(50)  NULL,
     payment_account   VARCHAR(50)  NULL,
     payment_holder    VARCHAR(50)  NULL,
+    extra_recruit_open BOOLEAN     NOT NULL DEFAULT FALSE,
 
     PRIMARY KEY (id),
     CONSTRAINT fk_buncheols_host FOREIGN KEY (host_id) REFERENCES users (id) ON DELETE CASCADE,
@@ -244,6 +245,7 @@ CREATE TABLE participation_bundles
     due_at              TIMESTAMP   NULL,
     payment_sent_at     TIMESTAMP   NULL,
     closed_at           TIMESTAMP   NULL,
+    is_extra            BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 

@@ -24,6 +24,11 @@ import java.util.List;
  * @param opensAt 예약 오픈 시각(UTC). 오픈 시각을 넣은 운영진 분철에만 있고 나머지는 null 이다. 이 시각 전에는 선착순 빈 자리가
  *     {@code NOT_OPEN} 이고 코드 없는 참여는 409(BCH-128)다. 정각이면 열린다
  * @param serverTime 이 응답을 만든 서버 시각(UTC). 화면이 기기 시계 대신 이 값에 맞춰 오픈까지 남은 시간을 센다
+ * @param extraRecruiting 지금 추가 신청을 받는지 — 진행 확정된 회원 개최이고, 개최자가 추가 모집을 켰고, 「종료」 전이다. 참여 가드와
+ *     같은 판정({@code Buncheol#isExtraRecruiting})이라 true 면 빈 자리가 {@code AVAILABLE} 로 내려간다. 원래 마감은 지났으므로 화면은
+ *     이 값이 true 면 상태·마감으로 신청을 막지 않는다
+ * @param ended 「종료」(진행 확정 뒤 모든 배송 도착, 끝나지 않은 참여 없음)인지. 관리 응답의 {@code ended} 와 같은 조회다. 회원 개최에서만
+ *     판정하고 운영진 분철·진행 확정 전·취소는 늘 false 다
  */
 public record BuncheolDetailResponse(
     Long id,
@@ -45,4 +50,6 @@ public record BuncheolDetailResponse(
     String openChatUrl,
     boolean termsEditable,
     Instant opensAt,
-    Instant serverTime) {}
+    Instant serverTime,
+    boolean extraRecruiting,
+    boolean ended) {}

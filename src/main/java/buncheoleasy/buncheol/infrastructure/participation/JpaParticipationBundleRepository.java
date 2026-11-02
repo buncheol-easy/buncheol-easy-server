@@ -2,10 +2,13 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +19,10 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       Long buncheolId, Long participantId);
 
   List<ParticipationBundle> findAllByBuncheolIdOrderByIdAsc(Long buncheolId);
+
+  @Lock(LockModeType.PESSIMISTIC_READ)
+  @Query("SELECT b FROM ParticipationBundle b WHERE b.id = :id")
+  Optional<ParticipationBundle> findByIdForShare(@Param("id") Long id);
 
   /**
    * 묶음 닫기 CAS. 🔴 활성 슬롯 존재 판정을 <b>UPDATE 의 WHERE 서브쿼리</b>로 묶는 것이 핵심이다 — 밖에서 세어 보고
@@ -71,4 +78,12 @@ interface JpaParticipationBundleRepository extends JpaRepository<ParticipationBu
       @Param("buncheolId") Long buncheolId,
       @Param("dueAt") Instant dueAt,
       @Param("now") Instant now);
+
+  /** 추가 신청 수락 때 그 묶음 하나에 입금 기한을 채운다. 열린 묶음이고 기한이 비어 있을 때만. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE ParticipationBundle b SET b.dueAt = :dueAt, b.updatedAt = :now "
+          + "WHERE b.id = :bundleId AND b.closedAt IS NULL AND b.dueAt IS NULL")
+  int assignDueAt(
+      @Param("bundleId") Long bundleId, @Param("dueAt") Instant dueAt, @Param("now") Instant now);
 }

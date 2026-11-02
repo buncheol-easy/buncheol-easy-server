@@ -17,6 +17,8 @@ import java.util.List;
  * @param confirmCheck 회원 개최 진행 확정 판정. 진행 확정 API 게이트와 <b>같은 판정</b>({@link ConfirmCheck})이라 화면은
  *     {@code ALL_PAID}·{@code DUE_PASSED} 일 때만 진행 확정 버튼을 켠다. 전원 입금은 마지막 묶음 입금 확인이 바로 진행 확정하므로
  *     실제로 켜지는 것은 {@code DUE_PASSED} 다({@code ALL_PAID} 는 옛 데이터 대비). 입금 수집중이 아니면 {@code null}.
+ * @param extraRecruitOpen 추가 모집 스위치 값. 지금 신청을 받는지({@code ended} 까지 본 판정)와는 다르다 — 스위치가 켜져 있어도
+ *     「종료」면 받지 않는다
  */
 public record BuncheolManagementResponse(
     Long id,
@@ -34,4 +36,5 @@ public record BuncheolManagementResponse(
     Instant paymentDueAt,
     String openChatUrl,
     boolean ended,
-    ConfirmCheck confirmCheck) {}
+    ConfirmCheck confirmCheck,
+    boolean extraRecruitOpen) {}

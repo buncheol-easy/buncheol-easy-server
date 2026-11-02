@@ -54,6 +54,11 @@ public class JpaParticipationBundleRepositoryAdapter implements ParticipationBun
   }
 
   @Override
+  public Optional<ParticipationBundle> findByIdForShare(final Long id) {
+    return jpaParticipationBundleRepository.findByIdForShare(id);
+  }
+
+  @Override
   public boolean closeIfNoActiveSlots(final Long bundleId, final Instant now) {
     return jpaParticipationBundleRepository.closeIfNoActiveSlots(
             bundleId, ParticipationStatus.active(), now)
@@ -70,6 +75,11 @@ public class JpaParticipationBundleRepositoryAdapter implements ParticipationBun
   public int assignDueAtByBuncheolId(
       final Long buncheolId, final Instant dueAt, final Instant now) {
     return jpaParticipationBundleRepository.assignDueAtByBuncheolId(buncheolId, dueAt, now);
+  }
+
+  @Override
+  public int assignDueAt(final Long bundleId, final Instant dueAt, final Instant now) {
+    return jpaParticipationBundleRepository.assignDueAt(bundleId, dueAt, now);
   }
 
   @Override

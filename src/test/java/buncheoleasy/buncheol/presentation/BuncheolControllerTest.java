@@ -1123,6 +1123,21 @@ class BuncheolControllerTest {
   }
 
   @Nested
+  @DisplayName("개최 만 19세 본인 체크 API 테스트")
+  class ConfirmHostAdultTest {
+
+    @Test
+    void 본문_없이_호출하면_체크를_남기고_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(post("/v1/buncheols/hosting-eligibility/adult-confirmation").with(mockAuth()))
+          .andExpect(status().isNoContent())
+          .andExpect(content().string(""));
+
+      then(buncheolService).should().confirmHostAdult(HOST_ID);
+    }
+  }
+
+  @Nested
   @DisplayName("분철 목록 조회 API 테스트")
   class SearchBuncheolsTest {
 

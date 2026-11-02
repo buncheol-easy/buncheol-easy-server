@@ -429,6 +429,35 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   }
 
   @Test
+  void 개최_만19세_본인_체크() throws Exception {
+    mockMvc
+        .perform(post("/v1/buncheols/hosting-eligibility/adult-confirmation").with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-hosting-eligibility-adult-confirmation",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("개최 만 19세 본인 체크")
+                        .description(
+                            """
+                            개최 입구에서 회원이 「만 19세 이상이에요」를 체크한 기록을 남긴다. 본문은 없고 성공하면 204 다.
+
+                            **멱등** — 이미 체크했으면 첫 체크 시각을 그대로 두고 204 를 준다. 동시에 여러 번 불러도 같다.
+
+                            체크 뒤 개최 자격은 `GET /v1/buncheols/hosting-eligibility` 로 다시 조회한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `USR-016` (`USER_NOT_FOUND`) | 존재하지 않는 회원(탈퇴 포함) |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
+                        .build())));
+  }
+
+  @Test
   void 분철_목록_조회() throws Exception {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     Instant createdAt = Instant.parse("2026-05-15T08:00:00Z");

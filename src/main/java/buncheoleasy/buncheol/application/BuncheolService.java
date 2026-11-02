@@ -234,6 +234,11 @@ public class BuncheolService {
     return HostingEligibilityResponse.allowed();
   }
 
+  /** 개최 입구의 「만 19세 이상」 본인 체크를 남긴다. 사전 조회와 짝이라 같은 서비스에 둔다. */
+  public void confirmHostAdult(final Long hostId) {
+    userDomainService.confirmHostAdult(hostId);
+  }
+
   /**
    * 분철 수정 — 모집중·마감 전에만. 제목·설명·사진·오픈채팅 링크는 신청자가 있어도 바꿀 수 있고, 거래 조건(마감·최소 인원·배송비·구매처)은
    * <b>활성 신청이 하나도 없는 C2C 분철</b>에서만 바꾼다. 조건 칸은 지금 값과 다를 때만 바뀐 것으로 본다 — 조건 칸을 보내지 않거나 지금 값을

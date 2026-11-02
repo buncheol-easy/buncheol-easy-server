@@ -34,6 +34,8 @@ import java.util.List;
  * {@code buncheolMemberCount}(열린 자리 수)와 다른 값이다.
  *
  * <p>{@code extra} 는 이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지다. 진행 확정 분철의 신청(APPLIED)은 수락 대기다.
+ *
+ * <p>{@code appliedAt} 은 이 참여가 만들어진 시각(신청 시각, UTC)이다. 참여 내역 카드의 "신청 [시각]" 에 쓴다.
  */
 public record MyParticipationResponse(
     Long participationId,
@@ -66,4 +68,5 @@ public record MyParticipationResponse(
     ParticipationCancellability cancellability,
     Integer confirmedSlotCount,
     Integer activeSlotCount,
-    boolean extra) {}
+    boolean extra,
+    Instant appliedAt) {}

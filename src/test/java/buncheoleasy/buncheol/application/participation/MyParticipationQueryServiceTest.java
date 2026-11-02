@@ -225,6 +225,35 @@ class MyParticipationQueryServiceTest {
     assertThat(result.get(0).extra()).isTrue();
   }
 
+  @Test
+  void 신청_시각은_참여가_만들어진_시각이다() {
+    Instant appliedAt = Instant.parse("2026-11-07T05:30:00Z");
+    Buncheol buncheol =
+        buncheol(10L, "회원 개최 분철", Instant.now().minus(7, ChronoUnit.DAYS), BuncheolStatus.CONFIRMED);
+    Participation participation =
+        participation(233L, 10L, 101L, 10_000L, ParticipationStatus.APPLIED, DUE_AT, null, null);
+    setField(participation, "bundleId", 9999L);
+    setField(participation, "createdAt", appliedAt);
+
+    given(participationRepository.findAllByParticipantIdOrderByCreatedAtDesc(PARTICIPANT_ID))
+        .willReturn(List.of(participation));
+    given(buncheolRepository.findAllByIds(List.of(10L))).willReturn(List.of(buncheol));
+    given(buncheolMemberRepository.findAllByBuncheolIds(List.of(10L)))
+        .willReturn(List.of(buncheolMember(101L, 10L, 1001L)));
+    given(groupMemberRepository.findAllByIds(List.of(1001L)))
+        .willReturn(List.of(groupMember(1001L, "해린")));
+    given(buncheolImageRepository.findThumbnailsByBuncheolIds(List.of(10L))).willReturn(List.of());
+    given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+    ParticipationBundle bundle = bundleWithAddress(9999L, 1L);
+    given(participationBundleDomainService.findAllByParticipations(List.of(participation)))
+        .willReturn(Map.of(9999L, bundle));
+
+    List<MyParticipationResponse> result =
+        myParticipationQueryService.getMyParticipations(PARTICIPANT_ID);
+
+    assertThat(result.get(0).appliedAt()).isEqualTo(appliedAt);
+  }
+
   // 🔴 C2C 의 입금 기한 정본은 묶음이다. 사본에 다른 값을 심어 어느 쪽을 읽는지 드러나게 한다.
   @Test
   void C2C_입금기한은_묶음_정본에서_읽는다() {

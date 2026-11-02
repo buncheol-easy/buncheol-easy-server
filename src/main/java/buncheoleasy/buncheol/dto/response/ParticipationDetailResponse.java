@@ -18,6 +18,8 @@ import java.time.Instant;
  * ParticipationCancellability#of})을 그대로 내려준다 (docs/56 S-1).
  *
  * <p>{@code extra} 는 이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지다.
+ *
+ * <p>{@code appliedAt} 은 이 참여가 만들어진 시각(신청 시각, UTC)이다.
  */
 public record ParticipationDetailResponse(
     Long participationId,
@@ -36,4 +38,5 @@ public record ParticipationDetailResponse(
     Instant paymentSentAt,
     String openChatUrl,
     ParticipationCancellability cancellability,
-    boolean extra) {}
+    boolean extra,
+    Instant appliedAt) {}

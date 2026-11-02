@@ -148,6 +148,37 @@ class ParticipationDetailQueryServiceTest {
     assertThat(response.extra()).isTrue();
   }
 
+  @Test
+  void 신청_시각은_참여가_만들어진_시각이다() {
+    Instant appliedAt = Instant.parse("2026-11-07T05:30:00Z");
+    Participation participation =
+        Participation.createApplied(BUNCHEOL_ID, SLOT_ID, PARTICIPANT_ID, 1L, 10_000L, 3_000L);
+    setField(participation, "id", PARTICIPATION_ID);
+    setField(participation, "bundleId", BUNDLE_ID);
+    setField(participation, "status", ParticipationStatus.APPLIED);
+    setField(participation, "createdAt", appliedAt);
+    given(participationDomainService.getParticipation(PARTICIPATION_ID)).willReturn(participation);
+
+    Buncheol buncheol = mock(Buncheol.class);
+    given(buncheol.getId()).willReturn(BUNCHEOL_ID);
+    lenient().when(buncheol.getFlowType()).thenReturn(FlowType.C2C);
+    given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
+    BuncheolMember slot = mock(BuncheolMember.class);
+    given(slot.getMemberId()).willReturn(MEMBER_ID);
+    given(buncheolMemberDomainService.getBuncheolMember(SLOT_ID, BUNCHEOL_ID)).willReturn(slot);
+    given(groupMemberRepository.findAllByIds(List.of(MEMBER_ID))).willReturn(List.of());
+    given(deliveryRepository.findByBundleId(BUNDLE_ID)).willReturn(Optional.empty());
+    given(participationBundleDomainService.findByParticipation(participation))
+        .willReturn(Optional.empty());
+    given(participationBundleDomainService.shippingFeeAttributionOf(isNull(), any()))
+        .willReturn(ShippingFeeAttribution.empty());
+
+    ParticipationDetailResponse response =
+        service().getDetail(PARTICIPANT_ID, PARTICIPATION_ID);
+
+    assertThat(response.appliedAt()).isEqualTo(appliedAt);
+  }
+
   // 🔴 이 서비스가 하는 배선을 고정한다 — 같은 묶음을 두 번 읽지 않고, 환급 판정에도 <b>같은</b> 귀속을 넘긴다.
   //
   // 조각별로는 정책 테스트가 덮지만(ShippingFeePaybackPolicyTest), 「어떤 판정 객체를 어느 경로로 넘기는가」는

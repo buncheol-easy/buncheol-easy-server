@@ -211,6 +211,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
     Instant deadline = Instant.parse("2026-06-01T12:00:00Z");
     Instant dueAt = Instant.parse("2026-06-02T12:00:00Z");
     Instant confirmedAt = Instant.parse("2026-06-01T13:00:00Z");
+    Instant appliedAt = Instant.parse("2026-05-30T09:30:00Z");
     MyParticipationResponse confirmed =
         new MyParticipationResponse(
             500L,
@@ -248,7 +249,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                 null,
                 null,
                 new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false);
+            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false, appliedAt);
     MyParticipationResponse awaitingPayment =
         new MyParticipationResponse(
             501L,
@@ -280,7 +281,7 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null, false);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, null, null, false, appliedAt);
     given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
         .willReturn(List.of(confirmed, awaitingPayment));
 
@@ -440,7 +441,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                 .description(
                                     "그 분철의 살아 있는 자리 수(같은 문구의 N). 입금 수집중 분철만, 그 밖은 null. buncheolMemberCount(열린 자리 수)와 다르다")
                                 .optional(),
-                            fieldWithPath("[].extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"))
+                            fieldWithPath("[].extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"),
+                            fieldWithPath("[].appliedAt")
+                                .description("참여(신청)가 만들어진 시각 (UTC ISO-8601). 참여 내역 카드의 \"신청 [시각]\" 표시용"))
                         .build())));
   }
 
@@ -469,7 +472,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED, false);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED,
+            false,
+            Instant.parse("2026-05-30T09:30:00Z"));
     given(participationDetailQueryService.getDetail(PARTICIPANT_ID, 500L)).willReturn(detail);
 
     mockMvc
@@ -566,7 +571,9 @@ class ParticipationControllerDocsTest extends DocsTestSupport {
                                     CANCELLABLE: 취소 가능(회원 개최 신청 단계) |
                                     BLOCKED_BY_STATUS: 입금 단계 시작 이후(입금 대기·보냈어요·입금확인) — BCH-086 |
                                     FLOW_NOT_SUPPORTED: LEGACY 참여 (BCH-091)"""),
-                            fieldWithPath("extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"))
+                            fieldWithPath("extra").description("이 참여의 묶음이 진행 확정 뒤 추가 신청으로 열렸는지(「추가 신청」 표시). 진행 확정 분철의 신청(APPLIED)은 수락 대기다"),
+                            fieldWithPath("appliedAt")
+                                .description("참여(신청)가 만들어진 시각 (UTC ISO-8601)"))
                         .build())));
   }
 

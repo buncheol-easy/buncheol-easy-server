@@ -330,6 +330,7 @@ public class MyParticipationQueryService {
         collecting
             ? activeSlotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue()
             : null,
-        ParticipationBundleDomainService.extraOf(bundleById, participation));
+        ParticipationBundleDomainService.extraOf(bundleById, participation),
+        participation.getCreatedAt());
   }
 }

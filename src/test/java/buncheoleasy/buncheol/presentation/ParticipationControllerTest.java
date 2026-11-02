@@ -292,7 +292,7 @@ class ParticipationControllerTest {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false);
+            ParticipationCancellability.BLOCKED_BY_STATUS, null, null, false, null);
 
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
           .willReturn(List.of(response));
@@ -322,6 +322,48 @@ class ParticipationControllerTest {
     }
 
     @Test
+    void 신청_시각을_UTC_ISO_문자열로_내린다() throws Exception {
+      MyParticipationResponse response =
+          new MyParticipationResponse(
+              500L,
+              9001L,
+              10L,
+              "회원 개최 분철",
+              5,
+              "민지",
+              53_000L,
+              3_000L,
+              ParticipationStatus.APPLIED,
+              null,
+              BuncheolStatus.CONFIRMED,
+              Instant.parse("2026-06-01T12:00:00Z"),
+              null,
+              null,
+              null,
+              List.of(),
+              null,
+              null,
+              null,
+              null,
+              null,
+              FlowType.C2C,
+              null,
+              null,
+              ParticipationCancellability.CANCELLABLE,
+              null,
+              null,
+              true,
+              Instant.parse("2026-05-30T09:30:00Z"));
+      given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID))
+          .willReturn(List.of(response));
+
+      mockMvc
+          .perform(get("/v1/participations/me").with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$[0].appliedAt").value("2026-05-30T09:30:00Z"));
+    }
+
+    @Test
     void 참여_내역이_없으면_빈_배열을_반환한다() throws Exception {
       given(myParticipationQueryService.getMyParticipations(PARTICIPANT_ID)).willReturn(List.of());
 
@@ -335,6 +377,37 @@ class ParticipationControllerTest {
   @Nested
   @DisplayName("참여 상세 조회 API 테스트")
   class GetParticipationDetailTest {
+
+    @Test
+    void 신청_시각을_UTC_ISO_문자열로_내린다() throws Exception {
+      ParticipationDetailResponse response =
+          new ParticipationDetailResponse(
+              PARTICIPATION_ID,
+              9001L,
+              10L,
+              "회원 개최 분철",
+              "민지",
+              53_000L,
+              ParticipationStatus.APPLIED,
+              null,
+              null,
+              null,
+              null,
+              null,
+              FlowType.C2C,
+              null,
+              null,
+              ParticipationCancellability.CANCELLABLE,
+              true,
+              Instant.parse("2026-05-30T09:30:00Z"));
+      given(participationDetailQueryService.getDetail(PARTICIPANT_ID, PARTICIPATION_ID))
+          .willReturn(response);
+
+      mockMvc
+          .perform(get("/v1/participations/{participationId}", PARTICIPATION_ID).with(mockAuth()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.appliedAt").value("2026-05-30T09:30:00Z"));
+    }
 
     @Test
     void 입금확인중_참여는_개최자_계좌를_포함해_200으로_반환한다() throws Exception {
@@ -361,7 +434,7 @@ class ParticipationControllerTest {
                   null,
                   null,
                   new RefundAccountResponse("국민은행", "12345678", "홍길동")), FlowType.LEGACY, null, null,
-            ParticipationCancellability.FLOW_NOT_SUPPORTED, false);
+            ParticipationCancellability.FLOW_NOT_SUPPORTED, false, null);
 
       given(participationDetailQueryService.getDetail(PARTICIPANT_ID, PARTICIPATION_ID))
           .willReturn(response);

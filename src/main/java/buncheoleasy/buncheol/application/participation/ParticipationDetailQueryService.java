@@ -113,6 +113,7 @@ public class ParticipationDetailQueryService {
         buncheol.getOpenChatUrl(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).
         ParticipationCancellability.of(participation, buncheol),
-        bundle != null && bundle.isExtra());
+        bundle != null && bundle.isExtra(),
+        participation.getCreatedAt());
   }
 }

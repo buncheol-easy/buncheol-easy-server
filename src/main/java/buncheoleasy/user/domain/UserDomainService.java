@@ -8,6 +8,7 @@ import buncheoleasy.user.domain.serviceterm.UserServiceTermRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -179,6 +180,26 @@ public class UserDomainService {
         };
     if (errorCode != null) {
       throw new BusinessException(errorCode);
+    }
+  }
+
+  /**
+   * 개최 입구의 「만 19세 이상」 본인 체크를 남긴다. 첫 체크 시각이 기록으로 남아야 하므로 이미 체크했으면 덮지 않는다.
+   *
+   * <p>트랜잭션을 걸지 않는다 — 더블탭 같은 동시 요청이 유니크 인덱스에 걸릴 때 바깥 트랜잭션이 있으면 커밋에서 500 이 난다({@link
+   * UserServiceTermRepository#saveIfAbsent}). 쓰기도 한 건뿐이라 묶을 것이 없다.
+   */
+  public void confirmHostAdult(final Long id) {
+    getUser(id);
+    Instant now = Instant.now(clock);
+    Optional<UserServiceTerm> existing =
+        userServiceTermRepository.findByUserIdAndTag(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG);
+    if (existing.isEmpty()) {
+      userServiceTermRepository.saveIfAbsent(
+          UserServiceTerm.of(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, true, now));
+    } else if (!existing.get().isAgreed()) {
+      existing.get().update(true, now);
+      userServiceTermRepository.save(existing.get());
     }
   }
 

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -333,6 +335,78 @@ class UserDomainServiceTest {
           .isEqualTo(C2cHostQualification.NOT_ADULT);
       assertThat(userDomainService.evaluateC2cHostQualification(2L))
           .isEqualTo(C2cHostQualification.QUALIFIED);
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 만 19세 본인 체크 저장 테스트")
+  class ConfirmHostAdultTest {
+
+    private static final Instant NOW = Instant.parse("2026-05-14T12:00:00Z");
+    private static final Instant FIRST_CONFIRMED_AT = Instant.parse("2026-01-01T00:00:00Z");
+
+    private void givenUserExists() {
+      given(userRepository.findById(1L))
+          .willReturn(Optional.of(User.create("KAKAO", "123456", "test@example.com")));
+    }
+
+    @Test
+    void 처음이면_지금_시각으로_체크를_남긴다() {
+      givenUserExists();
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.empty());
+
+      userDomainService.confirmHostAdult(1L);
+
+      ArgumentCaptor<UserServiceTerm> saved = ArgumentCaptor.forClass(UserServiceTerm.class);
+      then(userServiceTermRepository).should().saveIfAbsent(saved.capture());
+      assertThat(saved.getValue().getUserId()).isEqualTo(1L);
+      assertThat(saved.getValue().getTag()).isEqualTo("host_adult_confirm");
+      assertThat(saved.getValue().isAgreed()).isTrue();
+      assertThat(saved.getValue().getAgreedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 이미_체크했으면_첫_체크_시각을_덮지_않는다() {
+      givenUserExists();
+      UserServiceTerm existing =
+          UserServiceTerm.of(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, true, FIRST_CONFIRMED_AT);
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.of(existing));
+
+      userDomainService.confirmHostAdult(1L);
+
+      assertThat(existing.getAgreedAt()).isEqualTo(FIRST_CONFIRMED_AT);
+      then(userServiceTermRepository).should(never()).save(any());
+      then(userServiceTermRepository).should(never()).saveIfAbsent(any());
+    }
+
+    @Test
+    void 동의_안_함_행이_있으면_체크로_바꾼다() {
+      // 204 를 주고 행을 그대로 두면 사전 조회가 계속 체크 필요로 답해 화면이 못 빠져나온다.
+      givenUserExists();
+      UserServiceTerm existing =
+          UserServiceTerm.of(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, false, null);
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.of(existing));
+
+      userDomainService.confirmHostAdult(1L);
+
+      assertThat(existing.isAgreed()).isTrue();
+      assertThat(existing.getAgreedAt()).isEqualTo(NOW);
+      then(userServiceTermRepository).should().save(existing);
+    }
+
+    @Test
+    void 없는_회원이면_USER_NOT_FOUND_예외가_발생하고_남기지_않는다() {
+      given(userRepository.findById(1L)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> userDomainService.confirmHostAdult(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+      then(userServiceTermRepository).shouldHaveNoInteractions();
     }
   }
 

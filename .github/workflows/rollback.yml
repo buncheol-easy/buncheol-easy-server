@@ -75,6 +75,8 @@ jobs:
           fi
 
       - name: Login to GHCR
+        # 창고 장애 때도 서버에 남은 이미지로 되돌릴 수 있어야 한다. 받을 수 있는지는 다음 단계가 판단한다.
+        continue-on-error: true
         uses: docker/login-action@v3
         with:
           registry: ghcr.io

@@ -1,6 +1,6 @@
 name: Rollback Backend
 
-# ECR 의 불변 sha- 태그로 빌드 없이 즉시 되돌린다(1~2분). 태그 조회·절차는 루트 docs/38.
+# GHCR 의 불변 sha- 태그로 빌드 없이 즉시 되돌린다(1~2분). 태그 조회·절차는 루트 docs/38.
 # GitHub 자체가 불능일 때의 수동 롤백(박스에서 scripts/blue-green.sh)도 docs/38·39 에 있다.
 #
 # 💡 직전 버전으로의 1분 롤백은 이 워크플로보다 박스의 스위치 복귀가 빠르다:
@@ -25,7 +25,7 @@ on:
           - production
         required: true
       image_tag:
-        description: '되돌릴 불변 태그 (예: sha-a1b2c3d4e5f6) — ECR bce-backend 태그 목록 또는 직전 배포 로그에서 확인'
+        description: '되돌릴 불변 태그 (예: sha-a1b2c3d4e5f6) — GHCR bce-backend 태그 목록 또는 직전 배포 로그에서 확인'
         required: true
 
 # 배포와 같은 그룹 + cancel-in-progress: true = 롤백이 진행 중 배포를 "선점"한다.
@@ -35,11 +35,11 @@ concurrency:
   group: backend-${{ inputs.environment }}-deploy
   cancel-in-progress: true
 
-# 기본 무권한 — promote 잡만 OIDC 용 id-token 을 자체 선언한다
+# 기본 무권한 — 창고를 쓰는 잡만 packages 권한을 자체 선언한다
 permissions: {}
 
 env:
-  ECR_REGISTRY: 823164610944.dkr.ecr.ap-northeast-2.amazonaws.com
+  IMAGE_REGISTRY: ghcr.io/buncheol-easy
   IMAGE_REPO: bce-backend
 
 jobs:
@@ -56,9 +56,12 @@ jobs:
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
       TARGET_ENV: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Guard — 환경·브랜치·태그 검증 (박스를 건드리기 전에 fail-fast)
-        # OIDC 실패는 promote(별칭 재지정)에서 — 즉 박스를 이미 되돌린 뒤에 — 터진다.
+        # 창고 로그인 실패는 promote(별칭 재지정)에서 — 즉 박스를 이미 되돌린 뒤에 — 터진다.
         # 그 반쪽 롤백(컨테이너는 구버전, 별칭은 깨진 이미지)을 만들지 않도록
         # 허용 짝(staging=dev / production=main)을 첫 스텝에서 강제한다 (리뷰 재검토 반영).
         run: |
@@ -71,6 +74,15 @@ jobs:
             echo "::error::불변 태그(sha-<12자리 hex>)만 허용: $IMAGE_TAG"; exit 1
           fi
 
+      - name: Login to GHCR
+        # 창고 장애 때도 서버에 남은 이미지로 되돌릴 수 있어야 한다. 받을 수 있는지는 다음 단계가 판단한다.
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pull target image and blue-green switch
         # checkout 없음 — compose 파일·스크립트는 배포 디렉터리에 이미 있고,
         # 롤백은 코드가 아니라 이미지 좌표만 바꾸는 작업이다.
@@ -79,10 +91,10 @@ jobs:
         run: |
           set -e
           cd /home/ubuntu/buncheol-easy-server
-          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+          export BACKEND_IMAGE="${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           echo "Rolling back to ${BACKEND_IMAGE}"
 
-          # ECR/네트워크 장애 시에도 롤백이 돌아야 한다 — 로컬에 이미지가 있으면 pull 실패를
+          # 창고/네트워크 장애 시에도 롤백이 돌아야 한다 — 로컬에 이미지가 있으면 pull 실패를
           # 허용한다(불변 태그라 로컬 == 원격이 정의상 보장, 4차 리뷰 반영). 배포 스텝의
           # keep-last-3 이 이 경로의 재고를 만든다. 여기서 미리 pull 해 두면 스크립트 내부의
           # compose pull 은 즉시 no-op 이 된다.
@@ -100,7 +112,7 @@ jobs:
           if [ -n "$img_ref" ] && [ "$img_ref" != "$expected_ref" ]; then
             echo "::error::태그 계보 불일치 — 이 이미지는 '$img_ref' 빌드다. $TARGET_ENV 롤백은 '$expected_ref' 빌드만 허용"; exit 1
           fi
-          [ -n "$img_ref" ] || echo "::warning::bce.ref 라벨 없음(라벨 도입 전 빌드) — 계보 자동 확인 불가, ECR push 시각으로 수동 확인 권장"
+          [ -n "$img_ref" ] || echo "::warning::bce.ref 라벨 없음(라벨 도입 전 빌드) — 계보 자동 확인 불가, 창고 push 시각으로 수동 확인 권장"
 
           # 헬스 게이트·이미지 대조·Nginx 전환·구 색 graceful 정지는 스크립트가 수행한다.
           bash scripts/blue-green.sh deploy
@@ -127,37 +139,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      id-token: write
+      packages: write
     env:
       IMAGE_TAG: ${{ inputs.image_tag }}
       TARGET_ENV: ${{ inputs.environment }}
     steps:
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          role-to-assume: arn:aws:iam::823164610944:role/bce-gha-ecr-push
-          aws-region: ap-northeast-2
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Move alias to rollback target
         run: |
           set -e
-          alias=$([ "$TARGET_ENV" = "production" ] && echo prod || echo staging)
-          # accepted-media-types 명시 — buildx 는 OCI 매니페스트로 push 하므로 요청·회신 포맷을
-          # 고정해 put-image 왕복을 결정론적으로 만든다 (3차 리뷰 반영)
-          resp=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
-            --image-ids imageTag="$IMAGE_TAG" \
-            --accepted-media-types "application/vnd.oci.image.manifest.v1+json" "application/vnd.docker.distribution.manifest.v2+json" \
-            --output json)
-          manifest=$(echo "$resp" | jq -r '.images[0].imageManifest // empty')
-          mt=$(echo "$resp" | jq -r '.images[0].imageManifestMediaType // empty')
-          # 태그 미존재 시 batch-get-image 는 exit 0 + failures 에만 담긴다 — 명시적 가드 (리뷰 반영)
-          [ -n "$manifest" ] || { echo "::error::ECR 에 태그 없음: $IMAGE_TAG"; exit 1; }
-          # mediaType 미전달 시 OCI 매니페스트에서 UnsupportedImageTypeException 가능 (리뷰 반영)
-          args=(--repository-name "$IMAGE_REPO" --image-tag "$alias" --image-manifest "$manifest")
-          [ -n "$mt" ] && args+=(--image-manifest-media-type "$mt")
-          out=$(aws ecr put-image "${args[@]}" 2>&1) \
-            || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
-          echo "alias '$alias' -> ${IMAGE_TAG}"
+          ALIAS=$([ "$TARGET_ENV" = "production" ] && echo prod || echo staging)
+          docker buildx imagetools create --tag "${IMAGE_REGISTRY}/${IMAGE_REPO}:${ALIAS}" "${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+          echo "alias '${ALIAS}' -> ${IMAGE_TAG}"
 
       - name: Warn on stale alias
         # rollback 성공 + promote 실패 = 박스는 롤백됐는데 별칭은 깨진 이미지 — 이 상태에서

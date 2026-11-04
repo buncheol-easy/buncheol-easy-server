@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 
 import buncheoleasy.auth.TokenPair;
+import buncheoleasy.auth.application.AppLoginCode;
+import buncheoleasy.auth.application.AppLoginService;
 import buncheoleasy.auth.application.SocialLoginCommand;
 import buncheoleasy.auth.application.SocialLoginResult;
 import buncheoleasy.auth.application.SocialLoginService;
@@ -49,6 +52,8 @@ class OAuth2LoginSuccessHandlerTest {
   private static final String FRONTEND_CALLBACK_URL = "http://localhost:3000/login/callback";
   private static final String REFRESH_COOKIE_PATH = "/api/backend/v1/auth";
   private static final String AGE_RANGE_CONSENT_CALLBACK_URL = "http://localhost:3000/upload";
+  private static final String APP_CALLBACK_URL = "https://buncheoleasy.com/login/app";
+  private static final String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
   @Mock private OAuth2UserProfileExtractor profileExtractor;
 
@@ -60,6 +65,8 @@ class OAuth2LoginSuccessHandlerTest {
 
   @Mock private OAuth2User principal;
 
+  @Mock private AppLoginService appLoginService;
+
   private final RefreshTokenCookieFactory refreshTokenCookieFactory =
       new RefreshTokenCookieFactory(1209600, false, REFRESH_COOKIE_PATH);
 
@@ -68,6 +75,11 @@ class OAuth2LoginSuccessHandlerTest {
   }
 
   private OAuth2LoginSuccessHandler createHandler(final String loginCallbackUrl) {
+    return createHandler(loginCallbackUrl, APP_CALLBACK_URL);
+  }
+
+  private OAuth2LoginSuccessHandler createHandler(
+      final String loginCallbackUrl, final String appCallbackUrl) {
     return new OAuth2LoginSuccessHandler(
         List.of(profileExtractor),
         socialLoginService,
@@ -76,7 +88,163 @@ class OAuth2LoginSuccessHandlerTest {
         kakaoApiClient,
         new AgeRangeConsentRedirector(AGE_RANGE_CONSENT_CALLBACK_URL),
         new LoginFailureRedirector(loginCallbackUrl),
+        appLoginService,
+        new AppLoginRedirector(appCallbackUrl),
         loginCallbackUrl);
+  }
+
+  private static MockHttpServletRequest appLoginCallback(final String state) {
+    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/login/oauth2/code/kakao");
+    request.setParameter("state", state);
+    return request;
+  }
+
+  private OAuth2AuthenticationToken givenKakaoProfile() {
+    given(profileExtractor.supports("kakao")).willReturn(true);
+    given(profileExtractor.extract(principal))
+        .willReturn(new OAuth2UserProfile(SocialProvider.KAKAO, "provider-id", "test@example.com"));
+    return new OAuth2AuthenticationToken(
+        principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+  }
+
+  @Nested
+  @DisplayName("앱 로그인 콜백 (state = app.<challenge>.<무작위>)")
+  class AppLoginCallbackTest {
+
+    @Test
+    void 쿠키와_토큰_없이_일회용_코드만_앱_주소로_돌려준다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication = givenKakaoProfile();
+      given(appLoginService.issueLoginCode(any(SocialLoginCommand.class), eq(CHALLENGE)))
+          .willReturn(new AppLoginCode("one-time-code", false));
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"), response, authentication);
+
+      // then
+      assertThat(response.getStatus()).isEqualTo(302);
+      assertThat(response.getRedirectedUrl()).isEqualTo(APP_CALLBACK_URL + "?code=one-time-code");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      then(socialLoginService).should(never()).login(any());
+    }
+
+    @Test
+    void 가입_처리는_웹과_같은_명령으로_한다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication = givenKakaoProfile();
+      given(appLoginService.issueLoginCode(any(SocialLoginCommand.class), eq(CHALLENGE)))
+          .willReturn(new AppLoginCode("one-time-code", false));
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"),
+          new MockHttpServletResponse(),
+          authentication);
+
+      // then
+      ArgumentCaptor<SocialLoginCommand> captor =
+          ArgumentCaptor.forClass(SocialLoginCommand.class);
+      then(appLoginService).should().issueLoginCode(captor.capture(), eq(CHALLENGE));
+      assertThat(captor.getValue().provider()).isEqualTo("KAKAO");
+      assertThat(captor.getValue().providerId()).isEqualTo("provider-id");
+      assertThat(captor.getValue().email()).isEqualTo("test@example.com");
+    }
+
+    @Test
+    void 새_가입이면_signup_1_을_붙인다() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication = givenKakaoProfile();
+      given(appLoginService.issueLoginCode(any(SocialLoginCommand.class), eq(CHALLENGE)))
+          .willReturn(new AppLoginCode("one-time-code", true));
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl())
+          .isEqualTo(APP_CALLBACK_URL + "?code=one-time-code&signup=1");
+    }
+
+    @Test
+    void 이메일이_없어_가입하지_못하면_앱_주소로_email_required() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication = givenKakaoProfile();
+      given(appLoginService.issueLoginCode(any(SocialLoginCommand.class), eq(CHALLENGE)))
+          .willThrow(new BusinessException(ErrorCode.AUTH_SOCIAL_EMAIL_REQUIRED));
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(APP_CALLBACK_URL + "?error=email_required");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+    }
+
+    @Test
+    void 그_밖의_실패는_앱_주소로_failed() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication = givenKakaoProfile();
+      given(appLoginService.issueLoginCode(any(SocialLoginCommand.class), eq(CHALLENGE)))
+          .willThrow(new IllegalStateException("redis down"));
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(APP_CALLBACK_URL + "?error=failed");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+    }
+
+    @Test
+    void 앱_로그인이_꺼져_있으면_가입도_코드도_없이_웹_실패_화면으로_보낸다() throws Exception {
+      // given — 켜진 사이 시작했다가 꺼진 뒤 돌아온 콜백
+      OAuth2LoginSuccessHandler handler = createHandler(FRONTEND_CALLBACK_URL, "");
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(
+          appLoginCallback("app." + CHALLENGE + ".random"), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_CALLBACK_URL + "?error=failed");
+      assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).isNull();
+      then(appLoginService).shouldHaveNoInteractions();
+      then(socialLoginService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void state_의_challenge_모양이_다르면_코드를_만들지_않고_failed() throws Exception {
+      // given
+      OAuth2LoginSuccessHandler handler = createHandler();
+      OAuth2AuthenticationToken authentication =
+          new OAuth2AuthenticationToken(
+              principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "kakao");
+      MockHttpServletResponse response = new MockHttpServletResponse();
+
+      // when
+      handler.onAuthenticationSuccess(appLoginCallback("app.short.random"), response, authentication);
+
+      // then
+      assertThat(response.getRedirectedUrl()).isEqualTo(APP_CALLBACK_URL + "?error=failed");
+      then(appLoginService).shouldHaveNoInteractions();
+      then(socialLoginService).shouldHaveNoInteractions();
+    }
   }
 
   /** OutputCaptureExtension 은 앞선 테스트의 출력까지 돌려주므로, 표지 줄을 찍고 그 뒤만 본다. */

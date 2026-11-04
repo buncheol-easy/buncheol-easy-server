@@ -78,6 +78,26 @@ public enum ErrorCode {
   AUTH_OAUTH2_LOGIN_FAILED("AUTH-004", "소셜 로그인에 실패했습니다.", HttpStatus.UNAUTHORIZED),
   AUTH_INVALID_TOKEN("AUTH-005", "유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED),
   AUTH_EXPIRED_TOKEN("AUTH-006", "만료된 토큰입니다.", HttpStatus.UNAUTHORIZED),
+  // 앱 로그인 일회용 코드 — 없음·만료(120초)·이미 사용을 구분하지 않는다. 앱은 어느 경우든 로그인을 다시 시작한다.
+  AUTH_APP_LOGIN_CODE_INVALID(
+      "AUTH-007", "로그인 코드가 유효하지 않습니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED),
+  AUTH_APP_LOGIN_VERIFIER_MISMATCH(
+      "AUTH-008", "로그인 확인값이 맞지 않습니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED),
+  // 서명·발급자·대상 앱·만료·nonce 중 무엇이 틀렸는지 알려 주지 않는다.
+  AUTH_APPLE_TOKEN_INVALID(
+      "AUTH-009", "애플 로그인 정보를 확인하지 못했습니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED),
+  // 서버에 허용 앱(APPLE_SIGNIN_AUDIENCES)이 설정되지 않은 환경.
+  AUTH_APPLE_SIGNIN_DISABLED("AUTH-010", "애플 로그인을 사용할 수 없습니다.", HttpStatus.BAD_REQUEST),
+  // 애플 공개키를 받아 오지 못한 경우 — 토큰 문제가 아니라 잠시 뒤 다시 하면 된다.
+  AUTH_APPLE_KEYS_UNAVAILABLE(
+      "AUTH-011",
+      "지금은 애플 로그인을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+      HttpStatus.SERVICE_UNAVAILABLE),
+  // 같은 IP 에서 애플 토큰 검증 실패가 몰릴 때. 남은 횟수·해제 시각은 알리지 않는다.
+  AUTH_APPLE_LOGIN_RATE_LIMITED(
+      "AUTH-012", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+  // 서버에 앱 주소(APP_LOGIN_CALLBACK_URL)가 설정되지 않은 환경 — 카카오 앱 로그인을 시작하지 않는다.
+  AUTH_APP_LOGIN_DISABLED("AUTH-013", "앱 로그인을 사용할 수 없습니다.", HttpStatus.BAD_REQUEST),
 
   /** FILE - MultiPart File 관련 에러 */
   FILE_NAME_INVALID("FILE-001", "유효하지 않은 파일 이름입니다.", HttpStatus.BAD_REQUEST),

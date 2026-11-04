@@ -37,8 +37,17 @@ class KakaoAuthorizationRequestResolverTest {
           .jwkSetUri("https://kauth.kakao.com/.well-known/jwks.json")
           .build();
 
+  private static final String APP_LOGIN_PATH = "/oauth2/authorization/kakao/app";
+  private static final String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
   private final KakaoAuthorizationRequestResolver resolver =
-      new KakaoAuthorizationRequestResolver(new InMemoryClientRegistrationRepository(KAKAO));
+      new KakaoAuthorizationRequestResolver(
+          new InMemoryClientRegistrationRepository(KAKAO),
+          new AppLoginRedirector("https://buncheoleasy.com/login/app"));
+
+  private final KakaoAuthorizationRequestResolver appLoginOffResolver =
+      new KakaoAuthorizationRequestResolver(
+          new InMemoryClientRegistrationRepository(KAKAO), new AppLoginRedirector(""));
 
   private OAuth2AuthorizationRequest resolve(final String path) {
     return resolver.resolve(new MockHttpServletRequest("GET", path));
@@ -138,6 +147,64 @@ class KakaoAuthorizationRequestResolverTest {
 
       // then
       assertThat(first).isNotEqualTo(second);
+    }
+  }
+
+  @Nested
+  @DisplayName("앱 로그인")
+  class AppLoginTest {
+
+    private OAuth2AuthorizationRequest resolveApp(
+        final KakaoAuthorizationRequestResolver target, final String challenge) {
+      MockHttpServletRequest request = new MockHttpServletRequest("GET", APP_LOGIN_PATH);
+      if (challenge != null) {
+        request.setParameter("challenge", challenge);
+      }
+      return target.resolve(request);
+    }
+
+    @Test
+    void 일반_로그인과_같은_요청에_state_만_app_challenge_로_바꾼다() {
+      // when
+      OAuth2AuthorizationRequest request = resolveApp(resolver, CHALLENGE);
+
+      // then
+      assertThat(request.getState()).startsWith("app." + CHALLENGE + ".");
+      assertThat(queryParams(request)).doesNotContainKey(OAuth2ParameterNames.SCOPE);
+      assertThat(queryParams(request)).containsKey(OidcParameterNames.NONCE);
+      assertThat(request.getRedirectUri()).isEqualTo("http://localhost/login/oauth2/code/kakao");
+      assertThat(request.getScopes()).containsExactly("openid");
+    }
+
+    @Test
+    void 콜백_state_에서_challenge_를_다시_꺼낸다() {
+      // given
+      MockHttpServletRequest callback =
+          new MockHttpServletRequest("GET", "/login/oauth2/code/kakao");
+      callback.setParameter(
+          OAuth2ParameterNames.STATE, resolveApp(resolver, CHALLENGE).getState());
+
+      // when & then
+      assertThat(KakaoAuthorizationRequestResolver.isAppLoginCallback(callback)).isTrue();
+      assertThat(KakaoAuthorizationRequestResolver.isAgeRangeConsentCallback(callback)).isFalse();
+      assertThat(KakaoAuthorizationRequestResolver.appLoginChallenge(callback)).contains(CHALLENGE);
+    }
+
+    @Test
+    void challenge_가_형식에_맞지_않으면_카카오로_보내지_않는다() {
+      assertThat(resolveApp(resolver, "short")).isNull();
+      assertThat(resolveApp(resolver, null)).isNull();
+    }
+
+    @Test
+    void 앱_주소가_설정되지_않으면_올바른_challenge_도_카카오로_보내지_않는다() {
+      assertThat(resolveApp(appLoginOffResolver, CHALLENGE)).isNull();
+    }
+
+    @Test
+    void 앱_로그인이_꺼져도_일반_로그인은_그대로다() {
+      assertThat(appLoginOffResolver.resolve(new MockHttpServletRequest("GET", LOGIN_PATH)))
+          .isNotNull();
     }
   }
 

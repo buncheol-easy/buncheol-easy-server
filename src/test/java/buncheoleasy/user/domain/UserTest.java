@@ -79,7 +79,15 @@ class UserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"123456", "789012", "aa123", "test-user_123"})
+    @ValueSource(
+        strings = {
+          "123456",
+          "789012",
+          "aa123",
+          "test-user_123",
+          // 애플 사용자 식별자(sub) 모양
+          "001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0123"
+        })
     void 올바른_형식의_providerId로_유저를_생성할_수_있다(String providerId) {
       // when & then
       assertThatCode(() -> User.create("KAKAO", providerId, "test@example.com"))

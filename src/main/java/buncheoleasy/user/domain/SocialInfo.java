@@ -14,7 +14,8 @@ public record SocialInfo(
         SocialProvider provider,
     @Column(name = "provider_id", nullable = false, length = 100) String providerId) {
 
-  private static final Pattern PROVIDER_ID_REGEX = Pattern.compile("^[a-zA-Z0-9_-]+$");
+  // 점(.)은 애플 사용자 식별자(sub, 예: 001234.0a1b….0123) 때문에 허용한다.
+  private static final Pattern PROVIDER_ID_REGEX = Pattern.compile("^[a-zA-Z0-9._-]+$");
   private static final int MAX_LENGTH = 100;
 
   public SocialInfo {

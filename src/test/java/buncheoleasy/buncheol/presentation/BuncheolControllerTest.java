@@ -1206,7 +1206,8 @@ class BuncheolControllerTest {
               false,
               false,
               Instant.parse("2026-05-15T08:00:00Z"),
-              null);
+              null,
+              7L);
       CursorResponse<BuncheolSummaryResponse> response =
           new CursorResponse<>(List.of(item), null, false);
 
@@ -1225,6 +1226,7 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.items[0].bookmarked").value(false))
           // 클라가 Date.parse 로 '신규' 배지를 판정하므로 숫자 타임스탬프가 아닌 ISO-8601 문자열이어야 한다.
           .andExpect(jsonPath("$.items[0].createdAt").value("2026-05-15T08:00:00Z"))
+          .andExpect(jsonPath("$.items[0].hostId").value(7))
           .andExpect(jsonPath("$.hasNext").value(false))
           .andExpect(jsonPath("$.nextCursor").doesNotExist());
     }
@@ -1269,7 +1271,8 @@ class BuncheolControllerTest {
               null,
               false,
               null,
-              Instant.parse("2026-05-14T12:00:00Z"));
+              Instant.parse("2026-05-14T12:00:00Z"),
+              HOST_ID);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -1295,7 +1298,8 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))
           .andExpect(jsonPath("$.myParticipation.participations[0].status").value("AWAITING_PAYMENT"))
-          .andExpect(jsonPath("$.termsEditable").value(false));
+          .andExpect(jsonPath("$.termsEditable").value(false))
+          .andExpect(jsonPath("$.hostId").value(HOST_ID));
     }
 
     @Test
@@ -1316,7 +1320,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false, null, Instant.now());
+              null, FlowType.LEGACY, null, null, false, null, Instant.now(), 7L);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -1346,7 +1350,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false, null, Instant.now());
+              null, FlowType.LEGACY, null, null, false, null, Instant.now(), 7L);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc

@@ -11,8 +11,10 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.times;
 
 import buncheoleasy.auth.TokenPair;
+import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.auth.infrastructure.jwt.JwtTokenProvider;
 import buncheoleasy.global.exception.domain.BusinessException;
@@ -33,6 +35,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -286,6 +289,75 @@ class SocialLoginServiceTest {
   }
 
   @Nested
+  @DisplayName("signIn 테스트")
+  class SignInTest {
+
+    @Test
+    void 가입_로그인_처리만_하고_토큰은_발급하지_않는다() {
+      // given — 앱 로그인이 쓰는 경로. 여기서 웹 토큰을 발급하면 같은 회원의 웹 칸이 덮인다.
+      User user = User.create("KAKAO", "social_123", "test@example.com");
+      ReflectionTestUtils.setField(user, "id", 1L);
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), anyString(), isNull(), isNull(), isNull(), eq(false)))
+          .willReturn(new SocialLoginUser(user, true));
+
+      // when
+      LoginAccount account =
+          socialLoginService.signIn(
+              SocialLoginCommand.of("KAKAO", "social_123", "test@example.com"));
+
+      // then
+      assertThat(account).isEqualTo(new LoginAccount(1L, true));
+      then(jwtTokenProvider).shouldHaveNoInteractions();
+      then(refreshTokenStore).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 동시_첫_로그인으로_유니크_충돌이_나면_다시_조회해_먼저_만들어진_회원으로_로그인한다() {
+      // given — 다른 요청이 먼저 가입해 이 요청의 INSERT 가 uq_users_active_social_account 에 걸린 상황
+      User user = User.create("APPLE", "001234.abc.0123", "relay@privaterelay.appleid.com");
+      ReflectionTestUtils.setField(user, "id", 3L);
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), anyString(), isNull(), isNull(), isNull(), eq(false)))
+          .willThrow(new DataIntegrityViolationException("uq_users_active_social_account"))
+          .willReturn(new SocialLoginUser(user, false));
+
+      // when
+      LoginAccount account =
+          socialLoginService.signIn(
+              SocialLoginCommand.of(
+                  "APPLE", "001234.abc.0123", "relay@privaterelay.appleid.com"));
+
+      // then
+      assertThat(account).isEqualTo(new LoginAccount(3L, false));
+      then(userDomainService)
+          .should(times(2))
+          .getOrCreateBySocialLogin(
+              any(SocialInfo.class), anyString(), isNull(), isNull(), isNull(), eq(false));
+    }
+
+    @Test
+    void 다시_조회해도_충돌하면_그대로_던진다() {
+      // given
+      given(
+              userDomainService.getOrCreateBySocialLogin(
+                  any(SocialInfo.class), anyString(), isNull(), isNull(), isNull(), eq(false)))
+          .willThrow(new DataIntegrityViolationException("first"))
+          .willThrow(new DataIntegrityViolationException("second"));
+
+      // when & then
+      assertThatThrownBy(
+              () ->
+                  socialLoginService.signIn(
+                      SocialLoginCommand.of("KAKAO", "social_123", "test@example.com")))
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .hasMessage("second");
+    }
+  }
+
+  @Nested
   @DisplayName("logout 테스트")
   class LogoutTest {
 
@@ -298,7 +370,7 @@ class SocialLoginServiceTest {
       socialLoginService.logout(userId);
 
       // then
-      then(refreshTokenStore).should().delete(userId);
+      then(refreshTokenStore).should().delete(userId, LoginClient.WEB);
     }
   }
 }

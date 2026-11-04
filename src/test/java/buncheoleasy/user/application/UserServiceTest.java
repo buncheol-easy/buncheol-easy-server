@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.push.domain.PushDeviceRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
@@ -40,12 +41,14 @@ class UserServiceTest {
 
   @Mock private RefreshTokenStore refreshTokenStore;
 
+  @Mock private PushDeviceRepository pushDeviceRepository;
+
   @Nested
   @DisplayName("회원 탈퇴 테스트")
   class WithdrawTest {
 
     @Test
-    void 정상적으로_탈퇴하고_리프레시_토큰을_삭제한다() {
+    void 정상적으로_탈퇴하고_웹과_앱_리프레시_토큰을_모두_삭제한다() {
       // given
       Long userId = 1L;
 
@@ -54,14 +57,26 @@ class UserServiceTest {
 
       // then
       then(userDomainService).should().withdraw(userId);
-      then(refreshTokenStore).should().delete(userId);
+      then(refreshTokenStore).should().deleteAll(userId);
+    }
+
+    @Test
+    void 탈퇴하면_그_회원의_앱_푸시_기기를_지운다() {
+      // given — users 는 soft delete 라 push_devices 의 FK CASCADE 가 타지 않는다.
+      Long userId = 1L;
+
+      // when
+      userService.withdraw(userId);
+
+      // then
+      then(pushDeviceRepository).should().deleteAllByUserId(userId);
     }
 
     @Test
     void 리프레시_토큰_삭제_실패해도_탈퇴는_정상_처리된다() {
       // given
       Long userId = 1L;
-      doThrow(new RuntimeException("Redis 연결 실패")).when(refreshTokenStore).delete(userId);
+      doThrow(new RuntimeException("Redis 연결 실패")).when(refreshTokenStore).deleteAll(userId);
 
       // when & then: 예외가 전파되지 않아야 함
       userService.withdraw(userId);
@@ -83,6 +98,7 @@ class UserServiceTest {
 
       then(userDomainService).shouldHaveNoInteractions();
       then(refreshTokenStore).shouldHaveNoInteractions();
+      then(pushDeviceRepository).shouldHaveNoInteractions();
     }
 
     @Test
@@ -100,6 +116,7 @@ class UserServiceTest {
 
       then(userDomainService).shouldHaveNoInteractions();
       then(refreshTokenStore).shouldHaveNoInteractions();
+      then(pushDeviceRepository).shouldHaveNoInteractions();
     }
   }
 

@@ -96,6 +96,13 @@ public class BuncheolController {
     return ResponseEntity.ok(buncheolService.getHostingEligibility(hostId));
   }
 
+  /** 개최 입구의 「만 19세 이상」 본인 체크 API. 멱등이라 이미 체크했으면 첫 체크 시각을 그대로 두고 204 를 준다. */
+  @PostMapping("/hosting-eligibility/adult-confirmation")
+  public ResponseEntity<Void> confirmHostAdult(@AuthenticationPrincipal final Long hostId) {
+    buncheolService.confirmHostAdult(hostId);
+    return ResponseEntity.noContent().build();
+  }
+
   /**
    * 분철 단건 상세 조회 (비로그인 허용). 멤버별 가격·참여 가능 여부, 최소 진행 인원·현재 확정 인원, 로그인 유저의 내 참여 현황을 포함한다.
    *

@@ -601,8 +601,8 @@ class BuncheolServiceTest {
 
     @Test
     void 자격_게이트에_걸리면_분철이_저장되지_않는다() {
-      // given — 연령대 미확인(USR-032)이 게이트에서 던져지는 경우
-      willThrow(new BusinessException(ErrorCode.USER_AGE_NOT_VERIFIED))
+      // given — 만 19세 체크 없음(USR-036)이 게이트에서 던져지는 경우
+      willThrow(new BusinessException(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED))
           .given(userDomainService)
           .requireC2cHostQualification(HOST_ID);
       HoldBuncheolRequest request =
@@ -612,7 +612,7 @@ class BuncheolServiceTest {
       assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, List.of()))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_AGE_NOT_VERIFIED);
+          .isEqualTo(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED);
 
       then(buncheolDomainService).should(never()).createBuncheol(any(), any());
     }
@@ -835,14 +835,14 @@ class BuncheolServiceTest {
     }
 
     /**
-     * 사유가 서로 뒤바뀌면 FE 안내가 정반대가 된다 — AGE_UNVERIFIED 는 "카카오 재동의로 열림", NOT_ADULT 는 "회복 불가"다. exhaustive
-     * switch 는 누락만 잡고 뒤바뀜은 못 잡아 매핑을 따로 잠근다.
+     * 사유가 서로 뒤바뀌면 FE 안내가 정반대가 된다 — ADULT_CONFIRM_REQUIRED 는 "체크 한 번으로 열림", KAKAO_ACCOUNT_REQUIRED 는 "회복
+     * 불가"다. exhaustive switch 는 누락만 잡고 뒤바뀜은 못 잡아 매핑을 따로 잠근다.
      */
     @ParameterizedTest
     @CsvSource({
+      "KAKAO_ACCOUNT_REQUIRED, KAKAO_ACCOUNT_REQUIRED",
       "PHONE_REQUIRED, PHONE_REQUIRED",
-      "AGE_UNVERIFIED, AGE_UNVERIFIED",
-      "NOT_ADULT, NOT_ADULT"
+      "ADULT_CONFIRM_REQUIRED, ADULT_CONFIRM_REQUIRED"
     })
     void 자격_판정이_같은_이름의_사유로_매핑된다(
         C2cHostQualification qualification, HostingEligibilityResponse.Reason expected) {
@@ -858,17 +858,18 @@ class BuncheolServiceTest {
     }
 
     @Test
-    void 미성년이면_NOT_ADULT_사유로_부적격이다() {
+    void 체크_기록이_없으면_ADULT_CONFIRM_REQUIRED_사유로_부적격이다() {
       // given
       given(userDomainService.evaluateC2cHostQualification(HOST_ID))
-          .willReturn(C2cHostQualification.NOT_ADULT);
+          .willReturn(C2cHostQualification.ADULT_CONFIRM_REQUIRED);
 
       // when
       HostingEligibilityResponse response = buncheolService.getHostingEligibility(HOST_ID);
 
       // then
       assertThat(response.eligible()).isFalse();
-      assertThat(response.reason()).isEqualTo(HostingEligibilityResponse.Reason.NOT_ADULT);
+      assertThat(response.reason())
+          .isEqualTo(HostingEligibilityResponse.Reason.ADULT_CONFIRM_REQUIRED);
       // 자격 미달이면 상한은 볼 필요가 없다 — 제출 게이트의 검사 순서와 같다.
       then(buncheolDomainService).should(never()).isActiveHostedLimitExceeded(any());
     }

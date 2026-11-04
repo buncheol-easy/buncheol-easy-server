@@ -486,6 +486,36 @@ class BuncheolControllerTest {
           .andExpect(content().string(containsString(ErrorCode.GROUP_NOT_FOUND.getCode())));
     }
 
+    @Test
+    void 만19세_체크가_없으면_409_USR_036_으로_거절한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.code").value("USR-036"));
+    }
+
+    @Test
+    void 카카오_가입자가_아니면_403_USR_037_으로_거절한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isForbidden())
+          .andExpect(jsonPath("$.code").value("USR-037"));
+    }
+
     // 핵심 회귀 지점은 레코드가 아니라 컨트롤러 — toImageFile 의 catch 가 IOException 을 넘어
     // BusinessException 까지 삼키도록 넓어지면 ImageFileTest 는 초록인 채 조용히 회귀한다.
     @Test
@@ -1112,13 +1142,29 @@ class BuncheolControllerTest {
     void 부적격이면_사유를_함께_반환한다() throws Exception {
       given(buncheolService.getHostingEligibility(HOST_ID))
           .willReturn(
-              HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+              HostingEligibilityResponse.blocked(
+                  HostingEligibilityResponse.Reason.ADULT_CONFIRM_REQUIRED));
 
       mockMvc
           .perform(get("/v1/buncheols/hosting-eligibility").with(mockAuth()))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.eligible").value(false))
-          .andExpect(jsonPath("$.reason").value("NOT_ADULT"));
+          .andExpect(jsonPath("$.reason").value("ADULT_CONFIRM_REQUIRED"));
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 만 19세 본인 체크 API 테스트")
+  class ConfirmHostAdultTest {
+
+    @Test
+    void 본문_없이_호출하면_체크를_남기고_204를_반환한다() throws Exception {
+      mockMvc
+          .perform(post("/v1/buncheols/hosting-eligibility/adult-confirmation").with(mockAuth()))
+          .andExpect(status().isNoContent())
+          .andExpect(content().string(""));
+
+      then(buncheolService).should().confirmHostAdult(HOST_ID);
     }
   }
 
@@ -1160,7 +1206,8 @@ class BuncheolControllerTest {
               false,
               false,
               Instant.parse("2026-05-15T08:00:00Z"),
-              null);
+              null,
+              7L);
       CursorResponse<BuncheolSummaryResponse> response =
           new CursorResponse<>(List.of(item), null, false);
 
@@ -1179,6 +1226,7 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.items[0].bookmarked").value(false))
           // 클라가 Date.parse 로 '신규' 배지를 판정하므로 숫자 타임스탬프가 아닌 ISO-8601 문자열이어야 한다.
           .andExpect(jsonPath("$.items[0].createdAt").value("2026-05-15T08:00:00Z"))
+          .andExpect(jsonPath("$.items[0].hostId").value(7))
           .andExpect(jsonPath("$.hasNext").value(false))
           .andExpect(jsonPath("$.nextCursor").doesNotExist());
     }
@@ -1223,7 +1271,8 @@ class BuncheolControllerTest {
               null,
               false,
               null,
-              Instant.parse("2026-05-14T12:00:00Z"));
+              Instant.parse("2026-05-14T12:00:00Z"),
+              HOST_ID);
       given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
       mockMvc
@@ -1249,7 +1298,8 @@ class BuncheolControllerTest {
           .andExpect(jsonPath("$.myParticipation.participations[0].participationId").value(601))
           .andExpect(jsonPath("$.myParticipation.participations[0].buncheolMemberId").value(101))
           .andExpect(jsonPath("$.myParticipation.participations[0].status").value("AWAITING_PAYMENT"))
-          .andExpect(jsonPath("$.termsEditable").value(false));
+          .andExpect(jsonPath("$.termsEditable").value(false))
+          .andExpect(jsonPath("$.hostId").value(HOST_ID));
     }
 
     @Test
@@ -1270,7 +1320,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.CU_HALF, 4000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false, null, Instant.now());
+              null, FlowType.LEGACY, null, null, false, null, Instant.now(), 7L);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc
@@ -1300,7 +1350,7 @@ class BuncheolControllerTest {
               List.of(new ShippingOptionResponse(ShippingMethod.GS25_HALF, 3000)),
               List.of(),
               false,
-              null, FlowType.LEGACY, null, null, false, null, Instant.now());
+              null, FlowType.LEGACY, null, null, false, null, Instant.now(), 7L);
       given(buncheolDetailQueryService.getDetail(10L, null)).willReturn(response);
 
       mockMvc

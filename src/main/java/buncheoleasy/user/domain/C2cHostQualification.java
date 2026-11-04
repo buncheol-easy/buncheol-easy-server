@@ -9,12 +9,12 @@ package buncheoleasy.user.domain;
  */
 public enum C2cHostQualification {
   QUALIFIED,
+  // 카카오 가입자가 아님 — 카카오 동의로 받은 전화번호가 없어 이 계정으로는 회복 경로가 없다.
+  KAKAO_ACCOUNT_REQUIRED,
   // 가입 미완료(전화번호 미보유) — C2C 직거래는 개최자 연락처가 분쟁 처리의 근거다.
   PHONE_REQUIRED,
-  // 연령대 미보유 — 카카오 재동의로 회복 가능.
-  AGE_UNVERIFIED,
-  // 미성년 확정 — 회복 경로 없음.
-  NOT_ADULT;
+  // 「만 19세 이상」 본인 체크 기록 없음 — 체크 한 번으로 회복 가능.
+  ADULT_CONFIRM_REQUIRED;
 
   public boolean isQualified() {
     return this == QUALIFIED;

@@ -22,6 +22,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserServiceTerm extends TimestampedEntity {
 
+  /** 개최 입구의 「만 19세 이상」 본인 체크. 카카오 약관이 아니라 서버 API 가 남기므로 재로그인 갱신 대상이 아니다. */
+  public static final String HOST_ADULT_CONFIRM_TAG = "host_adult_confirm";
+
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;

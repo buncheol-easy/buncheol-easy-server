@@ -1,5 +1,6 @@
 package buncheoleasy.notification.application;
 
+import buncheoleasy.aidraft.application.AiDraftDailyTotalReachedEvent;
 import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRequestedEvent;
 import buncheoleasy.buncheol.domain.FlowType;
@@ -237,6 +238,23 @@ public class SlackNotificationListener {
             Map.of("type", "section", "text", plainText(event.content())),
             Map.of("type", "context", "elements", List.of(plainText(meta))));
     slackWebhookClient.send(SlackChannel.FEEDBACK, fallbackText, blocks);
+  }
+
+  /**
+   * (운영자) AI 개최글 하루 합계가 알림 기준에 닿았다. 막지 않는 신호라 한도를 다시 정할지 판단할 재료(날짜·합계)만 싣는다.
+   *
+   * <p>{@code @EventListener} 다 — AI 개최글 서비스는 엔진 대기 동안 DB 커넥션을 쥐지 않으려고 트랜잭션 밖에서 발행한다.
+   */
+  @Async
+  @EventListener
+  public void onAiDraftDailyTotalReached(final AiDraftDailyTotalReachedEvent event) {
+    if (!slackWebhookClient.isEnabled(SlackChannel.AI_USAGE)) {
+      return;
+    }
+    String text =
+        "🤖 [AI 개최글] %s 하루 합계가 %d건에 닿았어요 (막지 않음 · 한도 재검토 신호)"
+            .formatted(event.date(), event.total());
+    slackWebhookClient.send(SlackChannel.AI_USAGE, text);
   }
 
   /**

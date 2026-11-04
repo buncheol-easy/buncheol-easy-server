@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +32,7 @@ class RedisFixedWindowCounterTest {
   private static final String KEY = "TEST:counter";
 
   @Mock private StringRedisTemplate redisTemplate;
+  @Mock private ValueOperations<String, String> valueOperations;
 
   private RedisFixedWindowCounter counter;
 
@@ -99,6 +101,71 @@ class RedisFixedWindowCounterTest {
 
       assertThatThrownBy(() -> counter.increment(KEY, Duration.ofMinutes(10)))
           .isInstanceOf(DataAccessException.class);
+    }
+  }
+
+  @Nested
+  @DisplayName("decrement 테스트")
+  class DecrementTest {
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void 키가_살아_있고_0보다_클_때만_내리는_스크립트를_키_하나로_보낸다() {
+      // 만료된 키에 그냥 DECR 하면 TTL 없는 -1 키가 생기고, 그 뒤 INCR 이 첫 증가로 보지 못해 만료가 영영 안 걸린다.
+      counter.decrement(KEY);
+
+      ArgumentCaptor<RedisScript> script = ArgumentCaptor.forClass(RedisScript.class);
+      ArgumentCaptor<List> keys = ArgumentCaptor.forClass(List.class);
+      then(redisTemplate).should().execute(script.capture(), keys.capture());
+      assertThat(keys.getValue()).containsExactly(KEY);
+      assertThat(script.getValue().getScriptAsString())
+          .isEqualTo(
+              """
+              local current = redis.call('GET', KEYS[1])
+              if current and tonumber(current) > 0 then
+                return redis.call('DECR', KEYS[1])
+              end
+              return -1
+              """);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void Redis_장애는_그대로_던진다() {
+      RedisConnectionFailureException failure = new RedisConnectionFailureException("redis down");
+      given(redisTemplate.execute(any(RedisScript.class), anyList())).willThrow(failure);
+
+      assertThatThrownBy(() -> counter.decrement(KEY)).isSameAs(failure);
+    }
+  }
+
+  @Nested
+  @DisplayName("count 테스트")
+  class CountTest {
+
+    @Test
+    void 지금_값을_숫자로_읽는다() {
+      given(redisTemplate.opsForValue()).willReturn(valueOperations);
+      given(valueOperations.get(KEY)).willReturn("7");
+
+      assertThat(counter.count(KEY)).isEqualTo(7L);
+    }
+
+    @Test
+    void 키가_없으면_0이다() {
+      given(redisTemplate.opsForValue()).willReturn(valueOperations);
+      given(valueOperations.get(KEY)).willReturn(null);
+
+      assertThat(counter.count(KEY)).isZero();
+    }
+
+    @Test
+    void Redis_장애는_그대로_던진다() {
+      RedisConnectionFailureException failure = new RedisConnectionFailureException("redis down");
+      given(redisTemplate.opsForValue()).willReturn(valueOperations);
+      given(valueOperations.get(KEY)).willThrow(failure);
+
+      assertThatThrownBy(() -> counter.count(KEY)).isSameAs(failure);
     }
   }
 

@@ -135,6 +135,6 @@ class AppleSignInPersistenceIntegrationTest {
 
     // then
     assertThat(userDomainService.evaluateC2cHostQualification(userId))
-        .isEqualTo(C2cHostQualification.AGE_UNVERIFIED);
+        .isEqualTo(C2cHostQualification.KAKAO_ACCOUNT_REQUIRED);
   }
 }

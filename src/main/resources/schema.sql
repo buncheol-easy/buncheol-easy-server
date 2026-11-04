@@ -760,3 +760,30 @@ CREATE TABLE IF NOT EXISTS ai_draft_requests
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
+
+-- 앱 푸시 기기 토큰 — 기기(토큰) 하나에 한 행이다. 같은 기기로 다른 계정에 로그인하면 토큰 기준 upsert 로 주인이 바뀐다.
+-- 회원 탈퇴는 soft delete 라 아래 CASCADE 가 타지 않는다 — 탈퇴 처리(UserService.withdraw)가 행을 직접 지운다.
+-- 기존 배포 DB 에는 수동 CREATE 필요.
+CREATE TABLE IF NOT EXISTS push_devices
+(
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id     BIGINT       NOT NULL COMMENT '기기 주인',
+    platform    VARCHAR(10)  NOT NULL COMMENT 'IOS (추후 ANDROID)',
+    token       VARCHAR(200) NOT NULL COMMENT 'APNs 기기 토큰(hex)',
+    environment VARCHAR(12)  NOT NULL COMMENT 'SANDBOX | PRODUCTION — 개발 빌드/스토어 빌드',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    -- 기기 등록 upsert 기준
+    UNIQUE INDEX uq_push_devices_token (token),
+    -- 발송 시 수신자의 기기 목록 · 회원별 기기 수 상한 정리
+    INDEX idx_push_devices_user (user_id),
+
+    CONSTRAINT fk_push_devices_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;

@@ -63,6 +63,13 @@ app:
     pickup-reminder:
       enabled: false
       threshold: 12h
+  apns:
+    # application.yaml 이 로컬 .env 를 import 하므로 .env 에 키가 있으면 테스트가 애플 서버를 부를 수 있다 — 빈 값으로 고정해 끈다.
+    # 발송기 테스트는 설정을 직접 만든다.
+    team-id: ""
+    key-id: ""
+    private-key: ""
+    topic: ""
 
 delivery:
   tracker:

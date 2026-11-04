@@ -1,5 +1,6 @@
 -- Test H2 Database용 테이블 생성
 -- FK 역순으로 DROP (자식 → 부모 순서)
+DROP TABLE IF EXISTS push_devices;
 DROP TABLE IF EXISTS ai_draft_requests;
 DROP TABLE IF EXISTS cvs_stores;
 DROP TABLE IF EXISTS inbox_messages;
@@ -538,3 +539,20 @@ CREATE TABLE ai_draft_requests
 
 CREATE INDEX idx_ai_draft_requests_user_created ON ai_draft_requests (user_id, created_at);
 CREATE INDEX idx_ai_draft_requests_created ON ai_draft_requests (created_at);
+
+CREATE TABLE push_devices
+(
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id     BIGINT       NOT NULL,
+    platform    VARCHAR(10)  NOT NULL,
+    token       VARCHAR(200) NOT NULL,
+    environment VARCHAR(12)  NOT NULL,
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT fk_push_devices_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX uq_push_devices_token ON push_devices (token);
+CREATE INDEX idx_push_devices_user ON push_devices (user_id);

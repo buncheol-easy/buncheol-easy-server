@@ -4,7 +4,10 @@ import buncheoleasy.delivery.infrastructure.DeliveryTrackerProperties;
 import buncheoleasy.deposit.infrastructure.PayActionClient;
 import buncheoleasy.notification.domain.SlackChannel;
 import buncheoleasy.notification.infrastructure.SlackWebhookClient;
+import buncheoleasy.push.infrastructure.ApnsClient;
+import buncheoleasy.push.infrastructure.ApnsProperties;
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +32,16 @@ public class IntegrationStatusReporter {
   private final PayActionClient payActionClient;
   private final DeliveryTrackerProperties deliveryTrackerProperties;
   private final SlackWebhookClient slackWebhookClient;
+  private final ApnsClient apnsClient;
+  private final ApnsProperties apnsProperties;
 
   @EventListener(ApplicationReadyEvent.class)
   public void reportOnReady() {
     log.info(
-        "외부 연동 상태: payaction={}, delivery-tracker={}, slack[{}]",
+        "외부 연동 상태: payaction={}, delivery-tracker={}, apns={}, slack[{}]",
         onOff(payActionClient.isEnabled()),
         deliveryTrackerStatus(),
+        apnsStatus(),
         Arrays.stream(SlackChannel.values())
             .map(channel -> channel + "=" + onOff(slackWebhookClient.isEnabled(channel)))
             .collect(Collectors.joining(", ")));
@@ -52,6 +58,17 @@ public class IntegrationStatusReporter {
       return "ON";
     }
     return "OFF(outbound=%s, webhook=%s)".formatted(onOff(outbound), onOff(webhook));
+  }
+
+  /** 앱 푸시가 꺼졌을 때 비어 있는 키 이름(값 아님)을 보여 준다. 키가 다 있는데 꺼졌으면 키 본문으로 서명할 수 없는 것이다. */
+  private String apnsStatus() {
+    if (apnsClient.isEnabled()) {
+      return "ON";
+    }
+    List<String> missing = apnsProperties.missingEnvKeys();
+    return missing.isEmpty()
+        ? "OFF(APNS_PRIVATE_KEY 를 쓸 수 없음)"
+        : "OFF(빈 키: " + String.join(", ", missing) + ")";
   }
 
   private static String onOff(final boolean enabled) {

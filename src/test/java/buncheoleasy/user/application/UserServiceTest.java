@@ -11,6 +11,7 @@ import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.push.domain.PushDeviceRepository;
 import buncheoleasy.user.domain.User;
 import buncheoleasy.user.domain.UserDomainService;
 import buncheoleasy.user.dto.request.BankAccountRequest;
@@ -40,6 +41,8 @@ class UserServiceTest {
 
   @Mock private RefreshTokenStore refreshTokenStore;
 
+  @Mock private PushDeviceRepository pushDeviceRepository;
+
   @Nested
   @DisplayName("회원 탈퇴 테스트")
   class WithdrawTest {
@@ -55,6 +58,18 @@ class UserServiceTest {
       // then
       then(userDomainService).should().withdraw(userId);
       then(refreshTokenStore).should().delete(userId);
+    }
+
+    @Test
+    void 탈퇴하면_그_회원의_앱_푸시_기기를_지운다() {
+      // given — users 는 soft delete 라 push_devices 의 FK CASCADE 가 타지 않는다.
+      Long userId = 1L;
+
+      // when
+      userService.withdraw(userId);
+
+      // then
+      then(pushDeviceRepository).should().deleteAllByUserId(userId);
     }
 
     @Test
@@ -83,6 +98,7 @@ class UserServiceTest {
 
       then(userDomainService).shouldHaveNoInteractions();
       then(refreshTokenStore).shouldHaveNoInteractions();
+      then(pushDeviceRepository).shouldHaveNoInteractions();
     }
 
     @Test
@@ -100,6 +116,7 @@ class UserServiceTest {
 
       then(userDomainService).shouldHaveNoInteractions();
       then(refreshTokenStore).shouldHaveNoInteractions();
+      then(pushDeviceRepository).shouldHaveNoInteractions();
     }
   }
 

@@ -1,7 +1,7 @@
 name: Deploy Backend Production
 
-# main push -> GitHub 호스팅 러너가 이미지를 빌드해 ECR 에 push 하고,
-# production EC2 의 self-hosted runner 는 pull + 블루-그린 무중단 전환만 한다.
+# main push -> GitHub 호스팅 러너가 이미지를 빌드해 GHCR(비공개)에 push 하고,
+# production 서버 안의 self-hosted runner 는 pull + 블루-그린 무중단 전환만 한다.
 # 구조·근거는 deploy-staging.yml 과 동일(빌드를 박스 밖으로 — docs 35 §8-A,
 # 무중단 전환 — docs/36 방안 1 · docs/39, scripts/blue-green.sh).
 # 차이: 트리거 main, 러너 라벨 production, 별칭 태그 prod, 진행 중 배포는 끊지 않음.
@@ -16,12 +16,12 @@ concurrency:
   # production 은 진행 중 배포를 끊지 않는다(반쯤 배포된 상태 방지).
   cancel-in-progress: false
 
-# 기본 최소권한 — build/promote 잡만 OIDC 용 id-token 을 자체 선언으로 추가한다
+# 기본 최소권한 — 창고에 올리고 받는 잡만 packages 권한을 자체 선언으로 추가한다
 permissions:
   contents: read
 
 env:
-  ECR_REGISTRY: 823164610944.dkr.ecr.ap-northeast-2.amazonaws.com
+  IMAGE_REGISTRY: ghcr.io/buncheol-easy
   IMAGE_REPO: bce-backend
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
-      id-token: write   # OIDC 토큰 발급 (aws-actions/configure-aws-credentials)
+      packages: write   # GHCR 에 이미지를 올린다
       contents: read
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
@@ -50,14 +50,12 @@ jobs:
         id: meta
         run: echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          role-to-assume: arn:aws:iam::823164610944:role/bce-gha-ecr-push
-          aws-region: ap-northeast-2
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -70,11 +68,12 @@ jobs:
           # sha- 불변 태그만 push — prod 별칭은 헬스체크 통과 후 promote 잡이 옮긴다 (리뷰 #89).
           # ⚠️ main 머지 커밋은 dev 와 SHA 가 달라 prod 는 재빌드된다 — staging 에서 검증한
           # 이미지와 바이트 동일하지 않다(같은 소스의 재현 빌드). 승격 모델 전환은 후속 검토.
-          tags: ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+          tags: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
           # 빌드 출처 ref 라벨 — rollback 의 계보 검증이 읽는다 (4차 리뷰 반영)
           labels: |
             bce.ref=${{ github.ref_name }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           provenance: false
           # 기본 브랜치(dev)의 캐시는 모든 브랜치에서 읽힌다 — main 빌드도 dev 가 시딩한
           # 캐시를 재사용할 수 있다(리뷰 재검토에서 주석 정정).
@@ -91,17 +90,30 @@ jobs:
     timeout-minutes: 20
     env:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+    permissions:
+      contents: read
+      packages: read
     steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Sync source to deploy dir (preserve .env)
+        # ⚠️ mysql/my.cnf 는 이 저장소에 없고 서버에만 있다(buncheol-easy-infra box/mysql).
+        # --delete 가 지우면 다음 DB 재기동 때 binlog·문자셋·시간대 설정이 사라진다. 반드시 제외한다.
         run: |
           rsync -a --delete \
             --exclude='.git' \
             --exclude='.gradle' \
             --exclude='build' \
             --exclude='.env*' \
+            --exclude='mysql/' \
             "${GITHUB_WORKSPACE}/" /home/ubuntu/buncheol-easy-server/
 
       - name: Blue-green deploy (무중단 전환)
@@ -111,7 +123,7 @@ jobs:
         run: |
           set -e
           cd /home/ubuntu/buncheol-easy-server
-          export BACKEND_IMAGE="${ECR_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
+          export BACKEND_IMAGE="${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           bash scripts/blue-green.sh deploy
 
       - name: Post-mortem snapshot
@@ -130,7 +142,7 @@ jobs:
       - name: Retain last 3 images (rollback cache)
         # 박스 빌드가 없어져 builder prune 은 불필요해졌다. pull 된 sha- 이미지는 태그가 있어
         # image prune 으로 안 지워지므로 최근 3개만 남기고 정리한다(GitHub 불능 시 오프라인 롤백용).
-        # 레지스트리 쪽 보존은 ECR lifecycle policy(sha- 최근 10개)가 담당한다.
+        # 창고 쪽 정리는 아직 없다(GHCR 컨테이너 창고는 현재 무료, 바뀌면 한 달 전 공지).
         # ⚠️ 정렬은 이미지 Created(빌드 시각) 기준이지 pull 시각이 아니다 — 롤백으로 되돌린 옛
         # 이미지는 이후 배포 몇 번이면 밀려날 수 있다(실행 중·정지 컨테이너가 참조하는 이미지는
         # rmi 실패로 살아남음 — 정지된 구 색 컨테이너가 물고 있는 롤백 이미지도 그래서 안전).
@@ -138,46 +150,33 @@ jobs:
         # 지우면 안 되기 때문 (리뷰 반영).
         if: success() || failure()
         run: |
-          docker images --format '{{.Repository}}:{{.Tag}}' "${ECR_REGISTRY}/${IMAGE_REPO}" \
+          docker images --format '{{.Repository}}:{{.Tag}}' "${IMAGE_REGISTRY}/${IMAGE_REPO}" \
             | grep ':sha-' | tail -n +4 | xargs -r docker rmi || true
           docker image prune -f || true
 
   promote:
     # 별칭은 배포가 헬스체크까지 통과한 뒤에만 이동한다 — 실패한 배포의 이미지를 별칭이
     # 가리키면, 박스 .env 기본값(:prod)을 쓰는 수동 up/restart 가 롤백을 조용히 원복시킨다
-    # (리뷰 #89 반영). 재빌드 없이 ECR 매니페스트 재태깅만 한다.
+    # (리뷰 #89 반영). 재빌드 없이 매니페스트 재태깅만 한다.
     needs: [build, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      id-token: write
+      packages: write
     env:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          role-to-assume: arn:aws:iam::823164610944:role/bce-gha-ecr-push
-          aws-region: ap-northeast-2
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Move 'prod' alias to deployed image
         run: |
           set -e
-          # accepted-media-types 명시 — buildx 는 OCI 매니페스트로 push 하므로 요청·회신 포맷을
-          # 고정해 put-image 왕복을 결정론적으로 만든다 (3차 리뷰 반영)
-          resp=$(aws ecr batch-get-image --repository-name "$IMAGE_REPO" \
-            --image-ids imageTag="$IMAGE_TAG" \
-            --accepted-media-types "application/vnd.oci.image.manifest.v1+json" "application/vnd.docker.distribution.manifest.v2+json" \
-            --output json)
-          manifest=$(echo "$resp" | jq -r '.images[0].imageManifest // empty')
-          mt=$(echo "$resp" | jq -r '.images[0].imageManifestMediaType // empty')
-          # 태그 미존재 시 batch-get-image 는 exit 0 + failures 에만 담긴다 — 명시적 가드 (리뷰 반영)
-          [ -n "$manifest" ] || { echo "::error::ECR 에 태그 없음: $IMAGE_TAG"; exit 1; }
-          # mediaType 미전달 시 OCI 매니페스트에서 UnsupportedImageTypeException 가능 (리뷰 반영)
-          args=(--repository-name "$IMAGE_REPO" --image-tag prod --image-manifest "$manifest")
-          [ -n "$mt" ] && args+=(--image-manifest-media-type "$mt")
-          out=$(aws ecr put-image "${args[@]}" 2>&1) \
-            || { echo "$out" | grep -q ImageAlreadyExistsException || { echo "$out"; exit 1; }; }
+          docker buildx imagetools create --tag "${IMAGE_REGISTRY}/${IMAGE_REPO}:prod" "${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
           echo "alias 'prod' -> ${IMAGE_TAG}"
 
       - name: Warn on stale alias

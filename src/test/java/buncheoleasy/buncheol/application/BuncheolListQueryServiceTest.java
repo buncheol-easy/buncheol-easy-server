@@ -324,6 +324,52 @@ class BuncheolListQueryServiceTest {
   }
 
   @Nested
+  @DisplayName("개최자 번호(hostId)")
+  class HostIdTest {
+
+    @Test
+    void 운영진_분철과_회원_개최_카드에_각자의_개최자_번호를_싣는다() {
+      Buncheol staff = buncheol(10L, 100L, "운영진", Instant.parse("2026-05-15T08:00:00Z"));
+      setField(staff, "hostId", 1L);
+      Buncheol member =
+          c2cBuncheol(
+              11L,
+              100L,
+              "회원",
+              Instant.parse("2026-05-14T08:00:00Z"),
+              ShippingFeePolicy.of(3000, 3000));
+      setField(member, "hostId", 42L);
+      Buncheol sameHost =
+          c2cBuncheol(
+              12L,
+              100L,
+              "같은 회원의 다른 분철",
+              Instant.parse("2026-05-13T08:00:00Z"),
+              ShippingFeePolicy.of(3000, 3000));
+      setField(sameHost, "hostId", 42L);
+      given(buncheolRepository.search(any(), any(), anyInt()))
+          .willReturn(List.of(staff, member, sameHost));
+      given(groupRepository.findAllByIds(List.of(100L))).willReturn(List.of(group(100L, "몬엑")));
+      given(buncheolMemberNameResolver.resolveNames(eq(List.of(10L, 11L, 12L)), any()))
+          .willReturn(new BuncheolMemberNameResolver.MemberNames(Map.of(), Map.of()));
+
+      CursorResponse<BuncheolSummaryResponse> result =
+          buncheolListQueryService.search(
+              null, new BuncheolSearchCondition(null, null, null), BuncheolListCursor.firstPage(), 20);
+
+      assertThat(result.items())
+          .extracting(
+              BuncheolSummaryResponse::id,
+              BuncheolSummaryResponse::flowType,
+              BuncheolSummaryResponse::hostId)
+          .containsExactly(
+              tuple(10L, FlowType.LEGACY, 1L),
+              tuple(11L, FlowType.C2C, 42L),
+              tuple(12L, FlowType.C2C, 42L));
+    }
+  }
+
+  @Nested
   @DisplayName("예약 오픈 시각")
   class OpensAtTest {
 

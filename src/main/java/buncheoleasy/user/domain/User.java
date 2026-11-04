@@ -27,7 +27,6 @@ public class User extends TimestampedEntity {
 
   private static final String NICKNAME_PREFIX = "Guest";
   private static final int RANDOM_SUFFIX_LENGTH = 10;
-  private static final int ADULT_AGE_LOWER_BOUND = 20;
   private static final int AGE_RANGE_MAX_LENGTH = 10;
 
   @Id
@@ -69,7 +68,7 @@ public class User extends TimestampedEntity {
   @Column(name = "marketing_agreed_at")
   private Instant marketingAgreedAt;
 
-  // 카카오 연령대(선택 동의, 예: "20~29"). 개최자 성인 확인 참조용. NULL 이면 미동의/미수집.
+  // 카카오 연령대(선택 동의, 예: "20~29"). 저장만 하고 개최 자격 판정에는 쓰지 않는다. NULL 이면 미동의/미수집.
   // 카카오계정 생일 기반이라 본인인증 수준은 아니다 (docs/50).
   @Column(name = "age_range", length = 10)
   private String ageRange;
@@ -142,26 +141,6 @@ public class User extends TimestampedEntity {
   /** 카카오에서 연령대 동의 철회가 확정 신호로 확인된 경우 지체 없이 파기한다 (PIPA). */
   public void clearAgeRange() {
     this.ageRange = null;
-  }
-
-  /**
-   * 성인 확인 여부 — 연령대 구간 하한이 20 이상일 때만 true. "15~19" 구간은 만 19세 성인을 구분할 수 없어 보수적으로 false 처리한다(만 19세
-   * 개최 배제 감수 — docs/50 결정).
-   */
-  public boolean isVerifiedAdult() {
-    if (this.ageRange == null) {
-      return false;
-    }
-    int tildeIndex = this.ageRange.indexOf('~');
-    if (tildeIndex <= 0) {
-      return false;
-    }
-    try {
-      return Integer.parseInt(this.ageRange.substring(0, tildeIndex).trim())
-          >= ADULT_AGE_LOWER_BOUND;
-    } catch (NumberFormatException exception) {
-      return false;
-    }
   }
 
   // 같은 상태 재요청은 no-op 으로 두어 최초 동의 일시를 보존한다.

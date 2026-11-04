@@ -8,6 +8,7 @@ import buncheoleasy.user.domain.serviceterm.UserServiceTermRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -141,31 +142,38 @@ public class UserDomainService {
   }
 
   /**
-   * C2C 개최 자격 판정 (docs/46 §7.1-8) — 연락처(가입 완료 = 전화번호 보유)와 성인 확인. 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 연령대
-   * 미보유(카카오 재동의로 해결 — USR-032)와 미성년 확정(차단 — USR-033)을 구분한다.
+   * C2C 개최 자격 판정 — 카카오 가입자, 연락처(가입 완료 = 전화번호 보유), 「만 19세 이상」 본인 체크 순서로 막는다. 이메일은 전 회원 필수 수집이라 별도
+   * 검사가 없다. 카카오 연령대는 보지 않는다 — 저장된 값과 무관하게 체크 기록으로만 판정한다.
    *
    * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
    * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
    */
   public C2cHostQualification evaluateC2cHostQualification(final Long id) {
     User user = getUser(id);
+    if (user.getSocialInfo().provider() != SocialProvider.KAKAO) {
+      return C2cHostQualification.KAKAO_ACCOUNT_REQUIRED;
+    }
     if (!user.isProfileCompleted()) {
       return C2cHostQualification.PHONE_REQUIRED;
     }
-    if (user.getAgeRange() == null) {
-      return C2cHostQualification.AGE_UNVERIFIED;
-    }
-    if (!user.isVerifiedAdult()) {
-      return C2cHostQualification.NOT_ADULT;
+    if (!hasConfirmedHostAdult(id)) {
+      return C2cHostQualification.ADULT_CONFIRM_REQUIRED;
     }
     return C2cHostQualification.QUALIFIED;
+  }
+
+  private boolean hasConfirmedHostAdult(final Long id) {
+    return userServiceTermRepository
+        .findByUserIdAndTag(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG)
+        .filter(UserServiceTerm::isAgreed)
+        .isPresent();
   }
 
   /**
    * C2C 개최 자격 게이트 — 자격 미달이면 사유별 에러코드로 던진다. 응답 사유 매핑({@code HostingEligibilityResponse#from})과 대칭이다.
    *
    * <p>⚠️ 매핑은 반드시 <b>switch 식</b>으로 둔다. switch <b>문</b>은 enum exhaustiveness 검사를 받지 않아(JLS
-   * §14.11.2) 사유가 추가돼도 컴파일이 통과하고, 새 사유가 <b>아무 분기도 타지 않은 채 개최를 허용</b>한다 — 미성년 차단이 걸린 자리라 조용히
+   * §14.11.2) 사유가 추가돼도 컴파일이 통과하고, 새 사유가 <b>아무 분기도 타지 않은 채 개최를 허용</b>한다 — 개최 차단이 걸린 자리라 조용히
    * 뚫리면 곧바로 사고다. 식으로 두면 값을 추가하는 순간 컴파일이 깨진다.
    */
   public void requireC2cHostQualification(final Long id) {
@@ -173,12 +181,32 @@ public class UserDomainService {
     ErrorCode errorCode =
         switch (qualification) {
           case QUALIFIED -> null;
+          case KAKAO_ACCOUNT_REQUIRED -> ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED;
           case PHONE_REQUIRED -> ErrorCode.USER_PROFILE_IS_NOT_COMPLETE;
-          case AGE_UNVERIFIED -> ErrorCode.USER_AGE_NOT_VERIFIED;
-          case NOT_ADULT -> ErrorCode.USER_NOT_ADULT;
+          case ADULT_CONFIRM_REQUIRED -> ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED;
         };
     if (errorCode != null) {
       throw new BusinessException(errorCode);
+    }
+  }
+
+  /**
+   * 개최 입구의 「만 19세 이상」 본인 체크를 남긴다. 첫 체크 시각이 기록으로 남아야 하므로 이미 체크했으면 덮지 않는다.
+   *
+   * <p>트랜잭션을 걸지 않는다 — 더블탭 같은 동시 요청이 유니크 인덱스에 걸릴 때 바깥 트랜잭션이 있으면 커밋에서 500 이 난다({@link
+   * UserServiceTermRepository#saveIfAbsent}). 쓰기도 한 건뿐이라 묶을 것이 없다.
+   */
+  public void confirmHostAdult(final Long id) {
+    getUser(id);
+    Instant now = Instant.now(clock);
+    Optional<UserServiceTerm> existing =
+        userServiceTermRepository.findByUserIdAndTag(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG);
+    if (existing.isEmpty()) {
+      userServiceTermRepository.saveIfAbsent(
+          UserServiceTerm.of(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, true, now));
+    } else if (!existing.get().isAgreed()) {
+      existing.get().update(true, now);
+      userServiceTermRepository.save(existing.get());
     }
   }
 

@@ -136,6 +136,13 @@ class SecurityConfigTest {
           .perform(get("/v1/buncheols/hosting-eligibility"))
           .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void 개최_만19세_체크는_비로그인이면_401() throws Exception {
+      mockMvc
+          .perform(post("/v1/buncheols/hosting-eligibility/adult-confirmation"))
+          .andExpect(status().isUnauthorized());
+    }
   }
 
   @Nested

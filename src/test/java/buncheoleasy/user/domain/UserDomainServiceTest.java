@@ -6,10 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -20,11 +22,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserDomainService 단위 테스트")
@@ -268,19 +274,50 @@ class UserDomainServiceTest {
   @DisplayName("C2C 개최 자격 게이트 테스트")
   class RequireC2cHostQualificationTest {
 
-    private User qualifiedUser() {
+    private static final Instant CONFIRMED_AT = Instant.parse("2026-01-01T00:00:00Z");
+
+    private User phoneRegisteredUser() {
       User user = User.create("KAKAO", "123456", "test@example.com");
       user.updatePhoneNumber("01012345678");
-      user.updateAgeRange("20~29");
       return user;
     }
 
+    /** SocialProvider 에 KAKAO 만 있는 동안은 provider 를 비워 「카카오 아님」을 만든다. */
+    private User notKakaoUser() {
+      User user = phoneRegisteredUser();
+      ReflectionTestUtils.setField(user, "socialInfo", new SocialInfo(null, "123456"));
+      return user;
+    }
+
+    private void givenConfirmed(final Long id) {
+      given(userServiceTermRepository.findByUserIdAndTag(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(
+              Optional.of(
+                  UserServiceTerm.of(
+                      id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, true, CONFIRMED_AT)));
+    }
+
+    private void givenNotConfirmed(final Long id) {
+      given(userServiceTermRepository.findByUserIdAndTag(id, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.empty());
+    }
+
     @Test
-    void 전화번호와_성인_연령대가_있으면_통과한다() {
-      User user = qualifiedUser();
-      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    void 카카오_가입자가_전화번호와_체크를_갖추면_통과한다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(phoneRegisteredUser()));
+      givenConfirmed(1L);
 
       userDomainService.requireC2cHostQualification(1L);
+    }
+
+    @Test
+    void 카카오_가입자가_아니면_USER_HOST_KAKAO_ACCOUNT_REQUIRED_예외가_발생한다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(notKakaoUser()));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED);
     }
 
     @Test
@@ -295,44 +332,184 @@ class UserDomainServiceTest {
     }
 
     @Test
-    void 연령대가_없으면_재동의_유도용_USER_AGE_NOT_VERIFIED_예외가_발생한다() {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updatePhoneNumber("01012345678");
-      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+    void 체크_기록이_없으면_USER_HOST_ADULT_CONFIRM_REQUIRED_예외가_발생한다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(phoneRegisteredUser()));
+      givenNotConfirmed(1L);
 
       assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_AGE_NOT_VERIFIED);
+          .isEqualTo(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED);
     }
 
     @Test
-    void 연령대_구간이_성인_미만이면_USER_NOT_ADULT_예외가_발생한다() {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-      user.updatePhoneNumber("01012345678");
-      user.updateAgeRange("15~19");
+    void 오류_코드와_상태는_화면과_맞춘_계약이다() {
+      assertThat(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED.getCode()).isEqualTo("USR-036");
+      assertThat(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED.getHttpStatus())
+          .isEqualTo(HttpStatus.CONFLICT);
+      assertThat(ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED.getCode()).isEqualTo("USR-037");
+      assertThat(ErrorCode.USER_HOST_KAKAO_ACCOUNT_REQUIRED.getHttpStatus())
+          .isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void 카카오_가입자가_아니면_전화번호가_없어도_카카오_사유가_먼저다() {
+      User user = notKakaoUser();
+      ReflectionTestUtils.setField(user, "profileCompleted", false);
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
-      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
-          .isInstanceOf(BusinessException.class)
-          .extracting("errorCode")
-          .isEqualTo(ErrorCode.USER_NOT_ADULT);
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.KAKAO_ACCOUNT_REQUIRED);
+    }
+
+    @Test
+    void 카카오_가입자가_아니면_체크가_있어도_막힌다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(notKakaoUser()));
+      lenient()
+          .when(
+              userServiceTermRepository.findByUserIdAndTag(
+                  1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .thenReturn(
+              Optional.of(
+                  UserServiceTerm.of(
+                      1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, true, CONFIRMED_AT)));
+
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.KAKAO_ACCOUNT_REQUIRED);
+    }
+
+    @Test
+    void 가입_미완료면_체크가_없어도_전화번호_사유가_먼저다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.PHONE_REQUIRED);
+      then(userServiceTermRepository).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void 동의_안_함_행은_체크로_치지_않는다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(phoneRegisteredUser()));
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(
+              Optional.of(
+                  UserServiceTerm.of(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, false, null)));
+
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.ADULT_CONFIRM_REQUIRED);
+    }
+
+    // 연령대를 다시 보면 15~19 구간(만 19세 포함)과 미동의 회원이 도로 막힌다.
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"15~19", "20~29"})
+    void 체크가_있으면_연령대와_무관하게_통과한다(final String ageRange) {
+      User user = phoneRegisteredUser();
+      user.updateAgeRange(ageRange);
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      givenConfirmed(1L);
+
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.QUALIFIED);
+    }
+
+    @Test
+    void 성인_연령대가_있어도_체크가_없으면_막힌다() {
+      User user = phoneRegisteredUser();
+      user.updateAgeRange("20~29");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      givenNotConfirmed(1L);
+
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.ADULT_CONFIRM_REQUIRED);
     }
 
     @Test
     void 사전_조회는_같은_판정을_예외_대신_값으로_돌려준다() {
       // given — 개최 폼 진입 차단(docs/53 Q-07)이 제출 게이트와 같은 판정을 쓰는지 확인한다.
-      User minor = User.create("KAKAO", "123456", "test@example.com");
-      minor.updatePhoneNumber("01012345678");
-      minor.updateAgeRange("15~19");
-      given(userRepository.findById(1L)).willReturn(Optional.of(minor));
-      given(userRepository.findById(2L)).willReturn(Optional.of(qualifiedUser()));
+      given(userRepository.findById(1L)).willReturn(Optional.of(phoneRegisteredUser()));
+      givenNotConfirmed(1L);
+      given(userRepository.findById(2L)).willReturn(Optional.of(phoneRegisteredUser()));
+      givenConfirmed(2L);
 
       // when & then
       assertThat(userDomainService.evaluateC2cHostQualification(1L))
-          .isEqualTo(C2cHostQualification.NOT_ADULT);
+          .isEqualTo(C2cHostQualification.ADULT_CONFIRM_REQUIRED);
       assertThat(userDomainService.evaluateC2cHostQualification(2L))
           .isEqualTo(C2cHostQualification.QUALIFIED);
+    }
+  }
+
+  @Nested
+  @DisplayName("개최 만 19세 본인 체크 저장 테스트")
+  class ConfirmHostAdultTest {
+
+    private static final Instant NOW = Instant.parse("2026-05-14T12:00:00Z");
+    private static final Instant FIRST_CONFIRMED_AT = Instant.parse("2026-01-01T00:00:00Z");
+
+    private void givenUserExists() {
+      given(userRepository.findById(1L))
+          .willReturn(Optional.of(User.create("KAKAO", "123456", "test@example.com")));
+    }
+
+    @Test
+    void 처음이면_지금_시각으로_체크를_남긴다() {
+      givenUserExists();
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.empty());
+
+      userDomainService.confirmHostAdult(1L);
+
+      ArgumentCaptor<UserServiceTerm> saved = ArgumentCaptor.forClass(UserServiceTerm.class);
+      then(userServiceTermRepository).should().saveIfAbsent(saved.capture());
+      assertThat(saved.getValue().getUserId()).isEqualTo(1L);
+      assertThat(saved.getValue().getTag()).isEqualTo("host_adult_confirm");
+      assertThat(saved.getValue().isAgreed()).isTrue();
+      assertThat(saved.getValue().getAgreedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void 이미_체크했으면_첫_체크_시각을_덮지_않는다() {
+      givenUserExists();
+      UserServiceTerm existing =
+          UserServiceTerm.of(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, true, FIRST_CONFIRMED_AT);
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.of(existing));
+
+      userDomainService.confirmHostAdult(1L);
+
+      assertThat(existing.getAgreedAt()).isEqualTo(FIRST_CONFIRMED_AT);
+      then(userServiceTermRepository).should(never()).save(any());
+      then(userServiceTermRepository).should(never()).saveIfAbsent(any());
+    }
+
+    @Test
+    void 동의_안_함_행이_있으면_체크로_바꾼다() {
+      // 204 를 주고 행을 그대로 두면 사전 조회가 계속 체크 필요로 답해 화면이 못 빠져나온다.
+      givenUserExists();
+      UserServiceTerm existing =
+          UserServiceTerm.of(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG, false, null);
+      given(userServiceTermRepository.findByUserIdAndTag(1L, UserServiceTerm.HOST_ADULT_CONFIRM_TAG))
+          .willReturn(Optional.of(existing));
+
+      userDomainService.confirmHostAdult(1L);
+
+      assertThat(existing.isAgreed()).isTrue();
+      assertThat(existing.getAgreedAt()).isEqualTo(NOW);
+      then(userServiceTermRepository).should().save(existing);
+    }
+
+    @Test
+    void 없는_회원이면_USER_NOT_FOUND_예외가_발생하고_남기지_않는다() {
+      given(userRepository.findById(1L)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> userDomainService.confirmHostAdult(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+      then(userServiceTermRepository).shouldHaveNoInteractions();
     }
   }
 

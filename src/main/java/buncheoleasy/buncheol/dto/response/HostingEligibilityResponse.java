@@ -11,12 +11,12 @@ import buncheoleasy.user.domain.C2cHostQualification;
 public record HostingEligibilityResponse(boolean eligible, Reason reason) {
 
   public enum Reason {
+    /** 카카오 가입자가 아님 — 이 계정으로는 개최 불가. */
+    KAKAO_ACCOUNT_REQUIRED,
     /** 가입 미완료 — 전화번호 등록 필요. */
     PHONE_REQUIRED,
-    /** 연령대 미보유 — 연령대 추가 동의({@code /oauth2/authorization/kakao/age-range})로 회복 가능. */
-    AGE_UNVERIFIED,
-    /** 미성년 확정 — 개최 불가. */
-    NOT_ADULT,
+    /** 「만 19세 이상」 본인 체크 기록 없음 — 체크 API 로 회복 가능. */
+    ADULT_CONFIRM_REQUIRED,
     /** 활성(모집중·입금 수집중) 개최 수 상한 초과. */
     LIMIT_EXCEEDED,
     /** 정산 계좌 미등록 — LEGACY·C2C 공통이라 운영진에게도 적용된다. */
@@ -34,9 +34,9 @@ public record HostingEligibilityResponse(boolean eligible, Reason reason) {
   public static HostingEligibilityResponse from(final C2cHostQualification qualification) {
     return switch (qualification) {
       case QUALIFIED -> allowed();
+      case KAKAO_ACCOUNT_REQUIRED -> blocked(Reason.KAKAO_ACCOUNT_REQUIRED);
       case PHONE_REQUIRED -> blocked(Reason.PHONE_REQUIRED);
-      case AGE_UNVERIFIED -> blocked(Reason.AGE_UNVERIFIED);
-      case NOT_ADULT -> blocked(Reason.NOT_ADULT);
+      case ADULT_CONFIRM_REQUIRED -> blocked(Reason.ADULT_CONFIRM_REQUIRED);
     };
   }
 }

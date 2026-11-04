@@ -71,7 +71,7 @@ class AiDraftControllerDocsTest extends DocsTestSupport {
                             돌려준다. 요청이 엔진 응답을 기다리는 동기 처리다(보통 7초, 최대 25초 대기). 마감·멤버·가격은 주지 않는다.
 
                             개최 자격이 없으면 개최 요청(`POST /v1/buncheols`)과 같은 오류를 준다
-                            (`GET /v1/buncheols/hosting-eligibility` 의 reason 표 참고 — 403 `USR-018`·409 `USR-032`·403 `USR-033`·409 `BCH-089`·409 `USR-025`).
+                            (`GET /v1/buncheols/hosting-eligibility` 의 reason 표 참고 — 403 `USR-037`·403 `USR-018`·409 `USR-036`·409 `BCH-089`·409 `USR-025`).
 
                             **하루 횟수**: 1인 하루 10회(한국 시간 자정 초기화). 판매 페이지를 읽지 못한 실패처럼 AI 까지 가지 않은 실패는 횟수를
                             돌려준다. 같은 실패를 끝없이 반복하지 못하게 따로 숨은 시도 상한이 있다.

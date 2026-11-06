@@ -9,7 +9,8 @@ package buncheoleasy.user.domain;
  */
 public enum C2cHostQualification {
   QUALIFIED,
-  // 카카오 가입자가 아님 — 카카오 동의로 받은 전화번호가 없어 이 계정으로는 회복 경로가 없다.
+  // 개최를 열 수 없는 가입 경로 — 이 계정으로는 회복 경로가 없다. 지금 있는 가입 경로(카카오·애플)는 모두 열려 있어 나오지 않고, 허용 목록
+  // 밖 로그인이 붙으면 나온다. 이름은 화면·오류 코드(USR-037)와의 호환 때문에 그대로 둔다.
   KAKAO_ACCOUNT_REQUIRED,
   // 가입 미완료(전화번호 미보유) — C2C 직거래는 개최자 연락처가 분쟁 처리의 근거다.
   PHONE_REQUIRED,

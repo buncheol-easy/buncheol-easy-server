@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -277,13 +278,17 @@ class UserDomainServiceTest {
     private static final Instant CONFIRMED_AT = Instant.parse("2026-01-01T00:00:00Z");
 
     private User phoneRegisteredUser() {
-      User user = User.create("KAKAO", "123456", "test@example.com");
+      return phoneRegisteredUser(SocialProvider.KAKAO);
+    }
+
+    private User phoneRegisteredUser(final SocialProvider provider) {
+      User user = User.create(provider.name(), "123456", "test@example.com");
       user.updatePhoneNumber("01012345678");
       return user;
     }
 
-    /** SocialProvider 에 KAKAO 만 있는 동안은 provider 를 비워 「카카오 아님」을 만든다. */
-    private User notKakaoUser() {
+    /** 개최 허용 목록 밖 가입 경로는 지금 SocialProvider 에 없어서, provider 를 비워 만든다. */
+    private User outsideHostProvidersUser() {
       User user = phoneRegisteredUser();
       ReflectionTestUtils.setField(user, "socialInfo", new SocialInfo(null, "123456"));
       return user;
@@ -302,17 +307,53 @@ class UserDomainServiceTest {
           .willReturn(Optional.empty());
     }
 
-    @Test
-    void 카카오_가입자가_전화번호와_체크를_갖추면_통과한다() {
-      given(userRepository.findById(1L)).willReturn(Optional.of(phoneRegisteredUser()));
+    @ParameterizedTest
+    @EnumSource(
+        value = SocialProvider.class,
+        names = {"KAKAO", "APPLE"})
+    void 카카오와_애플_가입자는_전화번호와_체크를_갖추면_통과한다(final SocialProvider provider) {
+      given(userRepository.findById(1L)).willReturn(Optional.of(phoneRegisteredUser(provider)));
       givenConfirmed(1L);
 
       userDomainService.requireC2cHostQualification(1L);
+      assertThat(userDomainService.evaluateC2cHostQualification(1L))
+          .isEqualTo(C2cHostQualification.QUALIFIED);
+    }
+
+    // 허용 목록은 기본이 막힘이다. 제공자를 새로 붙이면 이 테스트가 깨져, 그 제공자에게 개최를 열지 C2C_HOST_PROVIDERS 에서 정하게 한다.
+    @Test
+    void 가입_경로가_늘면_개최_허용_여부를_다시_정해야_한다() {
+      assertThat(SocialProvider.values())
+          .as("제공자를 추가하면 UserDomainService.C2C_HOST_PROVIDERS 포함 여부를 정할 것")
+          .containsExactlyInAnyOrder(SocialProvider.KAKAO, SocialProvider.APPLE);
     }
 
     @Test
-    void 카카오_가입자가_아니면_USER_HOST_KAKAO_ACCOUNT_REQUIRED_예외가_발생한다() {
-      given(userRepository.findById(1L)).willReturn(Optional.of(notKakaoUser()));
+    void 애플_가입자도_가입_미완료면_프로필_예외가_발생한다() {
+      User user = User.create("APPLE", "001234.abc.0123", "relay@privaterelay.appleid.com");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_PROFILE_IS_NOT_COMPLETE);
+    }
+
+    @Test
+    void 애플_가입자도_체크_기록이_없으면_USER_HOST_ADULT_CONFIRM_REQUIRED_예외가_발생한다() {
+      given(userRepository.findById(1L))
+          .willReturn(Optional.of(phoneRegisteredUser(SocialProvider.APPLE)));
+      givenNotConfirmed(1L);
+
+      assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_HOST_ADULT_CONFIRM_REQUIRED);
+    }
+
+    @Test
+    void 허용_목록_밖_가입_경로면_USER_HOST_KAKAO_ACCOUNT_REQUIRED_예외가_발생한다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(outsideHostProvidersUser()));
 
       assertThatThrownBy(() -> userDomainService.requireC2cHostQualification(1L))
           .isInstanceOf(BusinessException.class)
@@ -353,8 +394,8 @@ class UserDomainServiceTest {
     }
 
     @Test
-    void 카카오_가입자가_아니면_전화번호가_없어도_카카오_사유가_먼저다() {
-      User user = notKakaoUser();
+    void 허용_목록_밖_가입_경로면_전화번호가_없어도_가입_경로_사유가_먼저다() {
+      User user = outsideHostProvidersUser();
       ReflectionTestUtils.setField(user, "profileCompleted", false);
       given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
@@ -363,8 +404,8 @@ class UserDomainServiceTest {
     }
 
     @Test
-    void 카카오_가입자가_아니면_체크가_있어도_막힌다() {
-      given(userRepository.findById(1L)).willReturn(Optional.of(notKakaoUser()));
+    void 허용_목록_밖_가입_경로면_체크가_있어도_막힌다() {
+      given(userRepository.findById(1L)).willReturn(Optional.of(outsideHostProvidersUser()));
       lenient()
           .when(
               userServiceTermRepository.findByUserIdAndTag(

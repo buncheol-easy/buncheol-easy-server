@@ -11,7 +11,7 @@ import buncheoleasy.user.domain.C2cHostQualification;
 public record HostingEligibilityResponse(boolean eligible, Reason reason) {
 
   public enum Reason {
-    /** 카카오 가입자가 아님 — 이 계정으로는 개최 불가. */
+    /** 개최를 열 수 없는 가입 경로(카카오·애플 밖) — 이 계정으로는 개최 불가. 이름은 호환 때문에 유지한다. */
     KAKAO_ACCOUNT_REQUIRED,
     /** 가입 미완료 — 전화번호 등록 필요. */
     PHONE_REQUIRED,

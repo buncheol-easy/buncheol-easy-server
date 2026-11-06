@@ -66,12 +66,12 @@ public enum ErrorCode {
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
   // USR-035 는 회원 개최 오픈 스위치(미오픈 차단) 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
-  // C2C 개최 자격 게이트. 체크 없음(체크 한 번으로 해결 — 409)과 카카오 가입자 아님(이 계정으로는 회복 불가 — 403)을 나눠야
-  // FE 가 체크 화면과 불가 안내를 분기할 수 있다.
+  // C2C 개최 자격 게이트. 체크 없음(체크 한 번으로 해결 — 409)과 개최를 열 수 없는 가입 경로(이 계정으로는 회복 불가 — 403)를
+  // 나눠야 FE 가 체크 화면과 불가 안내를 분기할 수 있다. USR-037 은 카카오·애플 밖 가입 경로에만 나온다(이름은 호환 때문에 유지).
   USER_HOST_ADULT_CONFIRM_REQUIRED(
       "USR-036", "분철을 개최하려면 만 19세 이상 확인이 필요합니다.", HttpStatus.CONFLICT),
   USER_HOST_KAKAO_ACCOUNT_REQUIRED(
-      "USR-037", "분철 개최는 카카오로 가입한 계정에서만 할 수 있습니다.", HttpStatus.FORBIDDEN),
+      "USR-037", "분철 개최는 카카오 또는 Apple로 가입한 계정에서 할 수 있습니다.", HttpStatus.FORBIDDEN),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),

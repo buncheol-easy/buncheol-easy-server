@@ -12,6 +12,7 @@
 #        수동 단일 기동이 정말 필요할 때: docker compose -f docker-compose.staging.yml up -d backend-blue
 # 상태:  scripts/blue-green.sh status   (활성 색·헬스·컨테이너 일괄 확인)
 # 로그:  docker logs -f buncheoleasy-backend-blue   # 활성 색은 status 로 확인
+#        지난 기록(배포로 컨테이너가 바뀐 뒤에도 30일): /data/logs/backend-{blue,green}/app*.log
 # 헬스:  curl -fsS http://127.0.0.1:8080/actuator/health   # blue (green 은 8081)
 #
 # 주의:
@@ -26,7 +27,7 @@
 #   orphan 이라 그 플래그 한 번에 소리 없이 삭제된다. 블루-그린 도입 직후엔 그게 유일한
 #   직전 버전 롤백 좌표다(안정화 후 수동 rm — docs/39).
 
-# 두 색의 공통 정의 — 차이는 컨테이너명·호스트 포트·profile 뿐이다.
+# 두 색의 공통 정의 — 차이는 컨테이너명·호스트 포트·profile·기록 폴더뿐이다.
 x-backend-base: &backend-base
   # sha- 불변 태그는 워크플로가 셸 env 로 주입한다(셸 env 가 .env 보다 우선).
   # 수동 조작을 위해 박스 .env 에 환경 별칭 기본값 한 줄이 필요하다:
@@ -45,6 +46,17 @@ x-backend-base: &backend-base
     # REDIS_PORT 는 .env 값을 그대로 쓰되 미설정 시 6379 기본값(env_file 과 의도적 중복 — 기본값 보장용).
     REDIS_PORT: ${REDIS_PORT:-6379}
     # DB_URL 의도적으로 미설정 → .env 의 RDS endpoint 가 사용된다.
+    # 자바 기록을 화면 출력(docker logs)과 함께 파일로도 남긴다. 배포는 쉬던 색 컨테이너를 새로 만들어
+    # docker logs 가 컨테이너와 함께 사라지므로(배포 두 번이면 두 색 다 — 루트 docs/142 §7-2), 호스트 디스크에
+    # 연결한 폴더에 쓴다. 폴더 연결은 색마다 따로 둔다(아래 backend-blue/green) — 전환 창에 두 JVM 이
+    # 같은 파일을 동시에 교체하면 깨질 수 있다. 화면 출력은 그대로라 docker logs·서버 안 5분 점검은 변함없다.
+    # 하루 1파일(컨테이너 TZ=UTC 라 UTC 자정에 교체), 30일 또는 전체 2GB 를 넘으면 오래된 것부터 지운다.
+    # 압축하지 않는다 — 지난 기록도 grep 으로 바로 읽는다. 하루 1MB 미만(11/6 실측)이라 디스크 부담이 없다.
+    LOGGING_FILE_NAME: /app/logs/app.log
+    LOGGING_LOGBACK_ROLLINGPOLICY_FILE_NAME_PATTERN: "/app/logs/app-%d{yyyy-MM-dd}.%i.log"
+    LOGGING_LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE: 50MB
+    LOGGING_LOGBACK_ROLLINGPOLICY_MAX_HISTORY: "30"
+    LOGGING_LOGBACK_ROLLINGPOLICY_TOTAL_SIZE_CAP: 2GB
   networks:
     # 목록을 적는 순간 기본 네트워크 자동 연결이 사라진다 — default 를 빼면 redis 를 못 찾는다.
     - default
@@ -133,6 +145,10 @@ services:
     ports:
       # 외부 직접 공개 금지 — localhost 바인딩(Nginx 가 upstream 전환으로 활성 색에 프록시).
       - "127.0.0.1:8080:8080"
+    volumes:
+      # 자바 기록 폴더 — 컨테이너를 새로 만들어도 남는다(x-backend-base 의 LOGGING_FILE_NAME 주석).
+      # 폴더가 없으면 docker 가 만든다. 파일은 root 소유·644 라 ubuntu 로 읽을 수 있다.
+      - /data/logs/backend-blue:/app/logs
 
   backend-green:
     <<: *backend-base
@@ -140,6 +156,8 @@ services:
     profiles: ["green"]
     ports:
       - "127.0.0.1:8081:8080"
+    volumes:
+      - /data/logs/backend-green:/app/logs
 
 volumes:
   redis-data:

@@ -138,6 +138,7 @@ class StaffBuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 400 | `BCH-123` (`BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS`) | `minHeadcount` 가 `buncheolMembers` 개수보다 큼 |
+                            | 400 | `BCH-136`·`BCH-137`·`BCH-138` | 제목·설명·구매처에 금칙어 (회원 개최와 같다) |
                             | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 이미지 파일명이 없거나 확장자가 없음 |
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp` 밖의 이미지가 있음 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 운영진(`can_host`)이 아님 — 분철을 만들지 않는다 |

@@ -191,6 +191,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 400 | `BCH-123` (`BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS`) | `minHeadcount` 가 `buncheolMembers` 개수보다 큼 (성사될 수 없는 분철) |
+                            | 400 | `BCH-136` (`BUNCHEOL_TITLE_BANNED_WORD`) | `title` 에 금칙어 (공백·문장부호를 지우고 비교) |
+                            | 400 | `BCH-137` (`BUNCHEOL_DESCRIPTION_BANNED_WORD`) | `description` 에 금칙어 |
+                            | 400 | `BCH-138` (`BUNCHEOL_PURCHASE_SITE_BANNED_WORD`) | `purchaseSite` 에 금칙어 |
                             | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 이미지 파일명이 없거나 확장자가 없음 |
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 이미지가 한 장이라도 있음 — 분철을 만들지 않는다 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
@@ -305,6 +308,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-007` (`BUNCHEOL_SHIPPING_FEE_INVALID`) | 배송비가 음수 |
                             | 400 | `BCH-001` (`BUNCHEOL_REQUIRED_FIELD_MISSING`) | 바꾼 `purchaseSite` 가 빈 문자열·공백 |
                             | 400 | `BCH-002` (`BUNCHEOL_TEXT_LENGTH_INVALID`) | 바꾼 `purchaseSite` 가 200자 초과 |
+                            | 400 | `BCH-136` (`BUNCHEOL_TITLE_BANNED_WORD`) | 바꾼 `title` 에 금칙어 (지금 값 그대로면 보지 않는다) |
+                            | 400 | `BCH-137` (`BUNCHEOL_DESCRIPTION_BANNED_WORD`) | 바꾼 `description` 에 금칙어 |
+                            | 400 | `BCH-138` (`BUNCHEOL_PURCHASE_SITE_BANNED_WORD`) | 바꾼 `purchaseSite` 에 금칙어 (조건을 바꿀 수 있을 때만 — 아니면 `BCH-084`·`BCH-124` 가 먼저) |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중이 아니거나 마감이 지남 |

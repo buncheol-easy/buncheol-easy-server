@@ -2,6 +2,7 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.text.BannedWordFilter;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
 import buncheoleasy.user.domain.serviceterm.UserServiceTermRepository;
@@ -27,6 +28,7 @@ public class UserDomainService {
   private final UserRepository userRepository;
   private final UserServiceTermRepository userServiceTermRepository;
   private final RandomNicknameGenerator nicknameGenerator;
+  private final BannedWordFilter bannedWordFilter;
   private final Clock clock;
 
   /**
@@ -108,6 +110,12 @@ public class UserDomainService {
       final Boolean marketingAgreed) {
     User user = getUser(id);
 
+    // 바뀐 닉네임만 거른다 — 목록에 말이 늘어도 기존 닉네임 그대로 전화번호만 고치는 요청은 막지 않는다. 값 객체(Nickname)에 두면
+    // DB 에서 읽을 때마다 거름이 돌아, 걸리는 닉네임을 가진 회원을 읽는 모든 요청이 실패한다.
+    if (!user.getNickname().value().equals(nickname)
+        && bannedWordFilter.containsBannedWord(nickname)) {
+      throw new BusinessException(ErrorCode.USER_NICKNAME_BANNED_WORD);
+    }
     if (userRepository.existsByNicknameExcludingId(nickname, id)) {
       throw new BusinessException(ErrorCode.USER_NICKNAME_DUPLICATE);
     }

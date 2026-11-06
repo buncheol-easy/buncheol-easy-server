@@ -2,13 +2,16 @@ package buncheoleasy.user.domain;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.text.BannedWordFilter;
 import buncheoleasy.user.domain.serviceterm.ServiceTermAgreement;
 import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
 import buncheoleasy.user.domain.serviceterm.UserServiceTermRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +20,15 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserDomainService {
 
+  // C2C 개최를 열 수 있는 가입 경로. 애플은 카카오와 같은 기능을 줘야 해서 넣었다(앱스토어 심사 4.8). 목록 밖 제공자는 넣기 전까지 막힌다 —
+  // 새 로그인을 붙여도 개최가 저절로 열리지 않게 허용 목록으로 둔다.
+  private static final Set<SocialProvider> C2C_HOST_PROVIDERS =
+      EnumSet.of(SocialProvider.KAKAO, SocialProvider.APPLE);
+
   private final UserRepository userRepository;
   private final UserServiceTermRepository userServiceTermRepository;
   private final RandomNicknameGenerator nicknameGenerator;
+  private final BannedWordFilter bannedWordFilter;
   private final Clock clock;
 
   /**
@@ -101,6 +110,12 @@ public class UserDomainService {
       final Boolean marketingAgreed) {
     User user = getUser(id);
 
+    // 바뀐 닉네임만 거른다 — 목록에 말이 늘어도 기존 닉네임 그대로 전화번호만 고치는 요청은 막지 않는다. 값 객체(Nickname)에 두면
+    // DB 에서 읽을 때마다 거름이 돌아, 걸리는 닉네임을 가진 회원을 읽는 모든 요청이 실패한다.
+    if (!user.getNickname().value().equals(nickname)
+        && bannedWordFilter.containsBannedWord(nickname)) {
+      throw new BusinessException(ErrorCode.USER_NICKNAME_BANNED_WORD);
+    }
     if (userRepository.existsByNicknameExcludingId(nickname, id)) {
       throw new BusinessException(ErrorCode.USER_NICKNAME_DUPLICATE);
     }
@@ -142,15 +157,15 @@ public class UserDomainService {
   }
 
   /**
-   * C2C 개최 자격 판정 — 카카오 가입자, 연락처(가입 완료 = 전화번호 보유), 「만 19세 이상」 본인 체크 순서로 막는다. 이메일은 전 회원 필수 수집이라 별도
-   * 검사가 없다. 카카오 연령대는 보지 않는다 — 저장된 값과 무관하게 체크 기록으로만 판정한다.
+   * C2C 개최 자격 판정 — 개최를 열 수 있는 가입 경로(카카오·애플), 연락처(가입 완료 = 전화번호 보유), 「만 19세 이상」 본인 체크 순서로 막는다.
+   * 이메일은 전 회원 필수 수집이라 별도 검사가 없다. 카카오 연령대는 보지 않는다 — 저장된 값과 무관하게 체크 기록으로만 판정한다.
    *
    * <p>던지지 않는 판정이라 개최 폼 진입 전 사전 조회에도 그대로 쓴다(docs/53 Q-07). 제출 시점 게이트는 {@link
    * #requireC2cHostQualification} 이 이 결과를 예외로 바꾼다 — 두 경로의 판정이 갈리지 않게 하기 위함이다.
    */
   public C2cHostQualification evaluateC2cHostQualification(final Long id) {
     User user = getUser(id);
-    if (user.getSocialInfo().provider() != SocialProvider.KAKAO) {
+    if (!C2C_HOST_PROVIDERS.contains(user.getSocialInfo().provider())) {
       return C2cHostQualification.KAKAO_ACCOUNT_REQUIRED;
     }
     if (!user.isProfileCompleted()) {

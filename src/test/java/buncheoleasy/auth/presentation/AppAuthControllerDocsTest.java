@@ -113,8 +113,9 @@ class AppAuthControllerDocsTest extends DocsTestSupport {
                             발급자(`https://appleid.apple.com`), 대상 앱(허용 번들 ID), 만료, nonce
                             (토큰의 nonce = 소문자 hex SHA256(rawNonce))를 확인한다.
 
-                            애플 가입자는 전화번호·연령대가 없어 가입 정보 입력 화면을 거치고, C2C 개최 자격은
-                            생기지 않는다. 실패: 토큰 검증 실패 `401 AUTH-009`, 서버에 허용 앱이 설정되지 않음
+                            애플 가입자는 전화번호·연령대가 없어 가입 정보 입력 화면을 거치고, 그 뒤에는 카카오 가입자와
+                            같은 조건(전화번호 등록 → 「만 19세 이상」 체크)으로 C2C 개최를 열 수 있다.
+                            실패: 토큰 검증 실패 `401 AUTH-009`, 서버에 허용 앱이 설정되지 않음
                             `400 AUTH-010`, 애플 공개키 조회 실패 `503 AUTH-011`, 새 가입인데 이메일 없음
                             `401 AUTH-003`, 같은 IP 의 검증 실패가 한도(기본 10분에 10회)에 닿음 `429 AUTH-012`.""")
                         .requestSchema(Schema.schema("AppleLoginRequest"))

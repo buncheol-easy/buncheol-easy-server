@@ -126,15 +126,20 @@ class AppleSignInPersistenceIntegrationTest {
   }
 
   @Test
-  void 애플_가입자는_전화번호를_넣어도_연령대가_없어_C2C_개최_자격이_없다() {
-    // given
+  void 애플_가입자는_카카오_가입자와_같은_순서로_C2C_개최_자격을_갖춘다() {
+    // given — 애플은 전화번호를 주지 않는다. 가입 정보 입력 전이면 전화번호 사유로 막힌다.
     Long userId = socialLoginService.signIn(appleCommand(null)).userId();
-
-    // when
-    userDomainService.updateProfile(userId, "애플회원", "01012345678", null, null);
-
-    // then
     assertThat(userDomainService.evaluateC2cHostQualification(userId))
-        .isEqualTo(C2cHostQualification.KAKAO_ACCOUNT_REQUIRED);
+        .isEqualTo(C2cHostQualification.PHONE_REQUIRED);
+
+    // when — 전화번호를 넣으면 다음은 「만 19세 이상」 체크다(연령대는 보지 않는다).
+    userDomainService.updateProfile(userId, "애플회원", "01012345678", null, null);
+    assertThat(userDomainService.evaluateC2cHostQualification(userId))
+        .isEqualTo(C2cHostQualification.ADULT_CONFIRM_REQUIRED);
+
+    // then — 체크를 남기면 개최할 수 있다.
+    userDomainService.confirmHostAdult(userId);
+    assertThat(userDomainService.evaluateC2cHostQualification(userId))
+        .isEqualTo(C2cHostQualification.QUALIFIED);
   }
 }

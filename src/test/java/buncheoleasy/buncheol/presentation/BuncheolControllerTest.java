@@ -502,7 +502,7 @@ class BuncheolControllerTest {
     }
 
     @Test
-    void 카카오_가입자가_아니면_403_USR_037_으로_거절한다() throws Exception {
+    void 개최를_열_수_없는_가입_경로면_403_USR_037_로_거절한다() throws Exception {
       MockMultipartFile requestPart =
           new MockMultipartFile(
               "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
@@ -514,6 +514,23 @@ class BuncheolControllerTest {
           .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
           .andExpect(status().isForbidden())
           .andExpect(jsonPath("$.code").value("USR-037"));
+    }
+
+    // 웹·앱은 detail 문구를 그대로 보여 준다 — 칸 이름이 든 문구가 그대로 나가는지 고정한다.
+    @Test
+    void 금칙어가_있으면_400과_칸별_코드_문구를_반환한다() throws Exception {
+      MockMultipartFile requestPart =
+          new MockMultipartFile(
+              "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());
+      willThrow(new BusinessException(ErrorCode.BUNCHEOL_TITLE_BANNED_WORD))
+          .given(buncheolService)
+          .holdBuncheol(eq(HOST_ID), any(), any());
+
+      mockMvc
+          .perform(multipart("/v1/buncheols").file(requestPart).file(validImagePart()).with(mockAuth()))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.code").value("BCH-136"))
+          .andExpect(jsonPath("$.detail").value(ErrorCode.BUNCHEOL_TITLE_BANNED_WORD.getMessage()));
     }
 
     // 핵심 회귀 지점은 레코드가 아니라 컨트롤러 — toImageFile 의 catch 가 IOException 을 넘어

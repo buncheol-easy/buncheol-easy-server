@@ -191,13 +191,16 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-047` (`BUNCHEOL_THUMBNAIL_INDEX_INVALID`) | `thumbnailIndex` 가 images 파트 범위를 벗어남 |
                             | 400 | `BCH-088` (`BUNCHEOL_OPEN_CHAT_URL_INVALID`) | `openChatUrl` 형식 위반 |
                             | 400 | `BCH-123` (`BUNCHEOL_MIN_HEADCOUNT_EXCEEDS_SLOTS`) | `minHeadcount` 가 `buncheolMembers` 개수보다 큼 (성사될 수 없는 분철) |
+                            | 400 | `BCH-136` (`BUNCHEOL_TITLE_BANNED_WORD`) | `title` 에 금칙어 (공백·문장부호를 지우고 비교) |
+                            | 400 | `BCH-137` (`BUNCHEOL_DESCRIPTION_BANNED_WORD`) | `description` 에 금칙어 |
+                            | 400 | `BCH-138` (`BUNCHEOL_PURCHASE_SITE_BANNED_WORD`) | `purchaseSite` 에 금칙어 |
                             | 400 | `FILE-001` (`FILE_NAME_INVALID`) | 이미지 파일명이 없거나 확장자가 없음 |
                             | 400 | `FILE-002` (`FILE_EXTENSION_INVALID`) | `.jpg` `.jpeg` `.png` `.webp`(대소문자 무관) 밖의 이미지가 한 장이라도 있음 — 분철을 만들지 않는다 |
                             | 403 | `USR-031` (`USER_CANNOT_HOST`) | 일반 유저가 `LEGACY` 개최를 요청 (운영진 전용 방식) |
                             | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
-                            | 403 | `USR-037` (`USER_HOST_KAKAO_ACCOUNT_REQUIRED`) | C2C 개최 자격 — 카카오 가입자가 아님 |
+                            | 403 | `USR-037` (`USER_HOST_KAKAO_ACCOUNT_REQUIRED`) | C2C 개최 자격 — 개최를 열 수 없는 가입 경로(카카오·애플 밖). 지금 있는 가입 경로에서는 나오지 않음 |
                             | 409 | `USR-036` (`USER_HOST_ADULT_CONFIRM_REQUIRED`) | C2C 개최 자격 — 「만 19세 이상」 체크 기록 없음. `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 해소 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
                             """)
@@ -305,6 +308,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-007` (`BUNCHEOL_SHIPPING_FEE_INVALID`) | 배송비가 음수 |
                             | 400 | `BCH-001` (`BUNCHEOL_REQUIRED_FIELD_MISSING`) | 바꾼 `purchaseSite` 가 빈 문자열·공백 |
                             | 400 | `BCH-002` (`BUNCHEOL_TEXT_LENGTH_INVALID`) | 바꾼 `purchaseSite` 가 200자 초과 |
+                            | 400 | `BCH-136` (`BUNCHEOL_TITLE_BANNED_WORD`) | 바꾼 `title` 에 금칙어 (지금 값 그대로면 보지 않는다) |
+                            | 400 | `BCH-137` (`BUNCHEOL_DESCRIPTION_BANNED_WORD`) | 바꾼 `description` 에 금칙어 |
+                            | 400 | `BCH-138` (`BUNCHEOL_PURCHASE_SITE_BANNED_WORD`) | 바꾼 `purchaseSite` 에 금칙어 (조건을 바꿀 수 있을 때만 — 아니면 `BCH-084`·`BCH-124` 가 먼저) |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중이 아니거나 마감이 지남 |
@@ -409,7 +415,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
-                            | `KAKAO_ACCOUNT_REQUIRED` | 카카오 가입자가 아님 — 이 계정으로는 개최 불가 | 403 `USR-037` |
+                            | `KAKAO_ACCOUNT_REQUIRED` | 개최를 열 수 없는 가입 경로(카카오·애플 밖) — 이 계정으로는 개최 불가. 지금 있는 가입 경로에서는 나오지 않음 | 403 `USR-037` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
                             | `ADULT_CONFIRM_REQUIRED` | 「만 19세 이상」 체크 기록 없음 — `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 회복 | 409 `USR-036` |
                             | `LIMIT_EXCEEDED` | 활성(모집중·입금 수집중) 개최 수 상한 초과 | 409 `BCH-089` |

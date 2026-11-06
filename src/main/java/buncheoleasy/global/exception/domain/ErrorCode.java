@@ -18,6 +18,9 @@ public enum ErrorCode {
   USER_NICKNAME_REQUIRED("USR-004", "닉네임은 필수입니다.", HttpStatus.BAD_REQUEST),
   USER_NICKNAME_LENGTH_INVALID("USR-005", "닉네임은 1자 이상 20자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
   USER_NICKNAME_FORMAT_INVALID("USR-006", "닉네임은 한글, 영문자, 숫자만 사용 가능합니다.", HttpStatus.BAD_REQUEST),
+  // 금칙어 거름(BannedWordFilter). 걸린 말은 문구에 되풀이하지 않는다 — 화면이 문구를 그대로 보여 준다.
+  USER_NICKNAME_BANNED_WORD(
+      "USR-038", "닉네임에 부적절한 표현이 들어 있어요. 다른 닉네임을 정해 주세요.", HttpStatus.BAD_REQUEST),
 
   USER_EMAIL_REQUIRED("USR-007", "이메일은 필수입니다.", HttpStatus.BAD_REQUEST),
   USER_EMAIL_LENGTH_INVALID("USR-008", "이메일은 320자 이하여야 합니다.", HttpStatus.BAD_REQUEST),
@@ -66,12 +69,12 @@ public enum ErrorCode {
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
   // USR-035 는 회원 개최 오픈 스위치(미오픈 차단) 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
-  // C2C 개최 자격 게이트. 체크 없음(체크 한 번으로 해결 — 409)과 카카오 가입자 아님(이 계정으로는 회복 불가 — 403)을 나눠야
-  // FE 가 체크 화면과 불가 안내를 분기할 수 있다.
+  // C2C 개최 자격 게이트. 체크 없음(체크 한 번으로 해결 — 409)과 개최를 열 수 없는 가입 경로(이 계정으로는 회복 불가 — 403)를
+  // 나눠야 FE 가 체크 화면과 불가 안내를 분기할 수 있다. USR-037 은 카카오·애플 밖 가입 경로에만 나온다(이름은 호환 때문에 유지).
   USER_HOST_ADULT_CONFIRM_REQUIRED(
       "USR-036", "분철을 개최하려면 만 19세 이상 확인이 필요합니다.", HttpStatus.CONFLICT),
   USER_HOST_KAKAO_ACCOUNT_REQUIRED(
-      "USR-037", "분철 개최는 카카오로 가입한 계정에서만 할 수 있습니다.", HttpStatus.FORBIDDEN),
+      "USR-037", "분철 개최는 카카오 또는 Apple로 가입한 계정에서 할 수 있습니다.", HttpStatus.FORBIDDEN),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
@@ -109,6 +112,13 @@ public enum ErrorCode {
   /** BCH - 분철 관련 에러 */
   BUNCHEOL_REQUIRED_FIELD_MISSING("BCH-001", "분철 필수 항목이 누락되었습니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_TEXT_LENGTH_INVALID("BCH-002", "분철 텍스트 길이가 허용 범위를 초과했습니다.", HttpStatus.BAD_REQUEST),
+  // 금칙어 거름(BannedWordFilter). 칸마다 코드를 나눠 화면이 어느 칸을 고칠지 문구로 알려 준다. 걸린 말은 되풀이하지 않는다.
+  BUNCHEOL_TITLE_BANNED_WORD(
+      "BCH-136", "제목에 부적절한 표현이 들어 있어요. 내용을 고쳐 주세요.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_DESCRIPTION_BANNED_WORD(
+      "BCH-137", "설명에 부적절한 표현이 들어 있어요. 내용을 고쳐 주세요.", HttpStatus.BAD_REQUEST),
+  BUNCHEOL_PURCHASE_SITE_BANNED_WORD(
+      "BCH-138", "구매처에 부적절한 표현이 들어 있어요. 내용을 고쳐 주세요.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_DEADLINE_INVALID("BCH-003", "분철 마감일은 현재 시각 이후여야 합니다.", HttpStatus.BAD_REQUEST),
   BUNCHEOL_DEADLINE_NOT_ON_THE_HOUR(
       "BCH-004", "분철 마감 시간은 정각(매시 0분 0초)이어야 합니다.", HttpStatus.BAD_REQUEST),

@@ -320,6 +320,14 @@ class UserDomainServiceTest {
           .isEqualTo(C2cHostQualification.QUALIFIED);
     }
 
+    // 허용 목록은 기본이 막힘이다. 제공자를 새로 붙이면 이 테스트가 깨져, 그 제공자에게 개최를 열지 C2C_HOST_PROVIDERS 에서 정하게 한다.
+    @Test
+    void 가입_경로가_늘면_개최_허용_여부를_다시_정해야_한다() {
+      assertThat(SocialProvider.values())
+          .as("제공자를 추가하면 UserDomainService.C2C_HOST_PROVIDERS 포함 여부를 정할 것")
+          .containsExactlyInAnyOrder(SocialProvider.KAKAO, SocialProvider.APPLE);
+    }
+
     @Test
     void 애플_가입자도_가입_미완료면_프로필_예외가_발생한다() {
       User user = User.create("APPLE", "001234.abc.0123", "relay@privaterelay.appleid.com");

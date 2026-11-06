@@ -197,7 +197,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
-                            | 403 | `USR-037` (`USER_HOST_KAKAO_ACCOUNT_REQUIRED`) | C2C 개최 자격 — 카카오 가입자가 아님 |
+                            | 403 | `USR-037` (`USER_HOST_KAKAO_ACCOUNT_REQUIRED`) | C2C 개최 자격 — 개최를 열 수 없는 가입 경로(카카오·애플 밖). 지금 있는 가입 경로에서는 나오지 않음 |
                             | 409 | `USR-036` (`USER_HOST_ADULT_CONFIRM_REQUIRED`) | C2C 개최 자격 — 「만 19세 이상」 체크 기록 없음. `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 해소 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
                             """)
@@ -409,7 +409,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
-                            | `KAKAO_ACCOUNT_REQUIRED` | 카카오 가입자가 아님 — 이 계정으로는 개최 불가 | 403 `USR-037` |
+                            | `KAKAO_ACCOUNT_REQUIRED` | 개최를 열 수 없는 가입 경로(카카오·애플 밖) — 이 계정으로는 개최 불가. 지금 있는 가입 경로에서는 나오지 않음 | 403 `USR-037` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
                             | `ADULT_CONFIRM_REQUIRED` | 「만 19세 이상」 체크 기록 없음 — `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 회복 | 409 `USR-036` |
                             | `LIMIT_EXCEEDED` | 활성(모집중·입금 수집중) 개최 수 상한 초과 | 409 `BCH-089` |

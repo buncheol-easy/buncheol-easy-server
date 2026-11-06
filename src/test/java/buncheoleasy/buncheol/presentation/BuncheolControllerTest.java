@@ -502,7 +502,7 @@ class BuncheolControllerTest {
     }
 
     @Test
-    void 카카오_가입자가_아니면_403_USR_037_으로_거절한다() throws Exception {
+    void 개최를_열_수_없는_가입_경로면_403_USR_037_로_거절한다() throws Exception {
       MockMultipartFile requestPart =
           new MockMultipartFile(
               "request", "", MediaType.APPLICATION_JSON_VALUE, validRequestJson().getBytes());

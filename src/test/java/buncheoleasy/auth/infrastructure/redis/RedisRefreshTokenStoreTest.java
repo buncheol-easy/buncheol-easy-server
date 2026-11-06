@@ -8,8 +8,8 @@ import static org.mockito.BDDMockito.then;
 import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -41,7 +41,7 @@ class RedisRefreshTokenStoreTest {
       store.save(1L, LoginClient.WEB, "refresh-token", 3600);
 
       // then
-      then(valueOperations).should().set("RT:1", "refresh-token", 3600, TimeUnit.SECONDS);
+      then(valueOperations).should().set("RT:1", "refresh-token", Duration.ofSeconds(3600));
     }
 
     @Test
@@ -66,7 +66,9 @@ class RedisRefreshTokenStoreTest {
       store.save(1L, LoginClient.APP, "app-refresh-token", 3600);
 
       // then
-      then(valueOperations).should().set("RT:APP:1", "app-refresh-token", 3600, TimeUnit.SECONDS);
+      then(valueOperations)
+          .should()
+          .set("RT:APP:1", "app-refresh-token", Duration.ofSeconds(3600));
     }
 
     @Test

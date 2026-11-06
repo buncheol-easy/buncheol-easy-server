@@ -32,7 +32,7 @@ public record HoldStaffBuncheolRequest(
     @PositiveOrZero Integer cuShippingFee,
     @Size(max = 200) String openChatUrl,
     @NotNull @PositiveOrZero Integer thumbnailIndex,
-    @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
+    @NotEmpty List<@Valid BuncheolMemberRequest> buncheolMembers) {
 
   public BuncheolParams toParams() {
     return new BuncheolParams(

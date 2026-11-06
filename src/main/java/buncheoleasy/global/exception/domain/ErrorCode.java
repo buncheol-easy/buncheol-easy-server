@@ -62,14 +62,16 @@ public enum ErrorCode {
 
   // LEGACY(운영진 방식) 개최는 운영이 지정한 계정(can_host)만 가능하다.
   USER_CANNOT_HOST("USR-031", "분철 개최 권한이 없습니다.", HttpStatus.FORBIDDEN),
-  // C2C 개최 자격 게이트 (docs/46 §7.1-8 · docs/50). 연령대 미보유(연령대 추가 동의로 해결 가능 — 409)와
-  // 미성년 확정(차단 — 403)을 나눠야 FE 가 "연령대 추가 동의 유도" 안내를 분기할 수 있다.
-  USER_AGE_NOT_VERIFIED(
-      "USR-032", "연령대 확인이 필요합니다. 카카오 연령대 제공에 동의해 주세요.", HttpStatus.CONFLICT),
-  USER_NOT_ADULT("USR-033", "미성년자는 분철을 개최할 수 없습니다.", HttpStatus.FORBIDDEN),
+  // USR-032·033 은 카카오 연령대로 개최를 막던 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
   USER_BANK_ACCOUNT_TOO_SHORT(
       "USR-034", "계좌번호는 숫자 8자리 이상 입력해 주세요.", HttpStatus.BAD_REQUEST),
   // USR-035 는 회원 개최 오픈 스위치(미오픈 차단) 에러로 배포됐다가 폐기된 번호라 재사용하지 않는다.
+  // C2C 개최 자격 게이트. 체크 없음(체크 한 번으로 해결 — 409)과 카카오 가입자 아님(이 계정으로는 회복 불가 — 403)을 나눠야
+  // FE 가 체크 화면과 불가 안내를 분기할 수 있다.
+  USER_HOST_ADULT_CONFIRM_REQUIRED(
+      "USR-036", "분철을 개최하려면 만 19세 이상 확인이 필요합니다.", HttpStatus.CONFLICT),
+  USER_HOST_KAKAO_ACCOUNT_REQUIRED(
+      "USR-037", "분철 개최는 카카오로 가입한 계정에서만 할 수 있습니다.", HttpStatus.FORBIDDEN),
 
   /** AUTH - 인증 관련 에러 */
   AUTH_UNSUPPORTED_AUTHENTICATION("AUTH-001", "지원하지 않는 인증 타입입니다.", HttpStatus.UNAUTHORIZED),
@@ -78,6 +80,26 @@ public enum ErrorCode {
   AUTH_OAUTH2_LOGIN_FAILED("AUTH-004", "소셜 로그인에 실패했습니다.", HttpStatus.UNAUTHORIZED),
   AUTH_INVALID_TOKEN("AUTH-005", "유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED),
   AUTH_EXPIRED_TOKEN("AUTH-006", "만료된 토큰입니다.", HttpStatus.UNAUTHORIZED),
+  // 앱 로그인 일회용 코드 — 없음·만료(120초)·이미 사용을 구분하지 않는다. 앱은 어느 경우든 로그인을 다시 시작한다.
+  AUTH_APP_LOGIN_CODE_INVALID(
+      "AUTH-007", "로그인 코드가 유효하지 않습니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED),
+  AUTH_APP_LOGIN_VERIFIER_MISMATCH(
+      "AUTH-008", "로그인 확인값이 맞지 않습니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED),
+  // 서명·발급자·대상 앱·만료·nonce 중 무엇이 틀렸는지 알려 주지 않는다.
+  AUTH_APPLE_TOKEN_INVALID(
+      "AUTH-009", "애플 로그인 정보를 확인하지 못했습니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED),
+  // 서버에 허용 앱(APPLE_SIGNIN_AUDIENCES)이 설정되지 않은 환경.
+  AUTH_APPLE_SIGNIN_DISABLED("AUTH-010", "애플 로그인을 사용할 수 없습니다.", HttpStatus.BAD_REQUEST),
+  // 애플 공개키를 받아 오지 못한 경우 — 토큰 문제가 아니라 잠시 뒤 다시 하면 된다.
+  AUTH_APPLE_KEYS_UNAVAILABLE(
+      "AUTH-011",
+      "지금은 애플 로그인을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+      HttpStatus.SERVICE_UNAVAILABLE),
+  // 같은 IP 에서 애플 토큰 검증 실패가 몰릴 때. 남은 횟수·해제 시각은 알리지 않는다.
+  AUTH_APPLE_LOGIN_RATE_LIMITED(
+      "AUTH-012", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+  // 서버에 앱 주소(APP_LOGIN_CALLBACK_URL)가 설정되지 않은 환경 — 카카오 앱 로그인을 시작하지 않는다.
+  AUTH_APP_LOGIN_DISABLED("AUTH-013", "앱 로그인을 사용할 수 없습니다.", HttpStatus.BAD_REQUEST),
 
   /** FILE - MultiPart File 관련 에러 */
   FILE_NAME_INVALID("FILE-001", "유효하지 않은 파일 이름입니다.", HttpStatus.BAD_REQUEST),
@@ -316,6 +338,25 @@ public enum ErrorCode {
   /** FDB - 의견 보내기 관련 에러 */
   // 비로그인도 열려 있는 엔드포인트라 도배 방지가 필요하다. 사용자에겐 사유를 자세히 알리지 않는다.
   FEEDBACK_RATE_LIMITED("FDB-001", "의견을 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+
+  /** AI - AI 개최글 도우미 관련 에러. 메시지는 화면이 그대로 보여 준다. */
+  // 위험 주소(내부망 등)로 막힌 경우도 같은 메시지다 — 무엇이 막혔는지 알려 주지 않는다.
+  AI_DRAFT_INVALID_INPUT(
+      "AI-001", "판매 페이지 주소나 상품 설명을 다시 확인해 주세요.", HttpStatus.BAD_REQUEST),
+  AI_DRAFT_FETCH_FAILED(
+      "AI-002",
+      "판매 페이지를 읽지 못했어요. 상품 설명을 복사해서 붙여 넣어 주세요.",
+      HttpStatus.UNPROCESSABLE_CONTENT),
+  AI_DRAFT_DAILY_LIMIT_EXCEEDED(
+      "AI-003", "오늘은 AI 작성을 모두 썼어요. 내일 다시 이용해 주세요.", HttpStatus.TOO_MANY_REQUESTS),
+  // AI 를 이미 불렀을 수 있어 하루 횟수를 돌려주지 않는다.
+  AI_DRAFT_GENERATION_FAILED(
+      "AI-004", "AI가 글을 쓰지 못했어요. 잠시 후 다시 시도해 주세요.", HttpStatus.BAD_GATEWAY),
+  AI_DRAFT_UNAVAILABLE(
+      "AI-005", "지금은 AI 작성을 쓸 수 없어요. 잠시 후 다시 시도해 주세요.", HttpStatus.SERVICE_UNAVAILABLE),
+  AI_DRAFT_IN_PROGRESS(
+      "AI-006", "AI가 이미 글을 쓰고 있어요. 끝난 뒤에 다시 시도해 주세요.", HttpStatus.CONFLICT),
+  AI_DRAFT_DISABLED("AI-007", "AI 작성 기능이 꺼져 있어요.", HttpStatus.CONFLICT),
 
   /** S3 - 이미지 저장소 관련 에러 */
   S3_UPLOAD_FAILED("S3-001", "이미지 업로드에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),

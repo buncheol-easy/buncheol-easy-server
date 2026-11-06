@@ -744,6 +744,33 @@ class BuncheolDetailQueryServiceTest {
   }
 
   @Nested
+  @DisplayName("개최자 번호(hostId)")
+  class HostIdTest {
+
+    // 앱의 「이 개최자 분철 안 보기」가 비로그인에서도 쓰므로, hostedByMe 처럼 호출자에 따라 가리면 안 된다.
+    @ParameterizedTest
+    @EnumSource(FlowType.class)
+    void 운영진_분철과_회원_개최_모두_비로그인에게도_개최자_번호를_싣는다(final FlowType flowType) {
+      stubEmptySlot(BuncheolStatus.RECRUITING, flowType);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, null);
+
+      assertThat(response.hostId()).isEqualTo(HOST_ID);
+      assertThat(response.flowType()).isEqualTo(flowType);
+    }
+
+    @Test
+    void 개최자가_아닌_로그인_유저에게도_개최자_번호를_싣는다() {
+      stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C);
+
+      BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
+
+      assertThat(response.hostedByMe()).isFalse();
+      assertThat(response.hostId()).isEqualTo(HOST_ID);
+    }
+  }
+
+  @Nested
   @DisplayName("오픈채팅 링크 노출 범위")
   class OpenChatUrlVisibilityTest {
 

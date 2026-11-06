@@ -197,8 +197,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 409 | `BCH-110` (`BUNCHEOL_C2C_CODE_MEMBER_NOT_ALLOWED`) | C2C 개최에 `accessType: "CODE_ONLY"` 슬롯을 포함 (코드 발급이 운영진 전용이라 영구 잠긴 슬롯이 된다) |
                             | 403 | `USR-018` (`USER_PROFILE_IS_NOT_COMPLETE`) | C2C 개최 자격 — 가입 미완료(전화번호 미등록). 운영진의 C2C 선택에도 적용 |
                             | 409 | `BCH-089` (`BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED`) | 일반 유저 활성(모집중·입금 수집중) 개최 수 상한 초과 |
-                            | 409 | `USR-032` (`USER_AGE_NOT_VERIFIED`) | C2C 개최 자격 — 연령대 미확인. 연령대 추가 동의(`/oauth2/authorization/kakao/age-range`)로 해소 가능 |
-                            | 403 | `USR-033` (`USER_NOT_ADULT`) | C2C 개최 자격 — 미성년자는 개최 불가 |
+                            | 403 | `USR-037` (`USER_HOST_KAKAO_ACCOUNT_REQUIRED`) | C2C 개최 자격 — 카카오 가입자가 아님 |
+                            | 409 | `USR-036` (`USER_HOST_ADULT_CONFIRM_REQUIRED`) | C2C 개최 자격 — 「만 19세 이상」 체크 기록 없음. `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 해소 |
                             | 409 | `USR-025` (`USER_BANK_ACCOUNT_NOT_REGISTERED`) | 정산 계좌 미등록 (LEGACY·C2C 공통) |
                             """)
                         .requestHeaders(userAuthorizationHeader())
@@ -381,7 +381,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
   void 개최_자격_사전_조회() throws Exception {
     given(buncheolService.getHostingEligibility(HOST_ID))
         .willReturn(
-            HostingEligibilityResponse.blocked(HostingEligibilityResponse.Reason.NOT_ADULT));
+            HostingEligibilityResponse.blocked(
+                HostingEligibilityResponse.Reason.ADULT_CONFIRM_REQUIRED));
 
     mockMvc
         .perform(get("/v1/buncheols/hosting-eligibility").with(userAuth()))
@@ -408,9 +409,9 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             **`reason` 과 개최 요청 시 대응 에러**
                             | reason | 의미 | 개최 요청 시 |
                             |--------|------|--------------|
+                            | `KAKAO_ACCOUNT_REQUIRED` | 카카오 가입자가 아님 — 이 계정으로는 개최 불가 | 403 `USR-037` |
                             | `PHONE_REQUIRED` | 가입 미완료(전화번호 미등록) | 403 `USR-018` |
-                            | `AGE_UNVERIFIED` | 연령대 미확인 — 연령대 추가 동의(`/oauth2/authorization/kakao/age-range`)로 회복 가능 | 409 `USR-032` |
-                            | `NOT_ADULT` | 미성년 확정 — 개최 불가 | 403 `USR-033` |
+                            | `ADULT_CONFIRM_REQUIRED` | 「만 19세 이상」 체크 기록 없음 — `POST /v1/buncheols/hosting-eligibility/adult-confirmation` 으로 회복 | 409 `USR-036` |
                             | `LIMIT_EXCEEDED` | 활성(모집중·입금 수집중) 개최 수 상한 초과 | 409 `BCH-089` |
                             | `BANK_ACCOUNT_REQUIRED` | 정산 계좌 미등록 (LEGACY·C2C 공통) | 409 `USR-025` |
                             """)
@@ -423,8 +424,37 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("reason")
                                 .type(JsonFieldType.STRING)
                                 .description(
-                                    "부적격 사유 (PHONE_REQUIRED | AGE_UNVERIFIED | NOT_ADULT | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
+                                    "부적격 사유 (KAKAO_ACCOUNT_REQUIRED | PHONE_REQUIRED | ADULT_CONFIRM_REQUIRED | LIMIT_EXCEEDED | BANK_ACCOUNT_REQUIRED). eligible 이 true 면 null")
                                 .optional())
+                        .build())));
+  }
+
+  @Test
+  void 개최_만19세_본인_체크() throws Exception {
+    mockMvc
+        .perform(post("/v1/buncheols/hosting-eligibility/adult-confirmation").with(userAuth()))
+        .andExpect(status().isNoContent())
+        .andDo(
+            document(
+                "buncheols-hosting-eligibility-adult-confirmation",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Buncheol")
+                        .summary("개최 만 19세 본인 체크")
+                        .description(
+                            """
+                            개최 입구에서 회원이 「만 19세 이상이에요」를 체크한 기록을 남긴다. 본문은 없고 성공하면 204 다.
+
+                            **멱등** — 이미 체크했으면 첫 체크 시각을 그대로 두고 204 를 준다. 동시에 여러 번 불러도 같다.
+
+                            체크 뒤 개최 자격은 `GET /v1/buncheols/hosting-eligibility` 로 다시 조회한다.
+
+                            **발생 가능한 에러**
+                            | HTTP | 코드 | 의미 |
+                            |------|------|------|
+                            | 404 | `USR-016` (`USER_NOT_FOUND`) | 존재하지 않는 회원(탈퇴 포함) |
+                            """)
+                        .requestHeaders(userAuthorizationHeader())
                         .build())));
   }
 
@@ -448,7 +478,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
             false,
             true,
             createdAt,
-            null);
+            null,
+            7L);
     CursorResponse<BuncheolSummaryResponse> response =
         new CursorResponse<>(List.of(item), "0_2026-05-15T08:00:00Z_10", true);
 
@@ -571,6 +602,10 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                                         + " null. 지난 시각이어도 그대로 실리므로 화면이 지금 시각과 비교해 \"M/D HH:mm"
                                         + " 오픈\" 을 붙인다. 오픈 전에도 availableMemberNames 는 빈 자리 이름을 싣는다")
                                 .optional(),
+                            fieldWithPath("items[].hostId")
+                                .description(
+                                    "분철을 연 회원 ID. 「이 개최자 분철 안 보기」처럼 같은 개최자의 분철을 묶어 거를 때"
+                                        + " 쓴다. 운영진(`LEGACY`) 분철은 운영진 계정 ID. 닉네임 등 다른 개최자 정보는 싣지 않는다"),
                             fieldWithPath("nextCursor")
                                 .description(
                                     "다음 페이지 커서 — `<groupRank>_<sortAt>_<id>` 불투명 토큰. `hasNext=false` 면 null")
@@ -621,7 +656,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
               null,
               false,
               Instant.parse("2026-05-20T10:00:00Z"),
-              Instant.parse("2026-05-20T10:25:00Z"));
+              Instant.parse("2026-05-20T10:25:00Z"),
+              HOST_ID);
     given(buncheolDetailQueryService.getDetail(10L, HOST_ID)).willReturn(response);
 
     mockMvc
@@ -675,6 +711,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               응답은 조회 시점 판정이라, 화면이 열어 둔 채 오픈 시각을 넘기면 다시 불러와야 `AVAILABLE` 로 바뀐다
                             - `serverTime` 은 이 응답을 만든 서버 시각 (UTC ISO-8601). 기기 시계가 틀려도 오픈까지 남은 시간을 맞게 세도록
                               화면이 이 값과 기기 시계의 차이를 보정해 쓴다
+                            - `hostId` 는 분철을 연 회원 ID. 「이 개최자 분철 안 보기」처럼 같은 개최자의 분철을 묶어 거를 때 쓴다.
+                              운영진(`LEGACY`) 분철은 운영진 계정 ID. 닉네임 등 다른 개최자 정보는 싣지 않는다. 목록 `items[].hostId` 와 같은 값
 
                             **응답 예시**
                             ```json
@@ -729,7 +767,8 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                               },
                               "termsEditable": false,
                               "opensAt": "2026-05-20T10:00:00Z",
-                              "serverTime": "2026-05-20T10:25:00Z"
+                              "serverTime": "2026-05-20T10:25:00Z",
+                              "hostId": 1
                             }
                             ```
 
@@ -858,7 +897,11 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("serverTime")
                                 .description(
                                     "응답을 만든 서버 시각 (UTC ISO-8601). 오픈까지 남은 시간을 기기 시계 대신 이 값에"
-                                        + " 맞춰 센다"))
+                                        + " 맞춰 센다"),
+                            fieldWithPath("hostId")
+                                .description(
+                                    "분철을 연 회원 ID. 「이 개최자 분철 안 보기」처럼 같은 개최자의 분철을 묶어 거를 때"
+                                        + " 쓴다. 운영진(`LEGACY`) 분철은 운영진 계정 ID. 닉네임 등 다른 개최자 정보는 싣지 않는다"))
                         .build())));
   }
 

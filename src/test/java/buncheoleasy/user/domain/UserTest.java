@@ -79,7 +79,15 @@ class UserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"123456", "789012", "aa123", "test-user_123"})
+    @ValueSource(
+        strings = {
+          "123456",
+          "789012",
+          "aa123",
+          "test-user_123",
+          // 애플 사용자 식별자(sub) 모양
+          "001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0123"
+        })
     void 올바른_형식의_providerId로_유저를_생성할_수_있다(String providerId) {
       // when & then
       assertThatCode(() -> User.create("KAKAO", providerId, "test@example.com"))
@@ -480,35 +488,6 @@ class UserTest {
       user.clearAgeRange();
 
       assertThat(user.getAgeRange()).isNull();
-      assertThat(user.isVerifiedAdult()).isFalse();
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"20~29", "30~39", "40~49", "90~"})
-    void 구간_하한이_20_이상이면_성인으로_확인된다(String ageRange) {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-
-      user.updateAgeRange(ageRange);
-
-      assertThat(user.isVerifiedAdult()).isTrue();
-    }
-
-    // "15~19" 는 만 19세 성인이 섞여 있어도 구분 불가라 보수적으로 미성년 취급한다 (docs/50).
-    @ParameterizedTest
-    @ValueSource(strings = {"1~9", "10~14", "15~19", "이상한값", "~29"})
-    void 구간_하한이_20_미만이거나_형식이_다르면_성인으로_확인되지_않는다(String ageRange) {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-
-      user.updateAgeRange(ageRange);
-
-      assertThat(user.isVerifiedAdult()).isFalse();
-    }
-
-    @Test
-    void 연령대가_없으면_성인으로_확인되지_않는다() {
-      User user = User.create("KAKAO", "123456", "test@example.com");
-
-      assertThat(user.isVerifiedAdult()).isFalse();
     }
   }
 }

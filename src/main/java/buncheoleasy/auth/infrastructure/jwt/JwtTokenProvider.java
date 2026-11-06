@@ -1,6 +1,7 @@
 package buncheoleasy.auth.infrastructure.jwt;
 
 import buncheoleasy.auth.TokenPair;
+import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
@@ -23,6 +24,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>관리자 토큰은 refresh 없이 access 단독이다 — refresh 저장소(Redis)가 userId 키라 admin id 와 충돌하고, 관리자 1~2명 규모에서
  * 만료 시 재로그인이 회전 관리보다 단순하기 때문. 대신 수명을 별도 설정(기본 12시간)으로 늘린다.
+ *
+ * <p>유저 refresh 토큰은 받은 곳({@link LoginClient})마다 칸이 따로다. 앱 토큰에만 {@code cli=app} claim 을 넣고, claim 이 없는
+ * 토큰은 웹 토큰이다 — 앱 칸이 생기기 전에 발급된 웹 토큰이 그대로 웹 토큰으로 읽힌다. 다른 칸의 토큰으로 갱신하려 하면 거절한다.
  */
 @Component
 public class JwtTokenProvider {
@@ -30,6 +34,8 @@ public class JwtTokenProvider {
   private static final String ROLE_CLAIM = "role";
   private static final String ADMIN_ROLE = "ADMIN";
   private static final String IMPERSONATION_CLAIM = "imp";
+  private static final String CLIENT_CLAIM = "cli";
+  private static final String APP_CLIENT = "app";
 
   private final long accessTokenExpirationSeconds;
   private final long refreshTokenExpirationSeconds;
@@ -70,14 +76,27 @@ public class JwtTokenProvider {
         Boolean.TRUE.equals(claims.get(IMPERSONATION_CLAIM, Boolean.class)));
   }
 
+  /** 웹 refresh 토큰에서 userId 를 꺼낸다. 앱 토큰이면 거절한다. */
   public Long parseUserIdFromRefreshToken(final String token) {
+    return parseUserIdFromRefreshToken(token, LoginClient.WEB);
+  }
+
+  /** refresh 토큰에서 userId 를 꺼낸다. 토큰이 {@code client} 칸 토큰이 아니면 거절한다. */
+  public Long parseUserIdFromRefreshToken(final String token, final LoginClient client) {
     final Claims claims = parseClaims(token, refreshSecretKey);
+    if (parseClient(claims) != client) {
+      throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+    }
     return parseUserId(claims.getSubject());
   }
 
-  /** 유저 access/refresh 토큰 쌍 발급. */
+  /** 유저 access/refresh 토큰 쌍 발급(웹 칸). */
   public TokenPair issueTokens(final Long userId) {
-    return new TokenPair(createAccessToken(userId), createRefreshToken(userId));
+    return issueTokens(userId, LoginClient.WEB);
+  }
+
+  public TokenPair issueTokens(final Long userId, final LoginClient client) {
+    return new TokenPair(createAccessToken(userId), createRefreshToken(userId, client));
   }
 
   public String createAccessToken(final Long userId) {
@@ -103,25 +122,37 @@ public class JwtTokenProvider {
   }
 
   public String createRefreshToken(final Long userId) {
+    return createRefreshToken(userId, LoginClient.WEB);
+  }
+
+  public String createRefreshToken(final Long userId, final LoginClient client) {
     final Instant now = Instant.now();
     final Instant expiration = now.plusSeconds(refreshTokenExpirationSeconds);
 
-    String token =
+    final var builder =
         Jwts.builder()
             .subject(String.valueOf(userId))
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiration))
-            .signWith(refreshSecretKey)
-            .compact();
+            .signWith(refreshSecretKey);
+    if (client == LoginClient.APP) {
+      builder.claim(CLIENT_CLAIM, APP_CLIENT);
+    }
+    final String token = builder.compact();
 
-    refreshTokenStore.save(userId, token, refreshTokenExpirationSeconds);
+    refreshTokenStore.save(userId, client, token, refreshTokenExpirationSeconds);
     return token;
   }
 
   public TokenPair reissueTokens(final Long userId, final String oldRefreshToken) {
-    refreshTokenStore.verify(userId, oldRefreshToken);
-    refreshTokenStore.delete(userId);
-    return issueTokens(userId);
+    return reissueTokens(userId, LoginClient.WEB, oldRefreshToken);
+  }
+
+  public TokenPair reissueTokens(
+      final Long userId, final LoginClient client, final String oldRefreshToken) {
+    refreshTokenStore.verify(userId, client, oldRefreshToken);
+    refreshTokenStore.delete(userId, client);
+    return issueTokens(userId, client);
   }
 
   private String buildAccessToken(
@@ -155,6 +186,18 @@ public class JwtTokenProvider {
     } catch (final JwtException | IllegalArgumentException exception) {
       throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN, exception);
     }
+  }
+
+  // claim 이 없으면 웹 토큰이다(앱 칸이 생기기 전 발급분 포함). 모르는 값은 서명이 맞아도 거절한다.
+  private LoginClient parseClient(final Claims claims) {
+    final Object client = claims.get(CLIENT_CLAIM);
+    if (client == null) {
+      return LoginClient.WEB;
+    }
+    if (APP_CLIENT.equals(client)) {
+      return LoginClient.APP;
+    }
+    throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
   }
 
   private Long parseUserId(final String subject) {

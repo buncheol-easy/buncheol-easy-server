@@ -13,5 +13,8 @@ public enum SlackChannel {
   SHIPPING_FEE_PAYBACK,
 
   /** 사용자 의견("의견 보내기") 수집 채널. 답장 없는 단방향 수집이라 운영자가 읽기만 한다. */
-  FEEDBACK
+  FEEDBACK,
+
+  /** AI 개최글 하루 합계 알림 채널. 막지 않는 사용량 신호라 운영자가 한도를 다시 정할지 판단하는 데 쓴다. */
+  AI_USAGE
 }

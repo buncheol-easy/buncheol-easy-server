@@ -15,12 +15,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("NotificationInboxRecorder 테스트")
 class NotificationInboxRecorderTest {
 
   @Mock private InboxMessageRepository inboxMessageRepository;
+
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   @InjectMocks private NotificationInboxRecorder recorder;
 
@@ -31,6 +34,37 @@ class NotificationInboxRecorderTest {
     ArgumentCaptor<InboxMessage> captor = ArgumentCaptor.forClass(InboxMessage.class);
     verify(inboxMessageRepository).save(captor.capture());
     return captor.getValue();
+  }
+
+  @Test
+  void 저장한_알림의_제목_본문_경로로_앱_푸시_이벤트를_발행한다() {
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "참여자",
+            "분철명", "아이브 앨범",
+            "멤버명", "장원영",
+            "입금금액", "32,000");
+
+    InboxMessage saved = record(7L, AlimtalkTemplate.PAYMENT_CONFIRMED, variables);
+
+    verify(eventPublisher)
+        .publishEvent(
+            new InboxNotificationRecordedEvent(
+                7L, saved.getTitle(), saved.getDescription(), "/profile/bids"));
+  }
+
+  @Test
+  void 경로가_없는_알림도_경로_없이_이벤트를_발행한다() {
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "참여자", "분철명", "아이브 앨범", "멤버명", "안유진", "지점명", "CU 역삼점", "운송장번호",
+            "123456789");
+
+    InboxMessage saved = record(7L, AlimtalkTemplate.PICKUP_REMINDER_CU, variables);
+
+    verify(eventPublisher)
+        .publishEvent(
+            new InboxNotificationRecordedEvent(7L, saved.getTitle(), saved.getDescription(), null));
   }
 
   @Test

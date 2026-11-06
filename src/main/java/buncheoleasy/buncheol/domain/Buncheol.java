@@ -35,8 +35,9 @@ import org.hibernate.annotations.DynamicUpdate;
 public class Buncheol extends TimestampedEntity implements Cursorable {
 
   // 제목 64자 — 목록·상세 어느 화면도 그 이상을 노출하지 않는다 (docs/56 H-02). DB 컬럼 길이(200)는 그대로 두고 검증만 조인다.
-  private static final int TITLE_MAX_LENGTH = 64;
-  private static final int DESCRIPTION_MAX_LENGTH = 700;
+  // AI 개최글 도우미가 초안을 이 길이에 맞춰 자른다 — 상한이 바뀌면 초안도 같이 따라가도록 공개한다.
+  public static final int TITLE_MAX_LENGTH = 64;
+  public static final int DESCRIPTION_MAX_LENGTH = 700;
   private static final int PURCHASE_SITE_MAX_LENGTH = 200;
   private static final int OPEN_CHAT_URL_MAX_LENGTH = 200;
 

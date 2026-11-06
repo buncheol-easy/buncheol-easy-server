@@ -1613,8 +1613,26 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_PURCHASE_SITE_BANNED_WORD);
 
-      then(participationDomainService).should(never()).findActiveByBuncheolId(anyLong());
       then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
+      then(buncheolImageDomainService).should(never()).deleteImagesExcluding(anyLong(), anyList());
+    }
+
+    // 어차피 못 바꾸는 칸을 고치라고 안내하지 않는다 — 조건 수정 가능 판정이 먼저다.
+    @Test
+    void 신청자가_있으면_구매처_금칙어보다_조건_수정_불가가_먼저다() {
+      givenLocked(FlowType.C2C);
+      givenActiveParticipations(1);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(null, null, null, null, "토토 사이트"),
+                      List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_TERMS_EDIT_HAS_APPLICANT);
     }
   }
 

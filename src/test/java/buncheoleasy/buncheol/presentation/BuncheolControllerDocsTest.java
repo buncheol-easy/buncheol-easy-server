@@ -310,7 +310,7 @@ class BuncheolControllerDocsTest extends DocsTestSupport {
                             | 400 | `BCH-002` (`BUNCHEOL_TEXT_LENGTH_INVALID`) | 바꾼 `purchaseSite` 가 200자 초과 |
                             | 400 | `BCH-136` (`BUNCHEOL_TITLE_BANNED_WORD`) | 바꾼 `title` 에 금칙어 (지금 값 그대로면 보지 않는다) |
                             | 400 | `BCH-137` (`BUNCHEOL_DESCRIPTION_BANNED_WORD`) | 바꾼 `description` 에 금칙어 |
-                            | 400 | `BCH-138` (`BUNCHEOL_PURCHASE_SITE_BANNED_WORD`) | 바꾼 `purchaseSite` 에 금칙어 |
+                            | 400 | `BCH-138` (`BUNCHEOL_PURCHASE_SITE_BANNED_WORD`) | 바꾼 `purchaseSite` 에 금칙어 (조건을 바꿀 수 있을 때만 — 아니면 `BCH-084`·`BCH-124` 가 먼저) |
                             | 403 | `BCH-044` (`BUNCHEOL_NO_PERMISSION`) | 호출자가 개최자가 아님 |
                             | 404 | `BCH-043` (`BUNCHEOL_NOT_FOUND`) | 존재하지 않는 분철 |
                             | 409 | `BCH-060` (`BUNCHEOL_NOT_RECRUITING`) | 모집중이 아니거나 마감이 지남 |

@@ -272,6 +272,10 @@ public class BuncheolService {
     rejectBannedWordInChangedText(buncheol, request);
 
     Optional<BuncheolTerms> newTerms = resolveTermsChange(buncheol, request.toTermsChange(), now);
+    // 구매처는 조건 수정이 가능할 때만 거른다 — 신청자가 있어 어차피 못 바꾸는 칸을 고치라고 안내하지 않게.
+    if (newTerms.isPresent() && !newTerms.get().purchaseSite().equals(buncheol.getPurchaseSite())) {
+      rejectBannedWord(newTerms.get().purchaseSite(), ErrorCode.BUNCHEOL_PURCHASE_SITE_BANNED_WORD);
+    }
 
     buncheolImageDomainService.validateModifyImageCount(
         buncheolId, request.keepImageIds(), images.size());
@@ -309,8 +313,8 @@ public class BuncheolService {
   }
 
   /**
-   * 수정은 바뀐 칸만 거른다. 목록에 말이 늘어도 이미 올라간 글의 사진·링크만 고치는 요청은 막히지 않고, 신청자가 있어 구매처를 고칠 수 없는 분철이
-   * 그 구매처 때문에 아무것도 못 고치는 일이 없다.
+   * 수정은 바뀐 칸만 거른다. 목록에 말이 늘어도 이미 올라간 글의 사진·링크만 고치는 요청은 막히지 않는다. 구매처는 거래 조건이라 수정 가능 판정 뒤에 따로
+   * 거른다({@link #modifyBuncheol}).
    */
   private void rejectBannedWordInChangedText(
       final Buncheol buncheol, final BuncheolModifyRequest request) {
@@ -319,11 +323,6 @@ public class BuncheolService {
     }
     if (!Objects.equals(request.description(), buncheol.getDescription())) {
       rejectBannedWord(request.description(), ErrorCode.BUNCHEOL_DESCRIPTION_BANNED_WORD);
-    }
-    // 구매처는 보내지 않으면(null) 지금 값을 유지한다.
-    if (request.purchaseSite() != null
-        && !request.purchaseSite().equals(buncheol.getPurchaseSite())) {
-      rejectBannedWord(request.purchaseSite(), ErrorCode.BUNCHEOL_PURCHASE_SITE_BANNED_WORD);
     }
   }
 

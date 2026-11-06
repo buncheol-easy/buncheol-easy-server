@@ -74,6 +74,7 @@ public class BannedWordFilter {
   }
 
   // 한글 채움 문자는 글자(Lo)로 분류돼 위 거름을 통과한다. 화면에는 빈칸으로 보여 띄어쓰기 우회에 쓰인다.
+  // NFKC 뒤에는 0x3164·0xFFA0 이 0x1160 으로 바뀌어 있지만, 정규화 순서가 바뀌어도 새지 않게 넷 다 적는다.
   private static boolean isHangulFiller(final int codePoint) {
     return codePoint == 0x115F || codePoint == 0x1160 || codePoint == 0x3164 || codePoint == 0xFFA0;
   }

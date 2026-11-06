@@ -7,6 +7,10 @@ import static org.mockito.Mockito.mock;
 
 import buncheoleasy.user.domain.RandomNicknameGenerator;
 import buncheoleasy.user.domain.UserRepository;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -14,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.core.io.ClassPathResource;
 
 @DisplayName("BannedWordFilter 단위 테스트")
 class BannedWordFilterTest {
@@ -51,19 +56,34 @@ class BannedWordFilterTest {
   @DisplayName("예외 목록")
   class AllowedPhraseTest {
 
-    // 띄어쓰기를 지우면 시각 뒤 「발송」이 금칙어처럼 이어진다.
+    // 띄어쓰기·줄바꿈을 지우면 「~할 때(時)」·시각 뒤 「발송·발주…」가 금칙어처럼 이어진다.
     @ParameterizedTest
     @ValueSource(
         strings = {
+          "입금 확인 시 발송됩니다",
+          "미입금 시 발송 불가",
+          "마감 시 발주 들어갑니다",
+          "분실 시 발생하는 문제는 책임지지 않아요",
+          "요청 시 발급",
+          "컴백 시 발매",
+          "역삽입 시 발열과 손상이 생길 수 있어요",
+          "유우시 발송", // 멤버 이름 + 발송
+          "■ 오픈 일시\n■ 발송 안내",
           "오후 3시 발송 예정",
           "6시 발매",
           "즉시 발송",
           "동시 발매 앨범",
           "다시 발송해 드려요",
-          "열시 발송",
+          "참여 시 팔로우 필수",
+          "구매 시 팔찌 증정",
+          "다시 팔아요",
+          "OO씨 발송해 드릴게요",
+          "날씨 발표",
           "시발점",
           "기존 나눔 참여자 우선",
-          "2병 신청 받아요"
+          "기존 나왔던 앨범",
+          "2병 신청 받아요",
+          "감염병 예방"
         })
     void 예외_표현_안에_통째로_들어간_일치는_걸지_않는다(final String text) {
       assertThat(filter.containsBannedWord(text)).isFalse();
@@ -74,10 +94,22 @@ class BannedWordFilterTest {
       assertThat(filter.containsBannedWord("3시 발송합니다 시발")).isTrue();
     }
 
-    // 예외를 짧게 적으면(예: 「다시발」) 문장 끝 「…다」 뒤의 금칙어까지 풀린다.
+    // 예외를 앞말·숫자로 감싸면(예: 「다시발」「3시발」) 문장 끝·숫자 뒤에 붙인 금칙어까지 풀린다.
     @ParameterizedTest
-    @ValueSource(strings = {"좋습니다 시발", "발송 예정 시발", "모두 시발", "이상한 시발", "하기 존나 힘들다"})
-    void 문장_끝_뒤에_붙은_금칙어는_예외로_풀리지_않는다(final String text) {
+    @ValueSource(
+        strings = {
+          "좋습니다 시발",
+          "발송 예정 시발",
+          "모두 시발",
+          "이상한 시발",
+          "하기 존나 힘들다",
+          "택배비 3000 시발",
+          "1시발",
+          "가격 10000 시팔",
+          "시발 생각할수록",
+          "시발 열받네"
+        })
+    void 문장_끝이나_숫자_뒤에_붙은_금칙어는_예외로_풀리지_않는다(final String text) {
       assertThat(filter.containsBannedWord(text)).isTrue();
     }
 
@@ -115,7 +147,9 @@ class BannedWordFilterTest {
           "마감 오후 9시 · 발송은 편의점 반값택배(GS25, CU) 3,000원",
           "입금 확인 후 즉시 발송, 미입금 시 다음 순번",
           "추가 모집합니다! 남은 멤버 2명",
-          "포토카드 1장 + 엽서 + 스티커 동봉"
+          "포토카드 1장 + 엽서 + 스티커 동봉",
+          "포카 짱 개이득",
+          "케타 민지 포카" // 케이타운포유 줄임말 + 멤버 이름
         })
     void 걸지_않는다(final String text) {
       assertThat(filter.containsBannedWord(text)).isFalse();
@@ -131,6 +165,41 @@ class BannedWordFilterTest {
       for (int i = 0; i < 5_000; i++) {
         String nickname = generator.generate();
         assertThat(filter.containsBannedWord(nickname)).as(nickname).isFalse();
+      }
+    }
+  }
+
+  @Nested
+  @DisplayName("목록 파일")
+  class ListFileTest {
+
+    // 금칙어를 지운 뒤 남은 예외는 쓸모가 없고, 금칙어와 똑같은 예외는 그 말을 영구히 풀어 버린다.
+    @Test
+    void 예외_항목은_금칙어를_하나_이상_품고_그보다_길다() {
+      List<String> words = readEntries("banned-words/words.txt");
+      List<String> allowed = readEntries("banned-words/allowed.txt");
+
+      for (String phrase : allowed) {
+        String normalizedPhrase = BannedWordFilter.normalize(phrase);
+        List<String> contained =
+            words.stream()
+                .map(BannedWordFilter::normalize)
+                .filter(normalizedPhrase::contains)
+                .toList();
+        assertThat(contained).as(phrase).isNotEmpty();
+        assertThat(contained).as(phrase).allMatch(word -> word.length() < normalizedPhrase.length());
+      }
+    }
+
+    private List<String> readEntries(final String path) {
+      try (InputStream input = new ClassPathResource(path).getInputStream()) {
+        return new String(input.readAllBytes(), StandardCharsets.UTF_8)
+            .lines()
+            .map(String::strip)
+            .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+            .toList();
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
       }
     }
   }

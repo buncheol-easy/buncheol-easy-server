@@ -150,7 +150,9 @@ class UserControllerDocsTest extends DocsTestSupport {
                         .summary("회원 프로필(닉네임·휴대폰·실명·마케팅 동의) 등록/수정")
                         .description(
                             "닉네임·휴대폰 번호와 선택적으로 실명·마케팅 수신 동의 여부를 등록 또는 수정한다. "
-                                + "미완료 유저가 호출하면 자동으로 프로필 완료 상태로 전이된다.")
+                                + "미완료 유저가 호출하면 자동으로 프로필 완료 상태로 전이된다. "
+                                + "바꾼 닉네임에 금칙어가 있으면 400 `USR-038` (`USER_NICKNAME_BANNED_WORD`), "
+                                + "다른 회원이 쓰는 닉네임이면 409 `USR-013` (`USER_NICKNAME_DUPLICATE`) 로 거부된다.")
                         .requestHeaders(userAuthorizationHeader())
                         .requestSchema(Schema.schema("UpdateUserProfileRequest"))
                         .requestFields(

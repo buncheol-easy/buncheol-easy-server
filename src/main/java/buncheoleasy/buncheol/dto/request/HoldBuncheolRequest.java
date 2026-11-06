@@ -33,7 +33,7 @@ public record HoldBuncheolRequest(
     @Size(max = 200) String openChatUrl,
     FlowType flowType,
     @NotNull @PositiveOrZero Integer thumbnailIndex,
-    @NotEmpty @Valid List<BuncheolMemberRequest> buncheolMembers) {
+    @NotEmpty List<@Valid BuncheolMemberRequest> buncheolMembers) {
 
   // 인자의 resolvedFlowType 은 서버 결정값 — 요청 필드 flowType 을 그대로 쓰지 않는다(자격 게이트 경유).
   public BuncheolParams toParams(final FlowType resolvedFlowType) {

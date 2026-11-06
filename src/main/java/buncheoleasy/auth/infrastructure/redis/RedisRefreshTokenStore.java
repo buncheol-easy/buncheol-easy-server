@@ -4,9 +4,9 @@ import buncheoleasy.auth.domain.LoginClient;
 import buncheoleasy.auth.domain.RefreshTokenStore;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -29,7 +29,7 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
       final Long userId, final LoginClient client, final String token, final long expirationTime) {
     redisTemplate
         .opsForValue()
-        .set(buildKey(userId, client), token, expirationTime, TimeUnit.SECONDS);
+        .set(buildKey(userId, client), token, Duration.ofSeconds(expirationTime));
   }
 
   @Override

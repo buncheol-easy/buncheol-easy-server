@@ -45,6 +45,7 @@ import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.text.BannedWordFilter;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.user.domain.C2cHostQualification;
@@ -108,6 +109,9 @@ class BuncheolServiceTest {
   @Mock private UserDomainService userDomainService;
 
   @Mock private StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
+
+  // 실제 목록을 읽는다 — 다른 테스트의 제목·설명이 걸리지 않는 것도 함께 확인된다.
+  @Spy private BannedWordFilter bannedWordFilter = new BannedWordFilter();
 
   @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -635,6 +639,44 @@ class BuncheolServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.USER_BANK_ACCOUNT_NOT_REGISTERED);
     }
+
+    // 칸마다 코드가 달라 화면이 어느 칸을 고칠지 문구로 알려 준다. 분철 INSERT 전에 거른다.
+    @ParameterizedTest
+    @CsvSource({
+      "시 발 분철, 분철 설명입니다., 공식 스토어, BUNCHEOL_TITLE_BANNED_WORD",
+      "테스트 분철 제목, 설명 ㅅ.ㅂ, 공식 스토어, BUNCHEOL_DESCRIPTION_BANNED_WORD",
+      "테스트 분철 제목, 분철 설명입니다., 토토 사이트, BUNCHEOL_PURCHASE_SITE_BANNED_WORD"
+    })
+    void 금칙어가_든_칸의_코드로_거부하고_분철을_만들지_않는다(
+        final String title,
+        final String description,
+        final String purchaseSite,
+        final ErrorCode expected) {
+      HoldBuncheolRequest request =
+          new HoldBuncheolRequest(
+              GROUP_ID,
+              title,
+              description,
+              purchaseSite,
+              Instant.now().plus(7, ChronoUnit.DAYS),
+              1,
+              3000,
+              null,
+              null,
+              null,
+              0,
+              List.of(new BuncheolMemberRequest(MEMBER_ID, 50_000L)));
+      List<ImageFile> images =
+          List.of(new ImageFile("image1.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+      assertThatThrownBy(() -> buncheolService.holdBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(expected);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(eventPublisher).should(never()).publishEvent(any());
+    }
   }
 
   @Nested
@@ -685,6 +727,33 @@ class BuncheolServiceTest {
       then(staffBuncheolSettingDomainService).shouldHaveNoInteractions();
       // 회원 개최의 C2C 자격 게이트를 타지 않는다.
       then(userDomainService).should(never()).requireC2cHostQualification(any());
+    }
+
+    @Test
+    void 금칙어를_회원_개최와_같이_거르고_분철을_만들지_않는다() {
+      given(userDomainService.canHost(HOST_ID)).willReturn(true);
+      HoldStaffBuncheolRequest request =
+          new HoldStaffBuncheolRequest(
+              GROUP_ID,
+              "몬엑 분철",
+              "씨.발 설명",
+              "공식 스토어",
+              deadline,
+              null,
+              1,
+              3000,
+              null,
+              null,
+              0,
+              List.of(new BuncheolMemberRequest(MEMBER_ID, 15_000L)));
+
+      assertThatThrownBy(() -> buncheolService.holdStaffBuncheol(HOST_ID, request, images))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_DESCRIPTION_BANNED_WORD);
+
+      then(buncheolDomainService).should(never()).createBuncheol(any(), any());
+      then(staffBuncheolSettingDomainService).should(never()).create(any(), any(), any(), any());
     }
 
     @Test
@@ -1227,6 +1296,40 @@ class BuncheolServiceTest {
 
       then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
     }
+
+    @Test
+    void 바꾼_설명에_금칙어가_있으면_BCH_137_이고_아무것도_바꾸지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("수정 분철 제목");
+      given(buncheol.getDescription()).willReturn("옛 설명");
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest("수정 분철 제목", "ㅅ ㅂ 설명", List.of(), null, 0, null);
+
+      assertThatThrownBy(
+              () -> buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_DESCRIPTION_BANNED_WORD);
+
+      then(buncheolDomainService).should(never()).updateBuncheolContent(any(), any(), any());
+      then(buncheolImageDomainService).should(never()).deleteImagesExcluding(anyLong(), anyList());
+    }
+
+    // 목록에 말이 늘어도 이미 올라간 글의 사진만 고치는 요청은 막지 않는다 — 바뀐 칸만 거른다.
+    @Test
+    void 그대로_보낸_칸은_금칙어가_있어도_거르지_않는다() {
+      Buncheol buncheol = mock(Buncheol.class);
+      given(buncheol.getTitle()).willReturn("시발 제목");
+      given(buncheol.getDescription()).willReturn("수정 설명");
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      BuncheolModifyRequest request =
+          new BuncheolModifyRequest("시발 제목", "수정 설명", List.of(), null, 0, null);
+
+      buncheolService.modifyBuncheol(HOST_ID, BUNCHEOL_ID, request, List.of());
+
+      then(buncheolDomainService).should().updateBuncheolContent(buncheol, "시발 제목", "수정 설명");
+    }
   }
 
   @Nested
@@ -1493,6 +1596,25 @@ class BuncheolServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NO_PERMISSION);
 
       then(participationDomainService).should(never()).findActiveByBuncheolId(anyLong());
+    }
+
+    @Test
+    void 바꾼_구매처에_금칙어가_있으면_BCH_138_이고_조건을_쓰지_않는다() {
+      givenLocked(FlowType.C2C);
+
+      assertThatThrownBy(
+              () ->
+                  buncheolService.modifyBuncheol(
+                      HOST_ID,
+                      BUNCHEOL_ID,
+                      termsRequest(null, null, null, null, "토토 사이트"),
+                      List.of()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_PURCHASE_SITE_BANNED_WORD);
+
+      then(participationDomainService).should(never()).findActiveByBuncheolId(anyLong());
+      then(buncheolDomainService).should(never()).changeTermsIfNoApplicant(any(), any(), any());
     }
   }
 

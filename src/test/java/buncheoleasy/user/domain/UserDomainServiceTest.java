@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.text.BannedWordFilter;
 import buncheoleasy.user.domain.serviceterm.UserServiceTerm;
 import java.time.Clock;
 import java.time.Instant;
@@ -43,6 +44,8 @@ class UserDomainServiceTest {
   @Mock private buncheoleasy.user.domain.serviceterm.UserServiceTermRepository userServiceTermRepository;
 
   @Mock private RandomNicknameGenerator nicknameGenerator;
+
+  @Spy private BannedWordFilter bannedWordFilter = new BannedWordFilter();
 
   @Spy private Clock clock = Clock.fixed(Instant.parse("2026-05-14T12:00:00Z"), ZoneOffset.UTC);
 
@@ -752,6 +755,35 @@ class UserDomainServiceTest {
 
       assertThat(user.getNickname().value()).isEqualTo(originalNickname);
       assertThat(user.getPhoneNumber()).isNull();
+    }
+
+    @Test
+    void 바꾼_닉네임에_금칙어가_있으면_USR_038_이고_엔티티는_변경되지_않는다() {
+      User user = User.create("KAKAO", "123456", "test@example.com");
+      String originalNickname = user.getNickname().value();
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+      assertThatThrownBy(
+              () -> userDomainService.updateProfile(1L, "씨발닉네임", "01012345678", null, null))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.USER_NICKNAME_BANNED_WORD);
+
+      assertThat(user.getNickname().value()).isEqualTo(originalNickname);
+      assertThat(user.getPhoneNumber()).isNull();
+      then(userRepository).should(never()).existsByNicknameExcludingId(any(), any());
+    }
+
+    // 목록에 말이 늘어도 기존 닉네임 그대로 전화번호만 고치는 요청은 막지 않는다.
+    @Test
+    void 닉네임을_바꾸지_않으면_금칙어가_있어도_거르지_않는다() {
+      User user = User.create("KAKAO", "123456", "test@example.com", "씨발닉네임");
+      given(userRepository.findById(1L)).willReturn(Optional.of(user));
+      given(userRepository.existsByNicknameExcludingId("씨발닉네임", 1L)).willReturn(false);
+
+      userDomainService.updateProfile(1L, "씨발닉네임", "01012345678", null, null);
+
+      assertThat(user.getPhoneNumber().value()).isEqualTo("01012345678");
     }
 
     @Test

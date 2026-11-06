@@ -29,6 +29,7 @@ import buncheoleasy.buncheol.dto.response.HostingEligibilityResponse;
 import buncheoleasy.delivery.domain.DeliveryDomainService;
 import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
+import buncheoleasy.global.text.BannedWordFilter;
 import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.C2cHostQualification;
@@ -36,6 +37,7 @@ import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -56,6 +58,7 @@ public class BuncheolService {
   private final GroupDomainService groupDomainService;
   private final UserDomainService userDomainService;
   private final StaffBuncheolSettingDomainService staffBuncheolSettingDomainService;
+  private final BannedWordFilter bannedWordFilter;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -118,13 +121,17 @@ public class BuncheolService {
     return buncheol.getId();
   }
 
-  /** 회원 개최와 운영진 개최가 함께 쓰는 본문: 자리 검증 → 분철 생성 → 자리 생성 → 이미지 업로드 이벤트. */
+  /** 회원 개최와 운영진 개최가 함께 쓰는 본문: 금칙어 → 자리 검증 → 분철 생성 → 자리 생성 → 이미지 업로드 이벤트. */
   private Buncheol createBuncheolWithMembers(
       final Long hostId,
       final BuncheolParams params,
       final Integer thumbnailIndex,
       final List<BuncheolMemberRequest> members,
       final List<ImageFile> images) {
+    rejectBannedWord(params.title(), ErrorCode.BUNCHEOL_TITLE_BANNED_WORD);
+    rejectBannedWord(params.description(), ErrorCode.BUNCHEOL_DESCRIPTION_BANNED_WORD);
+    rejectBannedWord(params.purchaseSite(), ErrorCode.BUNCHEOL_PURCHASE_SITE_BANNED_WORD);
+
     buncheolImageDomainService.validateImageCount(images.size());
 
     // 대표사진은 이미지 저장 순서를 바꾸지 않고 인덱스 플래그로만 지정한다 (필수 — DTO @NotNull 검증).
@@ -262,6 +269,7 @@ public class BuncheolService {
     Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
     buncheol.validateOwner(hostId);
     buncheol.validateRecruiting(now);
+    rejectBannedWordInChangedText(buncheol, request);
 
     Optional<BuncheolTerms> newTerms = resolveTermsChange(buncheol, request.toTermsChange(), now);
 
@@ -297,6 +305,31 @@ public class BuncheolService {
     if (!images.isEmpty()) {
       eventPublisher.publishEvent(
           BuncheolImageUploadEvent.ofModify(buncheolId, images, request.thumbnailIndex()));
+    }
+  }
+
+  /**
+   * 수정은 바뀐 칸만 거른다. 목록에 말이 늘어도 이미 올라간 글의 사진·링크만 고치는 요청은 막히지 않고, 신청자가 있어 구매처를 고칠 수 없는 분철이
+   * 그 구매처 때문에 아무것도 못 고치는 일이 없다.
+   */
+  private void rejectBannedWordInChangedText(
+      final Buncheol buncheol, final BuncheolModifyRequest request) {
+    if (!Objects.equals(request.title(), buncheol.getTitle())) {
+      rejectBannedWord(request.title(), ErrorCode.BUNCHEOL_TITLE_BANNED_WORD);
+    }
+    if (!Objects.equals(request.description(), buncheol.getDescription())) {
+      rejectBannedWord(request.description(), ErrorCode.BUNCHEOL_DESCRIPTION_BANNED_WORD);
+    }
+    // 구매처는 보내지 않으면(null) 지금 값을 유지한다.
+    if (request.purchaseSite() != null
+        && !request.purchaseSite().equals(buncheol.getPurchaseSite())) {
+      rejectBannedWord(request.purchaseSite(), ErrorCode.BUNCHEOL_PURCHASE_SITE_BANNED_WORD);
+    }
+  }
+
+  private void rejectBannedWord(final String text, final ErrorCode errorCode) {
+    if (bannedWordFilter.containsBannedWord(text)) {
+      throw new BusinessException(errorCode);
     }
   }
 

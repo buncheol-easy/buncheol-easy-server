@@ -16,11 +16,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
-import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.code.ParticipationCode;
 import buncheoleasy.buncheol.domain.code.ParticipationCodeDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -45,7 +46,6 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
@@ -97,6 +97,7 @@ class ParticipationServiceTest {
   @Mock private UserDomainService userDomainService;
   @Mock private DeliverySnapshotCreator deliverySnapshotCreator;
   @Mock private BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  @Mock private PaymentStarter paymentStarter;
   @Mock private ApplicationEventPublisher eventPublisher;
 
   @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -328,10 +329,9 @@ class ParticipationServiceTest {
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
-    // 🔴 추가 모집(성사 확정 후)은 슬롯마다 새 묶음·배송비 재부과·개별 24h 기한이라 별개 거래다. 그런데
-    // 응답은 합산 1건으로 접히므로, 열어 두면 참여자가 안내받은 금액을 한 번에 보내도 어느 묶음에도 안 맞는다.
+    // 입금 단계가 시작된 분철은 신청 자체를 받지 않는다 — 다중 슬롯도 마찬가지다.
     @Test
-    void 추가_모집_구간에는_다중_슬롯_신청을_열지_않는다() {
+    void 입금_수집_중에는_다중_슬롯_신청도_받지_않는다() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheol.isC2c()).willReturn(true);
@@ -345,7 +345,7 @@ class ParticipationServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
-      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
     }
 
     // 코드는 슬롯 하나에 대응한다 — 여러 슬롯에 같은 코드를 재사용할 수 없다.
@@ -867,7 +867,7 @@ class ParticipationServiceTest {
   }
 
   @Nested
-  @DisplayName("C2C 신청 정원 충족 테스트")
+  @DisplayName("C2C 신청 정원 충족(입금 단계 시작) 테스트")
   class C2cBuncheolFullTest {
 
     private Buncheol stubC2cRecruitingBuncheol() {
@@ -895,91 +895,61 @@ class ParticipationServiceTest {
       return buncheol;
     }
 
+    // 정원 충족 판정(열린 자리 = 살아 있는 참여, 최소 인원)은 PaymentStarter 가 한다(PaymentStarterTest). 신청 경로는 잠금으로
+    // 읽은 분철을 넘겨 같은 트랜잭션에서 판정을 맡긴다 — 마지막 열린 자리를 채운 요청 안에서 입금 단계가 시작된다.
     @Test
-    void 이_신청으로_전_슬롯이_채워지면_신청_인원을_사람_수로_담아_정원_충족_이벤트를_발행한다() {
-      stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(Collections.nCopies(3, buncheolMember()));
-      // 3슬롯을 2명이 채움(한 명이 2슬롯) — 신청 인원은 distinct 참여자 수여야 한다.
-      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
-          .willReturn(List.of(100L, 100L, 200L));
+    void 신청_뒤_잠금으로_읽은_분철로_입금_단계_시작_판정을_맡긴다() {
+      Buncheol buncheol = stubC2cRecruitingBuncheol();
 
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+      ParticipateResult result =
+          participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
       then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
-      then(eventPublisher)
-          .should()
-          .publishEvent(
-              argThat(
-                  (Object event) ->
-                      event instanceof BuncheolFullEvent full && full.applicantCount() == 2));
+      then(paymentStarter).should().startIfFull(buncheol, NOW);
+      // 응답 모양은 그대로다 — 입금 단계가 시작돼도 계좌·기한은 알림톡으로 안내한다.
+      assertThat(result.dueAt()).isNull();
+      assertThat(result.hostAccount()).isNull();
     }
 
-
-    // 개최자가 닫은 자리는 채워질 수 없다 — 정원에서 빼지 않으면 열린 자리가 다 차도 알림이 영영 안 나간다.
+    // 중간 슬롯에서는 남은 슬롯이 아직 비어 있어 정원이 찰 수 없다 — 비싼 판정을 마지막 슬롯에서 한 번만 돌린다.
     @Test
-    void 닫힌_자리는_정원에서_빼고_열린_자리가_다_차면_정원_충족_이벤트를_발행한다() {
-      stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(
-              List.of(buncheolMember(), buncheolMember(), closedMember(SECOND_MEMBER_ID)));
-      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
-          .willReturn(List.of(100L, 200L));
+    void 다슬롯_신청은_마지막_슬롯에서만_입금_단계_시작을_판정한다() {
+      Buncheol buncheol = stubC2cRecruitingBuncheol();
+      given(buncheolMemberDomainService.getBuncheolMemberForShare(SECOND_MEMBER_ID, BUNCHEOL_ID))
+          .willReturn(buncheolMember(SECOND_MEMBER_ID, SECOND_MEMBER_PRICE));
 
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+      participationService.participate(
+          BUNCHEOL_ID,
+          PARTICIPANT_ID,
+          new ParticipateRequest(
+              null, List.of(BUNCHEOL_MEMBER_ID, SECOND_MEMBER_ID), SHIPPING_ADDRESS_ID, null, null));
 
-      then(eventPublisher).should().publishEvent(any(BuncheolFullEvent.class));
-      // 🔴 분모(열린 자리 수)는 잠금 읽기로 센다 — 스냅샷으로 세면 락 대기 중 닫히거나 다시 열린 자리를 잘못 센다.
-      then(buncheolMemberDomainService).should().findAllByBuncheolIdForShare(BUNCHEOL_ID);
-      then(buncheolMemberDomainService).should(never()).findAllByBuncheolId(anyLong());
+      then(paymentStarter).should(times(1)).startIfFull(buncheol, NOW);
     }
 
+    // 추가 모집은 없어졌다 — 입금 단계가 시작된 분철의 빈 자리는 「마감」이고 신청은 BCH-060 이다.
     @Test
-    void 빈_슬롯이_남아_있으면_정원_충족_이벤트를_발행하지_않는다() {
-      stubC2cRecruitingBuncheol();
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(Collections.nCopies(3, buncheolMember()));
-      given(participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(BUNCHEOL_ID))
-          .willReturn(List.of(100L, 200L));
-
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
-
-      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
-      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
-    }
-
-    @Test
-    void 추가_모집_참여는_정원_충족_판정을_하지_않는다() {
-      // 정원 충족 판정이 RECRUITING 한정이라는 전제는 락 순서(분철 행 → 참여 행) 규약의 근거이기도 하다.
+    void 입금_수집_중_분철_신청은_거절하고_입금_단계_판정도_하지_않는다() {
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheol.getId()).willReturn(BUNCHEOL_ID);
       given(buncheol.isC2c()).willReturn(true);
       given(buncheol.isHost(PARTICIPANT_ID)).willReturn(false);
       given(buncheol.getStatus()).willReturn(BuncheolStatus.PAYMENT_COLLECTING);
-      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolDomainService.getLatestBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
       given(buncheolMemberDomainService.getBuncheolMemberForShare(BUNCHEOL_MEMBER_ID, BUNCHEOL_ID))
           .willReturn(buncheolMember());
-      given(
-              participationShippingAddressResolver.resolve(
-                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
-          .willReturn(shippingAddress());
-      given(participationDomainService.createParticipationIfCollecting(any()))
-          .willAnswer(
-              invocation -> {
-                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
-                return true;
-              });
-      givenParticipantAccount();
 
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
+      assertThatThrownBy(
+              () ->
+                  participationService.participate(
+                      BUNCHEOL_ID, PARTICIPANT_ID, participateRequest()))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
-      then(eventPublisher).should().publishEvent(any(ParticipationCreatedEvent.class));
-      then(eventPublisher).should(never()).publishEvent(any(BuncheolFullEvent.class));
-      then(participationDomainService)
-          .should(never())
-          .findActiveParticipantIdsByBuncheolIdForUpdate(anyLong());
+      then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
+      then(paymentStarter).shouldHaveNoInteractions();
     }
   }
 
@@ -1009,18 +979,6 @@ class ParticipationServiceTest {
     /** 신청(APPLIED) INSERT 성공 + 정원 충족 판정에 필요한 최소 스텁. */
     private void givenAppliedInsert() {
       given(participationDomainService.createParticipationIfRecruiting(any()))
-          .willAnswer(
-              invocation -> {
-                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
-                return true;
-              });
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember()));
-    }
-
-    /** 추가 모집(AWAITING_PAYMENT) INSERT 성공. */
-    private void givenCollectingInsert() {
-      given(participationDomainService.createParticipationIfCollecting(any()))
           .willAnswer(
               invocation -> {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
@@ -1059,9 +1017,7 @@ class ParticipationServiceTest {
       Participation existing = existingActive(bundleId);
       lenient()
           .when(
-              // 🔴 any() 로 두면 추가 모집(PAYMENT_COLLECTING)까지 상속 원본을 받아 버린다 —
-              // 실제로 그렇게 뒀다가 "추가 모집은 재사용하지 않는다" 테스트 2건이 깨졌다.
-              // 스텁의 조건을 실제 게이트와 같게 맞춘다.
+              // 스텁의 조건을 실제 게이트(회원 개최·모집중)와 같게 맞춘다.
               participationDomainService.findInheritanceSource(
                   argThat(
                       b -> b != null && b.isC2c() && b.getStatus() == BuncheolStatus.RECRUITING),
@@ -1202,31 +1158,6 @@ class ParticipationServiceTest {
           .attach(any(), eq(EXISTING_BUNDLE_ID), any(), eq(0L), isNull(), isNull(), eq(NOW));
     }
 
-    // 🔴 이 트랙의 핵심 회귀 방지. "열린 묶음이면 재사용" 으로 짜면 추가 모집이 옛 묶음에 붙어
-    // 배송비 재부과가 한 번도 발동하지 않고 조용히 죽는다 (docs/80 결정 12).
-    // 배송비·배송지가 상속분이 아니라 새 값인 것은 AdditionalRoundShippingFeeTest 가 따로 고정한다.
-    @Test
-    void C2C_추가_모집은_활성_묶음이_있어도_재사용하지_않는다() {
-      Buncheol buncheol = stubC2c(BuncheolStatus.PAYMENT_COLLECTING);
-      // 재사용 후보를 실제로 깔아야 "있어도 재사용하지 않는다" 가 성립한다.
-      givenExistingActive(EXISTING_BUNDLE_ID);
-      givenFirstParticipation(buncheol);
-      givenCollectingInsert();
-
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
-
-      then(participationBundleDomainService)
-          .should()
-          .attach(
-              any(),
-              isNull(),
-              eq(SHIPPING_ADDRESS_ID),
-              eq(SHIPPING_FEE),
-              any(),
-              eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
-              eq(NOW));
-    }
-
     // 배포선 창에서 생긴 미연결 행(bundle_id NULL)이 재사용 후보가 되는 경우. 새로 열되
     // ⚠️ 배송비는 상속분(0)을 그대로 써야 한다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
     @Test
@@ -1245,7 +1176,7 @@ class ParticipationServiceTest {
   }
 
   @Nested
-  @DisplayName("추가 모집 배송비 재부과 테스트 (docs/80 §3-6)")
+  @DisplayName("재참여 상속·상태 가드 테스트 (docs/80 §3-6)")
   class AdditionalRoundShippingFeeTest {
 
     private static final Long INHERITED_ADDRESS_ID = 201L;
@@ -1270,8 +1201,7 @@ class ParticipationServiceTest {
     /**
      * 같은 분철에 이미 활성 참여가 있다 — 상속 분기의 전제.
      *
-     * <p>⚠️ {@code lenient()} 인 이유: 추가 모집 경로는 이 조회를 <b>아예 하지 않는다</b>. 그래도 깔아 두지 않으면
-     * 단언이 배제할 값(옛 배송지·옛 이름·0원)이 테스트 안에 없어 <b>변경 전 코드로도 통과</b>한다.
+     * <p>⚠️ {@code lenient()} 인 이유: 상태 가드에 막히는 경로는 이 조회를 <b>아예 하지 않는다</b>.
      */
     private void givenExistingActive() {
       Participation existing = newInstance(Participation.class);
@@ -1282,9 +1212,7 @@ class ParticipationServiceTest {
       setField(existing, "bundleId", INHERITED_BUNDLE_ID);
       lenient()
           .when(
-              // 🔴 any() 로 두면 추가 모집(PAYMENT_COLLECTING)까지 상속 원본을 받아 버린다 —
-              // 실제로 그렇게 뒀다가 "추가 모집은 재사용하지 않는다" 테스트 2건이 깨졌다.
-              // 스텁의 조건을 실제 게이트와 같게 맞춘다.
+              // 스텁의 조건을 실제 게이트(회원 개최·모집중)와 같게 맞춘다.
               participationDomainService.findInheritanceSource(
                   argThat(
                       b -> b != null && b.isC2c() && b.getStatus() == BuncheolStatus.RECRUITING),
@@ -1296,63 +1224,6 @@ class ParticipationServiceTest {
           .thenReturn(INHERITED_ADDRESS_ID);
     }
 
-
-    // 🔴 이 트랙의 돈 규칙. 새 묶음이 생기면 배송비 1회 부과 — 추가 모집은 별도 이체·별도 택배다.
-    @Test
-    void 성사_확정_후_추가_모집은_배송비를_다시_부과하고_요청_배송지를_쓴다() {
-      Buncheol buncheol = stubC2c(BuncheolStatus.PAYMENT_COLLECTING);
-      // 🔴 상속 후보가 살아 있는 상태 — 이 PR 이 바꾸는 유일한 시나리오다(staging 참여 222→223).
-      // 안 깔면 아래 단언이 배제할 값이 없어 변경 전 코드로도 통과한다.
-      givenExistingActive();
-      given(buncheol.shippingFeeFor(ShippingMethod.GS25_HALF)).willReturn(SHIPPING_FEE);
-      given(
-              participationShippingAddressResolver.resolve(
-                  PARTICIPANT_ID, buncheol, SHIPPING_ADDRESS_ID))
-          .willReturn(shippingAddress());
-      givenParticipantAccount();
-      given(participationDomainService.createParticipationIfCollecting(any()))
-          .willAnswer(
-              invocation -> {
-                setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
-                return true;
-              });
-
-      participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
-
-      then(participationDomainService)
-          .should()
-          .createParticipationIfCollecting(participationCaptor.capture());
-      Participation saved = participationCaptor.getValue();
-      // 상속분(0원)이 아니라 새로 부과된 금액이다.
-      assertThat(saved.getShippingFee()).isEqualTo(SHIPPING_FEE);
-      // 상속한 옛 배송지가 아니라 요청한 배송지를 쓴다 — 새 택배라 소유·배송방법 검증도 여기서 처음 걸린다.
-      assertThat(saved.getShippingAddressId()).isEqualTo(SHIPPING_ADDRESS_ID);
-      assertThat(saved.getShippingAddressId()).isNotEqualTo(INHERITED_ADDRESS_ID);
-      // 🔴 정본은 묶음이다. 묶음의 배송지가 틀리면 updatable=false 라 코드로 못 되돌린다 —
-      // 참여 행만 보는 검증으로는 상속분이 묶음에 흘러들어도 통과한다.
-      then(participationBundleDomainService)
-          .should()
-          .attach(
-              any(),
-              isNull(),
-              eq(SHIPPING_ADDRESS_ID),
-              eq(SHIPPING_FEE),
-              // 입금자명도 옛 이름이 아니라 그 시점 프로필로 다시 스냅샷한다 (P2-c: 계좌는 묶음이 갖는다).
-              eq(
-                  RefundAccount.of(
-                      PARTICIPANT_ACCOUNT.bank(),
-                      PARTICIPANT_ACCOUNT.account(),
-                      PARTICIPANT_ACCOUNT.holder())),
-              eq(NOW.plus(ParticipationService.C2C_PAYMENT_WINDOW)),
-              eq(NOW));
-      // 추가 모집에서 상속은 구조적으로 불가능하다. 그 판정은 이제 findInheritanceSource 안에 있고
-      // (쓰기·읽기 공유), 거기서 RECRUITING 이 아니면 조회 없이 empty 를 낸다 —
-      // ParticipationDomainServiceTest 가 그 계약을 지킨다. 여기서는 게이트를 <b>거쳤는지</b>만 본다.
-      then(participationDomainService).should().findInheritanceSource(buncheol, PARTICIPANT_ID);
-      then(participationDomainService)
-          .should(never())
-          .findFirstActiveInBuncheol(anyLong(), anyLong());
-    }
 
     // 상태 판정이 스냅샷 계산보다 뒤에 있으면, 모집이 끝난 분철에 재참여할 때 배송지·계좌 예외가
     // 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다. 재참여자는 이 PR 로 그 경로에 새로 편입된다.
@@ -1393,8 +1264,6 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember()));
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
@@ -1466,15 +1335,18 @@ class ParticipationServiceTest {
     void LEGACY_입금대기_참여는_취소_전용_코드로_막힌다() {
       Participation participation = participationWith(ParticipationStatus.AWAITING_PAYMENT);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participation.getFlowType()).willReturn(FlowType.LEGACY);
       Buncheol buncheol = mock(Buncheol.class);
       given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.isC2c()).willReturn(false);
+      given(buncheol.isStaff()).willReturn(true);
 
       assertThatThrownBy(
               () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
           .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED);
+      // 거절할 운영진 참여 요청으로 분철 행 잠금 줄을 세우지 않는다(정각 오픈 때 신청이 그 줄에 선다).
+      then(buncheolDomainService).should(never()).getBuncheolForUpdate(anyLong());
     }
 
     // 확정된 참여는 만료 CAS(AWAITING_PAYMENT 한정)가 걸리지 않아 "기한이 지나면 자동 취소돼요"가
@@ -1492,48 +1364,40 @@ class ParticipationServiceTest {
   }
 
   @Nested
-  @DisplayName("참여자 자발 취소 — 성사 확정 가드 (docs/56 H-09)")
-  class CancelAfterHostConfirmTest {
+  @DisplayName("참여자 자발 취소 — 회원 개최는 신청만")
+  class CancelMemberParticipationTest {
 
-    private static final Instant CREATED_AT = NOW.minus(2, ChronoUnit.HOURS);
-
-    // 참여 상태·생성 시각을 지정하고, 그 분철이 성사 확정을 거친 참여로 판정하는지(createdBeforeFinalize)를 세팅한다.
-    private void participation(
-        final ParticipationStatus status, final boolean createdBeforeFinalize) {
+    private void participation(final ParticipationStatus status) {
       Participation participation = mock(Participation.class);
       given(participation.getStatus()).willReturn(status);
       given(participation.getBuncheolId()).willReturn(BUNCHEOL_ID);
+      given(participation.getFlowType()).willReturn(FlowType.C2C);
       given(participationDomainService.getParticipation(PARTICIPATION_ID))
           .willReturn(participation);
 
+      // 회원 개최 참여 취소는 분철 행을 첫 잠금으로 잡는다.
       Buncheol buncheol = mock(Buncheol.class);
-      given(buncheolDomainService.getBuncheol(BUNCHEOL_ID)).willReturn(buncheol);
-      given(buncheol.isC2c()).willReturn(true);
-      if (status == ParticipationStatus.AWAITING_PAYMENT) {
-        given(participation.getCreatedAt()).willReturn(CREATED_AT);
-        given(buncheol.isCreatedBeforeFinalize(CREATED_AT)).willReturn(createdBeforeFinalize);
-      }
+      given(buncheolDomainService.getBuncheolForUpdate(BUNCHEOL_ID)).willReturn(buncheol);
+      given(buncheol.isStaff()).willReturn(false);
     }
 
-    // H-09 본체 — 이 가드를 지우면 취소가 통과해 빨개진다.
+    // 입금 단계가 시작되면 개최자가 인원을 셈한 뒤라 스스로 빠질 수 없다 — 진행 확정 때 입금 미확인으로 빠진다.
     @Test
-    void 성사_확정을_거친_입금_대기_참여는_자발_취소를_막는다() {
-      participation(ParticipationStatus.AWAITING_PAYMENT, true);
+    void 입금_대기_참여는_자발_취소를_막는다() {
+      participation(ParticipationStatus.AWAITING_PAYMENT);
 
       assertThatThrownBy(
               () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
           .isInstanceOf(BusinessException.class)
           .extracting("errorCode")
-          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM);
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
 
       then(participationDomainService).should(never()).cancelByUser(anyLong(), any());
     }
 
-    // 입금 수집중 분철의 추가 모집(docs/46 §4.7-E1)은 APPLIED 를 거치지 않고 바로 AWAITING_PAYMENT 로 생성된다.
-    // 상태만 보고 막으면 이 경로의 참여자는 신청 즉시 24시간 잠겨 오신청도 되돌릴 수 없다.
     @Test
-    void 추가_모집으로_바로_입금_대기가_된_참여는_계속_취소할_수_있다() {
-      participation(ParticipationStatus.AWAITING_PAYMENT, false);
+    void 신청_참여는_그대로_취소된다() {
+      participation(ParticipationStatus.APPLIED);
       given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(true);
 
       participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
@@ -1543,16 +1407,19 @@ class ParticipationServiceTest {
       then(participationBundleDomainService).should().closeIfEmpty(any(), eq(NOW));
     }
 
+    // 판정과 CAS 사이에 입금 단계가 시작되면 CAS(신청만)가 0행이다 — 분철 행을 먼저 잠가 실제로는 오지 않지만 마지막 선이다.
     @Test
-    void 확정_전_신청_참여는_그대로_취소된다() {
-      participation(ParticipationStatus.APPLIED, true);
-      given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(true);
+    void 취소_CAS_가_0행이면_상태_위반으로_거절한다() {
+      participation(ParticipationStatus.APPLIED);
+      given(participationDomainService.cancelByUser(PARTICIPATION_ID, NOW)).willReturn(false);
 
-      participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID);
+      assertThatThrownBy(
+              () -> participationService.cancelByParticipant(PARTICIPANT_ID, PARTICIPATION_ID))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED);
 
-      then(participationDomainService).should().cancelByUser(PARTICIPATION_ID, NOW);
-      // 마지막 슬롯이면 묶음도 끝난다 — 안 닫으면 재참여가 시체 묶음을 재사용해 택배가 옛 주소로 나간다.
-      then(participationBundleDomainService).should().closeIfEmpty(any(), eq(NOW));
+      then(participationBundleDomainService).should(never()).closeIfEmpty(any(), any());
     }
   }
 
@@ -1986,7 +1853,6 @@ class ParticipationServiceTest {
           .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
 
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
-      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
     }
 
     // 🔴 다슬롯 신청은 한 트랜잭션이다 — 빠진 자리 하나의 예외가 그대로 밖으로 나가야 앞서 만든 자리까지 롤백된다.
@@ -2074,7 +1940,6 @@ class ParticipationServiceTest {
 
       then(buncheolMemberDomainService).should(never()).getBuncheolMember(any(), any());
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
-      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
     }
 
     // 다슬롯은 한 트랜잭션이다 — 닫힌 자리의 예외가 그대로 나가야 앞서 만든 자리까지 롤백된다.
@@ -2205,8 +2070,6 @@ class ParticipationServiceTest {
                 setField(invocation.getArgument(0), "id", PARTICIPATION_ID);
                 return true;
               });
-      given(buncheolMemberDomainService.findAllByBuncheolIdForShare(BUNCHEOL_ID))
-          .willReturn(List.of(buncheolMember()));
 
       participationService.participate(BUNCHEOL_ID, PARTICIPANT_ID, participateRequest());
 
@@ -2238,7 +2101,6 @@ class ParticipationServiceTest {
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
       then(participationDomainService).should(never()).createParticipationIfRecruiting(any());
-      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
     }
 
     // 🔴 다중 신청은 모집중 전용이다(합산 응답이 추가 모집에서는 거짓). 그 가드는 락 이전 값으로 판정하므로, 락 뒤 최신 상태가
@@ -2263,7 +2125,6 @@ class ParticipationServiceTest {
           .extracting("errorCode")
           .isEqualTo(ErrorCode.BUNCHEOL_NOT_RECRUITING);
 
-      then(participationDomainService).should(never()).createParticipationIfCollecting(any());
       then(participationBundleDomainService)
           .should(never())
           .attach(any(), any(), any(), anyLong(), any(), any(), any());

@@ -8,12 +8,12 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ParticipationStatus {
-  // C2C 신청(무입금 슬롯 선점). 개최자 성사 확정 시 일괄로 AWAITING_PAYMENT 로 전이한다. dueAt 없음(NULL).
+  // C2C 신청(무입금 슬롯 선점). 입금 단계 시작 때 일괄로 AWAITING_PAYMENT 로 전이한다. dueAt 없음(NULL).
   APPLIED("신청됨"),
   // 입금 대기. 개최자 계좌가 노출되고 개최자의 입금확인을 기다린다.
   // LEGACY 는 유상 참여 즉시 이 상태이고(0원 참여는 바로 CONFIRMED) 기한(10분)이 지나면 만료 스케줄러가 취소한다
-  // (PAYMENT_TIMEOUT). C2C 는 성사 확정 일괄 전이 또는 추가 모집으로 들어오며(기한 24h), 기한이 지나도 자동 취소하지
-  // 않는다 — 기한이 지나 빠지는 출구는 개최자 「제외」(HOST_RELEASED)뿐이다.
+  // (PAYMENT_TIMEOUT). C2C 는 입금 단계 시작 일괄 전이로 들어오며(기한 24h), 기한이 지나도 자동 취소하지
+  // 않는다 — 입금이 확인되지 않은 채 빠지는 출구는 개최자의 진행 확정(PAYMENT_NOT_CONFIRMED)과 운영진 파기다.
   AWAITING_PAYMENT("입금 확인 중"),
   // C2C: 참여자가 묶음 단위로 "보냈어요" 를 눌러 입금을 주장한 상태. 입금 대기로 되돌리는 경로는 없다.
   PAYMENT_SENT("보냈어요"),
@@ -35,20 +35,8 @@ public enum ParticipationStatus {
     return ACTIVE;
   }
 
-  // 개최자 「제외」 대상. 활성 상태에서 CONFIRMED 만 뺀 것 — 확정분은 분철 취소 cascade + 환불 경로로만 끝난다
-  // (docs/70 결정 8). ACTIVE 에서 파생시켜, 활성 상태가 늘어도 두 목록이 갈리지 않게 한다.
-  private static final Set<ParticipationStatus> RELEASABLE =
-      ACTIVE.stream()
-          .filter(status -> status != CONFIRMED)
-          .collect(Collectors.toUnmodifiableSet());
-
-  public static Set<ParticipationStatus> releasableStatuses() {
-    return RELEASABLE;
-  }
-
   // 아직 확정 전이라 무조건 「끝나지 않음」인 상태들. 확정(CONFIRMED)은 종착 상태라 배송 종료까지
-  // 봐야 하므로 가드(탈퇴·배송지 삭제)가 따로 판정한다. 집합은 RELEASABLE 과 같지만 의미가 다르다 —
-  // 「제외」 정책이 바뀌어도 가드가 흔들리면 안 되므로 이름을 공유하지 않고 파생 방식만 같게 간다.
+  // 봐야 하므로 가드(탈퇴·배송지 삭제)가 따로 판정한다.
   private static final Set<ParticipationStatus> UNCONFIRMED_ACTIVE =
       ACTIVE.stream()
           .filter(status -> status != CONFIRMED)

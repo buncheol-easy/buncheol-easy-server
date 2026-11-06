@@ -4,12 +4,14 @@ import buncheoleasy.delivery.domain.Delivery;
 import buncheoleasy.delivery.domain.DeliveryStatus;
 import buncheoleasy.delivery.domain.TrackedParcel;
 import buncheoleasy.user.domain.shipping.ShippingMethod;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,6 +23,12 @@ interface JpaDeliveryRepository extends JpaRepository<Delivery, Long> {
 
   /** id 오름차순 — 호출부가 앞선 것을 이기게(merge (a, b) -> a) 두면 위와 같은 규칙이 된다. */
   List<Delivery> findAllByBundleIdInOrderByIdAsc(List<Long> bundleIds);
+
+  /** 참여들의 배송 배타 잠금 조회 — 포트 javadoc 참고. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT d FROM Delivery d WHERE d.participationId IN :participationIds")
+  List<Delivery> findAllByParticipationIdsForUpdate(
+      @Param("participationIds") List<Long> participationIds);
 
   /** 운송장·배송방식이 같은 배송 조회 — 관리자 벌크 등록으로 한 운송장에 여러 배송이 매핑될 수 있어 전부 돌려준다. */
   List<Delivery> findAllByTrackingNumberAndShippingMethodAndStatusIn(

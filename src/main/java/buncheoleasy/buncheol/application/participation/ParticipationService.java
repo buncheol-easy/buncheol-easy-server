@@ -1,8 +1,8 @@
 package buncheoleasy.buncheol.application.participation;
 
 import buncheoleasy.buncheol.application.BuncheolConfirmedFinalizer;
-import buncheoleasy.buncheol.application.BuncheolFullEvent;
 import buncheoleasy.buncheol.application.DeliverySnapshotCreator;
+import buncheoleasy.buncheol.application.PaymentStarter;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
@@ -45,9 +45,6 @@ public class ParticipationService {
   // 운영진 분철 참여(개최자 계좌 노출) 시점부터 입금 만료까지. 단, deadline 을 넘지 않도록 클램프한다.
   private static final Duration STAFF_PAYMENT_TIME_LIMIT = Duration.ofMinutes(10);
 
-  // C2C 입금 창(24h — docs/46 §7.1-3). 성사 확정 후 일괄 기한과 추가 모집(즉시입금 진입)의 개별 기한이 같은 창을 쓴다.
-  public static final Duration C2C_PAYMENT_WINDOW = Duration.ofHours(24);
-
   private final BuncheolDomainService buncheolDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
@@ -58,6 +55,7 @@ public class ParticipationService {
   private final UserDomainService userDomainService;
   private final DeliverySnapshotCreator deliverySnapshotCreator;
   private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final PaymentStarter paymentStarter;
   private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
@@ -72,16 +70,8 @@ public class ParticipationService {
    * 첫 슬롯</b>을 찾아내 같은 묶음을 재사용하고 배송비를 0으로 둔다 — 슬롯 하나씩 N번 신청한 것과 결과가 같다.
    * 그래서 루프가 묶음 id 를 따로 이어 나를 필요가 없다.
    *
-   * <p>🔴 <b>단, 그건 모집중(RECRUITING)에서만 참이다.</b> 성사 확정 뒤 추가 모집(PAYMENT_COLLECTING)은
-   * 슬롯마다 <b>별개 거래</b>다 — {@code participateC2c} 가 재사용 후보를 아예 조회하지 않아 슬롯마다 새 묶음·
-   * 배송비 재부과·개별 24h 기한이 생긴다. 그런데 이 메서드의 응답은 그걸 <b>합산 1건</b>으로 접는다. 그러면
-   * 참여자는 "한 번에 얼마를 보내라" 를 안내받는데 실제로는 묶음별로 따로 들어와야 개최자 통장 대조가
-   * 성립한다 — 한 번에 보내면 <b>어느 묶음에도 안 맞는다</b>. 알림톡도 슬롯 단위 금액으로 N건이 따로 나가
-   * 화면과 어긋난다. 그래서 다중은 아래에서 <b>모집중 전용</b>으로 막는다.
-   *
-   * <p>이 가드가 안전한 이유: 여기서 읽는 상태는 락 이전 값이지만, {@code participateC2c} 는 락을 잡으며 최신 값으로
-   * 다시 읽고 <b>락 이전에 본 상태와 다르면 신청을 받지 않는다</b>(BCH-060). 즉 이 가드를 통과한 요청이 분기에서 볼 수
-   * 있는 상태는 모집중뿐이라 반드시 {@code applyC2c} 로 간다 — 그 사이 성사 확정돼 추가 모집 분기로 새는 일이 없다.
+   * <p>신청은 모집중(RECRUITING)에만 받는다. 아래 상태 가드는 락 이전 값이라 안내용이고, 최종 판정은 {@code participateC2c} 가
+   * 락을 잡으며 최신 값으로 다시 읽어 한다(BCH-060).
    *
    * <p>⚠️ 다중 슬롯은 <b>C2C 에서만</b> 열린다. LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있어 2번째
    * INSERT 가 그 자리에서 막힌다 — 요청 단계에서 먼저 거절해 원인이 드러나게 한다.
@@ -106,7 +96,6 @@ public class ParticipationService {
     if (!buncheol.isC2c()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
     }
-    // 🔴 다중은 모집중 전용이다 — 추가 모집은 슬롯마다 별개 묶음·별개 이체라 합산 응답이 거짓이 된다(위 javadoc).
     if (buncheol.getStatus() != BuncheolStatus.RECRUITING) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
@@ -115,10 +104,9 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.PARTICIPATION_CODE_NOT_APPLICABLE);
     }
 
-    // 🔴 정원 충족 판정(publishFullIfAllSlotsApplied)은 <b>마지막 슬롯에서만</b> 돌린다. "지금 정원이 찼나" 를
-    // 묻는 멱등 판정이라 마지막 INSERT 뒤 한 번이면 충분한데, 반복 호출 중 가장 비싼 축이다 — 그 분철의 활성
-    // 참여를 FOR UPDATE 로 전건 스캔하고, 그게 전부 분철 행 락 안에서 돈다(같은 분철의 다른 참여자가 그동안
-    // 전부 대기한다). 중간 슬롯에서 돌려 봐야 아직 정원이 안 차 발행되지도 않는다.
+    // 🔴 정원 충족 판정(PaymentStarter#startIfFull)은 <b>마지막 슬롯에서만</b> 돌린다. 중간 슬롯에서 정원이 차는
+    // 일은 없고(남은 슬롯이 아직 비어 있다), 그 분철의 활성 참여를 FOR UPDATE 로 전건 스캔하는 비싼 판정이 분철 행
+    // 락 안에서 돈다(같은 분철의 다른 참여자가 그동안 전부 대기한다).
     List<ParticipateResult> results = new ArrayList<>(slotIds.size());
     for (int i = 0; i < slotIds.size(); i++) {
       final boolean last = i == slotIds.size() - 1;
@@ -135,7 +123,7 @@ public class ParticipationService {
   }
 
   /**
-   * 슬롯 1개 신청. {@code checkFull} 은 이 슬롯 뒤에 정원 충족 판정을 돌릴지다 — 다중 슬롯 루프는 마지막
+   * 슬롯 1개 신청. {@code checkFull} 은 이 슬롯 뒤에 정원 충족(입금 단계 시작) 판정을 돌릴지다 — 다중 슬롯 루프는 마지막
    * 슬롯에서만 켠다(호출부 주석 참조). C2C 모집중 경로에서만 의미가 있고 나머지 경로는 무시한다.
    */
   private ParticipateResult participateSingle(
@@ -282,16 +270,11 @@ public class ParticipationService {
   }
 
   /**
-   * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)엔 무입금 신청(APPLIED)으로 슬롯을 선점하고, 성사 확정 후 입금
-   * 수집중(PAYMENT_COLLECTING)엔 빈 슬롯에 즉시입금(AWAITING_PAYMENT, 개별 24h)으로 진입한다(추가 모집 — §4.7-E1).
+   * C2C 참여 (docs/46 §1.1·§4.7). 모집중(RECRUITING)에만 무입금 신청(APPLIED)으로 슬롯을 선점한다. 입금 단계가 시작된 분철은
+   * 새 신청을 받지 않는다(BCH-060).
    *
-   * <p>다슬롯 일관성(§4.7-A1·A2)은 <b>모집중 구간에만</b> 적용된다: 그 구간의 재참여는 배송지·환불계좌(입금자명)를 강제로 재사용하고
-   * 배송비는 첫 참여에만 부과한다 — 한 번의 이체·한 개의 택배이므로 개최자 통장 대조(입금자명 1개)와 배송 1묶음이 성립한다. 요청의 배송지
-   * 입력은 무시된다(FE 는 프리필+잠금).
-   *
-   * <p><b>성사 확정 뒤 추가 모집은 별개 거래다</b> — 새 묶음·새 이체·새 택배라 배송지를 다시 고르고 배송비를 다시 부과하며 입금자명도 그
-   * 시점 프로필로 다시 스냅샷한다. A1·A2 의 근거는 무너지지 않는다: 묶음이 나뉘면 이체와 택배도 같이 나뉘므로 <b>이체별로 실제 입금자명이
-   * 맞아떨어지는 쪽이 오히려 정확하다</b>(옛 이름을 상속하면 통장에 안 찍힌 이름으로 대조하게 된다).
+   * <p>다슬롯 일관성(§4.7-A1·A2): 재참여는 배송지·환불계좌(입금자명)를 강제로 재사용하고 배송비는 첫 참여에만 부과한다 — 한 번의
+   * 이체·한 개의 택배이므로 개최자 통장 대조(입금자명 1개)와 배송 1묶음이 성립한다. 요청의 배송지 입력은 무시된다(FE 는 프리필+잠금).
    */
   private ParticipateResult participateC2c(
       final Buncheol loaded,
@@ -300,12 +283,9 @@ public class ParticipationService {
       final Long slotId,
       final Instant now,
       final boolean checkFull) {
-    // 락 이전에 본 상태 — 다중 신청 가드(participate)가 이 값으로 「모집중 전용」을 판정했다. loaded 와 아래 buncheol 은
-    // 같은 인스턴스라(영속성 컨텍스트) 다시 읽기 전에 잡아 둔다.
-    final BuncheolStatus statusBeforeLock = loaded.getStatus();
     // 분철 행 락으로 참여 생성을 직렬화한다 — 같은 유저의 동시 다슬롯 신청에서 "첫 참여 판정"(배송비 1회·배송지/입금자명
     // 스냅샷 재사용)이 둘 다 첫 참여로 오판되는 check-then-insert 레이스를 막는다 (docs/46 §4.7-A1·A2).
-    // 성사 확정·취소 CAS 와도 직렬화되어 상태 판정이 안정된다. 분철당 참여 빈도가 낮아 락 경합 부담은 미미하다.
+    // 입금 단계 시작·취소와도 직렬화되어 상태 판정이 안정된다. 분철당 참여 빈도가 낮아 락 경합 부담은 미미하다.
     // 🔴 락과 함께 최신 값으로 다시 읽는다. 락 이전 인스턴스를 그대로 쓰면 락을 기다리는 사이 개최자가 바꾼 조건(신청자 0명일
     // 때의 배송비·마감 수정)을 놓쳐, 옛 배송비가 묶음에 새겨진다 — 묶음 배송비는 updatable=false 라 되돌릴 수 없다.
     Buncheol buncheol = buncheolDomainService.getLatestBuncheolForUpdate(loaded.getId());
@@ -330,19 +310,12 @@ public class ParticipationService {
     // 상태는 한 번만 읽고 여기서 먼저 거른다. 스냅샷 계산 뒤로 미루면 모집이 끝난 분철에 재참여할 때
     // BUNCHEOL_NOT_RECRUITING 대신 배송지·계좌 예외가 먼저 나가 "왜 계좌 얘기가 나오지" 가 된다.
     //
-    // 이 값은 락 시점 최신이다(위 다시 읽기). 락을 기다리는 사이 상태가 바뀌었으면 받지 않는다 — 락 이전 값으로 판정한
-    // 가드(다중 신청 = 모집중 전용)가 있고, 바뀐 방향은 전부 이 신청이 이전 값으로 진행했어도 조건부 INSERT 가 0행으로
-    // 막았던 경우다(모집중 → 입금 수집중·종료, 입금 수집중 → 종료). 결과(BCH-060)는 같고 더 일찍 나갈 뿐이다.
-    final BuncheolStatus status = buncheol.getStatus();
-    if (status != statusBeforeLock
-        || (status != BuncheolStatus.RECRUITING && status != BuncheolStatus.PAYMENT_COLLECTING)) {
+    // 이 값은 락 시점 최신이다(위 다시 읽기). 락을 기다리는 사이 입금 단계가 시작됐거나 끝났으면 받지 않는다. 조건부 INSERT
+    // 도 같은 조건으로 막지만 더 일찍 나갈 뿐 결과(BCH-060)는 같다.
+    if (buncheol.getStatus() != BuncheolStatus.RECRUITING) {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 🔴 상속은 <b>모집중 재참여에만</b> 적용된다. 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라
-    // 배송지를 새로 고르고 배송비를 다시 부과한다 (docs/80 결정 11 · §3-6). 그래서 조회 자체를
-    // 모집중에만 한다 — 추가 모집에서는 이 값이 쓰이지 않아 헛쿼리가 된다.
-    //
     // ⚠️ 배송지·배송비·입금자명·묶음 재사용 넷이 <b>이 existing 하나</b>에서 나와야 한다. 조건을 두 벌 세우면
     // "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기고, 그러면 새 택배에 배송비가 0원으로 굳는다
     // — shipping_fee 와 shipping_address_id 는 updatable=false 라 코드로 되돌릴 수 없다.
@@ -384,43 +357,20 @@ public class ParticipationService {
     RefundAccount refundAccount =
         reusableBundleId == null ? refundAccountSnapshot(participantId) : null;
 
-    // 🔴 묶음 경계 판정은 「분철 상태」다 (docs/80 결정 12) — 그리고 그 판정은 <b>아래 switch 자체</b>다.
-    // RECRUITING(applyC2c)만 기존 묶음을 재사용하고, PAYMENT_COLLECTING(joinCollectingC2c)은 재사용 후보를
-    // 아예 넘겨받지 않는다. 모집중 재참여는 같은 이체·같은 택배지만, 성사 확정 뒤 추가 모집은 별도 이체·별도
-    // 택배이기 때문이다. 이 경계가 무너지면 추가 모집이 옛 묶음에 붙어 배송비 재부과(⑤)가 영원히 발동하지 않는다.
-    //
-    // ❌ 시각 비교(finalized_at)로 짜면 안 된다 — 개최자가 입금 수집 중 취소하면 그 값이 덮어써진다
-    // (JpaBuncheolRepository#hostCancelIfCollectingAndNoConfirmed). 백필 SQL 은 시각을 쓰지만 그건 과거를
-    // 재구성하는 일회성이고, 여기는 지금 상태를 보면 되므로 더 정확하다.
-    //
     // 재사용 후보는 배송지·입금자명을 상속한 그 참여의 묶음이다 — 돈 판정과 묶음 판정이 같은 existing 하나에서
     // 나와야 "배송비는 상속했는데 묶음은 새로" 같은 어긋남이 생기지 않는다.
     // ⚠️ 그 참여의 bundle_id 가 비어 있으면(배포선 창에서 생긴 행) 새로 연다. 이때 배송비는 반드시 위에서
     // 정해진 상속분(0)을 그대로 쓴다 — "새 묶음이니 부과" 로 재계산하면 없던 과금이 생긴다.
-    return switch (status) {
-      case RECRUITING ->
-          applyC2c(
-              buncheol,
-              participantId,
-              member,
-              shippingAddressId,
-              shippingFee,
-              refundAccount,
-              reusableBundleId,
-              now,
-              checkFull);
-      case PAYMENT_COLLECTING ->
-          joinCollectingC2c(
-              buncheol,
-              participantId,
-              member,
-              shippingAddressId,
-              shippingFee,
-              refundAccount,
-              now);
-      // 위 가드가 이미 걸렀다 — 여기 도달하면 가드가 깨진 것이다. switch 식 exhaustiveness 때문에 남는다.
-      default -> throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-    };
+    return applyC2c(
+        buncheol,
+        participantId,
+        member,
+        shippingAddressId,
+        shippingFee,
+        refundAccount,
+        reusableBundleId,
+        now,
+        checkFull);
   }
 
   /** C2C 무입금 신청 (RECRUITING → APPLIED 슬롯 선점). 신청 단계는 계좌·기한 없이 응답한다 (docs/46 §3-1). */
@@ -434,7 +384,7 @@ public class ParticipationService {
       final Long reusableBundleId,
       final Instant now,
       final boolean checkFull) {
-    // deadline 경과(확정 유예 대기) 구간의 신규 신청 차단 — docs/46 §4.7-E3. INSERT 의 원자 조건과 이중 방어.
+    // deadline 경과(마감 판정 대기) 구간의 신규 신청 차단. INSERT 의 원자 조건과 이중 방어.
     buncheol.validateRecruiting(now);
 
     Participation participation =
@@ -449,122 +399,20 @@ public class ParticipationService {
       throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
     }
 
-    // 신청 구간에는 입금 기한이 없다 — 성사 확정 시 묶음에 일괄로 채운다(assignDueAt).
+    // 신청 구간에는 입금 기한이 없다 — 입금 단계 시작 때 묶음에 일괄로 채운다(PaymentStarter).
     participationBundleDomainService.attach(
         participation, reusableBundleId, shippingAddressId, shippingFee, refundAccount, null, now);
 
     eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
+    // 마지막 열린 자리가 채워지면 이 요청 안에서 입금 단계가 시작된다. 응답 모양은 그대로다(계좌·기한 null — 안내는 알림톡).
     if (checkFull) {
-      publishFullIfAllSlotsApplied(buncheol);
+      paymentStarter.startIfFull(buncheol, now);
     }
     // 🔴 배송비는 반드시 이 메서드가 받은 shippingFee 파라미터여야 한다(묶음의 원값이 아니라).
     // 모집중 재참여면 호출부가 이 값을 0 으로 눌러 넘긴다 — 묶음 원값을 읽으면 2번째 슬롯부터도
     // 만액이 되고, 다슬롯 신청의 합산이 그걸 슬롯 수만큼 곱한다.
     return ParticipateResult.single(
         participation.getId(), participation.getAmount() + shippingFee, null, null);
-  }
-
-  /**
-   * C2C 정원 충족 감지 — 전 멤버 슬롯이 채워지면 개최자 확정 독촉 알림을 트리거한다 (docs/46 §6). 미충족→충족 전이마다 발행하고, 취소→재신청 루프의 중복
-   * 발송 차단은 리스너의 인메모리 가드가 담당한다. 카운트는 반드시 잠금 조회(current read)여야 한다 — participate 진입부 일반 조회가 RR 스냅샷을 행
-   * 락 전에 확정하므로, 비잠금 카운트는 락 대기 중 커밋된 타 참여를 못 세어 충족을 놓친다. <b>분모(열린 자리 수)도 같다</b> — 스냅샷으로 세면 락
-   * 대기 중 개최자가 닫은 자리를 「열림」으로 세어 충족을 놓치고, 다시 연 자리를 「닫힘」으로 세어 빈 자리가 있는데 발행한다.
-   *
-   * <p>락 순서 규약: 이 경로는 분철 행(X) → 자리 행(S) → 참여 행(X) 순서다. 개최자 취소 CAS ({@code
-   * hostCancelIfCollectingAndNoConfirmed})·데드엔드 정리 CAS({@code cancelIfCollectingAndEmpty}) 도 같은
-   * 방향이다. LEGACY 슬롯 입금확인도 분철 행을 먼저 잠근다({@link #lockBuncheolBeforeConfirm}). 반면 C2C 입금확인은
-   * <b>역순</b>(참여 행 → 분철 행)이다 — {@code ParticipationBundleService#confirmPayment} 가 묶음 확정 뒤
-   * {@code confirmIfAllCollected} 로 분철 행을 잡는다. 즉 규약은 이미 한 방향으로 고정돼 있지 않고, 교차 실행 시 정합성은 CAS 가 지키되 실패
-   * 모드가 데드락 롤백일 수 있다. 새 경로를 추가할 때 이 두 방향 중 어디에 속하는지 먼저 확인할 것.
-   *
-   * <p><b>P2-b 가 세 번째 방향을 더했다 — 참여 행 → 묶음 행 → 참여 행.</b> 묶음 종료 CAS 가 활성 슬롯 존재를 UPDATE 의
-   * 서브쿼리로 판정하는데(current read) InnoDB 가 그 참여 행들에 공유 락을 건다. 그래서 <b>같은 묶음의 두 슬롯을 동시에
-   * 취소하면</b> 서로 상대의 참여 행을 기다려 데드락이 날 수 있다 — 다슬롯 참여자가 두 슬롯을 연타 취소하는 경우다.
-   * 정합성은 지켜지고(롤백된 쪽은 취소 자체가 안 된다) 재시도하면 성공하지만, <b>실패 모드가 500 이라는 점</b>은 알고 있어야
-   * 한다. 이 판정을 밖으로 빼면 데드락은 사라지지만 그 대신 두 슬롯이 서로의 취소를 못 봐 <b>묶음이 영영 안 닫힌다</b> —
-   * 그쪽이 더 나쁘다(조용하고 되돌리기 어렵다).
-   *
-   * <p>같은 사이클의 쌍이 하나 더 있다 — <b>재참여 ↔ 자발 취소</b>. 재참여는 새 참여 행에 X 를 잡은 뒤 연결 CAS 의
-   * {@code EXISTS(묶음)} 로 묶음 행에 S 를 요청하고, 취소는 옛 참여 행에 X 를 잡은 뒤 종료 CAS 로 묶음 행에 X 를
-   * 잡고 그 서브쿼리가 새 참여 행에 S 를 요청한다. 원인은 같다 — <b>취소 경로가 분철 행 락을 잡지 않아</b> 두 경로가
-   * 직렬화되지 않는다. 레포에 데드락 재시도 핸들러가 없어 실패 모드는 500 이다.
-   *
-   * <p><b>2026-08-31 추가된 두 경로</b> (이 javadoc 이 요구하는 대로 방향을 밝혀 둔다):
-   *
-   * <ul>
-   *   <li>{@code ParticipationBundleService#confirmPayment} — ⚠️ <b>참여 행(X) → 분철 행(X) → 다른
-   *       묶음 포함 참여 행(S)</b>. {@code confirmIfAllCollected} 의 서브쿼리가 그 분철의 참여 전체에
-   *       공유 락을 건다. <b>같은 분철의 두 묶음을 개최자가 연속 확인</b>하면(목록을 위에서 아래로 클릭하는
-   *       평범한 조작) Tx A 가 묶음1 슬롯 X → 분철 X 를 쥔 채 묶음2 슬롯 S 를 기다리고, Tx B 는 묶음2 슬롯
-   *       X 를 쥔 채 분철 X 를 기다려 <b>데드락</b>이 난다. 슬롯 단위 입금확인은 분철 행을 먼저 잠그게 바뀌어 이 역순은
-   *       C2C 묶음 확정에만 남았다. 이 경로는 ① 잡는 행이 슬롯 1개가 아니라 <b>묶음 전건</b>이고 ② 분철 락 <b>전에</b>
-   *       배송 스냅샷 N건(조회 2 + INSERT 1 × 슬롯 수)을 처리해 <b>락 보유 시간이 길어 창이 넓다</b>.
-   *       창을 줄이려면 {@code confirmIfAllCollected} 를 스냅샷 루프보다 앞으로 당기는 선택지가 있으나,
-   *       {@code applyPaymentConfirmed} 의 기존 순서와 달라지므로 별도 판단이 필요하다.
-   *   <li>{@code ParticipationBundleService#release} — ⚠️ <b>묶음 행에서 S → X 승격</b>이 일어난다.
-   *       {@code releaseBundleIfDue} 의 {@code EXISTS (SELECT b FROM ParticipationBundle ...)} 가
-   *       InnoDB 에서 묶음 행에 <b>공유 락</b>을 걸고({@code linkBundleIfUnlinked} 주석과 같은 성질),
-   *       이어지는 {@code closeIfEmpty} 가 같은 행의 <b>X 락</b>을 요청한다. 같은 묶음에 「제외」가 동시에
-   *       두 번 들어오면(개최자 더블클릭) 각자 S 를 쥔 채 X 를 기다려 <b>데드락</b>이 날 수 있다.
-   *       정합성은 CAS 가 지키고 실패 모드는 롤백(500)이라 기존에 문서화된 리스크와 같은 종류다.
-   * </ul>
-   */
-  private void publishFullIfAllSlotsApplied(final Buncheol buncheol) {
-    // 개최자가 닫은 자리는 채워질 수 없으므로 정원에서 뺀다 — 안 빼면 남은 자리가 다 차도 알림이 영영 안 나간다.
-    // 자리도 잠금 읽기(FOR SHARE)로 센다(javadoc). 락 순서는 분철(X, 이미 보유) → 자리(S) → 참여(X) 로, 자리를 쓰는 개최자
-    // 빼기·닫기·다시 열기(분철 X → 자리 X)와 같은 방향이다.
-    long totalSlots =
-        buncheolMemberDomainService.findAllByBuncheolIdForShare(buncheol.getId()).stream()
-            .filter(slot -> !slot.isClosed())
-            .count();
-    List<Long> participantIds =
-        participationDomainService.findActiveParticipantIdsByBuncheolIdForUpdate(buncheol.getId());
-    if (participantIds.size() >= totalSlots) {
-      long applicantCount = participantIds.stream().distinct().count();
-      eventPublisher.publishEvent(new BuncheolFullEvent(buncheol.getId(), applicantCount));
-    }
-  }
-
-  /**
-   * C2C 추가 모집 — 성사 확정 후 빈 슬롯 즉시입금 진입 (docs/46 §4.7-E1). 분철은 이미 성사됐으므로 개별 24h 기한으로 바로 입금
-   * 대기(AWAITING_PAYMENT)에 들어가고, 계좌는 확정 시점 스냅샷(§4.7-B1)을 안내한다.
-   */
-  private ParticipateResult joinCollectingC2c(
-      final Buncheol buncheol,
-      final Long participantId,
-      final BuncheolMember member,
-      final Long shippingAddressId,
-      final long shippingFee,
-      final RefundAccount refundAccount,
-      final Instant now) {
-    Instant dueAt = now.plus(C2C_PAYMENT_WINDOW);
-    Participation participation =
-        Participation.create(
-            buncheol.getId(),
-            member.getId(),
-            participantId,
-            shippingAddressId,
-            member.getPrice(),
-            shippingFee,
-            dueAt);
-    if (!participationDomainService.createParticipationIfCollecting(participation)) {
-      // 진행확정(CONFIRMED) 전이 직후 등 — 추가 모집이 이미 닫힘.
-      throw new BusinessException(ErrorCode.BUNCHEOL_NOT_RECRUITING);
-    }
-
-    // 추가 모집은 별도 이체·별도 택배라 항상 새 묶음이다(재사용 후보를 넘기지 않는다). 배송지·배송비도
-    // 이 회차 것이다 — 호출부(participateC2c)가 상속을 모집중으로 한정해 여기로는 새 값이 넘어온다.
-    // ⚠️ 같은 회차에 슬롯을 여러 개 잡으면 그때마다 새 묶음이라 배송비도 그때마다 붙는다(수용된 한계 —
-    // ParticipationBundle javadoc 의 경계 문단).
-    participationBundleDomainService.attach(
-        participation, null, shippingAddressId, shippingFee, refundAccount, dueAt, now);
-
-    eventPublisher.publishEvent(new ParticipationCreatedEvent(participation.getId(), FlowType.C2C));
-    return ParticipateResult.single(
-        participation.getId(),
-        participation.getAmount() + shippingFee,
-        dueAt,
-        buncheol.getPaymentAccount());
   }
 
   /**
@@ -668,9 +516,8 @@ public class ParticipationService {
    * <p><b>여기 오는 것은 LEGACY 뿐이다.</b> 진입점은 <b>네 곳</b>이고 걸러 내는 장치가 서로 다르다 —
    * 개최자·어드민 확인은 {@link #requireLegacy}, 웹훅 자동확인은 {@code NOT_CONFIRMABLE} 조기 반환,
    * 0원 참여 즉시확정({@code confirmFreeParticipation})은 {@code participateSingle} 의 플로우 분기다.
-   * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는 묶음을 다
-   * 확정한 <b>뒤 1회만</b> 돌아야 해서 {@link ParticipationBundleService#confirmPayment} 안에 있다 — 슬롯마다
-   * 부르면 같은 판정을 N 번 돌린다.
+   * 넷 중 하나라도 빠뜨리면 이 문단의 결론이 성립하지 않으므로, 호출자를 늘릴 때 함께 갱신할 것. C2C 의 분철 전이(PAYMENT_COLLECTING → CONFIRMED)는
+   * {@code BuncheolConfirmer}(개최자 진행 확정, 마지막 묶음 입금 확인)만 한다.
    */
   private void applyPaymentConfirmed(
       final Participation participation, final Buncheol buncheol, final Instant now) {
@@ -682,23 +529,23 @@ public class ParticipationService {
   }
 
   /**
-   * C2C 참여자 자발 취소 (docs/46 §5 + docs/56 H-09). 신청(APPLIED)과 <b>성사 확정을 거치지 않은</b> 입금
-   * 대기(AWAITING_PAYMENT)에서만 허용한다. 보냈어요·입금확인 이후는 돈이 개최자에게 간 구간이라 문의 경유로 안내한다(§5 구간 ②′·③).
-   *
-   * <p>docs/56 H-09 로 §5 구간 ②(확정 후 입금 대기)의 자발 취소를 닫았다 — 개최자가 성사 확정으로 인원을 계산한 뒤 참여자가 빠져나가는 것을 막는다.
-   * 다만 "확정 후 입금 대기" 상태에는 성사 확정을 거치지 않고 도달하는 경로가 하나 더 있다: 입금 수집중 분철의 추가 모집(docs/46 §4.7-E1)은 신청 즉시
-   * AWAITING_PAYMENT 로 생성된다. 상태만 보고 막으면 이 경로로 들어온 참여자는 신청하는 순간 24시간 잠겨 오신청조차 되돌릴 수 없으므로, {@link
-   * Buncheol#isCreatedBeforeFinalize} 로 <b>성사 확정을 거친 참여만</b> 막는다.
+   * C2C 참여자 자발 취소 (docs/46 §5). 신청(APPLIED)에서만 허용한다 — 입금 단계가 시작되면 개최자가 인원을 셈한 뒤라 스스로 빠질 수 없고,
+   * 기한 뒤 개최자의 진행 확정 때 입금이 확인되지 않은 참여가 빠진다.
    *
    * <p>판정 자체는 {@link ParticipationCancellability#of} 가 하고 여기서는 사유를 에러코드로 바꾸기만 한다 — 참여 조회 응답이 같은 판정을
-   * 그대로 내려주므로(docs/56 S-1) 화면의 취소 버튼과 이 게이트가 갈리지 않는다.
+   * 그대로 내려주므로(docs/56 S-1) 화면의 취소 버튼과 이 게이트가 갈리지 않는다. 최종 차단은 취소 CAS(신청만)다.
    */
   @Transactional
   public void cancelByParticipant(final Long participantId, final Long participationId) {
     final Instant now = Instant.now(clock);
     Participation participation = participationDomainService.getParticipation(participationId);
     participation.validateOwnedBy(participantId);
-    Buncheol buncheol = buncheolDomainService.getBuncheol(participation.getBuncheolId());
+    // 회원 개최 참여만 분철 행을 첫 잠금으로 잡는다(getBuncheolForUpdate javadoc). 운영진 참여는 아래 판정이 BCH-091 로
+    // 거절하므로 잠그지 않는다 — 정각 오픈 때 분철 행 잠금 줄에 거절될 요청을 세우지 않는다. 플로우는 조회한 참여 행의 사본으로 고른다.
+    Buncheol buncheol =
+        participation.getFlowType() == FlowType.C2C
+            ? buncheolDomainService.getBuncheolForUpdate(participation.getBuncheolId())
+            : buncheolDomainService.getBuncheol(participation.getBuncheolId());
     requireCancellable(ParticipationCancellability.of(participation, buncheol));
 
     if (!participationDomainService.cancelByUser(participationId, now)) {
@@ -721,7 +568,6 @@ public class ParticipationService {
           case CANCELLABLE -> null;
           case BLOCKED_BY_STATUS -> ErrorCode.PARTICIPATION_CANCEL_NOT_ALLOWED;
           case FLOW_NOT_SUPPORTED -> ErrorCode.PARTICIPATION_CANCEL_NOT_SUPPORTED;
-          case BLOCKED_BY_HOST_CONFIRM -> ErrorCode.PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM;
         };
     if (errorCode != null) {
       throw new BusinessException(errorCode);
@@ -735,28 +581,16 @@ public class ParticipationService {
    * 통째로여야 하고, 그 경로가 {@link ParticipationBundleService#confirmPayment} 다 — 잠금 조회로 대상을 고정한 뒤
    * 전부 아니면 전무로 CAS 한다.
    *
-   * <p>이 가드가 없으면 슬롯 하나만 CONFIRMED 인 <b>혼합 묶음</b>을 만들 수 있고, 그 묶음은 되살릴 방법이 없다.
-   * 출구가 동시에 전부 닫히기 때문이다:
-   *
-   * <ol>
-   *   <li>「제외」 — {@code BundleReleasability.of} 가 슬롯 하나라도 CONFIRMED 면 {@code HAS_CONFIRMED} 를 내
-   *       {@code requireReleasable} 가 막는다. <b>기한이 아무리 지나도 열리지 않는다.</b>
-   *   <li>자동 만료 — C2C 는 만료 폴링 대상에서 아예 빠진다(LEGACY 등가조건).
-   *   <li>「입금 수집 종료」 — {@code confirmIfAllCollected} 가 "미확정 활성 참여 없음"을 요구하므로, 남은 미확정
-   *       슬롯이 분철을 「입금 수집중」에 붙잡아 둔다.
-   *   <li>묶음 입금확인 — {@code payableStatuses} 집합이 이미 확정된 슬롯을 빼므로 {@code expectedSlotIds} 대조가
-   *       어긋나 409 다.
-   * </ol>
-   *
-   * <p>⚠️ <b>「제외」 게이트를 푸는 방향으로 고치지 마라.</b> 확정분을 개최자가 임의로 뺄 수 없게 한 것은 의도된
-   * 결정이다(docs/70 결정 8). 막을 곳은 출구가 아니라 <b>혼합 상태가 생기는 입구</b>다.
+   * <p>이 가드가 없으면 슬롯 하나만 CONFIRMED 인 <b>혼합 묶음</b>을 만들 수 있다. 이체 1회를 슬롯마다 따로 확인한 기록이 되어
+   * 통장 대조가 어긋나고, 묶음 입금확인도 {@code payableStatuses} 집합이 이미 확정된 슬롯을 빼므로 {@code expectedSlotIds} 대조가
+   * 어긋나 409 다. 막을 곳은 출구가 아니라 <b>혼합 상태가 생기는 입구</b>다.
    *
    * <p>⚠️ <b>엔드포인트 자체를 지우지도 마라.</b> LEGACY(운영진 개최) 개최 관리 화면이 아직 이 API 를 쓴다.
    * "C2C 만 409" 가 정확한 처방이다.
    *
    * <p>🔴 <b>미연결 행(bundle_id = NULL)을 예외로 빼지 않았다 — 의도된 선택이다.</b> 그런 C2C 행은 이 가드
-   * 뒤에 <b>모든 출구가 닫힌다</b> — 묶음 확인·「제외」는 {@code bundleId} 를 인자로 받아 호출 자체가 불가고,
-   * 자동 만료는 C2C 를 안 보며, 자발 취소도 그 상태에선 막힌다. 그럼에도 빼지 않은 근거는 둘이다:
+   * 뒤에 묶음 입금확인을 탈 수 없다 — 묶음 확인은 {@code bundleId} 를 인자로 받아 호출 자체가 불가다. 그럼에도 빼지 않은 근거는
+   * 둘이다:
    *
    * <ol>
    *   <li><b>없다</b> — {@code flow_type='C2C' AND bundle_id IS NULL} 인 행이 prod·staging 모두 <b>0건</b>

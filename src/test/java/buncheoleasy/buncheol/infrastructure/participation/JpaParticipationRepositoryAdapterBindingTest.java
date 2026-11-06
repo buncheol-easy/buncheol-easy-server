@@ -28,7 +28,7 @@ import org.springframework.jdbc.support.KeyHolder;
 /**
  * 참여 INSERT 의 <b>SQL 과 바인딩</b>을 DB 없이 고정한다.
  *
- * <p>🔴 <b>왜 이 테스트가 따로 필요한가.</b> 운영 INSERT 경로({@code saveIfRecruiting}/{@code saveIfCollecting})는
+ * <p>🔴 <b>왜 이 테스트가 따로 필요한가.</b> 운영 INSERT 경로({@code saveIfRecruiting} 류)는
  * {@code UTC_TIMESTAMP()} 때문에 H2 에서 한 줄도 실행되지 않는다. 그래서 컬럼을 하나 빼며 파라미터 번호를 다시 매길 때
  * <b>한 칸 밀려도 컴파일되고 전체 스위트가 초록</b>이다 — {@code Participation} 의 "바인딩을 늘리면 인덱스가 밀려도
  * 잡아 줄 것이 없다" 는 주석이 그 상태를 말한다.
@@ -91,16 +91,6 @@ class JpaParticipationRepositoryAdapterBindingTest {
     assertThat(capturedSql).doesNotContain("staff_buncheol_settings");
   }
 
-  @Test
-  void 추가모집_INSERT_도_같은_바인딩을_쓴다() throws Exception {
-    JpaParticipationRepositoryAdapter adapter = adapterCapturingSql();
-
-    adapter.saveIfCollecting(participation());
-
-    assertSqlShape("status = 'PAYMENT_COLLECTING'");
-    assertBindingsInOrder("AWAITING_PAYMENT");
-  }
-
   private void assertSqlShape(final String buncheolCondition) {
     assertThat(capturedSql).doesNotContain("shipping_fee");
     assertThat(capturedSql).doesNotContain("shipping_address_id");
@@ -109,7 +99,7 @@ class JpaParticipationRepositoryAdapterBindingTest {
     assertThat(countColumns()).isEqualTo(countSelectExpressions());
     // 바인딩 개수와도 맞는다 — WHERE 의 ? 1개를 포함해 7.
     assertThat(capturedSql.chars().filter(c -> c == '?').count()).isEqualTo(7);
-    // 두 SQL 이 실제로 갈리는지. 없으면 saveIfCollecting 이 모집중 SQL 을 써도 초록이다.
+    // 경로마다 분철 조건이 실제로 실리는지.
     assertThat(capturedSql).contains(buncheolCondition);
   }
 

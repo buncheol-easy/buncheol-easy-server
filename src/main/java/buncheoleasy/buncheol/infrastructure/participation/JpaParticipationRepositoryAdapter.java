@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
@@ -91,8 +92,8 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   /**
    * 분철이 모집중이고 마감 전일 때만 삽입하는 conditional INSERT.
    *
-   * <p>⚠️ "APPLIED 신청은 RECRUITING 분철에만 생긴다"(성사 확정 일괄 전이에서 누락되는 orphan APPLIED 방지)는 정합성은, MySQL
-   * REPEATABLE READ 에서 INSERT ... SELECT 의 소스 행(buncheols)에 공유 락이 걸려 성사 확정 UPDATE 와 직렬화되는 동작에
+   * <p>⚠️ "APPLIED 신청은 RECRUITING 분철에만 생긴다"(입금 단계 시작 일괄 전이에서 누락되는 orphan APPLIED 방지)는 정합성은, MySQL
+   * REPEATABLE READ 에서 INSERT ... SELECT 의 소스 행(buncheols)에 공유 락이 걸려 입금 단계 시작 UPDATE 와 직렬화되는 동작에
    * 의존한다. READ COMMITTED 로 낮추면 소스 읽기가 비잠금 consistent read 가 되어 이 보장이 깨진다 — 격리수준을 바꾸려면 이 SQL 에
    * FOR SHARE 를 명시할 것 (docs/46 §4.7-C1).
    */
@@ -112,13 +113,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
           + " AND NOT EXISTS (SELECT 1 FROM staff_buncheol_settings s"
           + " WHERE s.buncheol_id = buncheols.id AND s.opens_at > UTC_TIMESTAMP())";
 
-  /**
-   * C2C 추가 모집: 분철이 입금 수집중일 때만 삽입하는 conditional INSERT (docs/46 §4.7-E1). 입금 수집은 deadline 이후
-   * 구간이므로 마감 조건 없이 상태만 확인한다 — 진행확정(CONFIRMED) 전이 후에는 삽입되지 않는다.
-   */
-  private static final String INSERT_IF_COLLECTING_SQL =
-      INSERT_COLUMNS_SQL + "FROM buncheols WHERE id = ? AND status = 'PAYMENT_COLLECTING'";
-
   @Override
   public boolean saveIfRecruiting(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_SQL);
@@ -127,11 +121,6 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   @Override
   public boolean saveIfRecruitingAndOpen(final Participation participation) {
     return saveIfBuncheolCondition(participation, INSERT_IF_RECRUITING_AND_OPEN_SQL);
-  }
-
-  @Override
-  public boolean saveIfCollecting(final Participation participation) {
-    return saveIfBuncheolCondition(participation, INSERT_IF_COLLECTING_SQL);
   }
 
   private boolean saveIfBuncheolCondition(final Participation participation, final String sql) {
@@ -147,7 +136,7 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
                 ps.setLong(2, participation.getBuncheolMemberId());
                 ps.setLong(3, participation.getParticipantId());
                 ps.setLong(4, participation.getAmount());
-                // C2C 신청(APPLIED)은 입금 기한이 없다 — 성사 확정 시 일괄 산정된다.
+                // C2C 신청(APPLIED)은 입금 기한이 없다 — 입금 단계 시작 때 일괄 산정된다.
                 ps.setTimestamp(
                     5,
                     participation.getDueAt() == null ? null : Timestamp.from(participation.getDueAt()),
@@ -273,18 +262,15 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public List<Participation> findAllByBundleIdForUpdate(final Long bundleId) {
-    return jpaParticipationRepository.findAllByBundleIdForUpdate(bundleId);
+  public List<Participation> findActiveByBuncheolIdAndParticipantIdForShare(
+      final Long buncheolId, final Long participantId) {
+    return jpaParticipationRepository.findByBuncheolIdAndParticipantIdAndStatusInForShare(
+        buncheolId, participantId, ParticipationStatus.active());
   }
 
   @Override
-  public int releaseBundleIfDue(final Long bundleId, final Instant now) {
-    return jpaParticipationRepository.releaseBundleIfDue(
-        bundleId,
-        ParticipationStatus.releasableStatuses(),
-        ParticipationStatus.CANCELLED,
-        ParticipationCancelReason.HOST_RELEASED,
-        now);
+  public List<Participation> findAllByBundleIdForUpdate(final Long bundleId) {
+    return jpaParticipationRepository.findAllByBundleIdForUpdate(bundleId);
   }
 
   @Override
@@ -301,20 +287,14 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
-  public List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(final Long buncheolId) {
-    return jpaParticipationRepository.findParticipantIdsByBuncheolIdAndStatusInForUpdate(
+  public List<Participation> findActiveByBuncheolIdForUpdate(final Long buncheolId) {
+    return jpaParticipationRepository.findByBuncheolIdAndStatusInForUpdate(
         buncheolId, ParticipationStatus.active());
   }
 
   @Override
   public List<Participation> findConfirmedByBuncheolId(final Long buncheolId) {
     return jpaParticipationRepository.findByBuncheolIdAndStatusOrderByCreatedAtAscIdAsc(
-        buncheolId, ParticipationStatus.CONFIRMED);
-  }
-
-  @Override
-  public int countConfirmedByBuncheolId(final Long buncheolId) {
-    return jpaParticipationRepository.countByBuncheolIdAndStatus(
         buncheolId, ParticipationStatus.CONFIRMED);
   }
 
@@ -329,9 +309,19 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
   }
 
   @Override
+  public List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(
+      final List<Long> buncheolIds) {
+    if (buncheolIds.isEmpty()) {
+      return List.of();
+    }
+    return jpaParticipationRepository.countUnconfirmedByBuncheolIds(
+        buncheolIds, ParticipationStatus.payableStatuses());
+  }
+
+  @Override
   public List<Participation> findOverduePaymentTargets(final Instant now, final int limit) {
-    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9) — 기한은 "개최자가 「제외」로 정리에
-    // 나설 수 있는 시각"이지 취소 시각이 아니다. 걸러내는 위치가 <b>쿼리</b>인 것이 중요하다: 루프 안에서
+    // 🔴 C2C 는 기한이 지나도 자동 취소하지 않는다 (docs/70 결정 9) — 기한은 개최자가 입금이 확인된
+    // 참여로만 진행 확정할 수 있게 되는 시각이지 취소 시각이 아니다. 걸러내는 위치가 <b>쿼리</b>인 것이 중요하다: 루프 안에서
     // skip 하면 안 죽는 C2C 행이 due_at ASC 앞자리를 영구 점유해 LEGACY 10분 칼컷이 기아 상태가 된다.
     return jpaParticipationRepository.findByStatusAndFlowTypeAndDueAtLessThanEqualOrderByDueAtAsc(
         ParticipationStatus.AWAITING_PAYMENT, FlowType.LEGACY, now, Limit.of(limit));
@@ -367,6 +357,16 @@ public class JpaParticipationRepositoryAdapter implements ParticipationRepositor
         ParticipationStatus.active(),
         ParticipationStatus.CANCELLED,
         ParticipationCancelReason.BUNCHEOL_CANCELLED,
+        now);
+  }
+
+  @Override
+  public int cancelUnconfirmedByBuncheolId(final Long buncheolId, final Instant now) {
+    return jpaParticipationRepository.cancelByBuncheolIdAndStatusIn(
+        buncheolId,
+        ParticipationStatus.payableStatuses(),
+        ParticipationStatus.CANCELLED,
+        ParticipationCancelReason.PAYMENT_NOT_CONFIRMED,
         now);
   }
 

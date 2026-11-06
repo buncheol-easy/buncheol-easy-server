@@ -3,9 +3,9 @@ package buncheoleasy.buncheol.application;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
-import buncheoleasy.buncheol.domain.participation.BundleReleasability;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
@@ -127,18 +127,6 @@ public class BuncheolManagementQueryService {
     // 이 목록은 그 분철의 전 상태(active ∪ CANCELLED)라 묶음별 슬롯이 빠짐없이 들어온다 — ofAllSlots 의 전제.
     ShippingFeeAttribution shippingFees =
         ShippingFeeAttribution.ofAllSlots(allParticipations, bundleById);
-    // 「제외」 가부는 묶음 단위 판정이다. 슬롯마다 다시 계산하면 같은 묶음의 행끼리 답이 갈릴 수 있으므로
-    // 묶음별로 한 번만 구해 재사용한다 — 게이트와 같은 판정을 내려줘야 "버튼은 있는데 409" 가 안 생긴다.
-    final Instant now = Instant.now(clock);
-    Map<Long, List<Participation>> slotsByBundleId =
-        allParticipations.stream()
-            .filter(p -> p.getBundleId() != null)
-            .collect(Collectors.groupingBy(Participation::getBundleId));
-    Map<Long, BundleReleasability> releasabilityByBundleId = new HashMap<>();
-    bundleById.forEach(
-        (id, bundle) ->
-            releasabilityByBundleId.put(
-                id, BundleReleasability.of(bundle, slotsByBundleId.getOrDefault(id, List.of()), now)));
     // 0원 슬롯의 계좌 노출 판정이 플로우별로 다르다 ({@link #depositorNameOf}).
     boolean c2c = buncheol.isC2c();
     List<BuncheolManagementParticipantResponse> participants =
@@ -152,7 +140,6 @@ public class BuncheolManagementQueryService {
                         deliveryByBundleId,
                         bundleById,
                         shippingFees,
-                        releasabilityByBundleId,
                         c2c))
             .toList();
     // 배송 스냅샷은 취소 cascade 에서 삭제되므로 취소분에는 조회하지 않는다.
@@ -167,7 +154,6 @@ public class BuncheolManagementQueryService {
                         Map.of(),
                         bundleById,
                         shippingFees,
-                        releasabilityByBundleId,
                         c2c))
             .toList();
 
@@ -194,7 +180,13 @@ public class BuncheolManagementQueryService {
         buncheol.getFlowType(),
         buncheol.getPaymentDueAt(),
         buncheol.getOpenChatUrl(),
-        ended);
+        ended,
+        // 진행 확정 게이트와 같은 판정 — 같은 살아 있는 참여 목록에서 센다.
+        ConfirmCheck.of(
+            buncheol.getStatus(),
+            participations,
+            buncheol.getPaymentDueAt(),
+            Instant.now(clock)));
   }
 
   // 멤버 슬롯 id → 그룹 멤버명. 멤버 슬롯 → 그룹 멤버 2단계로 해석한다. (group_members 누락 시 null 허용을 위해 HashMap 사용)
@@ -223,7 +215,6 @@ public class BuncheolManagementQueryService {
       final Map<Long, Delivery> deliveryByBundleId,
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
-      final Map<Long, BundleReleasability> releasabilityByBundleId,
       final boolean c2c) {
     User participant = userById.get(participation.getParticipantId());
     // 탈퇴 회원은 @SQLRestriction 으로 조회에서 빠져 null 이 온다.
@@ -274,9 +265,6 @@ public class BuncheolManagementQueryService {
                 : ManagementDeliveryResponse.from(delivery),
         // 「보냈어요」 시각의 정본은 묶음이다. 자리 칸은 사본이고 P4 에서 사라진다.
         ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
-        participation.getBundleId() == null
-            ? null
-            : releasabilityByBundleId.get(participation.getBundleId()),
         // 묶음 확인 API 의 expectedSlotIds 는 이 값이 true 인 슬롯만 실어야 한다 — 판정을 서버가 준다.
         ParticipationStatus.payableStatuses().contains(participation.getStatus()));
   }
@@ -296,7 +284,7 @@ public class BuncheolManagementQueryService {
    * </ul>
    *
    * <p>⚠️ <b>C2C 는 0원 슬롯이어도 내린다.</b> 0원 판정은 <b>슬롯</b> 단위인데 C2C 통장 대조는
-   * <b>묶음</b> 단위다 — 배송비가 묶음당 1회만 붙고(추가 모집은 새 묶음이라 또 붙는다) 멤버 가격 0 도 허용돼서, 같은 사람의 "0원 슬롯 + 유상 슬롯"이 한 묶음이
+   * <b>묶음</b> 단위다 — 배송비가 묶음당 1회만 붙고 멤버 가격 0 도 허용돼서, 같은 사람의 "0원 슬롯 + 유상 슬롯"이 한 묶음이
    * 될 수 있다. 그 0원 행의 예금주를 지우면 이체 1건에 대조 키가 갈린다. C2C 가 0원 슬롯에도 계좌를 요구하는 이유가
    * 그것이다({@code ParticipationService#participateC2c}). LEGACY 는 1인 1참여라 0원 = 아무것도 안 낸 사람이다.
    *
@@ -361,7 +349,7 @@ public class BuncheolManagementQueryService {
     }
     // 🔴 <b>「돈이 들어왔다」의 유일한 증거는 개최자의 입금확인이다.</b> 「보냈어요」는 참여자가 누르는
     // 자기신고라 통장 대조를 거치지 않는다 — 한 푼도 안 낸 사람이 눌러도 시각이 찍히고, 기한이 지나
-    // 「제외」되면 <b>그 사람 계좌가 개최자에게 노출</b>된다. 개최자가 착각해 송금할 수도 있다.
+    // 진행 확정 때 빠지면 <b>그 사람 계좌가 개최자에게 노출</b>된다. 개최자가 착각해 송금할 수도 있다.
     //
     // 약관도 같은 선을 긋는다 — "성사 확정 전에 취소되거나 입금 기한 내에 입금하지 않으면 <b>입금이
     // 없었으므로 환불 절차가 없다</b>", "이미 입금한 뒤 취소되면 개최자에게 반환을 요구할 수 있다".

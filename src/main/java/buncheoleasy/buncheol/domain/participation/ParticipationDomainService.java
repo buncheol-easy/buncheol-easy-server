@@ -25,19 +25,17 @@ public class ParticipationDomainService {
     return participationRepository.saveIfRecruitingAndOpen(participation);
   }
 
-  /** C2C 추가 모집 INSERT — 분철이 입금 수집중(PAYMENT_COLLECTING)인지 원자 확인 (docs/46 §4.7-E1). */
-  public boolean createParticipationIfCollecting(final Participation participation) {
-    return participationRepository.saveIfCollecting(participation);
-  }
-
   /**
-   * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 활성 참여 수는 슬롯 수 이하라 분철 단위 조회 후
-   * 필터링으로 충분하다.
+   * 분철 내 참여자의 기존 활성 참여 중 첫 건 (C2C 다슬롯 스냅샷 일치용 — docs/46 §4.7-A1). 호출 측 {@code @Transactional} 필수.
+   *
+   * <p>🔴 <b>잠금 읽기</b>다. 신청은 분철 행을 잠근 뒤 이 값을 고르는데, 일반 조회는 잠금 전 스냅샷을 봐서 기다리는 사이 같은 사람의
+   * 자발 취소로 닫힌 묶음을 재사용하려다 연결 CAS 에서 409 가 난다. 잠금 읽기는 최신 커밋을 본다.
    */
   public Optional<Participation> findFirstActiveInBuncheol(
       final Long buncheolId, final Long participantId) {
-    return participationRepository.findActiveByBuncheolId(buncheolId).stream()
-        .filter(participation -> participation.getParticipantId().equals(participantId))
+    return participationRepository
+        .findActiveByBuncheolIdAndParticipantIdForShare(buncheolId, participantId)
+        .stream()
         .findFirst();
   }
 
@@ -48,8 +46,7 @@ public class ParticipationDomainService {
    *   <li><b>C2C 여야 한다.</b> LEGACY 는 1인 1활성슬롯이라 묶음이 곧 참여다 — 묶을 것이 애초에 없어 항상 새로
    *       열고({@code attach(.., null, ..)}), 애초에 추가 신청 자체가 {@code
    *       PARTICIPATION_ALREADY_JOINED_BUNCHEOL} 로 막힌다.
-   *   <li><b>모집중이어야 한다.</b> 성사 확정 뒤 추가 모집은 별도 이체·별도 택배라 배송지를 새로 고르고 배송비를
-   *       다시 부과한다 (docs/80 결정 11 · §3-6).
+   *   <li><b>모집중이어야 한다.</b> 신청은 모집중에만 받는다 — 입금 단계 뒤에는 재참여 자체가 없다.
    * </ol>
    *
    * <p>🔴 <b>게이트를 하나라도 호출부에 남기지 마라.</b> 쓰기 경로는 {@code participateSingle} 이 먼저
@@ -105,21 +102,14 @@ public class ParticipationDomainService {
     return participationRepository.findActiveByBuncheolId(buncheolId);
   }
 
-  /** 분철의 활성 참여별 참여자 id 잠금 조회(current read) — C2C 정원 충족 판정용, 포트 javadoc 참고. */
-  public List<Long> findActiveParticipantIdsByBuncheolIdForUpdate(final Long buncheolId) {
-    return participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+  /** 분철의 살아 있는 참여 잠금 조회(최신 커밋) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public List<Participation> findActiveByBuncheolIdForUpdate(final Long buncheolId) {
+    return participationRepository.findActiveByBuncheolIdForUpdate(buncheolId);
   }
 
   /** 분철의 입금확인(CONFIRMED) 참여 전체. 진행확정 시 배송 스냅샷·알림 대상. */
   public List<Participation> findConfirmedByBuncheolId(final Long buncheolId) {
     return participationRepository.findConfirmedByBuncheolId(buncheolId);
-  }
-
-  // 분철의 입금확인된 참여자 수. 마감 판정은 finalizeExpiredByConfirmedHeadcount CAS 가 서브쿼리로 직접 센다.
-  // 현재 호출처는 개최자 취소 사전 검사(BuncheolService#cancelBuncheol — docs/56 H-13) 하나이며, 안내 문구를
-  // 고르기 위한 읽기다. 실제 차단은 hostCancelIfCollectingAndNoConfirmed CAS 가 원자적으로 한다.
-  public int countConfirmedByBuncheolId(final Long buncheolId) {
-    return participationRepository.countConfirmedByBuncheolId(buncheolId);
   }
 
   /** 참여자에게 아직 끝나지 않은 참여가 있는지 (회원탈퇴 가드용). 판정 기준은 포트 javadoc 참고. */
@@ -187,7 +177,7 @@ public class ParticipationDomainService {
   }
 
   /**
-   * C2C 성사 확정: 분철의 APPLIED 전건을 일괄 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). 호출 측
+   * 입금 단계 시작: 분철의 APPLIED 전건을 일괄 기한과 함께 AWAITING_PAYMENT 로 전이 ({@code PaymentStarter}). 호출 측
    * {@code @Transactional} 필수.
    *
    * @return 전이된 참여 수
@@ -199,6 +189,11 @@ public class ParticipationDomainService {
   /** 분철 취소 시 활성 참여 전체를 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이. 호출 측 @Transactional 필수. */
   public int cancelActiveByBuncheolId(final Long buncheolId, final Instant now) {
     return participationRepository.cancelActiveByBuncheolId(buncheolId, now);
+  }
+
+  /** 진행 확정 때 입금 미확인 참여를 분철 범위로 취소한다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public int cancelUnconfirmedByBuncheolId(final Long buncheolId, final Instant now) {
+    return participationRepository.cancelUnconfirmedByBuncheolId(buncheolId, now);
   }
 
   /** 분철 취소 cascade 로 실제 전이된 참여 조회 (취소 알림 대상). cancelActiveByBuncheolId 직후 같은 트랜잭션에서 호출. */

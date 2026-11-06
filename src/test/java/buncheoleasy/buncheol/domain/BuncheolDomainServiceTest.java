@@ -65,23 +65,15 @@ class BuncheolDomainServiceTest {
               anyLong(), eq(BuncheolStatus.CANCELLED), any(BuncheolStatus.class), any(Instant.class));
     }
 
-    // 입금 수집중 취소는 범용 finalizeIfStatus 가 아니라 확정 참여 유무를 함께 보는 전용 CAS 로 간다 (docs/56 H-13).
+    // 입금 수집중은 개최자가 혼자 접지 않는다 — 어느 CAS 도 PAYMENT_COLLECTING 을 기대하지 않아 상태 위반이다(서비스는 BCH-126 으로 먼저 거른다).
     @Test
-    void C2C_입금_수집중_분철은_확정_참여_가드_CAS_로_취소되고_직전_상태_PAYMENT_COLLECTING_을_반환한다() {
-      // given
-      given(
-              buncheolRepository.finalizeIfStatus(
-                  BUNCHEOL_ID, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, NOW))
-          .willReturn(0);
-      given(buncheolRepository.hostCancelIfCollectingAndNoConfirmed(BUNCHEOL_ID, NOW))
-          .willReturn(1);
+    void 입금_수집중을_기대하는_CAS_는_시도하지_않는다() {
+      given(buncheolRepository.finalizeIfStatus(anyLong(), any(), any(), any())).willReturn(0);
 
-      // when
-      BuncheolStatus priorStatus = buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW);
-
-      // then
-      assertThat(priorStatus).isEqualTo(BuncheolStatus.PAYMENT_COLLECTING);
-      // 범용 CAS 로 입금 수집중을 전이하면 확정 참여 가드를 우회하게 된다 — 그 경로를 쓰지 않는지 못 박는다.
+      assertThatThrownBy(() -> buncheolDomainService.cancelBuncheol(BUNCHEOL_ID, NOW))
+          .isInstanceOf(BusinessException.class)
+          .extracting("errorCode")
+          .isEqualTo(ErrorCode.BUNCHEOL_CANCEL_NOT_ALLOWED);
       then(buncheolRepository)
           .should(never())
           .finalizeIfStatus(
@@ -92,13 +84,11 @@ class BuncheolDomainServiceTest {
     }
 
     @Test
-    void 인원미달_자동취소_분철은_세번째_CAS_로_취소되고_직전_상태_CANCELLED_를_반환한다() {
+    void 인원미달_자동취소_분철은_두번째_CAS_로_취소되고_직전_상태_CANCELLED_를_반환한다() {
       // given
       given(
               buncheolRepository.finalizeIfStatus(
                   BUNCHEOL_ID, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, NOW))
-          .willReturn(0);
-      given(buncheolRepository.hostCancelIfCollectingAndNoConfirmed(BUNCHEOL_ID, NOW))
           .willReturn(0);
       given(
               buncheolRepository.finalizeIfStatus(
@@ -118,8 +108,6 @@ class BuncheolDomainServiceTest {
       given(
               buncheolRepository.finalizeIfStatus(
                   BUNCHEOL_ID, BuncheolStatus.RECRUITING, BuncheolStatus.HOST_CANCELLED, NOW))
-          .willReturn(0);
-      given(buncheolRepository.hostCancelIfCollectingAndNoConfirmed(BUNCHEOL_ID, NOW))
           .willReturn(0);
       given(
               buncheolRepository.finalizeIfStatus(
@@ -205,12 +193,12 @@ class BuncheolDomainServiceTest {
       assertThat(buncheolDomainService.changeTermsIfNoApplicant(BUNCHEOL_ID, terms, NOW)).isFalse();
     }
 
-    // 자동 마감 취소는 범용 finalizeIfStatus 가 아니라 마감 시각을 다시 보는 전용 CAS 를 쓴다.
+    // 마감 미달 취소는 범용 finalizeIfStatus 가 아니라 마감 시각을 다시 보는 전용 CAS 를 쓴다.
     @Test
-    void C2C_자동_마감_취소는_마감_조건이_있는_전용_CAS_에_위임한다() {
+    void 회원_개최_마감_미달_취소는_마감_조건이_있는_전용_CAS_에_위임한다() {
       given(buncheolRepository.cancelExpiredC2cIfRecruiting(BUNCHEOL_ID, NOW)).willReturn(0);
 
-      assertThat(buncheolDomainService.cancelUnconfirmedC2c(BUNCHEOL_ID, NOW)).isFalse();
+      assertThat(buncheolDomainService.cancelBelowMinHeadcount(BUNCHEOL_ID, NOW)).isFalse();
       then(buncheolRepository).should(never()).finalizeIfStatus(any(), any(), any(), any());
     }
 

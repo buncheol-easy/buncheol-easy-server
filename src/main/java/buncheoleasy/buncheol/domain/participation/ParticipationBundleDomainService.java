@@ -300,7 +300,7 @@ public class ParticipationBundleDomainService {
    * {@code p.dueAt <= :now} 가 그 값을 피연산자로 쓴다. 구분 없이 묶음 값으로 바꾸면 LEGACY 수동
    * 입금확인이 전건 실패하고 자동 취소가 조용히 멈춘다.
    *
-   * <p>값이 비면 사본으로 폴백한다 — 「보냈어요」 시각과 같은 이유다(성사 확정 전 C2C 묶음은 기한이
+   * <p>값이 비면 사본으로 폴백한다 — 「보냈어요」 시각과 같은 이유다(입금 단계 전 C2C 묶음은 기한이
    * 아직 없고, 그 구간의 자리 값도 NULL 이라 결과가 같다).
    */
   public static Instant dueAtOf(
@@ -355,7 +355,7 @@ public class ParticipationBundleDomainService {
         : bundle.getPaymentSentAt();
   }
 
-  /** 성사 확정 시 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */
+  /** 입금 단계 시작 때 기한 없이 열려 있던 묶음에 입금 기한을 채운다. 호출 측 {@code @Transactional} 필수. */
   public int assignDueAtByBuncheolId(
       final Long buncheolId, final Instant dueAt, final Instant now) {
     return participationBundleRepository.assignDueAtByBuncheolId(buncheolId, dueAt, now);

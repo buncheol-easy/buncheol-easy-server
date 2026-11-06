@@ -79,13 +79,9 @@ public class BuncheolDomainService {
   }
 
   /**
-   * 호스트의 분철 취소 (RECRUITING/PAYMENT_COLLECTING/CANCELLED → HOST_CANCELLED CAS). 진행확정(CONFIRMED)·이미 개최자
-   * 취소된 분철은 상태 위반으로 막는다. 목록·상세에서 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측이 반환된 직전
-   * 상태로 판단해 처리한다.
-   *
-   * <p>입금 수집중(C2C) 취소는 <b>입금확인된 참여가 0건일 때만</b> 통과한다 (docs/56 H-13) — 직거래라 확인된 돈은 이미 개최자 계좌에
-   * 있고 플랫폼이 환불을 강제할 수 없다. 모집중·인원미달 자동취소 구간은 그대로 열어 둔다(그 구간엔 C2C 입금확인이 있을 수 없고, LEGACY 는
-   * 회사 계좌 수납이라 운영진 환불 경로가 있다).
+   * 호스트의 분철 취소 (RECRUITING/CANCELLED → HOST_CANCELLED CAS). 진행확정(CONFIRMED)·이미 개최자 취소된 분철은 상태 위반으로
+   * 막는다. 입금 수집중은 개최자 혼자 접지 않는다 — 호출 측이 BCH-126 으로 먼저 거르고, 여기 와도 어느 CAS 에도 걸리지 않아 상태
+   * 위반이다. 목록·상세에서 숨겨지며(하드 삭제 대신 소프트 숨김), 활성 참여 cascade 취소·알림은 호출 측이 반환된 직전 상태로 판단해 처리한다.
    *
    * <p>상태별 CAS 를 순차 시도해 마감 스케줄러와 경합해도 성공한 시도로 직전 상태가 확정된다 — 허용 상태 IN 단일 CAS 로는 어느 상태에서 전이됐는지 알 수 없어,
    * 자동취소 직후 케스케이드를 중복 실행(취소 알림 재발송)할 수 있다.
@@ -98,11 +94,6 @@ public class BuncheolDomainService {
         > 0) {
       return BuncheolStatus.RECRUITING;
     }
-    // C2C 입금 수집중 취소 (docs/46 §7.1-6 — 기한 경과 후 개최자 선택지). LEGACY 는 이 상태가 없어 영향 없다.
-    // 입금확인 참여 존재 여부를 CAS 서브쿼리로 함께 판정한다 (docs/56 H-13).
-    if (buncheolRepository.hostCancelIfCollectingAndNoConfirmed(buncheolId, now) > 0) {
-      return BuncheolStatus.PAYMENT_COLLECTING;
-    }
     if (buncheolRepository.finalizeIfStatus(
             buncheolId, BuncheolStatus.CANCELLED, BuncheolStatus.HOST_CANCELLED, now)
         > 0) {
@@ -112,10 +103,10 @@ public class BuncheolDomainService {
   }
 
   /**
-   * C2C 자동 마감 취소 CAS (RECRUITING → CANCELLED — 확정 유예 경과 docs/46 §7.1-5, 마감 시각 인원 미달). 마감이 아직 안 지났으면
-   * (그 사이 연장됨) 취소하지 않는다 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수.
+   * 회원 개최 마감 미달 취소 CAS (RECRUITING → CANCELLED). 마감이 아직 안 지났으면(그 사이 연장됨) 취소하지 않는다 — 포트 javadoc
+   * 참고. 호출 측 {@code @Transactional} 필수.
    */
-  public boolean cancelUnconfirmedC2c(final Long buncheolId, final Instant now) {
+  public boolean cancelBelowMinHeadcount(final Long buncheolId, final Instant now) {
     return buncheolRepository.cancelExpiredC2cIfRecruiting(buncheolId, now) > 0;
   }
 
@@ -127,7 +118,7 @@ public class BuncheolDomainService {
   // --- C2C 플로우 전이 (docs/46 §4) ---
 
   /**
-   * C2C 성사 확정 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 확정 시점 개최자 계좌 스냅샷을 함께 기록한다.
+   * 회원 개최 입금 단계 시작 CAS (RECRUITING → PAYMENT_COLLECTING). 일괄 입금 기한과 그 시점 개최자 계좌 스냅샷을 함께 기록한다.
    * 호출 측 {@code @Transactional} 필수.
    *
    * @return 전이에 성공하면 true (false 면 RECRUITING 이 아니거나 C2C 분철이 아님)
@@ -148,25 +139,23 @@ public class BuncheolDomainService {
   }
 
   /**
-   * C2C 전원 입금확인 시 진행확정 CAS (PAYMENT_COLLECTING → CONFIRMED). 미확정 활성 참여가 남아 있으면 전이하지 않는다.
+   * 운영진 파기 CAS (회원 개최 {@code expectedStatus} → HOST_CANCELLED) — 포트 javadoc 참고.
    * 호출 측 {@code @Transactional} 필수.
    */
-  public boolean confirmIfAllCollected(final Long buncheolId, final Instant now) {
-    return buncheolRepository.confirmIfAllCollected(buncheolId, now) > 0;
+  public boolean staffCancelIfStatus(
+      final Long buncheolId, final BuncheolStatus expectedStatus, final Instant now) {
+    return buncheolRepository.staffCancelIfStatus(buncheolId, expectedStatus, now) > 0;
+  }
+
+  /** 회원 개최 진행 확정 CAS (PAYMENT_COLLECTING → CONFIRMED) — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public boolean confirmIfCollecting(final Long buncheolId, final Instant now) {
+    return buncheolRepository.confirmIfCollecting(buncheolId, now) > 0;
   }
 
   /**
-   * C2C 데드엔드 정리 CAS — 입금 수집중인데 활성 참여가 하나도 남지 않았으면(확정 0건) 미성사 취소한다 (docs/46 §7.1-6 보완).
-   * 확정 참여가 있으면 전이하지 않고 개최자 선택(부분 확정/취소)을 기다린다. 호출 측 {@code @Transactional} 필수.
-   */
-  public boolean cancelCollectingIfEmpty(final Long buncheolId, final Instant now) {
-    return buncheolRepository.cancelIfCollectingAndEmpty(buncheolId, now) > 0;
-  }
-
-  /**
-   * 최소 인원 ≤ 자리 수. 성사 판정은 참여 행 수를 세고 활성 참여는 자리당 1건이라, 최소 인원이 자리 수를 넘으면 성사될 수 없는
-   * 분철이 열린다. 개최(·수정) 요청 검사용이다 — 엔티티 불변식으로 두지 않는 이유는 입금 수집중 자리 빼기가 최소 인원을 일부러
-   * 낮추지 않기 때문이다({@link #lowerMinHeadcountToSlotCount}).
+   * 최소 인원 ≤ 자리 수. 입금 단계 시작 판정은 참여 행 수를 세고 활성 참여는 자리당 1건이라, 최소 인원이 자리 수를 넘으면 시작될 수
+   * 없는 분철이 열린다. 개최(·수정) 요청 검사용이다 — 엔티티 불변식으로 두지 않는 이유는 옛 입금 수집중 분철(옛 자리 빼기는 최소
+   * 인원을 낮추지 않았다)을 읽어야 하기 때문이다({@link #lowerMinHeadcountToSlotCount}).
    */
   public void validateMinHeadcountWithinSlots(final int minHeadcount, final int slotCount) {
     if (minHeadcount > slotCount) {
@@ -175,7 +164,7 @@ public class BuncheolDomainService {
   }
 
   /**
-   * 개최자가 자리를 뺀 뒤 모집중 분철의 최소 인원을 남은 자리 수로 낮춘다 — 포트 javadoc 참고. 입금 수집중이거나 이미 자리 수
+   * 개최자가 자리를 뺀 뒤 모집중 분철의 최소 인원을 남은 자리 수로 낮춘다 — 포트 javadoc 참고. 모집중이 아니거나 이미 자리 수
    * 이하면 그대로 둔다. 호출 측 {@code @Transactional} 필수.
    *
    * @return 낮췄으면 true
@@ -189,7 +178,17 @@ public class BuncheolDomainService {
     return buncheolRepository.lowerMinHeadcountIfRecruiting(buncheolId, slotCount, now) > 0;
   }
 
-  /** C2C 참여 생성 직렬화용 잠금 조회 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  /**
+   * 분철 행 잠금 조회. 호출 측 {@code @Transactional} 필수.
+   *
+   * <p><b>분철 단위 쓰기는 이 잠금을 첫 잠금으로 잡는다.</b> 대상은 회원 개최 분철의 상태·자리·참여·묶음을 바꾸는 쓰기 전부와
+   * 운영진 슬롯 입금 확인({@code ParticipationService#lockBuncheolBeforeConfirm})이다. 참여·묶음·자리 잠금이 모두 분철 행
+   * 앞에서 한 줄로 선 뒤에 잡히므로 경로끼리 잠금 순서가 엇갈리지 않는다. 상태 보장은 CAS 가 하고 이 잠금은 순서만 맡는다.
+   *
+   * <p>트랜잭션의 첫 분철 조회여야 한다 — 앞에서 {@link #getBuncheol} 로 읽었으면 영속성 컨텍스트가 그 낡은 인스턴스를
+   * 돌려준다(그때는 {@link #getLatestBuncheolForUpdate}). 묶음·참여에서 분철 id 를 읽는 조회는 먼저 해도 된다. 잠금 뒤의
+   * 판단은 CAS 나 잠금 읽기로만 한다 — 잠금 전 일반 조회가 만든 스냅샷에는 기다리는 사이 커밋된 변화가 보이지 않는다.
+   */
   public Buncheol getBuncheolForUpdate(final Long id) {
     return buncheolRepository
         .findByIdForUpdate(id)

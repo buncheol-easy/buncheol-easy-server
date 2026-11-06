@@ -83,7 +83,7 @@ class NotificationInboxRecorderTest {
     assertThat(saved.getTitle()).isEqualTo(AlimtalkTemplate.PAYMENT_CONFIRMED.subject());
     assertThat(saved.getReference()).isEqualTo("아이브 앨범");
     assertThat(saved.getDescription()).contains("입금이 확인").doesNotContain("#{");
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
     assertThat(saved.isPinned()).isFalse();
   }
 
@@ -94,7 +94,7 @@ class NotificationInboxRecorderTest {
 
     InboxMessage saved = record(7L, AlimtalkTemplate.BUNCHEOL_CONFIRMED, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
   }
 
   @Test
@@ -104,7 +104,7 @@ class NotificationInboxRecorderTest {
 
     InboxMessage saved = record(9L, AlimtalkTemplate.BUNCHEOL_CANCELLED, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
   }
 
   @Test
@@ -115,24 +115,41 @@ class NotificationInboxRecorderTest {
 
     InboxMessage saved = record(4L, AlimtalkTemplate.TRACKING_CU, variables);
 
-    assertThat(saved.getLinkPath()).isEqualTo("/profile/bids");
+    assertThat(saved.getLinkPath()).isEqualTo("/profile/participations");
   }
 
   @Test
   void 개최자_알림의_경로는_분철ID를_치환한_분철_관리_화면을_가리킨다() {
     Map<String, String> variables =
-        Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5", "분철ID", "77");
+        Map.of(
+            "닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "참여자닉네임", "참여자",
+            "입금자명", "홍길동", "입금금액", "25,000", "분철ID", "77");
 
-    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
 
     assertThat(saved.getLinkPath()).isEqualTo("/products/77/manage");
   }
 
+  // 취소된 분철은 다시 열 수 없어 개최자가 할 수 있는 일은 새로 개최하는 것뿐이다.
+  @Test
+  void 개최자_자동_취소_알림의_경로는_개최_화면을_가리킨다() {
+    Map<String, String> variables =
+        Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청멤버수", "0", "최소진행멤버수", "2");
+
+    InboxMessage saved = record(3L, AlimtalkTemplate.HOST_AUTO_CANCELLED, variables);
+
+    assertThat(saved.getLinkPath()).isEqualTo("/upload");
+    assertThat(saved.getTitle()).isEqualTo("분철 자동 취소 안내");
+  }
+
   @Test
   void 경로_변수가_누락되면_미치환_토큰이_남은_경로_대신_경로_없이_기록한다() {
-    Map<String, String> variables = Map.of("닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "신청인원", "5");
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", "개최자", "분철명", "세븐틴 미니 12집 분철", "멤버명", "호시", "참여자닉네임", "참여자",
+            "입금자명", "홍길동", "입금금액", "25,000");
 
-    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    InboxMessage saved = record(3L, AlimtalkTemplate.C2C_PAYMENT_SENT, variables);
 
     assertThat(saved.getLinkPath()).isNull();
   }

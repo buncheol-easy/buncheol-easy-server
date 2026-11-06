@@ -2,20 +2,18 @@ package buncheoleasy.notification.application;
 
 import static buncheoleasy.notification.infrastructure.AlimtalkExecutorConfig.ALIMTALK_EXECUTOR;
 
+import buncheoleasy.buncheol.application.BuncheolAutoCancelledEvent;
 import buncheoleasy.buncheol.application.BuncheolCancelReason;
 import buncheoleasy.buncheol.application.BuncheolCancelledEvent;
-import buncheoleasy.buncheol.application.BuncheolCollectingStartedEvent;
 import buncheoleasy.buncheol.application.BuncheolConfirmedEvent;
-import buncheoleasy.buncheol.application.BuncheolFullEvent;
+import buncheoleasy.buncheol.application.PaymentStartedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.BundlePaymentSentEvent;
-import buncheoleasy.buncheol.application.participation.BundleReleasedEvent;
-import buncheoleasy.buncheol.application.participation.ParticipationCreatedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentConfirmedEvent;
 import buncheoleasy.buncheol.application.participation.PaymentExpiredEvent;
+import buncheoleasy.buncheol.application.participation.PaymentNotConfirmedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackCompletedEvent;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackRejectedEvent;
-import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.delivery.application.PickupReminderDueEvent;
 import buncheoleasy.delivery.application.TrackingRegisteredEvent;
@@ -29,8 +27,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -61,10 +57,6 @@ public class AlimtalkNotificationListener {
   private final NotificationAssembler assembler;
   private final AlimtalkSender sender;
   private final NotificationInboxRecorder inboxRecorder;
-
-  // 정원 충족 알림을 보낸 분철 id. 취소→재신청 루프의 무제한 재발송(알림톡 건당 과금)을 막는 베스트 에포트 가드로,
-  // 재시작·배포 전환 시 초기화돼 그 후 재충족되면 1건 더 갈 수 있다 — 정확한 1회 보장이 아니라 스팸 차단이 목적.
-  private final Set<Long> fullNotifiedBuncheolIds = ConcurrentHashMap.newKeySet();
 
   /**
    * (참여자) 개최자가 입금을 확인함. 참여가 확정됐다. LEGACY 는 다음 관문이 최소 인원 충족이지만 C2C 는 인원이 이미 채워진 뒤라 함께 참여한 사람들의
@@ -97,8 +89,8 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없어 기한 뒤 취소 안내는 {@link
-   * #onBundleReleased} 가 보낸다.
+   * (참여자) 입금 기한이 지나 입금 만료 스케줄러가 참여를 자동 취소함(LEGACY). C2C 는 자동 만료가 없고, 기한 뒤 빠지는 안내는 {@link
+   * #onPaymentNotConfirmed} 가 보낸다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -121,37 +113,38 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 개최자가 묶음을 「제외」함 — 입금 기한이 지나 참여가 취소됐다. 묶음 1통으로 보낸다 — 슬롯마다 보내면 같은 사람이 같은 내용을 여러 번
-   * 받는다.
+   * (참여자) 개최자의 진행 확정 때 입금이 확인되지 않아 참여가 빠짐. 다슬롯 참여자에게 같은 안내가 슬롯 수만큼 가지 않도록 사람 단위로 묶어 1건씩
+   * 보낸다(멤버명 나열). 등록 문안 "입금 기한이 지나 개최자가 참여를 취소했어요" 가 이 동작과 맞다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onBundleReleased(final BundleReleasedEvent event) {
-    List<ParticipationView> views = loadViewsSafely(event.releasedParticipationIds());
-    if (views.isEmpty()) {
-      return;
-    }
-    ParticipationView first = views.get(0);
+  public void onPaymentNotConfirmed(final PaymentNotConfirmedEvent event) {
+    sendEachSafely(
+        groupByParticipant(loadViewsSafely(event.participationIds())), this::sendNotConfirmedNotice);
+  }
+
+  private void sendNotConfirmedNotice(final List<ParticipationView> group) {
+    ParticipationView first = group.get(0);
     AlimtalkTemplate template = AlimtalkTemplate.C2C_PAYMENT_EXPIRED;
     Map<String, String> variables =
         Map.of(
             "닉네임", first.participant().getNickname().value(),
             "분철명", first.buncheol().getTitle(),
-            "멤버명", mergedMemberName(views));
+            "멤버명", mergedMemberName(group));
     recordSafely(first.participant().getId(), template, variables);
     sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
   /**
-   * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 입금확인(전원 또는 미입금 제외 후 개최자 확정)이
-   * 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (성사 안내와 같은 합산
+   * (참여자) 참여한 분철의 진행이 확정됨 — LEGACY 는 최소 인원 충족, C2C 는 개최자의 진행 확정(전원 입금 확인 또는 기한 뒤 확인된 참여로)이
+   * 조건이라 문안이 갈린다. C2C 1인 다슬롯에서 같은 알림이 슬롯 수만큼 가지 않도록 유저 단위로 묶어 1건씩 보낸다 (입금 안내와 같은 합산
    * 규칙).
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void onBuncheolConfirmed(final BuncheolConfirmedEvent event) {
-    // 전이분 스냅샷을 상태 재확인 없이 그대로 쓴다 — 분철 CONFIRMED 는 종착 상태라(어느 CAS 도 CONFIRMED 에서 출발하지
-    // 않는다) 커밋~실행 사이에 확정 참여가 이탈할 전이가 없다. PAYMENT_COLLECTING 이 열려 있는 성사 안내 쪽과 다른 이유다.
+    // 전이분 스냅샷을 상태 재확인 없이 그대로 쓴다 — 커밋~실행 사이에 확정 참여가 이탈하는 전이는 회원 개최 운영진 파기(운송장 전)
+    // 하나뿐이고, 그때는 같은 큐 뒤에 취소 안내가 따라가 순서가 맞다. PAYMENT_COLLECTING 이 열려 있는 입금 안내 쪽과 다른 이유다.
     sendEachSafely(
         groupByParticipant(loadViewsSafely(event.participationIds())), this::sendConfirmedNotice);
   }
@@ -173,7 +166,7 @@ public class AlimtalkNotificationListener {
   }
 
   /**
-   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달·C2C 미성사). 문안은 {@link #cancelTemplate} 기준으로 갈린다. C2C 1인 다슬롯에서 같은 알림이
+   * (참여자) 참여한 분철이 취소됨(개최자 취소·미달). 문안은 {@link #cancelTemplate} 기준으로 갈린다. C2C 1인 다슬롯에서 같은 알림이
    * 슬롯 수만큼 가지 않도록 사람 단위로 묶어 1건씩 보낸다 (진행 확정과 같은 합산 규칙).
    */
   @Async(ALIMTALK_EXECUTOR)
@@ -188,46 +181,33 @@ public class AlimtalkNotificationListener {
   private void sendCancelledNotice(
       final List<ParticipationView> group, final BuncheolCancelReason reason) {
     ParticipationView first = group.get(0);
-    AlimtalkTemplate template = cancelTemplate(first, reason);
-    String memberName = mergedMemberName(group);
+    AlimtalkTemplate template = cancelTemplate(first);
     Map<String, String> variables =
-        template == AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED
-            ? Map.of(
-                "닉네임", first.participant().getNickname().value(),
-                "분철명", first.buncheol().getTitle(),
-                "멤버명", memberName)
-            : Map.of(
-                "닉네임", first.participant().getNickname().value(),
-                "분철명", first.buncheol().getTitle(),
-                "멤버명", memberName,
-                "취소사유", reason.getDescription());
+        Map.of(
+            "닉네임", first.participant().getNickname().value(),
+            "분철명", first.buncheol().getTitle(),
+            "멤버명", mergedMemberName(group),
+            "취소사유", reason.getDescription());
     recordSafely(first.participant().getId(), template, variables);
     sender.send(template, first.participant().getPhoneNumber().value(), variables);
   }
 
-  /**
-   * 취소 문안 선택. 판정 기준은 입금 이력이 아니라 취소 사유다 — C2C 성사 후(PAYMENT_COLLECTING) 개최자 취소도 입금 전 참여자에겐 이력이 없는데,
-   * 이력만 보고 미성사 문안을 보내면 "성사되지 않아 취소" 라는 거짓 안내에 사유까지 누락된다. 미성사({@code NOT_FINALIZED})는 무입금 신청
-   * 단계에서만 나오는 C2C 전용 사유라 환불 안내가 필요 없고(불변식이 다른 패키지에 있어 flowType 도 함께 본다), 나머지는 환불 주체가 갈린다 — LEGACY 는 플랫폼, C2C 는 대금이 개최자 계좌로 직접 간
-   * 직거래라 개최자다.
-   */
-  private AlimtalkTemplate cancelTemplate(
-      final ParticipationView view, final BuncheolCancelReason reason) {
-    if (reason == BuncheolCancelReason.NOT_FINALIZED && view.buncheol().isC2c()) {
-      return AlimtalkTemplate.C2C_BUNCHEOL_NOT_FINALIZED;
-    }
+  /** 취소 문안 선택. 환불 주체가 갈린다 — 운영진 분철은 플랫폼, 회원 개최는 대금이 개최자 계좌로 직접 간 직거래라 개최자다. */
+  private AlimtalkTemplate cancelTemplate(final ParticipationView view) {
     return view.buncheol().isC2c()
         ? AlimtalkTemplate.C2C_BUNCHEOL_CANCELLED
         : AlimtalkTemplate.BUNCHEOL_CANCELLED;
   }
 
-  /** (참여자) C2C 분철 성사 확정 — 입금 안내를 유저 단위로 합산해 1건씩 발송한다 (docs/46 §4.7-A3). */
+  /**
+   * 회원 개최 입금 단계 시작 — (참여자) 입금 안내를 유저 단위로 합산해 1건씩(docs/46 §4.7-A3), (개최자) 입금 단계 시작 안내를 1건
+   * 보낸다. 마감·마지막 열린 자리 신청·자리 빼기 어느 경우든 이 하나다. 상태 전이가 한 번뿐이라 중복 발송 가드가 필요 없다.
+   */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onBuncheolCollectingStarted(final BuncheolCollectingStartedEvent event) {
-    // 커밋 시점 전이 대상 스냅샷(event.participationIds)만 발송한다 — 실행 시점 상태 재조회는 그 사이 들어온
-    // 추가 모집 참여(onParticipationCreated 로 개별 안내를 받음)가 섞여 중복 발송된다. 커밋~실행 사이에
-    // 취소·확정된 건은 입금 안내가 무의미하므로 상태 필터로 거른다.
+  public void onPaymentStarted(final PaymentStartedEvent event) {
+    // 커밋 시점 전이 대상 스냅샷(event.participationIds)만 발송한다. 커밋~실행 사이에 취소·확정된 건은 입금 안내가
+    // 무의미하므로 상태 필터로 거른다.
     List<ParticipationView> views =
         loadViewsSafely(event.participationIds()).stream()
             .filter(
@@ -235,50 +215,60 @@ public class AlimtalkNotificationListener {
                     view.participation().getStatus() == ParticipationStatus.AWAITING_PAYMENT
                         || view.participation().getStatus() == ParticipationStatus.PAYMENT_SENT)
             .toList();
-    sendEachSafely(groupByParticipant(views), this::sendFinalizedNotice);
+    sendEachSafely(groupByParticipant(views), this::sendPaymentStartedNotice);
+    // 참여자 발송이 실패해도 개최자 안내는 따로 보낸다 — 두 수신자는 독립이다.
+    try {
+      sendHostPaymentStartedNotice(event.buncheolId());
+    } catch (final RuntimeException e) {
+      log.error("개최자 입금 단계 시작 안내 실패 - buncheolId={}", event.buncheolId(), e);
+    }
   }
 
-  /** (참여자) C2C 추가 모집 즉시입금 진입 — 이미 성사된 분철의 빈 슬롯 참여라 입금 안내를 바로 보낸다 (docs/46 §4.7-E1). */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onParticipationCreated(final ParticipationCreatedEvent event) {
-    // LEGACY 신규 참여는 알림톡 없음(현행 유지 — 계좌는 응답으로 안내, 운영 관제는 슬랙). C2C 무입금 신청(APPLIED)도 발송 없음.
-    if (event.flowType() != FlowType.C2C) {
+  // 기한은 참여자 안내와 같은 값(분철의 입금 단계 시작 + 24시간)이어야 한다.
+  private void sendHostPaymentStartedNotice(final Long buncheolId) {
+    BuncheolHostView view = assembler.loadBuncheolHost(buncheolId);
+    Instant paymentDueAt = view.buncheol().getPaymentDueAt();
+    if (paymentDueAt == null) {
+      log.error("입금 기한이 없어 개최자 입금 단계 시작 안내를 건너뜀 - buncheolId={}", buncheolId);
       return;
     }
-    ParticipationView view = assembler.loadByParticipation(event.participationId());
-    if (view.participation().getStatus() != ParticipationStatus.AWAITING_PAYMENT) {
-      return;
-    }
-    sendC2cPaymentGuide(
-        view,
-        AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
-        view.memberName(),
-        view.paymentAmount(),
-        view.paymentDueAt());
-  }
-
-  /** (개최자) C2C 모집 정원 충족 — 분철 관리에서 진행 확정을 눌러달라고 독촉한다. 분철당 1회만 발송한다(인메모리 가드). */
-  @Async(ALIMTALK_EXECUTOR)
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-  public void onBuncheolFull(final BuncheolFullEvent event) {
-    if (!fullNotifiedBuncheolIds.add(event.buncheolId())) {
-      return;
-    }
-    BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
+    AlimtalkTemplate template = AlimtalkTemplate.HOST_PAYMENT_STARTED;
     Map<String, String> variables =
         Map.of(
             "닉네임", view.host().getNickname().value(),
             "분철명", view.buncheol().getTitle(),
-            "신청인원", String.valueOf(event.applicantCount()),
+            "입금기한", AlimtalkFormats.dueAt(paymentDueAt),
             // 본문엔 없고 버튼 링크·수신함 경로(분철 관리 화면)에서만 치환되는 변수.
             "분철ID", String.valueOf(view.buncheol().getId()));
-    recordSafely(view.host().getId(), AlimtalkTemplate.C2C_BUNCHEOL_FULL, variables);
+    recordSafely(view.host().getId(), template, variables);
+    String hostPhone = hostPhoneOrNull(view.host(), buncheolId);
+    if (hostPhone == null) {
+      return;
+    }
+    sender.send(template, hostPhone, variables);
+  }
+
+  /**
+   * (개최자) 회원 개최 분철이 마감 때 최소 진행 멤버 수에 못 미쳐 자동 취소됨 — 분철당 1통. 신청이 0명이어도 보낸다(참여자 취소 안내가
+   * 없어 개최자는 마감된 것을 알 길이 없다). 신청 멤버 수는 이벤트가 실은 취소 자리 수다 — 리스너가 다시 세면 취소 뒤라 0 이 된다.
+   */
+  @Async(ALIMTALK_EXECUTOR)
+  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  public void onBuncheolAutoCancelled(final BuncheolAutoCancelledEvent event) {
+    BuncheolHostView view = assembler.loadBuncheolHost(event.buncheolId());
+    AlimtalkTemplate template = AlimtalkTemplate.HOST_AUTO_CANCELLED;
+    Map<String, String> variables =
+        Map.of(
+            "닉네임", view.host().getNickname().value(),
+            "분철명", view.buncheol().getTitle(),
+            "신청멤버수", String.valueOf(event.appliedSlotCount()),
+            "최소진행멤버수", String.valueOf(view.buncheol().getMinHeadcount()));
+    recordSafely(view.host().getId(), template, variables);
     String hostPhone = hostPhoneOrNull(view.host(), event.buncheolId());
     if (hostPhone == null) {
       return;
     }
-    sender.send(AlimtalkTemplate.C2C_BUNCHEOL_FULL, hostPhone, variables);
+    sender.send(template, hostPhone, variables);
   }
 
   // 개최자는 참여자와 달리 전화번호 등록 게이트(requireProfileCompleted)를 거치지 않았을 수 있다(소셜 가입 직후 미입력).
@@ -333,7 +323,7 @@ public class AlimtalkNotificationListener {
    * (개최자) 참여자가 <b>묶음</b>을 「보냈어요」로 표시함 — <b>묶음 1통</b>으로 알린다.
    *
    * <p>묶음은 이체 1회의 단위라, 슬롯마다 보내면 개최자가 <b>같은 입금을 여러 건으로 착각</b>해 통장 대조가
-   * 어긋난다. 멤버명은 나열하고 금액은 합산한다 — 성사 확정 안내(sendFinalizedNotice)와 같은 형태다.
+   * 어긋난다. 멤버명은 나열하고 금액은 합산한다 — 입금 안내(sendPaymentStartedNotice)와 같은 형태다.
    */
   @Async(ALIMTALK_EXECUTOR)
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -372,15 +362,15 @@ public class AlimtalkNotificationListener {
   }
 
   // 다슬롯 참여자에게는 멤버명 나열·금액 합산으로 1건만 보낸다. 계좌·기한은 분철의 확정 시점 스냅샷 (docs/46 §4.7-B1).
-  private void sendFinalizedNotice(final List<ParticipationView> group) {
+  private void sendPaymentStartedNotice(final List<ParticipationView> group) {
     ParticipationView first = group.get(0);
     long totalAmount = group.stream().mapToLong(ParticipationView::paymentAmount).sum();
     sendC2cPaymentGuide(
         first,
-        AlimtalkTemplate.C2C_BUNCHEOL_FINALIZED,
+        AlimtalkTemplate.PAYMENT_STARTED,
         mergedMemberName(group),
         totalAmount,
-        // 묶음 값을 쓴다 — 「제외」 게이트가 보는 기한이 묶음이다. 다슬롯이라 first 를 고르지만
+        // 묶음 값을 쓴다 — 입금 기한의 정본이 묶음이다. 다슬롯이라 first 를 고르지만
         // assignDueAtByBuncheolId 가 그 분철의 활성 묶음 「전부」에 같은 값을 심으므로 어느 것을 골라도 같다.
         first.paymentDueAt());
   }
@@ -466,7 +456,7 @@ public class AlimtalkNotificationListener {
     return listed + " 외 " + (names.size() - listedCount);
   }
 
-  // C2C 입금 안내 계열(성사 확정·추가 모집) 공용 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
+  // C2C 입금 안내 발송. 계좌·기한 스냅샷이 비면 오안내를 막기 위해 건너뛰고 로그만 남긴다.
   private void sendC2cPaymentGuide(
       final ParticipationView view,
       final AlimtalkTemplate template,

@@ -27,33 +27,10 @@ class ParticipationCancellabilityTest {
   class CancellableTest {
 
     @Test
-    void 신청_구간은_확정을_거쳤든_아니든_취소할_수_있다() {
+    void 회원_개최_신청은_취소할_수_있다() {
       assertThat(
               ParticipationCancellability.of(
-                  participation(ParticipationStatus.APPLIED, BEFORE_FINALIZE),
-                  finalizedC2c()))
-          .isEqualTo(ParticipationCancellability.CANCELLABLE);
-    }
-
-    /**
-     * docs/46 §4.7-E1 — 입금 수집중 분철의 추가 모집은 APPLIED 를 거치지 않고 곧바로 AWAITING_PAYMENT 로 생성된다. 상태만 보고
-     * 막으면 이 참여자는 신청하는 순간 24시간 잠겨 오신청조차 되돌릴 수 없다. 반드시 취소 가능이어야 한다.
-     */
-    @Test
-    void 추가_모집으로_확정_이후에_생성된_입금_대기_참여는_취소할_수_있다() {
-      assertThat(
-              ParticipationCancellability.of(
-                  participation(ParticipationStatus.AWAITING_PAYMENT, AFTER_FINALIZE),
-                  finalizedC2c()))
-          .isEqualTo(ParticipationCancellability.CANCELLABLE);
-    }
-
-    @Test
-    void 아직_성사_확정되지_않은_분철의_입금_대기_참여는_취소할_수_있다() {
-      assertThat(
-              ParticipationCancellability.of(
-                  participation(ParticipationStatus.AWAITING_PAYMENT, BEFORE_FINALIZE),
-                  c2c()))
+                  participation(ParticipationStatus.APPLIED, BEFORE_FINALIZE), c2c()))
           .isEqualTo(ParticipationCancellability.CANCELLABLE);
     }
   }
@@ -62,14 +39,21 @@ class ParticipationCancellabilityTest {
   @DisplayName("취소 차단 구간")
   class BlockedTest {
 
-    // H-09 본체. 이 판정을 지우면 확정 후 취소가 열려 빨개진다.
-    @Test
-    void 성사_확정을_거친_입금_대기_참여는_개최자_연락으로_보낸다() {
+    // 입금 단계가 시작되면 스스로 빠질 수 없다 — 옛 추가 모집분(입금 수집 중 생성)도 같다.
+    @ParameterizedTest
+    @EnumSource(
+        value = ParticipationStatus.class,
+        names = {"AWAITING_PAYMENT", "PAYMENT_SENT", "CONFIRMED", "CANCELLED"})
+    void 회원_개최는_신청이_아니면_상태로_막는다(final ParticipationStatus status) {
       assertThat(
-              ParticipationCancellability.of(
-                  participation(ParticipationStatus.AWAITING_PAYMENT, BEFORE_FINALIZE),
-                  finalizedC2c()))
-          .isEqualTo(ParticipationCancellability.BLOCKED_BY_HOST_CONFIRM);
+              ParticipationCancellability.of(participation(status, AFTER_FINALIZE), finalizedC2c()))
+          .isEqualTo(ParticipationCancellability.BLOCKED_BY_STATUS);
+    }
+
+    @Test
+    void 자발_취소_CAS_의_상태_집합은_신청_하나다() {
+      assertThat(ParticipationCancellability.cancellableStatuses())
+          .containsExactly(ParticipationStatus.APPLIED);
     }
 
     @ParameterizedTest

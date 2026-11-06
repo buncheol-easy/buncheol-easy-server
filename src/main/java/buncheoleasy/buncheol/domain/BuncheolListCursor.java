@@ -33,7 +33,7 @@ public record BuncheolListCursor(Integer groupRank, Instant sortAt, Long id) {
   /**
    * 모집중 그룹 순위 — 항상 마감 그룹보다 먼저 노출된다.
    *
-   * <p>RECRUITING 과 <b>PAYMENT_COLLECTING</b>(C2C 개최자가 성사를 확정해 입금을 수집하는 구간)이 이 그룹을 공유한다. 둘 다 아직
+   * <p>RECRUITING 과 <b>PAYMENT_COLLECTING</b>(C2C 입금 단계)이 이 그룹을 공유한다. 둘 다 아직
    * 진행 중인 분철이고 {@code createdAt} 이라는 같은 정렬 축을 쓴다. 예전에는 PAYMENT_COLLECTING 이 어느 그룹에도 없어, 개최자가 성사를
    * 확정하는 순간 분철이 목록·검색에서 통째로 사라졌다가 전원 입금확인 후 CONFIRMED 가 되어서야 다시 나타났다.
    */

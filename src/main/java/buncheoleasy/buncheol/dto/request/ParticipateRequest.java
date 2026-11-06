@@ -13,9 +13,8 @@ import java.util.List;
  * 보내므로 둘 다 받는다.
  *
  * <p>🔴 <b>다중 슬롯은 C2C 모집중 전용이다.</b> LEGACY 는 1인 1활성슬롯이 DB 유니크로 강제돼 있어 애초에
- * 열리지 않는다({@code uq_participations_legacy_active_participant}). 성사 확정 뒤 추가 모집도 막는다 —
- * 그 구간은 슬롯마다 별개 묶음·별개 이체라 합산 응답 1건이 거짓이 되기 때문이다({@code
- * ParticipationService#participate} javadoc).
+ * 열리지 않는다({@code uq_participations_legacy_active_participant}). 입금 단계가 시작된 분철은 신청 자체를 받지
+ * 않는다.
  *
  * <p>🔴 <b>하나라도 실패하면 전체 롤백</b>이다 (docs/70 §5). 3개 중 하나가 이미 팔렸으면 나머지 둘도 만들지
  * 않는다 — 부분 성공을 남기면 참여자가 "몇 개가 잡혔는지" 를 화면에서 재구성해야 한다.

@@ -2,6 +2,7 @@ package buncheoleasy.buncheol.infrastructure.participation;
 
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
@@ -146,6 +147,16 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("buncheolIds") List<Long> buncheolIds, @Param("status") ParticipationStatus status);
 
   @Query(
+      "SELECT new buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount("
+          + "p.buncheolId, COUNT(p)) "
+          + "FROM Participation p "
+          + "WHERE p.buncheolId IN :buncheolIds AND p.status IN :statuses "
+          + "GROUP BY p.buncheolId")
+  List<BuncheolUnconfirmedParticipationCount> countUnconfirmedByBuncheolIds(
+      @Param("buncheolIds") List<Long> buncheolIds,
+      @Param("statuses") Collection<ParticipationStatus> statuses);
+
+  @Query(
       "SELECT p FROM Participation p "
           + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses "
           + "ORDER BY p.createdAt ASC, p.id ASC")
@@ -155,12 +166,23 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   List<Participation> findByBundleIdIn(List<Long> bundleIds);
 
-  /** 활성 참여의 참여자 id 잠금 조회(current read, 행당 1건) — 정원 충족 판정용. 집계 + FOR UPDATE 는 H2 미지원이라 프로젝션으로 세운다. */
+  @Lock(LockModeType.PESSIMISTIC_READ)
+  @Query(
+      "SELECT p FROM Participation p "
+          + "WHERE p.buncheolId = :buncheolId AND p.participantId = :participantId "
+          + "AND p.status IN :statuses "
+          + "ORDER BY p.createdAt ASC, p.id ASC")
+  List<Participation> findByBuncheolIdAndParticipantIdAndStatusInForShare(
+      @Param("buncheolId") Long buncheolId,
+      @Param("participantId") Long participantId,
+      @Param("statuses") Collection<ParticipationStatus> statuses);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
-      "SELECT p.participantId FROM Participation p "
-          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses")
-  List<Long> findParticipantIdsByBuncheolIdAndStatusInForUpdate(
+      "SELECT p FROM Participation p "
+          + "WHERE p.buncheolId = :buncheolId AND p.status IN :statuses "
+          + "ORDER BY p.createdAt ASC, p.id ASC")
+  List<Participation> findByBuncheolIdAndStatusInForUpdate(
       @Param("buncheolId") Long buncheolId,
       @Param("statuses") Collection<ParticipationStatus> statuses);
 
@@ -176,8 +198,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
 
   List<Participation> findByBuncheolIdAndStatusAndCancelReason(
       Long buncheolId, ParticipationStatus status, ParticipationCancelReason cancelReason);
-
-  int countByBuncheolIdAndStatus(Long buncheolId, ParticipationStatus status);
 
   /**
    * 입금 만료 폴링 대상. 🔴 <b>{@code flowType} 을 등가조건으로</b> 받는다 — 부등호({@code &lt;&gt; 'C2C'})로 쓰면
@@ -217,8 +237,8 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("now") Instant now);
 
   /**
-   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다. 「제외」가 확정 슬롯 유무를 판정하기 전에 호출해, 판정과 UPDATE
-   * 사이에 개최자의 입금확인이 끼어들지 못하게 한다.
+   * 묶음의 슬롯 전건을 <b>잠금 조회</b>한다. 묶음 입금확인이 확인 대상을 판정하기 전에 호출해, 판정과 UPDATE
+   * 사이에 다른 쓰기가 끼어들지 못하게 한다.
    *
    * <p><b>왜 UPDATE 의 서브쿼리로 못 하는가</b>: MySQL 은 {@code UPDATE} 대상 테이블을 서브쿼리의 FROM 에서
    * 참조하는 것을 금지한다(<b>error 1093</b> — "You can't specify target table for update in FROM clause").
@@ -228,33 +248,6 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT p FROM Participation p WHERE p.bundleId = :bundleId")
   List<Participation> findAllByBundleIdForUpdate(@Param("bundleId") Long bundleId);
-
-  /**
-   * 개최자 「제외」 CAS — 한 묶음의 활성 슬롯 전부를 {@code HOST_RELEASED} 로 취소한다.
-   *
-   * <p>🔴 <b>기한 가드는 UPDATE 의 WHERE 안에 있다.</b> 호출부의 사전 판정은 사유를 고르는 용도이고, 최종 차단은
-   * 이 조건이 한다. {@code b.dueAt IS NOT NULL AND b.dueAt <= :now} 라 기한이 없으면(모집 중) <b>거부</b>이므로
-   * fail-closed 다.
-   *
-   * <p>⚠️ <b>확정 슬롯 검사는 여기 없다.</b> 같은 테이블을 서브쿼리로 참조하면 MySQL 이 거부하기 때문이다
-   * (error 1093). 대신 호출부가 {@link #findAllByBundleIdForUpdate} 로 슬롯을 잠근 뒤 판정한다 — 그 락이
-   * 입금확인({@code confirmPaymentIfAwaiting})을 막아 같은 원자성을 준다.
-   */
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      "UPDATE Participation p "
-          + "SET p.status = :cancelledStatus, p.cancelReason = :reason, "
-          + "    p.cancelledAt = :now, p.updatedAt = :now "
-          + "WHERE p.bundleId = :bundleId AND p.status IN :releasableStatuses "
-          + "AND EXISTS (SELECT b FROM ParticipationBundle b "
-          + "  WHERE b.id = :bundleId AND b.closedAt IS NULL "
-          + "    AND b.dueAt IS NOT NULL AND b.dueAt <= :now)")
-  int releaseBundleIfDue(
-      @Param("bundleId") Long bundleId,
-      @Param("releasableStatuses") Collection<ParticipationStatus> releasableStatuses,
-      @Param("cancelledStatus") ParticipationStatus cancelledStatus,
-      @Param("reason") ParticipationCancelReason reason,
-      @Param("now") Instant now);
 
   /** 분철의 특정 상태 참여를 모두 지정 사유로 CANCELLED 로 일괄 전이 (분철 취소 cascade). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -347,11 +340,10 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
   @Query(
       "UPDATE Participation p SET p.bundleId = :bundleId, p.updatedAt = :now "
           + "WHERE p.id = :id AND p.bundleId IS NULL "
-          // 🔴 대상 묶음의 생존을 같은 UPDATE 안에서(current read) 건다. 재사용 후보는 비잠금 조회로
-          // 뽑히는데(findFirstActiveInBuncheol), 참여 생성은 분철 행 X 락을 잡고 자발 취소는 안 잡아
-          // 둘이 직렬화되지 않는다. 그 사이 마지막 슬롯이 취소돼 묶음이 닫히면, 스냅샷을 믿고 그대로
-          // 붙일 경우 「닫혔는데 활성 슬롯을 가진 묶음」이 생긴다 — closeIfNoActiveSlots 가
-          // closed_at IS NULL 을 요구하므로 그 묶음은 두 번 다시 닫히지 않는다.
+          // 🔴 대상 묶음의 생존을 같은 UPDATE 안에서(current read) 건다. 신청과 자발 취소는 분철 행에서 한 줄로
+          // 서고 재사용 후보도 잠금 읽기(findFirstActiveInBuncheol)라 정상 경로에선 닫힌 묶음이 오지 않지만,
+          // 그대로 붙으면 「닫혔는데 활성 슬롯을 가진 묶음」이 생기고 closeIfNoActiveSlots 가
+          // closed_at IS NULL 을 요구해 그 묶음은 두 번 다시 닫히지 않는다 — 마지막 선으로 남긴다.
           // 새로 연 묶음은 방금 INSERT 한 행이라 이 조건이 항상 참이다 — 분기 없이 두 경로를 함께 덮는다.
           + "AND EXISTS (SELECT b FROM ParticipationBundle b "
           + "  WHERE b.id = :bundleId AND b.closedAt IS NULL)")
@@ -372,7 +364,7 @@ interface JpaParticipationRepository extends JpaRepository<Participation, Long> 
       @Param("reason") ParticipationCancelReason reason,
       @Param("now") Instant now);
 
-  /** C2C 성사 확정: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (docs/46 §4.1). */
+  /** 입금 단계 시작: 분철의 APPLIED 전건을 일괄 입금 기한과 함께 AWAITING_PAYMENT 로 전이 (PaymentStarter). */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "UPDATE Participation p "

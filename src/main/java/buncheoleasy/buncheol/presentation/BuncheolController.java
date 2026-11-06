@@ -6,13 +6,13 @@ import buncheoleasy.buncheol.application.BuncheolManagementQueryService;
 import buncheoleasy.buncheol.application.BuncheolService;
 import buncheoleasy.buncheol.application.MyHostedBuncheolQueryService;
 import buncheoleasy.buncheol.domain.BuncheolListCursor;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberPriceRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.request.HoldBuncheolRequest;
 import buncheoleasy.buncheol.dto.request.OpenChatUrlUpdateRequest;
-import buncheoleasy.buncheol.dto.response.BuncheolConfirmResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolManagementResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolMemberAddResponse;
@@ -135,24 +135,16 @@ public class BuncheolController {
   }
 
   /**
-   * C2C 개최자 성사 확정 API (docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금 대기로 전이하고, 입금 안내가 발송된다. 정원
-   * 미달 재량 확정·마감 전 조기 확정 허용.
+   * 회원 개최 진행 확정 API. 입금 기한이 지났고 확인된 참여가 있을 때 진행을 확정하고, 입금이 확인되지 않은 참여를 뺀다(전원 입금은 마지막
+   * 묶음 입금 확인이 바로 진행 확정한다). 본문의 빠질 참여 목록이 서버가 본 것과 다르면 409(BCH-127). 본문 없는 요청(옛 「성사 확정」)은
+   * 400.
    */
   @PostMapping("/{id}/confirm")
-  public ResponseEntity<BuncheolConfirmResponse> confirmRecruitment(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
-    return ResponseEntity.ok(
-        BuncheolConfirmResponse.from(buncheolService.confirmRecruitment(hostId, id)));
-  }
-
-  /**
-   * C2C 입금 수집 종료(부분 확정) API (docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행을 확정한다.
-   * 미입금 활성 참여가 남아 있으면 실패한다(보냈어요 잔여는 입금확인하거나 기한 뒤 「제외」로 먼저 정리).
-   */
-  @PostMapping("/{id}/finalize-collected")
-  public ResponseEntity<Void> finalizeCollected(
-      @AuthenticationPrincipal final Long hostId, @PathVariable final Long id) {
-    buncheolService.finalizeCollected(hostId, id);
+  public ResponseEntity<Void> confirmBuncheol(
+      @AuthenticationPrincipal final Long hostId,
+      @PathVariable final Long id,
+      @Valid @RequestBody final BuncheolConfirmRequest request) {
+    buncheolService.confirmBuncheol(hostId, id, request);
     return ResponseEntity.noContent().build();
   }
 

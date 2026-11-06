@@ -2,7 +2,6 @@ package buncheoleasy.buncheol.application;
 
 import buncheoleasy.buncheol.application.image.BuncheolImageUploadEvent;
 import buncheoleasy.buncheol.application.image.ImageFile;
-import buncheoleasy.buncheol.application.participation.ParticipationService;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolDomainService;
 import buncheoleasy.buncheol.domain.BuncheolHostCancellability;
@@ -10,6 +9,7 @@ import buncheoleasy.buncheol.domain.BuncheolParams;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.BuncheolTerms;
 import buncheoleasy.buncheol.domain.BuncheolTermsChange;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.image.BuncheolImageDomainService;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -20,6 +20,8 @@ import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainServi
 import buncheoleasy.buncheol.domain.participation.ParticipationDomainService;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
 import buncheoleasy.buncheol.domain.staff.StaffBuncheolSettingDomainService;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest.CancelParticipation;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberAddRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolMemberRequest;
 import buncheoleasy.buncheol.dto.request.BuncheolModifyRequest;
@@ -31,7 +33,6 @@ import buncheoleasy.global.exception.domain.BusinessException;
 import buncheoleasy.global.exception.domain.ErrorCode;
 import buncheoleasy.global.text.BannedWordFilter;
 import buncheoleasy.group.domain.GroupDomainService;
-import buncheoleasy.user.domain.BankAccount;
 import buncheoleasy.user.domain.C2cHostQualification;
 import buncheoleasy.user.domain.UserDomainService;
 import java.time.Clock;
@@ -39,9 +40,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -49,7 +53,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class BuncheolService {
 
   private final BuncheolDomainService buncheolDomainService;
-  private final BuncheolConfirmedFinalizer buncheolConfirmedFinalizer;
+  private final BuncheolConfirmer buncheolConfirmer;
+  private final PaymentStarter paymentStarter;
   private final BuncheolImageDomainService buncheolImageDomainService;
   private final BuncheolMemberDomainService buncheolMemberDomainService;
   private final ParticipationDomainService participationDomainService;
@@ -386,8 +391,8 @@ public class BuncheolService {
    * Buncheol#validateOpenChatUrlEditable} 이 CANCELLED·HOST_CANCELLED 를 막는다). <b>다른 필드를 이 패턴으로 얹지
    * 마라</b>. 상태 전이처럼 결과가 남는 쓰기는 CAS 로 내려야 한다.
    *
-   * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(성사 확정·진행
-   * 확정)만 {@code isC2c()} 로 막는다.
+   * <p><b>LEGACY 도 허용한다</b> — 개최·전체 수정 어디에도 flowType 가드가 없어 기존 동작과 맞춘다. C2C 전용 액션(진행 확정
+   * 등)만 플로우로 막는다.
    *
    * <p><b>참여자 알림은 보내지 않는다</b>(이번 범위 밖). 링크가 바뀌어도 참여자는 상세·내 참여를 다시 열어야 새 링크를 본다 — 이미 링크를
    * 복사해 간 사람에게는 안내가 닿지 않는다. 수신함 기록은 별도로 다룬다.
@@ -403,110 +408,78 @@ public class BuncheolService {
   }
 
   /**
-   * C2C 개최자 성사 확정 (RECRUITING → PAYMENT_COLLECTING, docs/46 §4.1). 신청자 전원을 일괄 입금 기한(24h)과 함께 입금
-   * 대기로 전이하고, 확정 시점 개최자 계좌를 분철에 스냅샷한다(§4.7-B1). 정원 미달이어도 개최자 재량으로 확정할 수 있고(§7.1-2), deadline
-   * 전 조기 확정도 허용한다(§4.7-E2) — 미달 경고·재확인은 FE 가 담당한다.
+   * 개최자의 회원 개최 진행 확정 (PAYMENT_COLLECTING → CONFIRMED). 입금 기한이 지났고 확인된 참여가 있을 때 한다({@link
+   * ConfirmCheck}). 전원 입금은 마지막 묶음 입금 확인이 그 자리에서 진행 확정하므로 여기 오는 {@code ALL_PAID} 는 옛 데이터뿐이다.
+   * 입금이 확인되지 않은 참여(입금 대기·「보냈어요」)는 같은 트랜잭션에서 빠지고({@code PAYMENT_NOT_CONFIRMED}), 확인된 묶음마다 배송이
+   * 생긴다 — 운송장은 이 뒤에만 넣을 수 있다.
+   *
+   * <p>{@code request} 의 빠질 참여 목록은 개최자가 확인 창에서 본 것이다. 서버가 잠금 아래에서 본 미확인 (id, 상태) 집합과 다르면
+   * 409(BCH-127)로 막는다 — 그 사이 누가 「보냈어요」를 누르거나 다른 탭에서 입금 확인했으면 개최자가 강조 없이 본 사람을 빼게 된다. 목록은
+   * 대조에만 쓰고 취소 대상은 분철 범위로 고른다(남의 참여 id 를 넣어도 대조 실패로 끝난다).
+   *
+   * <p>🔴 READ COMMITTED 다({@link BuncheolConfirmer} 계약). 진행확정 알림 대상을 잠금 뒤 일반 조회로 읽는다. 지금은 잠금 앞에
+   * 일반 조회가 없어 REPEATABLE READ 여도 같지만, 앞에 조회가 하나라도 끼면 그 스냅샷이 기다리는 사이 커밋된 입금 확인을 빠뜨리므로
+   * #245 와 같이 고정해 둔다. 회원 개최에서 확정 수를 바꾸는 쓰기(묶음 입금 확인)는 모두 분철 행을 먼저 잡으므로 READ COMMITTED
+   * 에서도 판정이 흔들리지 않고, 참여 잠금에 간격 잠금이 빠져도 새 참여 INSERT 는 분철 행에서 막힌다.
    */
-  @Transactional
-  public BuncheolConfirmResult confirmRecruitment(final Long hostId, final Long buncheolId) {
+  @Transactional(isolation = Isolation.READ_COMMITTED)
+  public void confirmBuncheol(
+      final Long hostId, final Long buncheolId, final BuncheolConfirmRequest request) {
+    // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate).
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
+    buncheol.validateOwner(hostId);
+    if (buncheol.isStaff()) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
+    }
     final Instant now = Instant.now(clock);
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    buncheol.validateOwner(hostId);
-    if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
-    }
 
-    // 입금 안내를 보낼 계좌 필수 — 개최 시점에도 검증하지만 이후 삭제됐을 수 있어 확정 시점에 재검증하고 스냅샷 소스로 쓴다.
-    userDomainService.requireBankAccountRegistered(hostId);
-    BankAccount hostAccount = userDomainService.getUser(hostId).getBankAccount();
-
-    Instant paymentDueAt = now.plus(ParticipationService.C2C_PAYMENT_WINDOW);
-    if (!buncheolDomainService.startCollecting(buncheolId, paymentDueAt, hostAccount, now)) {
-      // 이미 확정·취소됐거나(중복 클릭·유예 취소 경합) RECRUITING 이 아님.
+    // 바로 아래에서 바꿀 행이라 배타 잠금으로 읽는다.
+    List<Participation> active =
+        participationDomainService.findActiveByBuncheolIdForUpdate(buncheolId);
+    ConfirmCheck check =
+        ConfirmCheck.of(buncheol.getStatus(), active, buncheol.getPaymentDueAt(), now);
+    if (check == null || !check.isConfirmable()) {
       throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
     }
-
-    // 전이 대상 스냅샷 — 알림 이벤트에 실어 리스너가 "커밋 시점 전이 건"만 발송하게 한다 (실행 시점 재조회는 그 사이
-    // 들어온 추가 모집 참여와 중복 발송된다). 분철 CAS 선점 후라 이 목록과 아래 일괄 전이는 같은 집합이다.
-    List<Long> appliedIds =
-        participationDomainService.findActiveByBuncheolId(buncheolId).stream()
-            .filter(participation -> participation.getStatus() == ParticipationStatus.APPLIED)
-            .map(Participation::getId)
-            .toList();
-
-    int awaitingCount =
-        participationDomainService.startPaymentCollecting(buncheolId, paymentDueAt, now);
-    if (awaitingCount == 0) {
-      // 신청자가 전부 취소된 직후 — 확정이 무의미하므로 롤백해 RECRUITING 을 유지한다.
-      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_NOT_ALLOWED);
+    // 순서와 무관하게 집합으로 대조한다 — 화면이 정렬을 보장하지 않는다.
+    Set<CancelParticipation> unconfirmed =
+        active.stream()
+            .filter(p -> ParticipationStatus.payableStatuses().contains(p.getStatus()))
+            .map(p -> new CancelParticipation(p.getId(), p.getStatus()))
+            .collect(Collectors.toSet());
+    if (!unconfirmed.equals(Set.copyOf(request.cancelParticipations()))) {
+      throw new BusinessException(ErrorCode.BUNCHEOL_CONFIRM_LIST_CHANGED);
     }
-    // 신청 구간의 묶음은 기한 없이 열려 있다 — 참여 행과 같은 기한을 묶음에도 채운다. 비워 두면 나중에 붙을
-    // 개최자 「제외」 기한 가드가 fail-open 된다(기한 안인데도 참여자를 뺄 수 있게 된다 — docs/71 §8-1).
-    participationBundleDomainService.assignDueAtByBuncheolId(buncheolId, paymentDueAt, now);
 
-    // 커밋 후 성사 확정·입금 안내 알림톡(신청자 전원, 유저 단위 합산 — docs/46 §4.7-A3)과 수신함 기록을 트리거한다.
-    eventPublisher.publishEvent(new BuncheolCollectingStartedEvent(buncheolId, appliedIds));
-    return new BuncheolConfirmResult(
-        buncheolId, BuncheolStatus.PAYMENT_COLLECTING, paymentDueAt, awaitingCount);
+    buncheolConfirmer.confirm(buncheolId, active, now);
   }
 
   /**
-   * C2C 입금 수집 종료(부분 확정 — docs/46 §7.1-6). 입금 기한 경과로 미입금 슬롯이 정리된 뒤, 확정된 참여만으로 진행하겠다는 개최자
-   * 선택이다. 미입금 활성 참여(입금 대기·보냈어요)가 남아 있거나 확정 참여가 없으면 CAS 조건에 막혀 실패한다 — 보냈어요 잔여는 입금확인하거나
-   * 기한 뒤 「제외」로 먼저 정리해야 한다(§4.7-E1).
-   */
-  @Transactional
-  public void finalizeCollected(final Long hostId, final Long buncheolId) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
-    buncheol.validateOwner(hostId);
-    if (!buncheol.isC2c()) {
-      throw new BusinessException(ErrorCode.BUNCHEOL_FLOW_NOT_SUPPORTED);
-    }
-
-    if (!buncheolDomainService.confirmIfAllCollected(buncheolId, Instant.now(clock))) {
-      // 성사 확정(confirmRecruitment)과 다른 단계라 전용 코드를 쓴다 (docs/53 Q-12).
-      throw new BusinessException(ErrorCode.BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED);
-    }
-    buncheolConfirmedFinalizer.finalizeConfirmed(buncheolId);
-  }
-
-  /**
-   * 개최자의 분철 취소. 모집중·입금 수집중·인원미달 자동취소 상태에서만 가능하고, 활성 참여는 같은 트랜잭션에서 cascade 취소된다.
+   * 개최자의 분철 취소. 모집중·인원미달 자동취소 상태에서만 가능하고, 모집중이면 활성 참여가 같은 트랜잭션에서 cascade 취소된다.
    *
-   * <p>개최자가 <b>입금확인(CONFIRMED)한</b> 참여가 1건이라도 있으면 취소를 막는다 (docs/56 H-13). 직거래 구조라 개최자가 수령을
-   * 인정한 돈은 이미 그의 계좌에 있는데 분철을 접으면 플랫폼이 환불을 강제할 수단이 없다. 인원 미달인데 일부만 입금한 경우 개최자가 스스로 접을 수
-   * 없게 되는 것은 인지된 트레이드오프이고, 문의 경유 환불로 처리한다 — 그래서 에러 문구가 "환불한 뒤 고객센터로 문의" 를 안내한다.
-   *
-   * <p>⚠️ 판정 범위는 <b>CONFIRMED 뿐</b>이다. 참여자가 "보냈어요"(PAYMENT_SENT)만 누른 건은 실제로 돈이 갔더라도 개최자가
-   * 입금확인을 누르지 않은 채 취소하면 그대로 통과한다. 마킹은 참여자의 자기 신고라 그것만으로 취소를 막으면 허위 마킹 하나로 개최자가 분철을
-   * 영영 접지 못하게 되므로, 판정 기준을 개최자가 수령을 인정한 시점으로 뒀다(docs/56 §14-3 결정 그대로). 남는 리스크는 문의 경유로 처리한다.
+   * <p>입금 수집중(회원 개최)에는 개최자 혼자 접지 않는다 — 참여자에게 계좌가 공개된 뒤라 입금 확인 건수와 무관하게 BCH-126 으로
+   * 「운영진에게 알려 주세요」를 안내하고, 운영자가 실제 입금·환불 계획을 확인한 뒤 어드민에서 파기한다.
    */
   @Transactional
   public void cancelBuncheol(final Long hostId, final Long buncheolId) {
-    Buncheol buncheol = buncheolDomainService.getBuncheol(buncheolId);
+    // 분철 행이 첫 잠금이다(BuncheolDomainService#getBuncheolForUpdate). 운영진 분철도 지나지만 원래 첫 잠금이 같은 행의
+    // 취소 CAS 라 잠그는 시점만 앞으로 온다.
+    Buncheol buncheol = buncheolDomainService.getBuncheolForUpdate(buncheolId);
     buncheol.validateOwner(hostId);
     final Instant now = Instant.now(clock);
 
-    // H-13 안내용 사전 검사. 실제 차단은 아래 CAS 서브쿼리가 원자적으로 하고, 여기서는 "왜 못 접는지 + 무엇을 해야 하는지" 를
-    // 알려 주기 위해 먼저 읽는다 — CAS 만 두면 상태 위반과 구분되지 않아 BCH-050(범용 문구)으로 떨어진다.
-    // 판정은 개최 목록 응답이 그대로 내려주는 것과 같은 값이다 (docs/56 S-2).
-    long confirmedCount =
-        BuncheolHostCancellability.requiresConfirmedCount(buncheol.getStatus())
-            ? participationDomainService.countConfirmedByBuncheolId(buncheolId)
-            : 0L;
-    // 매핑을 switch 식으로 둬야 사유가 추가될 때 컴파일 에러로 잡힌다 — == 비교나 switch 문으로 두면 새 차단 사유가
-    // 사전 검사를 통과해 목록은 "취소 불가"라 말하는데 API 는 취소를 허용하는 fail-open 이 된다.
-    // BLOCKED_BY_STATUS 만 여기서 던지지 않고 CAS 에 맡긴다 — 경합에서 어느 상태로부터 전이됐는지는 CAS 만 알 수 있다.
+    // 잠근 상태로 가른다 — 개최 목록이 내려주는 것과 같은 판정이다(docs/56 S-2). 매핑을 switch 식으로 둬야 사유가 추가될 때
+    // 컴파일 에러로 잡힌다. BLOCKED_BY_STATUS 는 여기서 던지지 않고 아래 CAS 에 맡긴다(BCH-050).
     ErrorCode blockedCode =
-        switch (BuncheolHostCancellability.of(buncheol.getStatus(), confirmedCount)) {
+        switch (BuncheolHostCancellability.of(buncheol.getStatus())) {
           case CANCELLABLE, BLOCKED_BY_STATUS -> null;
-          case BLOCKED_BY_CONFIRMED_PAYMENT -> ErrorCode.BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS;
+          case NEEDS_STAFF -> ErrorCode.BUNCHEOL_CANCEL_NEEDS_STAFF;
         };
     if (blockedCode != null) {
       throw new BusinessException(blockedCode);
     }
 
-    // 모집중·입금 수집중·인원미달 자동취소 상태에서만 취소 (→ HOST_CANCELLED CAS). 마감 판정 스케줄러와 경합해도 한쪽만 성공한다.
+    // 모집중·인원미달 자동취소 상태에서만 취소 (→ HOST_CANCELLED CAS).
     BuncheolStatus priorStatus = buncheolDomainService.cancelBuncheol(buncheolId, now);
 
     // 자동취소(CANCELLED)된 분철은 마감 스케줄러가 같은 트랜잭션에서 참여 취소·배송 스냅샷 정리·취소 알림까지 이미 끝냈다.
@@ -515,31 +488,19 @@ public class BuncheolService {
     if (priorStatus == BuncheolStatus.CANCELLED) {
       return;
     }
+    cancelledFinalizer().finalizeCancelled(buncheolId, now, BuncheolCancelReason.HOST_CANCELLED);
+  }
 
-    // 취소 확정 후 같은 트랜잭션에서 활성 참여(입금확인중·입금확인됨)를 모두 CANCELLED(BUNCHEOL_CANCELLED) 로 일괄 전이한다.
-    // 입금확인된 참여의 환불은 운영자가 오프라인으로 처리한다. 알림 대상은 cascade 로 실제 전이된 참여만 재조회해 수집한다(그 사이
-    // 자발취소·만료된 참여에 중복 알림이 가지 않도록).
-    participationDomainService.cancelActiveByBuncheolId(buncheolId, now);
-    // cascade 는 참여를 한 번의 UPDATE 로 전이시켜 어느 묶음이 비었는지 개별로 알 수 없다 — 같은 CAS 조건을
-    // 분철 범위로 넓혀 일괄 판정한다. 안 닫으면 취소된 분철에 활성 묶음이 영구히 남는다.
-    participationBundleDomainService.closeEmptyByBuncheolId(buncheolId, now);
-    List<Long> cancelledIds =
-        participationDomainService.findCascadeCancelledByBuncheolId(buncheolId).stream()
-            .map(Participation::getId)
-            .sorted()
-            .toList();
-    // 입금확인 시 생성된 배송 스냅샷을 정리한다 — Delivery 는 취소되지 않은 참여에만 존재해야 한다.
-    deliveryDomainService.deleteByParticipationIds(cancelledIds);
-    // 분철 단위로 1번 발행한다 — 참여마다 발행하면 다슬롯 참여자가 취소 알림을 슬롯 수만큼 받는다.
-    if (!cancelledIds.isEmpty()) {
-      eventPublisher.publishEvent(
-          new BuncheolCancelledEvent(
-              buncheolId, cancelledIds, BuncheolCancelReason.HOST_CANCELLED));
-    }
+  private BuncheolCancelledFinalizer cancelledFinalizer() {
+    return new BuncheolCancelledFinalizer(
+        participationDomainService,
+        participationBundleDomainService,
+        deliveryDomainService,
+        eventPublisher);
   }
 
   /**
-   * C2C 개최자가 신청을 받는 동안(모집중·입금 수집중) 빈 자리를 분철에서 뺀다 — 다른 곳에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
+   * C2C 개최자가 신청을 받는 동안(모집중·마감 전) 빈 자리를 분철에서 뺀다 — 다른 곳에서 먼저 팔린 멤버의 이중 판매를 막는 용도다.
    *
    * <ul>
    *   <li>참여·참여 코드 기록이 하나도 없는 자리는 행을 지운다 — 상세·목록·찜·멤버 검색에서 처음부터 없던 멤버처럼 사라진다.
@@ -552,12 +513,11 @@ public class BuncheolService {
    * 주세요」를 권하면 안 된다.
    *
    * <p>모집중에 빼서 열린 자리 수가 최소 인원보다 작아지면 최소 인원을 열린 자리 수로 낮춘다. 그대로 두면 C2C 는 마감 정각에 인원
-   * 미달로 즉시 취소되어 신청자까지 전원 취소된다.
+   * 미달로 즉시 취소되어 신청자까지 전원 취소된다. 빼고 나니 남은 열린 자리가 모두 신청됐으면 같은 트랜잭션에서 입금 단계를 시작한다
+   * ({@link PaymentStarter#startIfFull}, 신청 경로와 같은 판정).
    *
    * <p>락 순서는 분철 행(X) → 자리 행(X) → 참여·참여 코드 행(S, DELETE·닫기 CAS 의 NOT EXISTS) 이다. C2C 신청(분철 X → 자리
-   * S → 참여 INSERT)·개최자 취소 CAS 와 같은 「분철 → 자리 → 참여」 방향이라 신청과는 분철 행에서 한 줄로 선다. 입금확인(참여 →
-   * 분철)과는 역방향이지만, 겹치려면 개최자가 같은 자리의 입금확인과 빼기를 동시에 눌러야 하고 실패 모드는 기존과 같은 데드락
-   * 롤백이다(ParticipationService#publishFullIfAllSlotsApplied).
+   * S → 참여 INSERT)·개최자 취소와 같은 「분철 → 자리 → 참여」 방향이라 분철 행에서 한 줄로 선다.
    */
   @Transactional
   public void removeMember(final Long hostId, final Long buncheolId, final Long buncheolMemberId) {
@@ -594,9 +554,13 @@ public class BuncheolService {
       throw new BusinessException(ErrorCode.BUNCHEOL_MEMBER_REMOVE_HAS_APPLICANT);
     }
 
-    // 모집중 여부는 UPDATE 조건이 판정한다(입금 수집중이면 0행). 위 DELETE·닫기가 영속성 컨텍스트를 비웠으므로 엔티티
-    // 더티체킹이 아니라 UPDATE 로 쓴다.
+    // 모집중 여부는 UPDATE 조건도 함께 본다. 위 DELETE·닫기가 영속성 컨텍스트를 비웠으므로 엔티티 더티체킹이 아니라 UPDATE 로
+    // 쓴다.
     buncheolDomainService.lowerMinHeadcountToSlotCount(buncheolId, openSlotCount - 1, now);
+
+    // 빼고 나니 남은 열린 자리가 모두 신청됐으면 이 요청 안에서 입금 단계가 시작된다. 방금 낮춘 최소 인원을 봐야 하므로
+    // 잠금 읽기로 다시 읽는다(위 UPDATE 들이 영속성 컨텍스트를 비웠다 — 앞의 인스턴스는 낡았다).
+    paymentStarter.startIfFull(buncheolDomainService.getLatestBuncheolForUpdate(buncheolId), now);
   }
 
   /**
@@ -637,9 +601,8 @@ public class BuncheolService {
    * C2C 개최자가 <b>모집중·마감 전</b>에 빈 자리 하나의 가격을 바꾼다. 빼기와 같은 규칙 — 그 자리에 활성 신청자가 있으면 바꾸지
    * 않는다(그 사람이 보고 신청한 가격이다). 다른 자리의 신청자는 막지 않는다.
    *
-   * <p>🔴 빼기·넣기와 달리 <b>입금 수집중(추가 모집)에는 열지 않는다</b>. 추가 모집 신청은 바로 입금 대기라, 옛 가격을 띄워 둔 화면이 그
-   * 값으로 입금액을 안내해 틀린 금액이 송금될 수 있다. 모집중 신청은 입금을 성사 확정 뒤 서버 금액으로 안내받는다. 추가 모집 중 가격은 빼고
-   * 다시 넣기로 바꾼다.
+   * <p>빼기·넣기와 같이 입금 단계가 시작되면 열지 않는다({@link #lockForSlotEdit}). 아래 모집중 검사는 마감 뒤 판정 전 구간도
+   * 막는다.
    *
    * <p>닫힌 자리는 바꾸지 않는다 — 다시 넣기({@link #addMember})가 가격을 받아 연다. 판정과 쓰기는 조건부 UPDATE 하나이고, 락 순서는
    * 분철 행(X) → 자리 행(X, UPDATE) → 참여 행(S, NOT EXISTS) 으로 빼기와 같다.
@@ -659,7 +622,8 @@ public class BuncheolService {
   }
 
   /**
-   * 자리 빼기·넣기·가격 바꾸기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다.
+   * 자리 빼기·넣기·가격 바꾸기 공통 진입 검사. 분철 행을 잠가 C2C 신청(분철 락 → 자리 조회)과 한 줄로 세운다. 모집중·마감 전에만
+   * 연다 — 입금 단계가 시작되면 자리가 거래 조건이 된다.
    *
    * <p>🔴 이 잠금 조회가 트랜잭션의 <b>첫 분철 조회</b>여야 한다. 앞에서 {@code getBuncheol} 을 부르면 영속성 컨텍스트가 락 이전에
    * 읽은 인스턴스를 그대로 돌려줘 상태 판정이 낡는다(ParticipationService#participateC2c 주석과 같은 함정).

@@ -3,10 +3,13 @@ package buncheoleasy.buncheol.application.participation;
 import buncheoleasy.buncheol.application.payback.ShippingFeePaybackPolicy;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
+import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.image.BuncheolImage;
 import buncheoleasy.buncheol.domain.image.BuncheolImageRepository;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
+import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundle;
 import buncheoleasy.buncheol.domain.participation.ParticipationBundleDomainService;
@@ -130,6 +133,25 @@ public class MyParticipationQueryService {
     Map<Long, ShippingAddress> shippingAddressById =
         findShippingAddresses(participations, bundleById);
 
+    // 입금 현황("N자리 중 M자리 입금 확인")은 입금 수집중 분철만 내린다. 참여자 이름 없이 수만 센다.
+    List<Long> collectingIds =
+        buncheolById.values().stream()
+            .filter(b -> b.getStatus() == BuncheolStatus.PAYMENT_COLLECTING)
+            .map(Buncheol::getId)
+            .toList();
+    Map<Long, Long> activeSlotCountByBuncheolId =
+        participationRepository.countActiveByBuncheolIds(collectingIds).stream()
+            .collect(
+                Collectors.toMap(
+                    BuncheolActiveParticipationCount::buncheolId,
+                    BuncheolActiveParticipationCount::count));
+    Map<Long, Long> confirmedSlotCountByBuncheolId =
+        participationRepository.countConfirmedByBuncheolIds(collectingIds).stream()
+            .collect(
+                Collectors.toMap(
+                    BuncheolConfirmedParticipationCount::buncheolId,
+                    BuncheolConfirmedParticipationCount::count));
+
     final Instant now = Instant.now(clock);
     return participations.stream()
         .map(
@@ -146,6 +168,8 @@ public class MyParticipationQueryService {
                     bundleById,
                     shippingFees,
                     shippingAddressById,
+                    activeSlotCountByBuncheolId,
+                    confirmedSlotCountByBuncheolId,
                     now))
         .toList();
   }
@@ -226,8 +250,11 @@ public class MyParticipationQueryService {
       final Map<Long, ParticipationBundle> bundleById,
       final ShippingFeeAttribution shippingFees,
       final Map<Long, ShippingAddress> shippingAddressById,
+      final Map<Long, Long> activeSlotCountByBuncheolId,
+      final Map<Long, Long> confirmedSlotCountByBuncheolId,
       final Instant now) {
     Buncheol buncheol = buncheolById.get(participation.getBuncheolId());
+    boolean collecting = buncheol.getStatus() == BuncheolStatus.PAYMENT_COLLECTING;
     // 미연결 참여(배포선 창)는 묶음이 없다 — 계좌 없이 내려간다. 백필이 채우면 다음 조회부터 나온다.
     RefundAccount refundAccount =
         ParticipationBundleDomainService.refundAccountOf(bundleById, participation);
@@ -296,6 +323,12 @@ public class MyParticipationQueryService {
         ParticipationBundleDomainService.paymentSentAtOf(bundleById, participation),
         buncheol.getOpenChatUrl(),
         // 취소 API 게이트와 같은 판정을 그대로 내린다 — 화면이 상태로 재판정하면 서버와 갈린다 (docs/56 S-1).
-        ParticipationCancellability.of(participation, buncheol));
+        ParticipationCancellability.of(participation, buncheol),
+        collecting
+            ? confirmedSlotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue()
+            : null,
+        collecting
+            ? activeSlotCountByBuncheolId.getOrDefault(buncheol.getId(), 0L).intValue()
+            : null);
   }
 }

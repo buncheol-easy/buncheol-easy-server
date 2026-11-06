@@ -62,4 +62,10 @@ public interface DeliveryRepository {
 
   /** 취소된 참여들의 배송 스냅샷을 일괄 삭제한다 (분철 취소 cascade 시 고아 스냅샷 정리). 호출 측 {@code @Transactional} 필수. */
   void deleteByParticipationIds(List<Long> participationIds);
+
+  /**
+   * 참여들의 배송을 배타 잠금으로 읽는다. 진행 확정 뒤 운영진 파기가 「운송장 전」을 판정할 때, 운송장 등록 CAS 와 배송 행에서 한쪽만
+   * 반영되게 한다. 빈 목록이면 조회하지 않는다. 호출 측 {@code @Transactional} 필수.
+   */
+  List<Delivery> findAllByParticipationIdsForUpdate(List<Long> participationIds);
 }

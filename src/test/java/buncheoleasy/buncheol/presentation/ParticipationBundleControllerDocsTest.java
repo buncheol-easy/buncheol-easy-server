@@ -10,6 +10,7 @@ import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWit
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import buncheoleasy.buncheol.application.participation.BundleConfirmResult;
 import buncheoleasy.buncheol.application.participation.ParticipationBundleService;
 import buncheoleasy.global.docs.DocsTestSupport;
 import com.epages.restdocs.apispec.ResourceSnippetParameters;
@@ -32,67 +33,6 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
 
   @MockitoBean private ParticipationBundleService participationBundleService;
 
-  @Test
-  void 개최자_묶음_제외() throws Exception {
-    given(participationBundleService.release(eq(USER_ID), eq(BUNDLE_ID)))
-        .willReturn(List.of(232L, 233L));
-
-    mockMvc
-        .perform(
-            post("/v1/participation-bundles/{bundleId}/release", BUNDLE_ID).with(userAuth()))
-        .andExpect(status().isOk())
-        .andDo(
-            document(
-                "participation-bundles-release",
-                resource(
-                    ResourceSnippetParameters.builder()
-                        .tag("ParticipationBundle")
-                        .summary("개최자 묶음 「제외」")
-                        .description(
-                            """
-                            개최자가 **입금 기한이 지난** 묶음의 활성 슬롯을 전부 취소한다. C2C 는 기한이 지나도 자동
-                            취소하지 않으므로 이것이 미입금자를 빼는 유일한 출구다.
-
-                            **열리는 조건은 하나다 — 입금 기한이 정해졌고, 그 기한이 지났을 때.**
-
-                            | 상태 | 제외 |
-                            |------|------|
-                            | 모집 중 (기한 없음) | ❌ |
-                            | 입금 대기 · 「보냈어요」 — 기한 **전** | ❌ |
-                            | 입금 대기 · 「보냈어요」 — 기한 **후** | ✅ |
-                            | 입금확인됨 | ❌ |
-
-                            모집 중을 막는 이유: 아직 확정도 안 된 참여자를 개최자가 임의로 자를 수 있는 도구가 되면
-                            안 된다. 기한 전을 막는 이유: 이체가 늦게 찍혀 **정상 입금자를 빼는 사고**가 나면 복구
-                            경로가 문의뿐이다.
-
-                            응답의 `releasedParticipationIds` 는 **실제로 취소된** 슬롯이다 — 화면이 본 집합과
-                            다를 수 있으므로(그 사이 참여자가 자발 취소하는 등) 사후 대조에 쓴다.
-
-                            가부는 개최 관리 응답의 `participants[].releasability` 로 미리 알 수 있다(같은 판정).
-
-                            **발생 가능한 에러**
-                            | HTTP | 코드 | 의미 |
-                            |------|------|------|
-                            | 404 | `BCH-114` (`BUNDLE_NOT_FOUND`) | 묶음 없음 |
-                            | 403 | `BUNCHEOL_NO_PERMISSION` | 개최자가 아님 |
-                            | 409 | `BCH-084` (`BUNCHEOL_FLOW_NOT_SUPPORTED`) | LEGACY 분철 |
-                            | 409 | `BCH-111` (`BUNDLE_RELEASE_RECRUITING`) | 모집 중이라 불가 |
-                            | 409 | `BCH-112` (`BUNDLE_RELEASE_BEFORE_DUE`) | 입금 기한 전 |
-                            | 409 | `BCH-113` (`BUNDLE_RELEASE_HAS_CONFIRMED`) | 입금확인된 슬롯 있음 |
-                            """)
-                        .requestHeaders(userAuthorizationHeader())
-                        .pathParameters(parameterWithName("bundleId").description("참여 묶음 ID"))
-                        .responseFields(
-                            fieldWithPath("bundleId")
-                                .type(JsonFieldType.NUMBER)
-                                .description("제외한 묶음 ID"),
-                            fieldWithPath("releasedParticipationIds")
-                                .type(JsonFieldType.ARRAY)
-                                .description("실제로 취소된 참여 ID 목록"))
-                        .responseSchema(Schema.schema("BundleReleaseResponse"))
-                        .build())));
-  }
   @Test
   void 참여자_묶음_보냈어요_마킹() throws Exception {
     given(participationBundleService.markPaymentSent(eq(USER_ID), eq(BUNDLE_ID)))
@@ -147,7 +87,7 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
   @Test
   void 개최자_묶음_입금확인() throws Exception {
     given(participationBundleService.confirmPayment(eq(USER_ID), eq(BUNDLE_ID), any()))
-        .willReturn(List.of(232L, 233L));
+        .willReturn(new BundleConfirmResult(List.of(232L, 233L), true));
 
     mockMvc
         .perform(
@@ -173,14 +113,18 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                             단위이므로 확인도 1회다.
 
                             🔴 **`expectedSlotIds` 는 필수다.** 개최자가 화면에서 본 슬롯 집합을 그대로 실어
-                            보낸다. 서버의 실제 집합과 다르면 **409** 로 막고 새로고침을 유도한다 — 추가 모집으로
-                            생긴 묶음은 슬롯이 늘거나 줄 수 있어(그쪽은 개별 취소가 열려 있다) 개최자가 **보지 못한
-                            슬롯까지 확정**되면 안 된다. 순서는 보지 않고 집합으로 대조한다.
+                            보낸다. 서버의 실제 집합과 다르면 **409** 로 막고 새로고침을 유도한다 — 개최자가 **보지
+                            못한 슬롯까지 확정**되면 안 된다. 순서는 보지 않고 집합으로 대조한다.
 
                             **입금 기한이 지나도 확인할 수 있다** — 개최자 확인이 늦어도 유효해야 한다.
 
-                            확정되면 배송 스냅샷이 만들어지고, 분철의 전 슬롯이 확정됐으면 진행확정으로 이어진다.
                             참여자에게는 **묶음 1통**으로 확인 알림이 간다.
+
+                            **이 묶음으로 분철의 미확인 참여가 0 이 되면 같은 요청에서 분철을 진행 확정한다** — 확인된
+                            묶음마다 배송이 생기고(운송장 입력칸이 열림) 확인된 참여자에게 진행확정 알림이 간다. 응답의
+                            `buncheolConfirmed` 가 `true` 다. 진행 확정에 실패하면(배송지 없음 등) 이 입금 확인도 함께
+                            되돌린다. 미확인이 남아 있으면 진행 확정은 입금 기한 뒤 개최자가 한다
+                            (`POST /v1/buncheols/{id}/confirm`).
 
                             **발생 가능한 에러**
                             | HTTP | 코드 | 의미 |
@@ -203,7 +147,10 @@ class ParticipationBundleControllerDocsTest extends DocsTestSupport {
                                 .description("확인한 묶음 ID"),
                             fieldWithPath("confirmedParticipationIds")
                                 .type(JsonFieldType.ARRAY)
-                                .description("확정된 참여 ID 목록"))
+                                .description("확정된 참여 ID 목록"),
+                            fieldWithPath("buncheolConfirmed")
+                                .type(JsonFieldType.BOOLEAN)
+                                .description("이 확인으로 분철이 진행 확정됐는가"))
                         .requestSchema(Schema.schema("BundleConfirmRequest"))
                         .responseSchema(Schema.schema("BundleConfirmResponse"))
                         .build())));

@@ -181,7 +181,7 @@ public enum ErrorCode {
   // C2C 플로우 (docs/46) — 신청→확정→입금 직거래
   BUNCHEOL_FLOW_NOT_SUPPORTED(
       "BCH-084", "이 분철의 진행 방식에서는 지원하지 않는 요청입니다.", HttpStatus.CONFLICT),
-  BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-085", "현재 상태에서는 성사 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
+  // BCH-085 는 개최자 「성사 확정」 실패로 배포됐다가 그 단계가 없어져 폐기된 번호라 재사용하지 않는다.
   PARTICIPATION_CANCEL_NOT_ALLOWED(
       "BCH-086", "현재 상태에서는 참여를 취소할 수 없습니다. 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
   PARTICIPATION_PAYMENT_SENT_NOT_ALLOWED(
@@ -191,29 +191,17 @@ public enum ErrorCode {
   // C2C 오픈으로 can_host 게이트가 사라진 자리의 남용 방지(무제한 개최·이미지 업로드) — 일반 유저 활성 개최 상한.
   BUNCHEOL_ACTIVE_HOST_LIMIT_EXCEEDED(
       "BCH-089", "동시에 진행할 수 있는 개최 수를 초과했습니다.", HttpStatus.CONFLICT),
-  // 성사 확정(BCH-085)과 분리한다 — 개최자가 누른 건 "진행 확정"인데 "성사 확정" 실패라고 뜨면
-  // 어느 단계에서 막혔는지 알 수 없다 (docs/53 Q-12, docs/54 4-1).
-  BUNCHEOL_COLLECT_FINALIZE_NOT_ALLOWED(
-      "BCH-090", "현재 상태에서는 진행 확정을 할 수 없습니다.", HttpStatus.CONFLICT),
-  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 성사 확정·진행 확정·제외·보냈어요·자리 빼기와 넣기 등
+  BUNCHEOL_CONFIRM_NOT_ALLOWED("BCH-090", "현재 상태에서는 진행 확정을 할 수 없어요.", HttpStatus.CONFLICT),
+  // 범용 플로우 가드(BCH-084)와 분리한다 — BCH-084 는 진행 확정·보냈어요·자리 빼기와 넣기 등
   // C2C 전용 액션 여러 곳이 공유하므로, 취소 전용 안내를 그 자리에 넣으면 다른 액션에서
   // 엉뚱한 문구가 뜬다(이 PR 이 BCH-085 에 대해 고친 것과 같은 유형의 버그). docs/54 4-2.
   PARTICIPATION_CANCEL_NOT_SUPPORTED(
       "BCH-091",
       "이 분철에서는 직접 취소할 수 없어요. 입금 기한이 지나면 자동으로 취소돼요.",
       HttpStatus.CONFLICT),
-  // 성사 확정을 거친 참여의 자발 취소 차단 (docs/56 H-09). 취소 불가 구간을 공유하는 BCH-086("고객센터로 문의")과
-  // 분리한다 — 여기서 막힌 사람이 연락할 상대는 고객센터가 아니라 돈을 받을 개최자다(직거래).
-  PARTICIPATION_CANCEL_AFTER_HOST_CONFIRM(
-      "BCH-092",
-      "개최자가 성사 확정한 뒤에는 참여를 직접 취소할 수 없어요. 사정이 생겼다면 개최자에게 먼저 알려 주세요.",
-      HttpStatus.CONFLICT),
-  // 입금 확인된 참여가 있는 분철의 개최자 취소 차단 (docs/56 H-13). 상태 위반(BCH-050)과 분리한다 — 상태는 취소 가능
-  // 구간인데 "현재 상태에서는 취소할 수 없습니다" 만 뜨면 개최자가 무엇을 해야 하는지 알 수 없다.
-  BUNCHEOL_CANCEL_CONFIRMED_PAYMENT_EXISTS(
-      "BCH-093",
-      "입금이 확인된 참여자가 있어 분철을 취소할 수 없어요. 받은 금액을 환불한 뒤 고객센터로 문의해 주세요.",
-      HttpStatus.CONFLICT),
+  // BCH-092 는 「성사 확정 뒤 자발 취소 차단」으로 배포됐다가 그 구간이 없어져(자발 취소는 신청만) 폐기된 번호라 재사용하지 않는다.
+  // BCH-093 은 「입금 확인된 참여가 있으면 개최자 취소 차단」으로 배포됐다가 입금 수집중 개최자 취소가 없어져(BCH-126)
+  // 폐기된 번호라 재사용하지 않는다.
   // 전체 수정 가드(BCH-060)와 분리한다 — 링크 수정은 모집중이 끝난 뒤에도 열려 있어서
   // "모집 중인 분철이 아닙니다" 가 뜨면 실패 사유를 오해한다. 취소된 분철에서만 막힌다.
   BUNCHEOL_OPEN_CHAT_URL_NOT_EDITABLE(
@@ -249,14 +237,7 @@ public enum ErrorCode {
       "BCH-110", "회원 개최(C2C) 분철에는 코드 참여 멤버를 만들 수 없습니다.", HttpStatus.CONFLICT),
 
   // ── 참여 묶음 ──
-  // 「제외」는 미입금자를 정리하는 도구지 사람을 고르는 도구가 아니다 — 기한이 지나야 열린다 (docs/71 §8-1).
-  BUNDLE_RELEASE_RECRUITING(
-      "BCH-111", "모집 중에는 참여를 제외할 수 없어요. 입금 기한이 지난 뒤에 정리할 수 있어요.", HttpStatus.CONFLICT),
-  BUNDLE_RELEASE_BEFORE_DUE(
-      "BCH-112", "아직 입금 기한 전이에요. 기한이 지난 뒤에 제외할 수 있어요.", HttpStatus.CONFLICT),
-  BUNDLE_RELEASE_HAS_CONFIRMED(
-      "BCH-113", "입금이 확인된 참여는 제외할 수 없어요. 환불이 필요하면 고객센터로 문의해 주세요.", HttpStatus.CONFLICT),
-  // 「제외」 전용이 아닌 범용 조회 실패다.
+  // BCH-111~113 은 개최자 「제외」 실패로 배포됐다가 그 기능이 없어져 폐기된 번호라 재사용하지 않는다.
   BUNDLE_NOT_FOUND("BCH-114", "참여 묶음을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
   // 개최자가 화면에서 본 슬롯 집합과 서버의 실제 집합이 다르다 — 화면을 새로 고쳐야 한다.
   BUNDLE_SLOTS_CHANGED(
@@ -298,11 +279,24 @@ public enum ErrorCode {
   BUNCHEOL_MEMBER_PRICE_CHANGE_NOT_ALLOWED(
       "BCH-125", "신청자가 있거나 마감한 자리는 가격을 바꿀 수 없어요.", HttpStatus.CONFLICT),
 
+  // ── 회원 개최 진행 확정·접기 ──
+  // 입금 수집중 개최자 취소 차단. 상태 위반(BCH-050)과 분리한다 — 계좌가 공개된 뒤라 개최자가 할 일은 운영진에게 알리는 것이다.
+  BUNCHEOL_CANCEL_NEEDS_STAFF(
+      "BCH-126",
+      "입금 단계가 시작된 분철은 혼자 취소할 수 없어요. 진행이 어렵다면 카카오톡 채널로 운영진에게 알려 주세요.",
+      HttpStatus.CONFLICT),
+  // 확인 창에 보여 준 빠질 참여 목록과 서버가 본 미확인 참여가 다르다 — 그 사이 「보냈어요」·입금 확인이 있었다.
+  BUNCHEOL_CONFIRM_LIST_CHANGED(
+      "BCH-127", "그 사이 입금 상태가 바뀌었어요. 빠지는 멤버를 다시 확인해 주세요.", HttpStatus.CONFLICT),
+
   // ── 운영진 분철 예약 오픈 ──
   // 코드 참여는 오픈 전에도 받는다(코드 전용 자리). 이 거절은 코드 없는 참여에만 나간다.
   BUNCHEOL_NOT_OPEN_YET("BCH-128", "아직 열리지 않은 분철이에요.", HttpStatus.CONFLICT),
   BUNCHEOL_OPENS_AT_INVALID(
       "BCH-129", "오픈 시각은 지금 이후, 마감 전으로 정해 주세요.", HttpStatus.BAD_REQUEST),
+  // 진행 확정 뒤 운영진 파기는 운송장 전에만 된다. 상태 위반(BCH-050)과 분리한다 — 상태가 틀린 게 아니라 발송이 시작됐다.
+  BUNCHEOL_CANCEL_HAS_TRACKING(
+      "BCH-130", "운송장이 등록된 배송이 있어 파기할 수 없어요.", HttpStatus.CONFLICT),
 
   /** DLV - 배송 관련 에러 */
   DELIVERY_SHIPPING_METHOD_REQUIRED("DLV-001", "배송 방법은 필수입니다.", HttpStatus.BAD_REQUEST),

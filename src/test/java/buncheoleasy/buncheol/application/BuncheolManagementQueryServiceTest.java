@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import buncheoleasy.buncheol.domain.Buncheol;
 import buncheoleasy.buncheol.domain.BuncheolRepository;
 import buncheoleasy.buncheol.domain.BuncheolStatus;
+import buncheoleasy.buncheol.domain.ConfirmCheck;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.ShippingFeePolicy;
 import buncheoleasy.buncheol.domain.member.BuncheolMember;
@@ -80,7 +81,7 @@ class BuncheolManagementQueryServiceTest {
   @Mock private UserRepository userRepository;
   @Mock private ParticipationBundleDomainService participationBundleDomainService;
 
-  // 「제외」 가부 판정이 현재 시각을 본다. @InjectMocks 는 Clock 을 목으로 못 만들어 @Spy 로 고정값을 넣는다.
+  // 진행 확정 판정이 현재 시각을 본다. @InjectMocks 는 Clock 을 목으로 못 만들어 @Spy 로 고정값을 넣는다.
   @Spy private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
 
   private static final Long BUNCHEOL_ID = 10L;
@@ -515,6 +516,51 @@ class BuncheolManagementQueryServiceTest {
       assertThat(response.memberCount()).isEqualTo(2);
       assertThat(response.confirmedCount()).isEqualTo(1);
       assertThat(response.participants()).hasSize(2);
+    }
+
+    // 진행 확정 버튼은 이 값만 보고 켠다 — 진행 확정 게이트와 같은 판정(확인·미확인 수, 입금 기한).
+    @Test
+    void 입금_수집중이면_진행_확정_판정을_내리고_그_밖에는_null() {
+      Buncheol buncheol = buncheol(BuncheolStatus.PAYMENT_COLLECTING);
+      setField(buncheol, "flowType", FlowType.C2C);
+      setField(buncheol, "paymentDueAt", FIXED_NOW.minusSeconds(60));
+      given(buncheolRepository.findById(BUNCHEOL_ID)).willReturn(Optional.of(buncheol));
+      given(groupRepository.findById(GROUP_ID)).willReturn(Optional.of(group(GROUP_ID, "IVE")));
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of(buncheolMember(101L, 1001L), buncheolMember(102L, 1002L)));
+      given(groupMemberRepository.findAllByGroupIdAndIds(GROUP_ID, List.of(1001L, 1002L)))
+          .willReturn(List.of(groupMember(1001L, "안유진"), groupMember(1002L, "레이")));
+      Participation sent =
+          participation(601L, 101L, OTHER_USER, 53_000L, ParticipationStatus.PAYMENT_SENT);
+      Participation confirmed =
+          participation(602L, 102L, PARTICIPANT_USER, 43_000L, ParticipationStatus.CONFIRMED);
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of(sent, confirmed));
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of(9602L))).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of(OTHER_USER, PARTICIPANT_USER)))
+          .willReturn(List.of(user(OTHER_USER, "타인"), user(PARTICIPANT_USER, "장원영")));
+
+      BuncheolManagementResponse response =
+          buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID);
+
+      assertThat(response.confirmCheck()).isEqualTo(ConfirmCheck.DUE_PASSED);
+    }
+
+    @Test
+    void 모집중_분철의_진행_확정_판정은_null() {
+      stubBasicBuncheol(BuncheolStatus.RECRUITING);
+      given(buncheolMemberRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(participationRepository.findActiveByBuncheolId(BUNCHEOL_ID)).willReturn(List.of());
+      given(participationRepository.findCancelledByBuncheolId(BUNCHEOL_ID))
+          .willReturn(List.of());
+      given(deliveryRepository.findAllByBundleIds(List.of())).willReturn(List.of());
+      given(userRepository.findAllByIds(List.of())).willReturn(List.of());
+
+      assertThat(buncheolManagementQueryService.getManagement(BUNCHEOL_ID, HOST_ID).confirmCheck())
+          .isNull();
     }
 
     @Test

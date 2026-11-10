@@ -67,7 +67,7 @@ class AlimtalkSenderTest {
     assertThat(request.buttons().get(0).type()).isEqualTo(AlimtalkButtonType.AC);
     assertThat(request.buttons().get(0).name()).isEqualTo("채널 추가");
     assertThat(request.buttons().get(1).type()).isEqualTo(AlimtalkButtonType.WL);
-    assertThat(request.buttons().get(1).mobileUrl()).isEqualTo(BASE_URL + "/profile/bids");
+    assertThat(request.buttons().get(1).mobileUrl()).isEqualTo(BASE_URL + "/profile/participations");
   }
 
   @Test

@@ -169,8 +169,8 @@ public class MyBookmarkedBuncheolQueryService {
     if (buncheol.getStatus() == BuncheolStatus.HOST_CANCELLED) {
       return false;
     }
-    // "마감 제외" 는 모집중 그룹(RECRUITING·PAYMENT_COLLECTING)을 남긴다 — 개최자가 성사를 확정했다고 해서
-    // 찜해둔 분철이 사라지면, 정작 입금 안내를 기다리는 사람이 그 분철을 찜에서 잃는다.
+    // "마감 제외" 는 모집중 그룹(RECRUITING·PAYMENT_COLLECTING)을 남긴다 — 입금 단계가 시작됐다고 해서
+    // 찜해둔 분철이 사라지면, 정작 입금 중인 사람이 진행 중인 분철을 찜에서 잃는다.
     if (hideClosed && !buncheol.getStatus().isRecruitingGroup()) {
       return false;
     }

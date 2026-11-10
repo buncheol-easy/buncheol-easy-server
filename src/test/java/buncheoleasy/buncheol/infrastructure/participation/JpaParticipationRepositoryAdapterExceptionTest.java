@@ -61,19 +61,6 @@ class JpaParticipationRepositoryAdapterExceptionTest {
         .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
   }
 
-  @Test
-  void 추가_모집_INSERT_도_같은_변환을_탄다() {
-    JpaParticipationRepositoryAdapter adapter =
-        adapterThrowing(
-            new DataIntegrityViolationException(
-                SQL_PREFIX + "`fk_participations_buncheol_member` FOREIGN KEY ...)"));
-
-    assertThatThrownBy(() -> adapter.saveIfCollecting(participation()))
-        .isInstanceOf(BusinessException.class)
-        .extracting("errorCode")
-        .isEqualTo(ErrorCode.PARTICIPATION_MEMBER_NOT_FOUND);
-  }
-
   // 넓게 삼키지 않는다 — 다른 FK 위반은 원인이 드러나게 그대로 올라가야 한다.
   @Test
   void 다른_FK_위반은_그대로_올린다() {

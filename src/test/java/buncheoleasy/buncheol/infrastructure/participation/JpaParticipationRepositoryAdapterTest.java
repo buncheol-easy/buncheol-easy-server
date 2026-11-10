@@ -12,6 +12,7 @@ import buncheoleasy.buncheol.domain.member.BuncheolMember;
 import buncheoleasy.buncheol.domain.member.BuncheolMemberRepository;
 import buncheoleasy.buncheol.domain.participation.BuncheolActiveParticipationCount;
 import buncheoleasy.buncheol.domain.participation.BuncheolConfirmedParticipationCount;
+import buncheoleasy.buncheol.domain.participation.BuncheolUnconfirmedParticipationCount;
 import buncheoleasy.buncheol.domain.participation.Participation;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancelReason;
 import buncheoleasy.buncheol.domain.participation.ParticipationCancellability;
@@ -1119,6 +1120,48 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
+  @DisplayName("countUnconfirmedByBuncheolIds — 입금 대기·보냈어요만 센다")
+  class CountUnconfirmedByBuncheolIdsTest {
+
+    // 진행 확정 가드의 미확인 집합(payableStatuses)과 같아야 한다 — 신청·입금확인·취소는 세지 않는다.
+    @Test
+    void 입금_대기와_보냈어요만_분철_단위로_집계한다() {
+      Long buncheolId = createBuncheol();
+      List<ParticipationStatus> statuses =
+          List.of(
+              ParticipationStatus.AWAITING_PAYMENT,
+              ParticipationStatus.PAYMENT_SENT,
+              ParticipationStatus.APPLIED,
+              ParticipationStatus.CONFIRMED,
+              ParticipationStatus.CANCELLED);
+      for (int i = 0; i < statuses.size(); i++) {
+        ParticipationStatus status = statuses.get(i);
+        Long userId = TestUserFixture.insertUser(jdbcTemplate, "unconfirmed_" + i);
+        Long memberId = TestGroupFixture.insertGroupMember(jdbcTemplate, groupId, "미확인멤버" + i);
+        insertParticipation(
+            buncheolId,
+            createBuncheolMember(buncheolId, memberId),
+            userId,
+            insertShippingAddress(userId, "미확인매장" + i),
+            30_000L,
+            Instant.now().plus(30, ChronoUnit.MINUTES),
+            status,
+            status == ParticipationStatus.CANCELLED
+                ? ParticipationCancelReason.BUNCHEOL_CANCELLED
+                : null);
+      }
+
+      assertThat(participationRepository.countUnconfirmedByBuncheolIds(List.of(buncheolId)))
+          .containsExactly(new BuncheolUnconfirmedParticipationCount(buncheolId, 2L));
+    }
+
+    @Test
+    void 빈_입력에는_쿼리_없이_빈_리스트를_반환한다() {
+      assertThat(participationRepository.countUnconfirmedByBuncheolIds(List.of())).isEmpty();
+    }
+  }
+
+  @Nested
   @DisplayName("findActiveBuncheolMemberIds — 여러 분철의 점유 슬롯 ID 조회")
   class FindActiveBuncheolMemberIdsTest {
 
@@ -1268,7 +1311,7 @@ class JpaParticipationRepositoryAdapterTest {
   }
 
   @Nested
-  @DisplayName("findActiveParticipantIdsByBuncheolIdForUpdate — 활성 참여자 id 잠금 조회 (C2C 정원 충족 판정)")
+  @DisplayName("findActiveByBuncheolIdForUpdate — 살아 있는 참여 잠금 조회 (입금 단계 시작·진행 확정 판정)")
   class FindActiveParticipantIdsForUpdateTest {
 
     @Test
@@ -1310,25 +1353,23 @@ class JpaParticipationRepositoryAdapterTest {
           ParticipationStatus.CANCELLED,
           ParticipationCancelReason.BUNCHEOL_CANCELLED);
 
-      List<Long> participantIds =
-          participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
+      List<Participation> active = participationRepository.findActiveByBuncheolIdForUpdate(buncheolId);
 
-      assertThat(participantIds).containsExactlyInAnyOrder(participantId, otherParticipantId);
+      assertThat(active)
+          .extracting(Participation::getParticipantId)
+          .containsExactlyInAnyOrder(participantId, otherParticipantId);
     }
 
     @Test
     void 활성_참여가_없으면_빈_리스트를_반환한다() {
       Long buncheolId = createBuncheol();
 
-      List<Long> participantIds =
-          participationRepository.findActiveParticipantIdsByBuncheolIdForUpdate(buncheolId);
-
-      assertThat(participantIds).isEmpty();
+      assertThat(participationRepository.findActiveByBuncheolIdForUpdate(buncheolId)).isEmpty();
     }
   }
 
   @Nested
-  @DisplayName("findConfirmedByBuncheolId / countConfirmedByBuncheolId — 입금확인 참여만")
+  @DisplayName("findConfirmedByBuncheolId — 입금확인 참여만")
   class ConfirmedByBuncheolIdTest {
 
     @Test
@@ -1362,15 +1403,13 @@ class JpaParticipationRepositoryAdapterTest {
       assertThat(participationRepository.findConfirmedByBuncheolId(buncheolId))
           .singleElement()
           .satisfies(p -> assertThat(p.getStatus()).isEqualTo(ParticipationStatus.CONFIRMED));
-      assertThat(participationRepository.countConfirmedByBuncheolId(buncheolId)).isEqualTo(1);
     }
 
     @Test
-    void 확정_참여가_없으면_빈_리스트와_0_을_반환한다() {
+    void 확정_참여가_없으면_빈_리스트를_반환한다() {
       Long buncheolId = createBuncheol();
 
       assertThat(participationRepository.findConfirmedByBuncheolId(buncheolId)).isEmpty();
-      assertThat(participationRepository.countConfirmedByBuncheolId(buncheolId)).isZero();
     }
   }
 
@@ -2051,75 +2090,6 @@ class JpaParticipationRepositoryAdapterTest {
    * {@code created_at} 을 명시하지 않아 스키마 기본값({@code CURRENT_TIMESTAMP})으로 채워지므로 <b>DB 시계</b>라는 전제는
    * 같다. 시각 차는 분 단위로 벌려 DATETIME 초 반올림에 흔들리지 않게 한다.
    */
-  @Nested
-  @DisplayName("성사 확정 시각과 참여 생성 시각의 선후 (docs/56 H-09)")
-  class FinalizeOrderTest {
-
-    private Long createC2cBuncheol() {
-      Instant deadline = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
-      Buncheol buncheol =
-          Buncheol.create(
-              hostId,
-              new BuncheolParams(
-                  groupId, "C2C 제목", null, "스토어명", deadline, 1, 3000, null, FlowType.C2C, null),
-              Instant.now());
-      buncheolRepository.save(buncheol);
-      em.flush();
-      em.clear();
-      return buncheol.getId();
-    }
-
-    private void startCollecting(final Long buncheolId, final Instant at) {
-      int affected =
-          buncheolRepository.startCollectingIfRecruiting(
-              buncheolId, at.plus(24, ChronoUnit.HOURS), "국민", "12345678", "개최자", at);
-      assertThat(affected).isOne();
-      em.clear();
-    }
-
-    private Long insertAwaitingParticipation(final Long buncheolId, final Long memberId) {
-      return insertParticipation(
-          buncheolId,
-          memberId,
-          participantId,
-          insertShippingAddress(participantId, "GS25 확정순서점"),
-          30_000L,
-          Instant.now().plus(24, ChronoUnit.HOURS),
-          ParticipationStatus.AWAITING_PAYMENT,
-          null);
-    }
-
-    // 추가 모집(docs/46 §4.7-E1) — 성사 확정이 이미 끝난 뒤 생성되므로 "확정을 거친 참여" 로 판정되면 안 된다.
-    // 여기서 true 가 나오면 이 경로의 참여자가 신청 즉시 취소 불가로 잠긴다.
-    @Test
-    void 성사_확정_이후에_생성된_참여는_확정_이전_참여가_아니다() {
-      Long buncheolId = createC2cBuncheol();
-      Long memberId = createBuncheolMember(buncheolId);
-      startCollecting(buncheolId, Instant.now().minus(5, ChronoUnit.MINUTES));
-
-      Long participationId = insertAwaitingParticipation(buncheolId, memberId);
-      em.clear();
-
-      Buncheol buncheol = buncheolRepository.findById(buncheolId).orElseThrow();
-      Participation saved = participationRepository.findById(participationId).orElseThrow();
-      assertThat(buncheol.isCreatedBeforeFinalize(saved.getCreatedAt())).isFalse();
-    }
-
-    // 모집중 신청(APPLIED) → 성사 확정 일괄 전이 경로. 확정보다 먼저 만들어졌으므로 취소가 막혀야 한다.
-    @Test
-    void 성사_확정_이전에_생성된_참여는_확정_이전_참여로_판정된다() {
-      Long buncheolId = createC2cBuncheol();
-      Long memberId = createBuncheolMember(buncheolId);
-
-      Long participationId = insertAwaitingParticipation(buncheolId, memberId);
-      startCollecting(buncheolId, Instant.now().plus(5, ChronoUnit.MINUTES));
-
-      Buncheol buncheol = buncheolRepository.findById(buncheolId).orElseThrow();
-      Participation saved = participationRepository.findById(participationId).orElseThrow();
-      assertThat(buncheol.isCreatedBeforeFinalize(saved.getCreatedAt())).isTrue();
-    }
-  }
-
   /**
    * 개최자가 뺀 자리로 들어온 신청의 FK 위반을 「없는 멤버」로 바꾸는 판별이 실제 메시지에서 맞는지 고정한다. 운영 INSERT 는 H2 로 못
    * 태우므로(UTC_TIMESTAMP) 같은 FK 를 평범한 INSERT 로 일으켜 <b>Spring 이 번역한 예외의 메시지</b>를 본다.

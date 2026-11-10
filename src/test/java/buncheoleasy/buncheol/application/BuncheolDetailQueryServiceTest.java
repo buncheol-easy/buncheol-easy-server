@@ -417,19 +417,19 @@ class BuncheolDetailQueryServiceTest {
           .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
     }
 
-    // docs/46 §4.7-E1 — C2C 는 성사 확정 후 입금 수집중 구간에도 빈 슬롯 추가 모집을 받는다.
+    // 추가 모집은 없어졌다 — 입금 단계가 시작되면 빈 자리는 「마감」이다(신청도 BCH-060).
     @Test
-    void 입금_수집중인_C2C_분철의_빈_슬롯은_AVAILABLE_을_유지한다() {
+    void 입금_수집중인_C2C_분철의_빈_슬롯은_CLOSED_로_내려간다() {
       stubEmptySlot(BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C);
 
       BuncheolDetailResponse response = buncheolDetailQueryService.getDetail(BUNCHEOL_ID, ME);
 
       assertThat(response.members().get(0).saleStatus())
-          .isEqualTo(BuncheolMemberSaleStatus.AVAILABLE);
+          .isEqualTo(BuncheolMemberSaleStatus.CLOSED);
     }
 
-    // 마감 후에도 개최자 성사 확정 전까지 최대 48시간 RECRUITING 에 머무는데(C2C 확정 유예 — docs/46 §4.7-E3),
-    // 이 구간의 신청은 Buncheol#validateRecruiting 에서 409(BCH-060) 로 막힌다.
+    // 마감 시각이 지나 스케줄러가 판정하기 전(최대 10분)에는 RECRUITING 에 머무는데, 이 구간의 신청은
+    // Buncheol#validateRecruiting 에서 409(BCH-060) 로 막힌다.
     @Test
     void 마감_시각이_지난_모집중_분철의_빈_슬롯은_CLOSED_로_내려간다() {
       stubEmptySlot(BuncheolStatus.RECRUITING, FlowType.C2C, NOW.minusSeconds(1));
@@ -455,7 +455,7 @@ class BuncheolDetailQueryServiceTest {
     @ParameterizedTest
     @EnumSource(
         value = BuncheolStatus.class,
-        names = {"RECRUITING", "PAYMENT_COLLECTING"})
+        names = {"RECRUITING"})
     void 신청을_받는_분철에서도_개최자가_닫은_자리는_CLOSED_로_내려간다(final BuncheolStatus status) {
       stubBasicBuncheol(status, ShippingFeePolicy.of(3000, null), FlowType.C2C, DEADLINE);
       given(buncheolImageRepository.findAllByBuncheolIdOrderByIdAsc(BUNCHEOL_ID))

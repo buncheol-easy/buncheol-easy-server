@@ -187,42 +187,9 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public List<Long> findRecruitingIdsPastDeadline(
-      final Instant now, final Instant c2cGraceCutoff, final int limit) {
+  public List<Long> findRecruitingIdsPastDeadline(final Instant now, final int limit) {
     return jpaBuncheolRepository.findIdsByStatusAndDeadlineBefore(
-        BuncheolStatus.RECRUITING,
-        FlowType.LEGACY,
-        FlowType.C2C,
-        now,
-        c2cGraceCutoff,
-        ParticipationStatus.active(),
-        PageRequest.of(0, limit));
-  }
-
-  @Override
-  public List<Long> findCollectingIdsPastPaymentDue(final Instant now, final int limit) {
-    return jpaBuncheolRepository.findIdsByStatusAndPaymentDueBefore(
-        BuncheolStatus.PAYMENT_COLLECTING, now, PageRequest.of(0, limit));
-  }
-
-  @Override
-  public int cancelIfCollectingAndEmpty(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.cancelIfCollectingAndEmpty(
-        buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
-        ParticipationStatus.active(),
-        BuncheolStatus.CANCELLED,
-        now);
-  }
-
-  @Override
-  public int hostCancelIfCollectingAndNoConfirmed(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.hostCancelIfCollectingAndNoConfirmed(
-        buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
-        ParticipationStatus.CONFIRMED,
-        BuncheolStatus.HOST_CANCELLED,
-        now);
+        BuncheolStatus.RECRUITING, FlowType.LEGACY, FlowType.C2C, now, PageRequest.of(0, limit));
   }
 
   @Override
@@ -320,16 +287,19 @@ public class JpaBuncheolRepositoryAdapter implements BuncheolRepository {
   }
 
   @Override
-  public int confirmIfAllCollected(final Long buncheolId, final Instant now) {
-    return jpaBuncheolRepository.confirmIfAllCollected(
+  public int staffCancelIfStatus(
+      final Long buncheolId, final BuncheolStatus expectedStatus, final Instant now) {
+    return jpaBuncheolRepository.staffCancelIfStatus(
         buncheolId,
-        BuncheolStatus.PAYMENT_COLLECTING,
-        Set.of(
-            ParticipationStatus.APPLIED,
-            ParticipationStatus.AWAITING_PAYMENT,
-            ParticipationStatus.PAYMENT_SENT),
-        ParticipationStatus.CONFIRMED,
-        BuncheolStatus.CONFIRMED,
+        expectedStatus,
+        FlowType.C2C,
+        BuncheolStatus.HOST_CANCELLED,
         now);
+  }
+
+  @Override
+  public int confirmIfCollecting(final Long buncheolId, final Instant now) {
+    return jpaBuncheolRepository.confirmIfCollecting(
+        buncheolId, BuncheolStatus.PAYMENT_COLLECTING, FlowType.C2C, BuncheolStatus.CONFIRMED, now);
   }
 }

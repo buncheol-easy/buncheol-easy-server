@@ -34,6 +34,7 @@ import buncheoleasy.buncheol.domain.BuncheolStatus;
 import buncheoleasy.buncheol.domain.BuncheolTermsChange;
 import buncheoleasy.buncheol.domain.FlowType;
 import buncheoleasy.buncheol.domain.participation.ParticipationStatus;
+import buncheoleasy.buncheol.dto.request.BuncheolConfirmRequest.CancelParticipation;
 import buncheoleasy.buncheol.dto.request.BuncheolSearchCondition;
 import buncheoleasy.buncheol.dto.response.BuncheolDetailResponse;
 import buncheoleasy.buncheol.dto.response.BuncheolImageResponse;
@@ -1045,6 +1046,71 @@ class BuncheolControllerTest {
   }
 
   @Nested
+  @DisplayName("진행 확정 API 테스트")
+  class ConfirmBuncheolTest {
+
+    private ResultActions perform(final String body) throws Exception {
+      return mockMvc.perform(
+          post("/v1/buncheols/{id}/confirm", 10L)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(body)
+              .with(mockAuth()));
+    }
+
+    @Test
+    void 빠질_참여_목록을_받아_204_로_진행_확정한다() throws Exception {
+      perform(
+              "{\"cancelParticipations\": [{\"participationId\": 101, \"status\": \"PAYMENT_SENT\"}]}")
+          .andExpect(status().isNoContent());
+
+      then(buncheolService)
+          .should()
+          .confirmBuncheol(
+              eq(HOST_ID),
+              eq(10L),
+              argThat(
+                  r ->
+                      r.cancelParticipations()
+                          .equals(
+                              List.of(
+                                  new CancelParticipation(101L, ParticipationStatus.PAYMENT_SENT)))));
+    }
+
+    @Test
+    void 모두_입금_확인됐으면_빈_목록으로_진행_확정한다() throws Exception {
+      perform("{\"cancelParticipations\": []}").andExpect(status().isNoContent());
+    }
+
+    // 🔴 옛 클라이언트의 「성사 확정」은 본문 없이 같은 경로를 부른다 — 진행 확정으로 읽히면 안 된다.
+    @Test
+    void 본문이_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      mockMvc
+          .perform(post("/v1/buncheols/{id}/confirm", 10L).with(mockAuth()))
+          .andExpect(status().isBadRequest());
+
+      then(buncheolService).should(never()).confirmBuncheol(any(), any(), any());
+    }
+
+    @Test
+    void 목록_필드가_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).confirmBuncheol(any(), any(), any());
+    }
+
+    @Test
+    void 항목의_참여_id_가_없으면_400이고_서비스를_호출하지_않는다() throws Exception {
+      perform("{\"cancelParticipations\": [{\"status\": \"AWAITING_PAYMENT\"}]}")
+          .andExpect(status().isBadRequest())
+          .andExpect(content().string(containsString(ErrorCode.INVALID_INPUT_VALUE.getCode())));
+
+      then(buncheolService).should(never()).confirmBuncheol(any(), any(), any());
+    }
+  }
+
+  @Nested
   @DisplayName("C2C 자리 다시 넣기 API 테스트")
   class AddMemberTest {
 
@@ -1110,7 +1176,7 @@ class BuncheolControllerTest {
               "https://cdn.example.com/buncheol-10-thumb.jpg",
               FlowType.LEGACY,
               BuncheolHostCancellability.CANCELLABLE,
-              false);
+              false, null);
       given(myHostedBuncheolQueryService.getMyHostedBuncheols(HOST_ID))
           .willReturn(List.of(response));
 
@@ -1418,7 +1484,6 @@ class BuncheolControllerTest {
                   "010-1234-5678",
                   "1234567890",
                   DeliveryStatus.SHIPPING), null,
-              null,
               true);
       BuncheolManagementParticipantResponse awaiting =
           new BuncheolManagementParticipantResponse(
@@ -1436,7 +1501,6 @@ class BuncheolControllerTest {
               null,
               null,
               null, null,
-              null,
               true);
       BuncheolManagementResponse response =
           new BuncheolManagementResponse(
@@ -1449,7 +1513,7 @@ class BuncheolControllerTest {
               4,
               4,
               1,
-              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null, false);
+              List.of(confirmed, awaiting), List.of(), FlowType.LEGACY, null, null, false, null);
       given(buncheolManagementQueryService.getManagement(10L, HOST_ID)).willReturn(response);
 
       mockMvc

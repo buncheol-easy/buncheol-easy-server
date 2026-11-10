@@ -8,7 +8,7 @@ import java.util.List;
  * @param participatedMemberCount 이 분철 내 내가 활성 참여 중인 멤버 슬롯 수
  * @param participations 내 활성 참여 목록 (멤버 슬롯별 1건)
  * @param inheritanceApplies 지금 자리를 더 신청하면 <b>첫 신청의 묶음을 재사용하는가</b>. 참이면 배송지를 고를 수
- *     없다 — 화면은 선택 UI 를 감춘다. 거짓이면 평소대로 고른다(LEGACY · 성사 확정 뒤 추가 모집 · 활성 참여 없음).
+ *     없다 — 화면은 선택 UI 를 감춘다. 거짓이면 평소대로 고른다(LEGACY · 활성 참여 없음).
  * @param inheritedShippingAddress 그때 상속될 배송지.
  *     <p>🔴 <b>{@code inheritanceApplies} 와 함께 읽어야 한다.</b> 이 값이 {@code null} 인 경우는 <b>둘</b>이고
  *     화면에서 정반대의 UI 다 — ① 상속 구간이 아니라서(고를 수 있다) ② <b>상속인데 배송지를 못 읽어서</b>

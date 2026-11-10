@@ -36,6 +36,11 @@ public class DeliveryDomainService {
     deliveryRepository.deleteByParticipationIds(participationIds);
   }
 
+  /** 참여들의 배송 배타 잠금 조회 — 포트 javadoc 참고. 호출 측 {@code @Transactional} 필수. */
+  public List<Delivery> findAllByParticipationIdsForUpdate(final List<Long> participationIds) {
+    return deliveryRepository.findAllByParticipationIdsForUpdate(participationIds);
+  }
+
   /**
    * 운송장 등록 (SNAPSHOTTED → SHIPPING CAS, 재등록은 번호 last-write-wins). 이미 DELIVERED/RECEIVED 로 진행됐으면 상태
    * 위반 예외. 호출 측 {@code @Transactional} 필수.

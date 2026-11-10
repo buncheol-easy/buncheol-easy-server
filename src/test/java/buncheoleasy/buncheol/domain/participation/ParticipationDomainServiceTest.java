@@ -59,7 +59,11 @@ class ParticipationDomainServiceTest {
     @Test
     void C2C_모집중이면_내_첫_활성_참여를_상속_원본으로_준다() {
       Participation mine = newParticipation();
-      given(participationRepository.findActiveByBuncheolId(10L)).willReturn(List.of(mine));
+      // 쓰기 경로라 잠금 읽기로 고른다 — 분철 행을 잠근 뒤라 잠금 전 스냅샷이 아니라 최신 커밋을 봐야 한다.
+      given(
+              participationRepository.findActiveByBuncheolIdAndParticipantIdForShare(
+                  10L, mine.getParticipantId()))
+          .willReturn(List.of(mine));
 
       assertThat(
               participationDomainService.findInheritanceSource(
@@ -118,8 +122,8 @@ class ParticipationDomainServiceTest {
 
     @Test
     void 모집중이어도_내_활성_참여가_없으면_비어_있다() {
-      given(participationRepository.findActiveByBuncheolId(10L))
-          .willReturn(List.of(newParticipation()));
+      given(participationRepository.findActiveByBuncheolIdAndParticipantIdForShare(10L, 999L))
+          .willReturn(List.of());
 
       assertThat(
               participationDomainService.findInheritanceSource(
@@ -203,13 +207,6 @@ class ParticipationDomainServiceTest {
       List<Participation> result = participationDomainService.findConfirmedByBuncheolId(1L);
 
       assertThat(result).containsExactly(participation);
-    }
-
-    @Test
-    void 입금확인된_참여_수_집계를_리포지토리에_위임한다() {
-      given(participationRepository.countConfirmedByBuncheolId(1L)).willReturn(3);
-
-      assertThat(participationDomainService.countConfirmedByBuncheolId(1L)).isEqualTo(3);
     }
   }
 

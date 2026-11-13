@@ -19,6 +19,7 @@ DROP TABLE IF EXISTS staff_buncheol_settings;
 DROP TABLE IF EXISTS buncheols;
 DROP TABLE IF EXISTS user_recent_searches;
 DROP TABLE IF EXISTS user_favorite_groups;
+DROP TABLE IF EXISTS group_member_popularity;
 DROP TABLE IF EXISTS group_aliases;
 DROP TABLE IF EXISTS group_members;
 DROP TABLE IF EXISTS `groups`;
@@ -135,6 +136,17 @@ CREATE TABLE group_members
 CREATE INDEX idx_group_members_group_id ON group_members (group_id);
 CREATE INDEX idx_group_members_name ON group_members (name);
 CREATE INDEX idx_group_members_search_name ON group_members (search_name);
+
+CREATE TABLE group_member_popularity
+(
+    member_id       BIGINT       NOT NULL,
+    popularity_rank INT          NOT NULL,
+    source          VARCHAR(100) NOT NULL,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (member_id),
+    CONSTRAINT fk_group_member_popularity_member FOREIGN KEY (member_id) REFERENCES group_members (id) ON DELETE CASCADE
+);
 
 CREATE TABLE group_aliases
 (

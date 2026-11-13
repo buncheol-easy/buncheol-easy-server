@@ -47,6 +47,7 @@ public class SecurityConfig {
     // AUTH_REQUIRED_GET_PATHS 에도 함께 넣어야 한다.
     "/v1/groups/*",
     "/v1/groups/*/members",
+    "/v1/groups/*/members/popularity",
     "/v1/buncheols",
     "/v1/buncheols/*",
     "/v1/search-keywords/recent",

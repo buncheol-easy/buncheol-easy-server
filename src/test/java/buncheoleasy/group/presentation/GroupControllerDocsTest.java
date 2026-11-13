@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import buncheoleasy.global.docs.DocsTestSupport;
 import buncheoleasy.group.application.GroupService;
 import buncheoleasy.group.dto.response.GroupDetailResponse;
+import buncheoleasy.group.dto.response.GroupMemberPopularityResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
@@ -215,6 +216,39 @@ class GroupControllerDocsTest extends DocsTestSupport {
                             fieldWithPath("[].id").description("멤버 ID"),
                             fieldWithPath("[].name").description("멤버 이름"),
                             fieldWithPath("[].image").description("멤버 이미지 URL").optional())
+                        .build())));
+  }
+
+  @Test
+  void 그룹_멤버_인기_순위_조회() throws Exception {
+    // given
+    given(groupService.getGroupMemberPopularity(1L))
+        .willReturn(
+            List.of(
+                new GroupMemberPopularityResponse(10L, 3),
+                new GroupMemberPopularityResponse(11L, 27)));
+
+    // when & then
+    mockMvc
+        .perform(get("/v1/groups/{groupId}/members/popularity", 1L))
+        .andExpect(status().isOk())
+        .andDo(
+            document(
+                "groups-members-popularity",
+                resource(
+                    ResourceSnippetParameters.builder()
+                        .tag("Group")
+                        .summary("그룹 멤버 인기 순위 조회")
+                        .description(
+                            "외부 공개 순위에서 옮겨 온 멤버 인기 순위를 순위 오름차순으로 조회한다. "
+                                + "순위가 있는 멤버만 실리고, 자료가 없는 그룹이면 빈 배열이다. "
+                                + "개최 화면이 멤버별 가격을 차등해 미리 채울 때 쓴다. "
+                                + "존재하지 않는 그룹이면 404 `GRP-001` (`GROUP_NOT_FOUND`) 이 발생한다.")
+                        .pathParameters(parameterWithName("groupId").description("그룹 ID"))
+                        .responseSchema(Schema.schema("GroupMemberPopularityListResponse"))
+                        .responseFields(
+                            fieldWithPath("[].memberId").description("멤버 ID"),
+                            fieldWithPath("[].rank").description("출처 순위표 안의 순위 (1 이 가장 높다)"))
                         .build())));
   }
 }

@@ -2,6 +2,7 @@ package buncheoleasy.group.presentation;
 
 import buncheoleasy.group.application.GroupService;
 import buncheoleasy.group.dto.response.GroupDetailResponse;
+import buncheoleasy.group.dto.response.GroupMemberPopularityResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
@@ -51,5 +52,11 @@ public class GroupController {
   public ResponseEntity<List<GroupMemberResponse>> getGroupMembers(
       @PathVariable final Long groupId) {
     return ResponseEntity.ok(groupService.getGroupMembers(groupId));
+  }
+
+  @GetMapping("/{groupId}/members/popularity")
+  public ResponseEntity<List<GroupMemberPopularityResponse>> getGroupMemberPopularity(
+      @PathVariable final Long groupId) {
+    return ResponseEntity.ok(groupService.getGroupMemberPopularity(groupId));
   }
 }

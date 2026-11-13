@@ -11,6 +11,9 @@ import buncheoleasy.group.domain.GroupDomainService;
 import buncheoleasy.group.domain.GroupRepository;
 import buncheoleasy.group.domain.alias.GroupAlias;
 import buncheoleasy.group.domain.alias.GroupAliasRepository;
+import buncheoleasy.group.domain.popularity.GroupMemberPopularity;
+import buncheoleasy.group.domain.popularity.GroupMemberPopularityRepository;
+import buncheoleasy.group.dto.response.GroupMemberPopularityResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import java.time.Clock;
 import java.util.List;
@@ -32,6 +35,7 @@ class GroupServiceTest {
   @Mock private BuncheolRepository buncheolRepository;
   @Mock private GroupRepository groupRepository;
   @Mock private GroupAliasRepository groupAliasRepository;
+  @Mock private GroupMemberPopularityRepository groupMemberPopularityRepository;
   @Mock private Clock clock;
 
   @Nested
@@ -88,6 +92,27 @@ class GroupServiceTest {
     void 구두점만_입력하면_조회하지_않고_빈_결과다() {
       assertThat(groupService.searchGroupsByMemberName("()")).isEmpty();
       verifyNoInteractions(groupDomainService);
+    }
+  }
+
+  @Nested
+  @DisplayName("멤버 인기 순위")
+  class MemberPopularityTest {
+
+    @Test
+    void 순위가_있는_멤버만_순위와_함께_돌려준다() {
+      given(groupMemberPopularityRepository.findAllByGroupId(1L))
+          .willReturn(
+              List.of(
+                  new GroupMemberPopularity(10L, 3, "테스트 순위"),
+                  new GroupMemberPopularity(11L, 27, "테스트 순위")));
+
+      List<GroupMemberPopularityResponse> result = groupService.getGroupMemberPopularity(1L);
+
+      assertThat(result)
+          .containsExactly(
+              new GroupMemberPopularityResponse(10L, 3),
+              new GroupMemberPopularityResponse(11L, 27));
     }
   }
 }

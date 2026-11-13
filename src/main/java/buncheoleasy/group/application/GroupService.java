@@ -9,6 +9,8 @@ import buncheoleasy.group.domain.alias.GroupAlias;
 import buncheoleasy.group.domain.alias.GroupAliasRepository;
 import buncheoleasy.group.domain.member.GroupMember;
 import buncheoleasy.group.dto.response.GroupDetailResponse;
+import buncheoleasy.group.domain.popularity.GroupMemberPopularityRepository;
+import buncheoleasy.group.dto.response.GroupMemberPopularityResponse;
 import buncheoleasy.group.dto.response.GroupMemberResponse;
 import buncheoleasy.group.dto.response.GroupResponse;
 import buncheoleasy.group.dto.response.GroupWithMembersResponse;
@@ -34,6 +36,7 @@ public class GroupService {
   private final BuncheolRepository buncheolRepository;
   private final GroupRepository groupRepository;
   private final GroupAliasRepository groupAliasRepository;
+  private final GroupMemberPopularityRepository groupMemberPopularityRepository;
   private final Clock clock;
 
   @Transactional(readOnly = true)
@@ -93,6 +96,15 @@ public class GroupService {
     groupDomainService.validateGroupExists(groupId);
     return groupDomainService.getGroupMembers(groupId).stream()
         .map(GroupMemberResponse::from)
+        .toList();
+  }
+
+  /** 순위가 있는 멤버만 돌려준다. 순위 자료가 없는 그룹이면 빈 목록 — 화면은 그때 가격을 차등하지 않는다. */
+  @Transactional(readOnly = true)
+  public List<GroupMemberPopularityResponse> getGroupMemberPopularity(final Long groupId) {
+    groupDomainService.validateGroupExists(groupId);
+    return groupMemberPopularityRepository.findAllByGroupId(groupId).stream()
+        .map(GroupMemberPopularityResponse::from)
         .toList();
   }
 

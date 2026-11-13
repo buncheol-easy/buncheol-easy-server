@@ -197,6 +197,24 @@ CREATE TABLE IF NOT EXISTS group_aliases
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- 외부 공개 순위에서 옮겨 온 멤버 인기 순위. 개최 화면의 멤버별 가격 차등 미리 채움 전용.
+-- 행이 없는 멤버는 순위 밖이다. 애플리케이션 쓰기 경로 없음 — SQL 로 직접 넣는다.
+CREATE TABLE IF NOT EXISTS group_member_popularity
+(
+    member_id       BIGINT       NOT NULL COMMENT '멤버',
+    popularity_rank INT          NOT NULL COMMENT '출처 순위표 안의 순위 (1 이 가장 높다)',
+    source          VARCHAR(100) NOT NULL COMMENT '출처와 기준 월',
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (member_id),
+
+    CONSTRAINT fk_group_member_popularity_member
+        FOREIGN KEY (member_id)
+            REFERENCES group_members (id) ON DELETE CASCADE
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS buncheols
 (
     id                BIGINT       NOT NULL AUTO_INCREMENT,
